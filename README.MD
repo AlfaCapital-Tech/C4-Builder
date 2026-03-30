@@ -49,16 +49,17 @@ PS C:\docprojects\Online Banking> c4builder --help
 Usage: index [options]
 
 Options:
-  -V, --version   output the version number
-  new             create a new project from template
-  config          change configuration for the current directory
-  list            display the current configuration
-  reset           clear all configuration
-  site            serve the generated site
-  -w, --watch     watch for changes and rebuild
-  docs            a brief explanation for the available configuration options
-  -p, --port <n>  port used for serving the generated site
-  -h, --help      output usage information
+  -V, --version                     output the version number
+  new                               create a new project from template
+  config                            change configuration for the current directory
+  list                              display the current configuration
+  reset                             clear all configuration
+  site                              serve the generated site
+  -w, --watch                       watch for changes and rebuild
+  docs                              a brief explanation for the available configuration options
+  -p, --port <n>                    port used for serving the generated site
+  -c, --config-file <.c4builder>    set the configuration file relative path
+  -h, --help                        output usage information
 ```
 
 By default, running `c4builder` will attempt to build the project.
@@ -220,6 +221,17 @@ I would like to bind the **build** phase to the C4 model. It could parse the dia
 The project is still in it's early phase and I intend on using it on some actual projects in order to find more use cases and fix bugs.
 
 # Change log
+
+## v0.2.20
+
+Fork by [Alfa Capital Technologies](https://alfacapital.tech)
+
+- Updated commander to v14 (fixed compatibility with Node.js 20+)
+- Updated dependencies: fs-extra 11.x, node-watch 0.7.x
+- PlantUML updated to 1.2025.2
+- Added Dockerfile and CI for building Docker image to GHCR
+- Added CI for npm publishing via OIDC (Trusted Publisher)
+- Published as [@alfacapital-tech/c4builder](https://www.npmjs.com/package/@alfacapital-tech/c4builder)
 
 ## v0.2.16
 

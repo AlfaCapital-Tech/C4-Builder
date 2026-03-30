@@ -55,6 +55,11 @@ const generateTree = async (dir, options) => {
     let tree = [];
 
     const build = async (dir, parent) => {
+        // Skip output folder - this allows a user to use the top-level folder as ROOT_FOLDER.
+        if (dir === options.DIST_FOLDER) {
+            return;
+        }
+
         let name = getFolderName(dir, options.ROOT_FOLDER, options.HOMEPAGE_NAME);
         let item = tree.find((x) => x.dir === dir);
         if (!item) {
@@ -149,6 +154,8 @@ const generateImages = async (tree, options, onImageGenerated, conf) => {
         totalImages += item.pumlFiles.length;
     }
 
+    let taskList = [];
+
     for (const item of tree) {
         for (const pumlFile of item.pumlFiles) {
             //There was a bug with this, that's why I require it inside the loop
@@ -190,10 +197,17 @@ const generateImages = async (tree, options, onImageGenerated, conf) => {
                     })
                     .out.pipe(stream);
 
-                await new Promise((resolve) => stream.on('finish', resolve));
+                taskList.push(new Promise((resolve) => stream.on('finish', resolve)));
             }
-            processedImages++;
-            if (onImageGenerated) onImageGenerated(processedImages, totalImages);
+
+            var taskPromises = Promise.all(taskList).then((result) => {
+                processedImages++;
+                if (onImageGenerated) onImageGenerated(processedImages, totalImages);
+                // Add puml checksum
+                newChecksums.push(cksum);
+            });
+
+            await taskPromises;
 
             // Add puml checksum
             newChecksums.push(cksum);
@@ -640,11 +654,27 @@ const generateWebMD = async (tree, options) => {
     let filePromises = [];
     let docsifySideBar = '';
 
+    const getWebFileName = (originalFileName) => options.WEB_FILE_NAME || originalFileName;
+
+    const isExcluded = (dir) => {
+        if (!Array.isArray(options.EXCLUDE_SIDEBAR_FOLDER_BY_PATH)) return false;
+
+        return options.EXCLUDE_SIDEBAR_FOLDER_BY_PATH.find((pathToExclude) => {
+            const isString = typeof pathToExclude === 'string';
+
+            if (isString) return dir.startsWith(pathToExclude);
+
+            return false;
+        });
+    };
+
     for (const item of tree) {
         //sidebar
-        docsifySideBar += `${'  '.repeat(item.level - 1)}* [${item.name}](${encodeURIPath(
-            path.join(...path.join(item.dir).split(path.sep).splice(1), options.WEB_FILE_NAME)
-        )})\n`;
+        if (!isExcluded(item.dir)) {
+            docsifySideBar += `${'  '.repeat(item.level - 1)}* [${item.name}](${encodeURIPath(
+                path.join(...path.join(item.dir).split(path.sep).splice(1), getWebFileName(item.name))
+            )})\n`;
+        }
         let name = getFolderName(item.dir, options.ROOT_FOLDER, options.HOMEPAGE_NAME);
 
         //title
@@ -705,7 +735,7 @@ const generateWebMD = async (tree, options) => {
                 path.join(
                     options.DIST_FOLDER,
                     item.dir.replace(options.ROOT_FOLDER, ''),
-                    `${options.WEB_FILE_NAME}.md`
+                    `${getWebFileName(item.name)}.md`
                 ),
                 MD
             )
@@ -716,6 +746,8 @@ const generateWebMD = async (tree, options) => {
         docsifyTemplate = require(path.join(process.cwd(), options.DOCSIFY_TEMPLATE));
     }
 
+    const getRootName = () => tree.find((item) => !item.parent);
+
     //docsify homepage
     filePromises.push(
         writeFile(
@@ -725,13 +757,14 @@ const generateWebMD = async (tree, options) => {
                 repo: options.REPO_NAME,
                 loadSidebar: true,
                 auto2top: true,
-                homepage: `${options.WEB_FILE_NAME}.md`,
+                homepage: `${options.WEB_FILE_NAME || getRootName().name}.md`,
                 plantuml: {
                     skin: 'classic'
                 },
                 stylesheet: options.WEB_THEME,
                 alias: { '/.*/_sidebar.md': '/_sidebar.md' },
-                supportSearch: options.SUPPORT_SEARCH
+                supportSearch: options.SUPPORT_SEARCH,
+                executeScript: options.EXECUTE_SCRIPT
             })
         )
     );

@@ -1,6 +1,6 @@
 const figlet = require('figlet');
-const program = require('commander');
-const package = require('./package.json');
+const { program } = require('commander');
+const pkg = require('./package.json');
 const chalk = require('chalk');
 const path = require('path');
 
@@ -42,6 +42,7 @@ const getOptions = (conf) => {
         INCLUDE_BREADCRUMBS: conf.get('includeBreadcrumbs'),
         INCLUDE_TABLE_OF_CONTENTS: conf.get('includeTableOfContents'),
         INCLUDE_LINK_TO_DIAGRAM: conf.get('includeLinkToDiagram'),
+        EXCLUDE_SIDEBAR_FOLDER_BY_PATH: conf.get('excludeSidebarFolderByPath'),
         PDF_CSS: conf.get('pdfCss') || path.join(__dirname, 'pdf.css'),
         DIAGRAMS_ON_TOP: conf.get('diagramsOnTop'),
         CHARSET: conf.get('charset'),
@@ -50,67 +51,71 @@ const getOptions = (conf) => {
         PLANTUML_SERVER_URL: conf.get('plantumlServerUrl'),
         DIAGRAM_FORMAT: conf.get('diagramFormat'),
         MD_FILE_NAME: 'README',
-        WEB_FILE_NAME: 'HOME',
+        WEB_FILE_NAME: conf.get('webFileName'),
         SUPPORT_SEARCH: conf.get('supportSearch'),
+        EXECUTE_SCRIPT: conf.get('executeScript'),
         EXCLUDE_OTHER_FILES: conf.get('excludeOtherFiles')
     };
 };
 
 module.exports = async () => {
     program
-        .version(package.version)
-        .option('new', 'create a new project from template')
-        .option('config', 'change configuration for the current directory')
-        .option('list', 'display the current configuration')
-        .option('reset', 'clear all configuration')
-        .option('site', 'serve the generated site')
+        .version(pkg.version)
+        .option('--new', 'create a new project from template')
+        .option('--config', 'change configuration for the current directory')
+        .option('-c, --config-file <.c4builder>', 'set the configuration file relative path')
+        .option('--list', 'display the current configuration')
+        .option('--reset', 'clear all configuration')
+        .option('--site', 'serve the generated site')
         .option('-w, --watch', 'watch for changes and rebuild')
-        .option('docs', 'a brief explanation for the available configuration options')
+        .option('--docs', 'a brief explanation for the available configuration options')
         .option('-p, --port <n>', 'port used for serving the generated site', parseInt)
         .parse(process.argv);
 
+    const opts = program.opts();
+
     let conf = { get: () => {} };
-    if (!program.new)
+    if (!opts.new)
         conf = new Configstore(
             process.cwd().split(path.sep).splice(1).join('_'),
             {},
-            { configPath: path.join(process.cwd(), '.c4builder') }
+            { configPath: path.join(process.cwd(), opts.configFile ?? '.c4builder') }
         );
 
-    if (program.docs) return cmdHelp();
+    if (opts.docs) return cmdHelp();
 
     //initial options
     let options = getOptions(conf);
 
-    if (program.new || program.config || !options.HAS_RUN) clearConsole();
+    if (opts.new || opts.config || !options.HAS_RUN) clearConsole();
 
     intro();
 
-    if (!options.HAS_RUN && !program.new) {
+    if (!options.HAS_RUN && !opts.new) {
         console.log(
             `\nif you created the project using the 'c4model new' command you can just press enter and go with the default options to get a basic idea of how it works.\n`
         );
         console.log(`you can always change the configuration by running > c4builder config\n`);
     }
 
-    if (program.new) return cmdNewProject();
-    if (program.list) return cmdList(options);
+    if (opts.new) return cmdNewProject();
+    if (opts.list) return cmdList(options);
 
-    if (program.reset) {
+    if (opts.reset) {
         conf.clear();
         console.log(`configuration was reset`);
         return;
     }
 
-    await cmdCollect(options, conf, program);
-    if (!program.config) {
+    await cmdCollect(options, conf, opts);
+    if (!opts.config) {
         conf.set('hasRun', true);
 
         let isBuilding = false;
         let attemptedWatchBuild = false;
         //get options after wizard
         options = getOptions(conf);
-        if (program.watch) {
+        if (opts.watch) {
             watch(options.ROOT_FOLDER, { recursive: true }, async (evt, name) => {
                 // clearConsole();
                 // intro();
@@ -137,7 +142,7 @@ module.exports = async () => {
                 await build(options, conf);
                 while (attemptedWatchBuild) {
                     attemptedWatchBuild = false;
-                    await build(options);
+                    await build(options, conf);
                 }
                 isBuilding = false;
             });
@@ -147,9 +152,9 @@ module.exports = async () => {
         await build(options, conf);
         isBuilding = false;
 
-        if (program.site) return await cmdSite(options, program);
+        if (opts.site) return await cmdSite(options, opts);
 
-        if (options.GENERATE_WEBSITE && !program.watch) {
+        if (options.GENERATE_WEBSITE && !opts.watch) {
             console.log(chalk.gray('\nto view the generated website run'));
             console.log(`> c4builder site`);
         }

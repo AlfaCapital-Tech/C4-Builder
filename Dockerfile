@@ -1,21 +1,20 @@
-FROM openjdk:11
-RUN curl -fsSL https://deb.nodesource.com/setup_17.x | bash -
-RUN apt-get update && apt-get install -y nodejs graphviz chromium xvfb
+FROM node:20-alpine
 
-RUN npm i -g c4builder
-    
-RUN useradd defaultuser -u 1000 -s /bin/bash -d /home/defaultuser -m \
-    && echo 'exec chromium $@ --no-sandbox --disable-setuid-sandbox' > /usr/bin/chromium.sh \
-    && chmod a=xr /usr/bin/chromium.sh
-    
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
-    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium.sh
+RUN apk add --no-cache openjdk21-jre graphviz bash
 
-USER defaultuser
-VOLUME /pwd
-CMD /bin/bash -c "echo Scanning for all .c4builder files in volume 'pwd' && \
-Xvfb :99 -ac -screen 0 1280x720x16 -nolisten tcp -nolisten unix & disown $! && \
-export DISPLAY=:99 && \
-cd /pwd && \
-find -name .c4builder -execdir c4builder \; \
-&& echo FINISHED"
+WORKDIR /app
+COPY package*.json ./
+
+# Install dependencies, skip post-install scripts for node-plantuml
+RUN npm install --ignore-scripts && \
+    mkdir -p /app/node_modules/node-plantuml/vendor && \
+    echo "module.exports = {};" > /app/node_modules/node-plantuml/vendor/vizjs.js
+
+COPY . .
+
+RUN ln -s /app/index.js /usr/local/bin/c4builder && \
+    chmod +x /app/index.js
+
+USER node
+WORKDIR /pwd
+CMD ["c4builder"]

@@ -2,3 +2,8 @@ docs
 /.vscode
 template/docs/
 template/.c4builder
+.npmrc
+.github/
+Dockerfile
+.gitignore
+.prettierrc

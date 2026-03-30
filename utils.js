@@ -1,5 +1,5 @@
 const fs = require('fs');
-const zlib = require('zlib');
+const zlib = require('node:zlib');
 
 const makeDirectory = (path) =>
     new Promise((resolve) => {
@@ -144,8 +144,12 @@ const plantumlVersions = [
     },
     {
         version: '1.2022.3',
-        isLatest: true,
         jar: 'plantuml-1.2022.3.jar'
+    },
+    {
+        version: '1.2025.2',
+        isLatest: true,
+        jar: 'plantuml-1.2025.2.jar'
     }
 ];
 

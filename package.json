@@ -1,19 +1,18 @@
 {
-  "name": "c4builder",
-  "version": "0.2.16",
+  "name": "@alfacapital-tech/c4builder",
+  "version": "0.2.21",
   "description": "A CLI tool designed to compile a folder structure of markdowns and plant uml files into a site, pdf, single file markdown or a collection of markdowns with links",
   "main": "index.js",
   "bin": {
     "c4builder": "./index.js"
   },
-  "homepage": "https://adrianvlupu.github.io/C4-Builder/",
+  "homepage": "https://github.com/AlfaCapital-Tech/C4-Builder",
   "bugs": {
-    "url": "https://github.com/adrianvlupu/C4-Builder/issues",
-    "email": "adrianvlupu@gmail.com"
+    "url": "https://github.com/AlfaCapital-Tech/C4-Builder/issues"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/adrianvlupu/C4-Builder.git"
+    "url": "https://github.com/AlfaCapital-Tech/C4-Builder.git"
   },
   "scripts": {},
   "keywords": [
@@ -27,18 +26,21 @@
     "Generator"
   ],
   "author": "Adrian Victor Lupu",
+  "contributors": [
+    "Alfa Capital Technologies <https://alfacapital.tech>"
+  ],
   "license": "MIT",
   "dependencies": {
     "chalk": "^2.4.1",
+    "commander": "^14.0.0",
     "configstore": "^4.0.0",
     "express": "^4.17.1",
     "figlet": "^1.2.1",
-    "fs-extra": "^7.0.1",
+    "fs-extra": "^11.3.4",
     "inquirer": "^8.2.2",
-    "joi": "^14.3.1",
+    "joi": "^17.12.2",
     "md-to-pdf": "^5.1.0",
     "node-plantuml": "^0.9.0",
-    "node-watch": "^0.6.3",
-    "zlib": "^1.0.5"
+    "node-watch": "^0.7.4"
   }
 }

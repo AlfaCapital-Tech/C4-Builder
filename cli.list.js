@@ -108,6 +108,11 @@ Replace diagrams with a link: ${
             ? chalk.green(currentConfiguration.INCLUDE_LINK_TO_DIAGRAM)
             : chalk.red('not set')
     }
+Exclude sidebar folder by path: ${
+        Array.isArray(currentConfiguration.EXCLUDE_SIDEBAR_FOLDER_BY_PATH)
+            ? chalk.green(currentConfiguration.EXCLUDE_SIDEBAR_FOLDER_BY_PATH)
+            : chalk.red('not is an array or not set')
+    }
 Place diagrams before text: ${
         currentConfiguration.DIAGRAMS_ON_TOP !== undefined
             ? chalk.green(currentConfiguration.DIAGRAMS_ON_TOP)
@@ -123,15 +128,20 @@ Diagram format: ${
             ? chalk.green(currentConfiguration.DIAGRAM_FORMAT)
             : chalk.red('not set')
     }
+Web file name: ${
+        currentConfiguration.WEB_FILE_NAME !== undefined
+            ? chalk.green(currentConfiguration.WEB_FILE_NAME)
+            : chalk.red('not set')
+    }
 Charset: ${
         currentConfiguration.CHARSET !== undefined
             ? chalk.green(currentConfiguration.CHARSET)
             : chalk.red('not set')
     }
 Exclude other files: ${
-    currentConfiguration.EXCLUDE_OTHER_FILES !== undefined
-        ? chalk.green(currentConfiguration.EXCLUDE_OTHER_FILES)
-        : chalk.red('not set')
+        currentConfiguration.EXCLUDE_OTHER_FILES !== undefined
+            ? chalk.green(currentConfiguration.EXCLUDE_OTHER_FILES)
+            : chalk.red('not set')
     }
 `);
     return;
