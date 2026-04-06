@@ -176,7 +176,7 @@ module.exports = async (currentConfiguration, conf, program) => {
                 type: 'input',
                 name: 'webTheme',
                 message: 'Change the default docsify theme?',
-                default: currentConfiguration.WEB_THEME || '//unpkg.com/docsify/lib/themes/vue.css'
+                default: currentConfiguration.WEB_THEME || 'vendor/vue.css'
             });
             conf.set('webTheme', webOptions.webTheme);
 

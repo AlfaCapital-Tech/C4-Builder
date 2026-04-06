@@ -75,7 +75,8 @@ const generateTree = async (dir, options) => {
             tree.push(item);
         }
 
-        let files = fs.readdirSync(dir).filter((x) => x.charAt(0) !== '_');
+        const IGNORED_FILES = ['CLAUDE.md'];
+        let files = fs.readdirSync(dir).filter((x) => x.charAt(0) !== '_' && !IGNORED_FILES.includes(x));
         for (const file of files) {
             //if folder
             if (fs.statSync(path.join(dir, file)).isDirectory()) {
@@ -768,6 +769,14 @@ const generateWebMD = async (tree, options) => {
             })
         )
     );
+
+    //copy local docsify vendor files to dist
+    const docsifyVendorSrc = path.join(__dirname, 'vendor', 'docsify');
+    if (fs.existsSync(docsifyVendorSrc)) {
+        filePromises.push(
+            fsextra.copy(docsifyVendorSrc, path.join(options.DIST_FOLDER, 'vendor'))
+        );
+    }
 
     //github pages preparation
     filePromises.push(writeFile(path.join(options.DIST_FOLDER, `.nojekyll`), ''));
