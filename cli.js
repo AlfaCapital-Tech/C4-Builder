@@ -36,7 +36,7 @@ const getOptions = (conf) => {
         PROJECT_NAME: conf.get('projectName'),
         REPO_NAME: conf.get('repoUrl'),
         HOMEPAGE_NAME: conf.get('homepageName'),
-        WEB_THEME: conf.get('webTheme'),
+        WEB_THEME: conf.get('webTheme') === '//unpkg.com/docsify/lib/themes/vue.css' ? 'vendor/vue.css' : conf.get('webTheme'),
         DOCSIFY_TEMPLATE: conf.get('docsifyTemplate'),
         INCLUDE_NAVIGATION: conf.get('includeNavigation'),
         INCLUDE_BREADCRUMBS: conf.get('includeBreadcrumbs'),
