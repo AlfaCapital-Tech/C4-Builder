@@ -764,6 +764,7 @@ const generateWebMD = async (tree, options) => {
                 },
                 stylesheet: options.WEB_THEME,
                 alias: { '/.*/_sidebar.md': '/_sidebar.md' },
+                sidebarDisplayLevel: 1,
                 supportSearch: options.SUPPORT_SEARCH,
                 executeScript: options.EXECUTE_SCRIPT
             })

@@ -40,8 +40,6 @@ cd project
 c4builder
 ```
 
-A sample project is available at [C4Builder-Demo](https://github.com/adrianvlupu/C4Builder-Demo/tree/master/docs).
-
 ## Available Commands
 
 ```bash
@@ -54,7 +52,7 @@ Options:
   config                            change configuration for the current directory
   list                              display the current configuration
   reset                             clear all configuration
-  site                              serve the generated site
+  --site                              serve the generated site
   -w, --watch                       watch for changes and rebuild
   docs                              a brief explanation for the available configuration options
   -p, --port <n>                    port used for serving the generated site
@@ -213,12 +211,6 @@ The current entity structure is inserted after the header
 ### Custom pdf
 
 If defined, this css is used in the generation of the pdf files.
-
-# Future plans
-
-I would like to bind the **build** phase to the C4 model. It could parse the diagrams and know what Person/System/Component/Container is related to what and help with additional validation. Maybe even export to [structurizr](https://structurizr.com/) or vice versa.
-
-The project is still in it's early phase and I intend on using it on some actual projects in order to find more use cases and fix bugs.
 
 # Change log
 

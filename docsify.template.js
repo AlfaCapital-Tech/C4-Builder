@@ -21,6 +21,7 @@ module.exports = (options) => {
         <meta name="viewport"
         content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
         <link rel="stylesheet" href="${options.stylesheet}">
+        <link rel="stylesheet" href="vendor/sidebar-collapse.min.css">
     </head>
     
     <body>
@@ -39,6 +40,7 @@ module.exports = (options) => {
             !!options.executeScript &&
             `<script src="vendor/swagger-ui-bundle.js"></script>`
         }
+        <script src="vendor/docsify-sidebar-collapse.min.js"></script>
     </body>
     
     </html>`;
