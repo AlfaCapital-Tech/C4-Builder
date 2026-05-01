@@ -13,6 +13,7 @@ const cmdSite = require('./cli.site');
 const cmdCollect = require('./cli.collect');
 const { build } = require('./build');
 const watch = require('node-watch');
+const { EventEmitter } = require('events');
 
 const { clearConsole } = require('./utils.js');
 
@@ -115,6 +116,8 @@ module.exports = async () => {
         let attemptedWatchBuild = false;
         //get options after wizard
         options = getOptions(conf);
+        const reloadEmitter = new EventEmitter();
+        reloadEmitter.setMaxListeners(0);
         if (opts.watch) {
             watch(options.ROOT_FOLDER, { recursive: true }, async (evt, name) => {
                 // clearConsole();
@@ -139,12 +142,21 @@ module.exports = async () => {
                 }
 
                 isBuilding = true;
-                await build(options, conf);
-                while (attemptedWatchBuild) {
-                    attemptedWatchBuild = false;
+                let buildOk = true;
+                try {
                     await build(options, conf);
+                    while (attemptedWatchBuild) {
+                        attemptedWatchBuild = false;
+                        await build(options, conf);
+                    }
+                } catch (err) {
+                    buildOk = false;
+                    attemptedWatchBuild = false;
+                    console.log(chalk.red(`build failed: ${err && err.stack ? err.stack : err}`));
+                } finally {
+                    isBuilding = false;
                 }
-                isBuilding = false;
+                if (buildOk) reloadEmitter.emit('reload');
             });
         }
 
@@ -152,7 +164,7 @@ module.exports = async () => {
         await build(options, conf);
         isBuilding = false;
 
-        if (opts.site) return await cmdSite(options, opts);
+        if (opts.site) return await cmdSite(options, opts, reloadEmitter);
 
         if (options.GENERATE_WEBSITE && !opts.watch) {
             console.log(chalk.gray('\nto view the generated website run'));
