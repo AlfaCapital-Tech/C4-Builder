@@ -219,6 +219,26 @@ const generateImages = async (tree, options, onImageGenerated, conf) => {
     conf.set('checksums', newChecksums);
 };
 
+// Если первый md-файл уже начинается с заголовка h1 — авто-заголовок страницы
+// по имени папки/файла не добавляем, чтобы не было двух заголовков подряд.
+// Проверяем только первый md-файл: именно он окажется сразу за авто-заголовком
+// в compileDocument, поэтому только он может породить визуальный дубль.
+// Лидирующий BOM (﻿) учитываем — md-файлы из Windows/редакторов часто с ним.
+const hasOwnH1 = (item) => {
+    if (!item.mdFiles || item.mdFiles.length === 0) return false;
+    return /^﻿?\s*#\s+\S/.test(item.mdFiles[0].toString());
+};
+
+// Вставить блок (breadcrumb / TOC / навигация) сразу после первого h1.
+// Используется когда у пользователя свой h1 — авто-заголовок не ставится,
+// а служебный блок должен оказаться ПОД заголовком, как было раньше.
+const injectAfterFirstH1 = (md, block) => {
+    if (!block) return md;
+    const m = md.match(/^([\s\S]*?#\s+[^\n]*\n)/);
+    if (!m) return block + '\n\n' + md;
+    return m[1] + block + md.slice(m[1].length);
+};
+
 const compileDocument = async (md, item, options, getDiagram) => {
     let MD = md;
     const alreadyIncludedPumls = [];
@@ -429,23 +449,26 @@ const generateMD = async (tree, options, onProgress) => {
     let filePromises = [];
     for (const item of tree) {
         let name = getFolderName(item.dir, options.ROOT_FOLDER, options.HOMEPAGE_NAME);
+        const ownH1 = hasOwnH1(item);
         //title
-        let MD = `# ${name}`;
+        let MD = ownH1 ? '' : `# ${name}`;
+
+        // "Page chrome" — breadcrumb / TOC / навигация. Собираем отдельно, чтобы при
+        // наличии собственного h1 у пользователя поместить весь блок ПОД его заголовок,
+        // а не над ним (как было исторически — между авто-# name и контентом).
+        let chrome = '';
         //bradcrumbs
         if (options.INCLUDE_BREADCRUMBS && name !== options.HOMEPAGE_NAME)
-            MD += `\n\n\`${item.dir.replace(options.ROOT_FOLDER, '')}\``;
+            chrome += `\n\n\`${item.dir.replace(options.ROOT_FOLDER, '')}\``;
         //table of contents
         if (options.INCLUDE_TABLE_OF_CONTENTS) {
             let tableOfContents = '';
             for (const _item of tree) {
-                let isDown = item.level < _item.level;
                 let label = `${item.dir === _item.dir ? '**' : ''}${_item.name}${
                     item.dir === _item.dir ? '**' : ''
                 }`;
                 tableOfContents += `${'  '.repeat(_item.level - 1)}* [${label}](${encodeURIPath(
                     path.join(
-                        // '/',
-                        // options.DIST_FOLDER,
                         './',
                         item.level - 1 > 0 ? '../'.repeat(item.level - 1) : '',
                         _item.dir.replace(options.ROOT_FOLDER, ''),
@@ -453,15 +476,13 @@ const generateMD = async (tree, options, onProgress) => {
                     )
                 )})\n`; //slice 1 if root and down
             }
-            MD += `\n\n${tableOfContents}\n---`;
+            chrome += `\n\n${tableOfContents}\n---`;
         }
         //parent menu
         if (item.parent && options.INCLUDE_NAVIGATION) {
             let parentName = getFolderName(item.parent, options.ROOT_FOLDER, options.HOMEPAGE_NAME);
-            MD += `\n\n[${parentName} (up)](${encodeURIPath(
+            chrome += `\n\n[${parentName} (up)](${encodeURIPath(
                 path.join(
-                    // '/',
-                    // options.DIST_FOLDER,
                     './',
                     item.level - 1 > 0 ? '../'.repeat(item.level - 1) : '',
                     item.parent.replace(options.ROOT_FOLDER, ''),
@@ -475,8 +496,6 @@ const generateMD = async (tree, options, onProgress) => {
         for (const file of item.descendants) {
             descendantsMenu += `\n\n- [${file}](${encodeURIPath(
                 path.join(
-                    // '/',
-                    // options.DIST_FOLDER,
                     './',
                     item.level - 1 > 0 ? '../'.repeat(item.level - 1) : '',
                     item.dir.replace(options.ROOT_FOLDER, ''),
@@ -486,9 +505,13 @@ const generateMD = async (tree, options, onProgress) => {
             )})`;
         }
         //descendants menu
-        if (descendantsMenu && options.INCLUDE_NAVIGATION) MD += `${descendantsMenu}`;
+        if (descendantsMenu && options.INCLUDE_NAVIGATION) chrome += `${descendantsMenu}`;
         //separator
-        if (options.INCLUDE_NAVIGATION) MD += `\n\n---`;
+        if (options.INCLUDE_NAVIGATION) chrome += `\n\n---`;
+
+        // Если своего h1 нет — chrome идёт сразу после авто-заголовка, как раньше.
+        // Если есть — chrome будет вставлен после пользовательского h1 пост-обработкой.
+        if (!ownH1) MD += chrome;
 
         //concatenate markdown files
         MD = await compileDocument(MD, item, options, async (item, pumlFile, options) => {
@@ -538,6 +561,9 @@ const generateMD = async (tree, options, onProgress) => {
             }
         });
 
+        // Если был свой h1 — вставляем chrome (breadcrumbs/TOC/nav) после него.
+        if (ownH1) MD = injectAfterFirstH1(MD, chrome);
+
         //write to disk
         filePromises.push(
             writeFile(
@@ -546,7 +572,7 @@ const generateMD = async (tree, options, onProgress) => {
                     item.dir.replace(options.ROOT_FOLDER, ''),
                     `${options.MD_FILE_NAME}.md`
                 ),
-                MD
+                MD.trimStart()
             ).then(() => {
                 processedCount++;
                 if (onProgress) onProgress(processedCount, totalCount);
@@ -564,10 +590,14 @@ const generatePDF = async (tree, options, onProgress) => {
     let filePromises = [];
     for (const item of tree) {
         let name = getFolderName(item.dir, options.ROOT_FOLDER, options.HOMEPAGE_NAME);
+        const ownH1 = hasOwnH1(item);
         //title
-        let MD = `# ${name}`;
+        let MD = ownH1 ? '' : `# ${name}`;
+
+        let chrome = '';
         if (options.INCLUDE_BREADCRUMBS && name !== options.HOMEPAGE_NAME)
-            MD += `\n\n\`${item.dir.replace(options.ROOT_FOLDER, '')}\``;
+            chrome += `\n\n\`${item.dir.replace(options.ROOT_FOLDER, '')}\``;
+        if (!ownH1) MD += chrome;
 
         //concatenate markdown files
         MD = await compileDocument(MD, item, options, async (item, pumlFile, options) => {
@@ -586,6 +616,8 @@ const generatePDF = async (tree, options, onProgress) => {
             return diagramImage;
         });
 
+        if (ownH1) MD = injectAfterFirstH1(MD, chrome);
+
         //write temp file
         filePromises.push(
             writeFile(
@@ -594,7 +626,7 @@ const generatePDF = async (tree, options, onProgress) => {
                     item.dir.replace(options.ROOT_FOLDER, ''),
                     `${options.MD_FILE_NAME}_TEMP.md`
                 ),
-                MD
+                MD.trimStart()
             )
                 .then(() => {
                     return markdownpdf(
@@ -679,7 +711,7 @@ const generateWebMD = async (tree, options) => {
         let name = getFolderName(item.dir, options.ROOT_FOLDER, options.HOMEPAGE_NAME);
 
         //title
-        let MD = `# ${name}`;
+        let MD = hasOwnH1(item) ? '' : `# ${name}`;
 
         //concatenate markdown files
         MD = await compileDocument(MD, item, options, async (item, pumlFile, options) => {
@@ -729,6 +761,8 @@ const generateWebMD = async (tree, options) => {
                 else return diagramLink;
             }
         });
+
+        MD = MD.trimStart();
 
         //write to disk
         filePromises.push(
