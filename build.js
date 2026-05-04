@@ -136,9 +136,9 @@ const generateTree = async (dir, options) => {
     return tree;
 };
 
-const generateImages = async (tree, options, onImageGenerated, conf) => {
+const generateImages = async (tree, options, onImageGenerated, cacheConf) => {
     // Get the old checksums (from last run) of all PUML-files
-    let oldChecksums = conf.get('checksums') || [];
+    let oldChecksums = cacheConf.get('checksums') || [];
     let newChecksums = [];
     const bkFolderName = options.DIST_FOLDER + DIST_BACKUP_FOLDER_SUFFIX;
 
@@ -216,7 +216,7 @@ const generateImages = async (tree, options, onImageGenerated, conf) => {
     }
 
     // store all puml checksums
-    conf.set('checksums', newChecksums);
+    cacheConf.set('checksums', newChecksums);
 };
 
 // Если первый md-файл уже начинается с заголовка h1 — авто-заголовок страницы
@@ -821,7 +821,7 @@ const generateWebMD = async (tree, options) => {
     return Promise.all(filePromises);
 };
 
-const build = async (options, conf) => {
+const build = async (options, cacheConf) => {
     let start_date = new Date();
     const bkFolderName = options.DIST_FOLDER + DIST_BACKUP_FOLDER_SUFFIX;
 
@@ -849,7 +849,7 @@ const build = async (options, conf) => {
             (count, total) => {
                 process.stdout.write(`processed ${count}/${total} images\r`);
             },
-            conf
+            cacheConf
         );
         console.log('');
     }

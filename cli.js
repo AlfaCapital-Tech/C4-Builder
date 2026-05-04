@@ -76,12 +76,27 @@ module.exports = async () => {
     const opts = program.opts();
 
     let conf = { get: () => {} };
-    if (!opts.new)
-        conf = new Configstore(
-            process.cwd().split(path.sep).splice(1).join('_'),
+    let cacheConf = { get: () => {}, set: () => {}, clear: () => {} };
+    if (!opts.new) {
+        const projectKey = process.cwd().split(path.sep).splice(1).join('_');
+        const configPath = path.join(process.cwd(), opts.configFile ?? '.c4builder');
+        conf = new Configstore(projectKey, {}, { configPath });
+        cacheConf = new Configstore(
+            projectKey + '_cache',
             {},
-            { configPath: path.join(process.cwd(), opts.configFile ?? '.c4builder') }
+            { configPath: configPath + '.cache' }
         );
+
+        // Миграция: чексуммы раньше жили в .c4builder, переносим их в .c4builder.cache,
+        // чтобы рабочий конфиг перестал «дёргаться» в git при каждой сборке.
+        const legacyChecksums = conf.get('checksums');
+        if (legacyChecksums !== undefined) {
+            if (cacheConf.get('checksums') === undefined) {
+                cacheConf.set('checksums', legacyChecksums);
+            }
+            conf.delete('checksums');
+        }
+    }
 
     if (opts.docs) return cmdHelp();
 
@@ -104,6 +119,7 @@ module.exports = async () => {
 
     if (opts.reset) {
         conf.clear();
+        cacheConf.clear();
         console.log(`configuration was reset`);
         return;
     }
@@ -144,10 +160,10 @@ module.exports = async () => {
                 isBuilding = true;
                 let buildOk = true;
                 try {
-                    await build(options, conf);
+                    await build(options, cacheConf);
                     while (attemptedWatchBuild) {
                         attemptedWatchBuild = false;
-                        await build(options, conf);
+                        await build(options, cacheConf);
                     }
                 } catch (err) {
                     buildOk = false;
@@ -161,7 +177,7 @@ module.exports = async () => {
         }
 
         isBuilding = true;
-        await build(options, conf);
+        await build(options, cacheConf);
         isBuilding = false;
 
         if (opts.site) return await cmdSite(options, opts, reloadEmitter);
