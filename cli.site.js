@@ -2,6 +2,7 @@ const chalk = require('chalk');
 const path = require('path');
 const fs = require('fs');
 const express = require('express');
+const open = require('open');
 
 const LIVERELOAD_PATH = '/__livereload';
 const LIVERELOAD_SNIPPET = `
@@ -132,9 +133,13 @@ module.exports = (currentConfiguration, program, reloadEmitter) => {
 
     return new Promise((resolve, reject) => {
         const server = app.listen(port, '127.0.0.1', () => {
+            const url = 'http://localhost:' + port;
             console.log('serving your docsify site');
-            console.log(`go to ${chalk.green('http://localhost:' + port)}`);
+            console.log(`go to ${chalk.green(url)}`);
             if (liveReloadEnabled) console.log(chalk.gray('livereload enabled (browser auto-reload on rebuild)'));
+            // --open: открываем браузер один раз при старте; BROWSER=none отключает (CI/headless)
+            if (program.open && process.env.BROWSER !== 'none')
+                open(url).catch(() => console.log(chalk.gray('could not open the browser automatically')));
             resolve(server);
         });
         server.on('error', (err) => {
