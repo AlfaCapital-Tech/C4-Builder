@@ -204,8 +204,6 @@ const generateImages = async (tree, options, onImageGenerated, cacheConf) => {
             var taskPromises = Promise.all(taskList).then((result) => {
                 processedImages++;
                 if (onImageGenerated) onImageGenerated(processedImages, totalImages);
-                // Add puml checksum
-                newChecksums.push(cksum);
             });
 
             await taskPromises;
