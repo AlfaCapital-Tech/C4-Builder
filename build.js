@@ -136,6 +136,34 @@ const generateTree = async (dir, options) => {
     return tree;
 };
 
+// Свернуть локальные !include (.iuml и пр.) диаграммы в материал для чексуммы — рекурсивно.
+// Иначе правка включённого .iuml не инвалидирует кэш и на сайт уезжает устаревший рендер.
+// URL (!include https://…) и stdlib (!include <…>) пропускаем: локально не меняются.
+const foldIncludes = (content, fileDir, searchDir, visited) => {
+    const re = /^[ \t]*!include(?:_once|_many|sub|url)?[ \t]+(.+?)[ \t]*$/gim;
+    let out = '';
+    let m;
+    while ((m = re.exec(content)) !== null) {
+        const ref = m[1].trim().replace(/^["']|["']$/g, '').split('!')[0].trim(); // снять кавычки и !subpart
+        if (!ref || /^https?:\/\//i.test(ref) || ref.startsWith('<')) continue;
+        // PlantUML резолвит include от каталога файла с директивой, затем от include-пути (item.dir)
+        const resolved = [path.resolve(fileDir, ref), path.resolve(searchDir, ref)].find(
+            (p) => fs.existsSync(p) && fs.statSync(p).isFile()
+        );
+        if (!resolved || visited.has(resolved)) continue; // защита от циклов и повторов
+        visited.add(resolved);
+        let inc = '';
+        try {
+            inc = fs.readFileSync(resolved, 'utf-8');
+        } catch {
+            continue;
+        }
+        out += ` ${resolved} ${inc}`;
+        out += foldIncludes(inc, path.dirname(resolved), searchDir, visited); // вложенные include
+    }
+    return out;
+};
+
 const generateImages = async (tree, options, onImageGenerated, cacheConf) => {
     // Get the old checksums (from last run) of all PUML-files
     let oldChecksums = cacheConf.get('checksums') || [];
@@ -163,10 +191,13 @@ const generateImages = async (tree, options, onImageGenerated, cacheConf) => {
             process.env.PLANTUML_HOME = path.join(__dirname, 'vendor', ver.jar);
             const plantuml = require('node-plantuml');
 
-            // Calculate hash of current puml content
+            // Calculate hash of current puml content + its resolved !include graph (.iuml и пр.),
+            // чтобы правка включённого файла инвалидировала кэш диаграмм, которые его включают.
+            const pumlBody = '' + (pumlFile.content || '');
+            const includes = foldIncludes(pumlBody, item.dir, item.dir, new Set());
             let cksum = crypto
                 .createHash('sha256')
-                .update('' + pumlFile.content || '', 'utf-8')
+                .update(pumlBody + includes, 'utf-8')
                 .digest('hex');
 
             // path to backup image file
