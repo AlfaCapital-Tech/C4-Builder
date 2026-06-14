@@ -56,6 +56,7 @@ Options:
   reset                             clear all configuration
   site                              serve the generated site
   -w, --watch                       watch for changes and rebuild
+  -o, --open                        open the generated site in the browser (with --site)
   docs                              a brief explanation for the available configuration options
   -p, --port <n>                    port used for serving the generated site
   -c, --config-file <.c4builder>    set the configuration file relative path

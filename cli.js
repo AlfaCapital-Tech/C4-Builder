@@ -69,6 +69,7 @@ module.exports = async () => {
         .option('--reset', 'clear all configuration')
         .option('--site', 'serve the generated site')
         .option('-w, --watch', 'watch for changes and rebuild')
+        .option('-o, --open', 'open the generated site in the browser (with --site)')
         .option('--docs', 'a brief explanation for the available configuration options')
         .option('-p, --port <n>', 'port used for serving the generated site', parseInt)
         .parse(process.argv);
