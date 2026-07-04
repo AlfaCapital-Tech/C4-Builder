@@ -9,3 +9,6 @@ test/.tmp/
 .idea
 *.iml
 *.tgz
+
+# личные настройки Claude Code (общие commands/skills — в git)
+.claude/settings.local.json
