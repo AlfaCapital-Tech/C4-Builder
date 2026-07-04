@@ -3,7 +3,7 @@
 		"scope": "plantuml",
 		"prefix": "Include C4 Context Diagram",
 		"body": [
-			"!include https://raw.githubusercontent.com/adrianvlupu/C4-PlantUML/{{plantumlVersion}}/C4_Context.puml"
+			"!include <C4/C4_Context>"
 		],
 		"description": "Include C4 Context Diagram"
 	},
@@ -11,7 +11,7 @@
 		"scope": "plantuml",
 		"prefix": "Include C4 Container Diagram",
 		"body": [
-			"!include https://raw.githubusercontent.com/adrianvlupu/C4-PlantUML/{{plantumlVersion}}/C4_Container.puml"
+			"!include <C4/C4_Container>"
 		],
 		"description": "Include C4 Container Diagram"
 	},
@@ -19,7 +19,7 @@
 		"scope": "plantuml",
 		"prefix": "Include C4 Component Diagram",
 		"body": [
-			"!include https://raw.githubusercontent.com/adrianvlupu/C4-PlantUML/{{plantumlVersion}}/C4_Component.puml"
+			"!include <C4/C4_Component>"
 		],
 		"description": "Include C4 Component Diagram"
 	},
@@ -27,7 +27,7 @@
 		"scope": "plantuml",
 		"prefix": "Include C4 Deployment Diagram",
 		"body": [
-			"!include https://raw.githubusercontent.com/adrianvlupu/C4-PlantUML/{{plantumlVersion}}/C4_Deployment.puml"
+			"!include <C4/C4_Deployment>"
 		],
 		"description": "Include C4 Deployment Diagram"
 	},
@@ -35,7 +35,7 @@
 		"scope": "plantuml",
 		"prefix": "Include C4 Dynamic Diagram",
 		"body": [
-			"!include https://raw.githubusercontent.com/adrianvlupu/C4-PlantUML/{{plantumlVersion}}/C4_Dynamic.puml"
+			"!include <C4/C4_Dynamic>"
 		],
 		"description": "Include C4 Dynamic Diagram"
 	},
