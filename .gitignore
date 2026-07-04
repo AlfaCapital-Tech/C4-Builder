@@ -2,6 +2,9 @@ node_modules
 template/docs/
 template/.c4builder
 
+# временные выходы golden-тестов (эталон test/golden/ — в git)
+test/.tmp/
+
 #intellij
 .idea
 *.iml

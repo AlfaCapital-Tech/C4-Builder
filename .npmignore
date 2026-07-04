@@ -2,6 +2,11 @@ docs
 /.vscode
 template/docs/
 template/.c4builder
+test/
+vitest.config.mjs
+openspec/
+.claude/
+.pi/
 .npmrc
 .github/
 Dockerfile

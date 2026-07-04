@@ -14,7 +14,11 @@
     "type": "git",
     "url": "https://github.com/AlfaCapital-Tech/C4-Builder.git"
   },
-  "scripts": {},
+  "scripts": {
+    "test": "vitest run",
+    "test:golden": "vitest run test/golden.test.mjs",
+    "test:golden:update": "UPDATE_GOLDEN=1 vitest run test/golden.test.mjs"
+  },
   "keywords": [
     "C4",
     "C4Model",
@@ -43,5 +47,8 @@
     "node-plantuml": "^0.9.0",
     "node-watch": "^0.7.4",
     "open": "^8.4.2"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.9"
   }
 }
