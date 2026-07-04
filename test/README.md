@@ -40,13 +40,15 @@ Layout диаграмм зависит от версий graphviz/шрифтов
 Если golden-тест упал в CI из-за различий окружения:
 
 1. Скачайте артефакт `golden-actual-node22` упавшего прогона
-   (это нормализованное фактическое дерево выхода):
+   (нормализованный фактический выход, упакован в tar — tar сохраняет
+   пустые файлы вроде `.nojekyll`, которые upload-artifact дропает):
    ```bash
-   gh run download <run-id> -n golden-actual-node22 -D /tmp/golden-actual
+   gh run download <run-id> -n golden-actual-node22 -D /tmp/dl
+   tar -xzf /tmp/dl/golden-actual.tar.gz -C /tmp
    ```
 2. Регенерируйте эталон из него и закоммитьте:
    ```bash
-   node test/golden-from-dir.mjs /tmp/golden-actual
+   node test/golden-from-dir.mjs /tmp/actual
    git add test/golden && git commit
    ```
 

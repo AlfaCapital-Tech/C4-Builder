@@ -42,11 +42,16 @@ jobs:
       - run: npm test
 
       # Нормализованный фактический выход сборки — из него регенерируется
-      # эталон при расхождении окружений (см. test/README.md)
+      # эталон при расхождении окружений (см. test/README.md).
+      # Пакуем в tar: upload-artifact дропает пустые файлы (напр. .nojekyll).
+      - name: Pack actual output
+        if: failure()
+        run: tar -czf golden-actual.tar.gz -C test/.tmp actual
+
       - name: Upload actual output
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: golden-actual-node${{ matrix.node }}
-          path: test/.tmp/actual/
+          path: golden-actual.tar.gz
           if-no-files-found: ignore

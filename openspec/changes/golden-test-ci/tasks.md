@@ -21,4 +21,4 @@
 ## 4. GitHub Actions
 
 - [x] 4.1 Создать `.github/workflows/ci.yml`: `pull_request` + `push` в master, runner `ubuntu-24.04`, матрица Node 22/24, setup-java Temurin 21, установка graphviz, `npm ci --ignore-scripts`, `npm test`, concurrency с cancel-in-progress
-- [ ] 4.2 Прогнать workflow на ветке (push/PR), при расхождении эталона из-за окружения CI — регенерировать эталон по артефакту CI и зафиксировать процедуру в test/README
+- [x] 4.2 Прогнать workflow на ветке (push/PR), при расхождении эталона из-за окружения CI — регенерировать эталон по артефакту CI и зафиксировать процедуру в test/README
