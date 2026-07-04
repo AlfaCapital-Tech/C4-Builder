@@ -4,11 +4,17 @@ const chalk = require('chalk');
 const fs = require('fs');
 const path = require('path');
 const fsextra = require('fs-extra');
+const { spawn } = require('child_process');
 let docsifyTemplate = require('./docsify.template.js');
 const markdownpdf = require('md-to-pdf').mdToPdf;
 const http = require('http');
 
 const DIST_BACKUP_FOLDER_SUFFIX = '_bk';
+
+// Вендорный шрифт: ширина текста в SVG считается из AWT-метрик, поэтому
+// шрифт пинуется, чтобы рендер не зависел от того, что установлено на машине.
+const FONTS_DIR = path.join(__dirname, 'vendor', 'fonts');
+const DEFAULT_FONT_NAME = 'Liberation Sans';
 
 const {
     encodeURIPath,
@@ -164,6 +170,56 @@ const foldIncludes = (content, fileDir, searchDir, visited) => {
     return out;
 };
 
+// Прямой вызов PlantUML: layout считает встроенный Java-движок Smetana
+// (`-Playout=smetana`), внешний graphviz/dot не нужен. Диаграмма подаётся в stdin
+// (`-pipe`), результат читается из stdout — имя выходного файла задаёт c4builder,
+// а не директива `@startuml <name>`. Include-путь и вендорный шрифт отдаются JVM.
+// ditaa рендерит собственный движок (layout не участвует), а `-Playout=smetana`
+// на нём меняет размер холста — поэтому для ditaa флаг не передаётся (выход
+// байт-в-байт совпадает с историческим).
+const renderDiagram = (content, { jarPath, includePath, format, charset, isDitaa }) =>
+    new Promise((resolve, reject) => {
+        const argv = [
+            '-Djava.awt.headless=true',
+            `-Dplantuml.include.path=${includePath}`,
+            `-Dsun.java2d.fontpath=prepend:${FONTS_DIR}`,
+            '-jar',
+            jarPath,
+            ...(isDitaa ? [] : ['-Playout=smetana']),
+            `-SdefaultFontName=${DEFAULT_FONT_NAME}`,
+            '-charset',
+            charset,
+            `-t${format}`,
+            '-pipe'
+        ];
+
+        const child = spawn('java', argv);
+        const stdout = [];
+        const stderr = [];
+
+        child.stdout.on('data', (chunk) => stdout.push(chunk));
+        child.stderr.on('data', (chunk) => stderr.push(chunk));
+        child.on('error', reject); // java не найдена и пр.
+        child.on('close', (code) => {
+            // Smetana печатает диагностический шум (UNSURE_ABOUT…) — это не ошибка
+            // рендера, пользователю не показываем; остальной stderr пробрасываем.
+            const errText = Buffer.concat(stderr)
+                .toString('utf8')
+                .split('\n')
+                .filter((line) => line.trim() && !/UNSURE_ABOUT/.test(line))
+                .join('\n');
+            if (code !== 0) {
+                return reject(new Error(`PlantUML завершился с кодом ${code}\n${errText}`));
+            }
+            if (errText) process.stderr.write(errText + '\n');
+            resolve(Buffer.concat(stdout));
+        });
+
+        child.stdin.on('error', () => {}); // EPIPE, если java упала до чтения stdin
+        child.stdin.write(content);
+        child.stdin.end();
+    });
+
 const generateImages = async (tree, options, onImageGenerated, cacheConf) => {
     // Get the old checksums (from last run) of all PUML-files
     let oldChecksums = cacheConf.get('checksums') || [];
@@ -176,6 +232,7 @@ const generateImages = async (tree, options, onImageGenerated, cacheConf) => {
     let ver = plantumlVersions.find((v) => v.version === options.PLANTUML_VERSION);
     if (options.PLANTUML_VERSION === 'latest') ver = plantumlVersions.find((v) => v.isLatest);
     if (!ver) throw new Error(`PlantUML version ${options.PLANTUML_VERSION} not supported`);
+    const jarPath = path.join(__dirname, 'vendor', ver.jar);
 
     const crypto = require('crypto');
 
@@ -187,10 +244,6 @@ const generateImages = async (tree, options, onImageGenerated, cacheConf) => {
 
     for (const item of tree) {
         for (const pumlFile of item.pumlFiles) {
-            //There was a bug with this, that's why I require it inside the loop
-            process.env.PLANTUML_HOME = path.join(__dirname, 'vendor', ver.jar);
-            const plantuml = require('node-plantuml');
-
             // Calculate hash of current puml content + its resolved !include graph (.iuml и пр.),
             // чтобы правка включённого файла инвалидировала кэш диаграмм, которые его включают.
             const pumlBody = '' + (pumlFile.content || '');
@@ -218,18 +271,16 @@ const generateImages = async (tree, options, onImageGenerated, cacheConf) => {
             if (oldChecksums.find((x) => x === cksum) && (await fs.existsSync(bkFilePath))) {
                 await fsextra.copyFileSync(bkFilePath, filePath);
             } else {
-                //write diagram as image
-                let stream = fs.createWriteStream(filePath);
+                //render diagram to image via direct java call (Smetana layout, vendored font)
+                const render = renderDiagram(pumlFile.content, {
+                    jarPath,
+                    includePath: item.dir,
+                    format: pumlFile.isDitaa ? 'png' : options.DIAGRAM_FORMAT,
+                    charset: options.CHARSET,
+                    isDitaa: pumlFile.isDitaa
+                }).then((image) => writeFile(filePath, image));
 
-                plantuml
-                    .generate(path.join(item.dir, pumlFile.dir), {
-                        format: pumlFile.isDitaa ? 'png' : options.DIAGRAM_FORMAT,
-                        charset: options.CHARSET,
-                        include: item.dir
-                    })
-                    .out.pipe(stream);
-
-                taskList.push(new Promise((resolve) => stream.on('finish', resolve)));
+                taskList.push(render);
             }
 
             var taskPromises = Promise.all(taskList).then((result) => {

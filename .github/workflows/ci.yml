@@ -13,7 +13,8 @@ concurrency:
 jobs:
   test:
     name: test (node ${{ matrix.node }})
-    # runner пинован: версия graphviz влияет на layout диаграмм и golden-эталон
+    # runner пинован как страховка: layout считает Java-движок Smetana + вендорный
+    # шрифт, поэтому эталон определяется мажором JDK (Temurin 21), а не окружением
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
@@ -31,11 +32,6 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-
-      - name: Install graphviz
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends graphviz
 
       - run: npm ci --ignore-scripts
 

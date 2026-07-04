@@ -30,6 +30,10 @@ I strongly encourage people to check them out first but if you want to dive righ
 
 `npm i -g c4builder`
 
+**Requirements:** local diagram generation needs a Java runtime (JRE 17+) on `PATH`.
+Graphviz is **not** required — layout is computed by PlantUML's built-in Java engine
+(Smetana). The PlantUML jar and the diagram font are bundled with c4builder.
+
 The easiest way to get started is with the _new project_ template.
 
 ![new](docs/images/new.gif)
@@ -201,7 +205,9 @@ By default this option is disabled. The output will contain image files generate
 ![diagram](https://www.plantuml.com/plantuml/svg/0/fLLDRnen4BqZyH-c72eY4RZqr5CJWff48K5PqgIdQDOxW5j_h6ml9AhwtplsifibJPL3EO0yVfvvy_p6VF41NQYqwlS-I2DKLL3b56n2AFtdoSJXRho...)
 ```
 
-If enabled, all images will be generated using the local copy of plantuml and will get added to the **destination** folder.
+If enabled, all images will be generated using the local copy of plantuml (via a
+direct `java` call, Smetana layout — no graphviz needed) and will get added to the
+**destination** folder.
 
 ### Replace diagrams with link
 

@@ -145,7 +145,7 @@ module.exports = async () => {
         console.log(
             chalk.bold(
                 chalk.yellow(
-                    'Make sure you have java and graphviz installed (https://plantuml.com/starting).'
+                    'Make sure you have Java (JRE 17+) installed. Graphviz is not required — layout uses PlantUML Smetana.'
                 )
             )
         );

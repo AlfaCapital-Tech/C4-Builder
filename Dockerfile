@@ -1,14 +1,12 @@
 FROM node:20-alpine
 
-RUN apk add --no-cache openjdk21-jre graphviz bash
+# graphviz не нужен: layout считает встроенный Java-движок PlantUML (Smetana)
+RUN apk add --no-cache openjdk21-jre bash
 
 WORKDIR /app
 COPY package*.json ./
 
-# Install dependencies, skip post-install scripts for node-plantuml
-RUN npm install --ignore-scripts && \
-    mkdir -p /app/node_modules/node-plantuml/vendor && \
-    echo "module.exports = {};" > /app/node_modules/node-plantuml/vendor/vizjs.js
+RUN npm install --ignore-scripts
 
 COPY . .
 
