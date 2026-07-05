@@ -68,12 +68,6 @@ Include breadcrumbs: ${
             : chalk.red('not set')
     }
 
-PlantUML version: ${
-        currentConfiguration.PLANTUML_VERSION !== undefined
-            ? chalk.green(currentConfiguration.PLANTUML_VERSION)
-            : chalk.red('not set')
-    }
-
 Embed SVG diagram : ${
         currentConfiguration.EMBED_DIAGRAM !== undefined
             ? chalk.green(currentConfiguration.EMBED_DIAGRAM)

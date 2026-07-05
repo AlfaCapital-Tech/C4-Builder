@@ -21,7 +21,7 @@ const {
     readFile,
     writeFile,
     plantUmlServerUrl,
-    plantumlVersions
+    VENDORED_JAR
 } = require('./utils.js');
 // D2-бэкенд: только статические хелперы (парсинг импортов) грузятся сразу; сам
 // движок @terrastruct/d2 тянется лениво внутри renderD2/teardownD2.
@@ -258,10 +258,20 @@ const generateImages = async (tree, options, onImageGenerated, cacheConf) => {
     let totalImages = 0;
     let processedImages = 0;
 
-    let ver = plantumlVersions.find((v) => v.version === options.PLANTUML_VERSION);
-    if (options.PLANTUML_VERSION === 'latest') ver = plantumlVersions.find((v) => v.isLatest);
-    if (!ver) throw new Error(`PlantUML version ${options.PLANTUML_VERSION} not supported`);
-    const jarPath = path.join(__dirname, 'vendor', ver.jar);
+    // Рендерим единственным вендорным JAR — выбора версии больше нет. Легаси-ключ
+    // plantumlVersion в старых .c4builder игнорируем; предупреждаем однократно, только
+    // если он пинует конкретную удалённую версию (≠ latest и ≠ версии вендорного JAR).
+    const jarPath = path.join(__dirname, 'vendor', VENDORED_JAR.jar);
+    const pinned = options.LEGACY_PLANTUML_VERSION;
+    if (pinned && pinned !== 'latest' && pinned !== VENDORED_JAR.version) {
+        console.log(chalk.bold(chalk.yellow('WARNING:')));
+        console.log(
+            chalk.yellow(
+                `Выбор версии PlantUML удалён — сборка идёт вендорным JAR ${VENDORED_JAR.version}. ` +
+                    `Ключ plantumlVersion: "${pinned}" в .c4builder можно убрать.`
+            )
+        );
+    }
 
     const crypto = require('crypto');
 

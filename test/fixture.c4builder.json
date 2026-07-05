@@ -16,7 +16,6 @@
     "executeScript": false,
     "docsifyTemplate": "",
     "webPort": "3000",
-    "plantumlVersion": "1.2025.2",
     "includeBreadcrumbs": true,
     "includeLinkToDiagram": false,
     "diagramsOnTop": false,

@@ -125,33 +125,13 @@ const clearConsole = () => {
     process.stdout.write('\x1b[0f');
 };
 
-const plantumlVersions = [
-    {
-        version: '1.2020.07',
-        jar: 'plantuml-1.2020.7.jar'
-    },
-    {
-        version: '1.2020.17',
-        jar: 'plantuml.1.2020.17.jar'
-    },
-    {
-        version: '1.2021.7',
-        jar: 'plantuml.1.2021.7.jar'
-    },
-    {
-        version: '1.2021.12',
-        jar: 'plantuml.1.2021.12.jar'
-    },
-    {
-        version: '1.2022.3',
-        jar: 'plantuml-1.2022.3.jar'
-    },
-    {
-        version: '1.2025.2',
-        isLatest: true,
-        jar: 'plantuml-1.2025.2.jar'
-    }
-];
+// Единственный вендорный PlantUML-JAR. Выбор версии убран: локальный java-direct
+// рендер (Smetana) не зависит от версии, старые JAR удалены (см. change
+// remove-plantuml-version). Одна точка правды для имени и версии JAR.
+const VENDORED_JAR = {
+    version: '1.2025.2',
+    jar: 'plantuml-1.2025.2.jar'
+};
 
 module.exports = {
     makeDirectory,
@@ -161,5 +141,5 @@ module.exports = {
     writeOnSameLine,
     clearConsole,
     plantUmlServerUrl,
-    plantumlVersions
+    VENDORED_JAR
 };

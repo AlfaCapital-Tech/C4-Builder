@@ -5,7 +5,6 @@ const chalk = require('chalk');
 const fs = require('fs');
 const path = require('path');
 const fsextra = require('fs-extra');
-const { plantumlVersions } = require('./utils');
 const Configstore = require('configstore');
 
 const { readFile, writeFile, makeDirectory } = require('./utils.js');
@@ -19,7 +18,7 @@ const validate = (schema) => (answers) => {
     }
 };
 
-const generateTemplate = async (dir, projectName, plantumlVersion) => {
+const generateTemplate = async (dir, projectName) => {
     const build = async (dir, parent) => {
         let files = fs.readdirSync(dir);
         for (const file of files) {
@@ -50,8 +49,7 @@ const generateTemplate = async (dir, projectName, plantumlVersion) => {
         }
         const pumlFiles = files.filter((x) => path.extname(x).toLowerCase() === '.puml');
         for (const pumlFile of pumlFiles) {
-            let fileContents = await readFile(path.join(dir, pumlFile));
-            fileContents = fileContents.toString().replace(/{{plantumlVersion}}/g, plantumlVersion);
+            const fileContents = await readFile(path.join(dir, pumlFile));
             await writeFile(
                 path.join(
                     process.cwd(),
@@ -110,48 +108,6 @@ module.exports = async () => {
     let projectName = responses.projectName;
 
     responses = await inquirer.prompt({
-        type: 'list',
-        name: 'plantumlVersion',
-        message: 'PlantUML version:',
-        default: 'latest',
-        choices: plantumlVersions
-            .map((v) => {
-                return {
-                    name: v.version,
-                    value: v.version
-                };
-            })
-            .concat({
-                name: 'latest (compatible with plantuml online server)',
-                value: 'latest'
-            })
-    });
-    let plantumlVersion = responses.plantumlVersion;
-    let ver = plantumlVersions.find((v) => v.version === plantumlVersion);
-    if (plantumlVersion === 'latest') ver = plantumlVersions.find((v) => v.isLatest);
-    if (!ver) throw new Error(`PlantUML version ${plantumlVersion} not supported`);
-    if (!ver.isLatest) {
-        console.log(chalk.bold(chalk.yellow('WARNING:')));
-        console.log(
-            chalk.bold(
-                chalk.yellow(
-                    `Generating diagram images using the online plantuml server will break on version ${ver.version}.`
-                )
-            )
-        );
-        console.log(
-            chalk.bold(chalk.yellow(`The build will generate diagram images using the included ${ver.jar}.`))
-        );
-        console.log(
-            chalk.bold(
-                chalk.yellow(
-                    'Make sure you have Java (JRE 17+) installed. Graphviz is not required — layout uses PlantUML Smetana.'
-                )
-            )
-        );
-    }
-
-    responses = await inquirer.prompt({
         type: 'confirm',
         name: 'isVSCode',
         message: 'Include the VSCode autocomplete?',
@@ -161,23 +117,20 @@ module.exports = async () => {
     console.log(isVSCode);
 
     await makeDirectory(projectName);
-    await generateTemplate(path.join(__dirname, 'template'), projectName, plantumlVersion);
+    await generateTemplate(path.join(__dirname, 'template'), projectName);
 
     let conf = new Configstore(
         path.join(process.cwd(), projectName).split(path.sep).splice(1).join('_'),
         {},
         { configPath: path.join(process.cwd(), projectName, '.c4builder') }
     );
-    conf.set('plantumlVersion', plantumlVersion);
     conf.set('projectName', projectName);
-    if (!ver.isLatest) conf.set('generateLocalImages', true);
 
     let readme = await readFile(path.join(__dirname, 'template', 'readme.md'));
     await writeFile(path.join(process.cwd(), projectName, 'README.MD'), `# ${projectName}\n\n${readme}`);
 
     if (isVSCode) {
-        let snippets = await readFile(path.join(__dirname, 'vendor', 'C4-PlantUML', 'C4.code-snippets'));
-        snippets = snippets.toString().replace(/{{plantumlVersion}}/g, plantumlVersion);
+        const snippets = await readFile(path.join(__dirname, 'vendor', 'C4-PlantUML', 'C4.code-snippets'));
         await makeDirectory(path.join(projectName, '.vscode'));
         await writeFile(path.join(process.cwd(), projectName, '.vscode', 'C4.code-snippets'), snippets);
     }

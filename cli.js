@@ -24,7 +24,9 @@ const intro = () => {
 
 const getOptions = (conf) => {
     return {
-        PLANTUML_VERSION: conf.get('plantumlVersion'),
+        // Легаси-детект: выбор версии PlantUML удалён; ключ plantumlVersion из старых
+        // .c4builder отдаём build.js только для однократного предупреждения на пине.
+        LEGACY_PLANTUML_VERSION: conf.get('plantumlVersion'),
         GENERATE_MD: conf.get('generateMD'),
         GENERATE_WEBSITE: conf.get('generateWEB'),
         GENERATE_COMPLETE_MD_FILE: conf.get('generateCompleteMD'),

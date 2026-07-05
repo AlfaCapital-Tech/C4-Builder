@@ -2,8 +2,6 @@ const inquirer = require('inquirer');
 const joi = require('joi');
 const fs = require('fs');
 const path = require('path');
-const chalk = require('chalk');
-const { plantumlVersions } = require('./utils');
 
 const validate = (schema) => (answers) => {
     //just in case
@@ -204,63 +202,6 @@ module.exports = async (currentConfiguration, conf, program) => {
 
     }
 
-    let plantumlVersion, ver;
-    if (currentConfiguration.PLANTUML_VERSION === undefined || program.config) {
-        let defaultPlantumlVersion =
-            currentConfiguration.PLANTUML_VERSION === undefined
-                ? 'latest'
-                : currentConfiguration.PLANTUML_VERSION;
-        responses = await inquirer.prompt({
-            type: 'list',
-            name: 'plantumlVersion',
-            message: 'PlantUML version:',
-            default: defaultPlantumlVersion,
-            choices: plantumlVersions
-                .map((v) => {
-                    return {
-                        name: v.version,
-                        value: v.version
-                    };
-                })
-                .concat({
-                    name: 'latest (compatible with plantuml online server)',
-                    value: 'latest'
-                })
-        });
-        plantumlVersion = responses.plantumlVersion;
-        conf.set('plantumlVersion', plantumlVersion);
-        if (
-            currentConfiguration.PLANTUML_VERSION &&
-            plantumlVersion !== currentConfiguration.PLANTUML_VERSION
-        ) {
-            console.log(chalk.bold(chalk.yellow('WARNING:')));
-            console.log(
-                chalk.bold(
-                    chalk.yellow(
-                        `You need to update the plantuml file to include https://raw.githubusercontent.com/adrianvlupu/C4-PlantUML/${plantumlVersion}.`
-                    )
-                )
-            );
-        }
-    } else {
-        plantumlVersion = currentConfiguration.PLANTUML_VERSION;
-    }
-    ver = plantumlVersions.find((v) => v.version === plantumlVersion);
-    if (plantumlVersion === 'latest') ver = plantumlVersions.find((v) => v.isLatest);
-    if (!ver) throw new Error(`PlantUML version ${options.PLANTUML_VERSION} not supported`);
-    if (!ver.isLatest) {
-        console.log(
-            chalk.bold(
-                chalk.yellow(
-                    `Generating diagram images using the online plantuml server will break on version ${ver.version}.`
-                )
-            )
-        );
-        console.log(
-            chalk.bold(chalk.yellow(`The build will generate diagram images using the included ${ver.jar}.`))
-        );
-    }
-
     if (
         currentConfiguration.GENERATE_LOCAL_IMAGES === undefined ||
         currentConfiguration.EMBED_DIAGRAM === undefined ||
@@ -323,11 +264,10 @@ module.exports = async (currentConfiguration, conf, program) => {
                 value: 'excludeOtherFiles'
             }
         ];
-        if (ver.isLatest)
-            choices.push({
-                name: 'Generate diagram images locally',
-                value: 'generateLocalImages'
-            });
+        choices.push({
+            name: 'Generate diagram images locally',
+            value: 'generateLocalImages'
+        });
 
         responses = await inquirer.prompt({
             type: 'checkbox',
@@ -342,11 +282,7 @@ module.exports = async (currentConfiguration, conf, program) => {
         conf.set('embedDiagram', !!responses.generate.find((x) => x === 'embedDiagram'));
         conf.set('excludeOtherFiles', !!responses.generate.find((x) => x === 'excludeOtherFiles'));
 
-        if (ver.isLatest) {
-            conf.set('generateLocalImages', !!responses.generate.find((x) => x === 'generateLocalImages'));
-        } else {
-            conf.set('generateLocalImages', true);
-        }
+        conf.set('generateLocalImages', !!responses.generate.find((x) => x === 'generateLocalImages'));
     }
 
     if (!currentConfiguration.PLANTUML_SERVER_URL || program.config) {
