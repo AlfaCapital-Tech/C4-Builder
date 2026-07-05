@@ -26,6 +26,7 @@ const {
 // D2-бэкенд: только статические хелперы (парсинг импортов) грузятся сразу; сам
 // движок @terrastruct/d2 тянется лениво внутри renderD2/teardownD2.
 const { renderD2, foldD2Imports, teardownD2 } = require('./d2renderer.js');
+const { resolveJava } = require('./jre.js');
 // PNG-выход: SVG обоих движков растеризуется resvg (ленивая загрузка внутри модуля).
 const { rasterizeSvgToPng } = require('./pngraster.js');
 const { date } = require('joi');
@@ -209,7 +210,7 @@ const foldIncludes = (content, fileDir, searchDir, visited) => {
 // ditaa рендерит собственный движок (layout не участвует), а `-Playout=smetana`
 // на нём меняет размер холста — поэтому для ditaa флаг не передаётся (выход
 // байт-в-байт совпадает с историческим).
-const renderDiagram = (content, { jarPath, includePath, format, charset, isDitaa }) =>
+const renderDiagram = (content, { javaBin, jarPath, includePath, format, charset, isDitaa }) =>
     new Promise((resolve, reject) => {
         const argv = [
             '-Djava.awt.headless=true',
@@ -225,7 +226,7 @@ const renderDiagram = (content, { jarPath, includePath, format, charset, isDitaa
             '-pipe'
         ];
 
-        const child = spawn('java', argv);
+        const child = spawn(javaBin, argv);
         const stdout = [];
         const stderr = [];
 
@@ -278,6 +279,14 @@ const generateImages = async (tree, options, onImageGenerated, cacheConf) => {
 
     const crypto = require('crypto');
 
+    // JRE резолвится ЛЕНИВО и один раз за сборку: только если в дереве есть хотя бы одна
+    // PlantUML-диаграмма. Проект целиком на D2 java не трогает (скачивание не инициируется).
+    const needsJava = tree.some((item) => item.diagrams.some((d) => d.engine === 'plantuml'));
+    let javaBin = null;
+    if (needsJava) {
+        javaBin = (await resolveJava({ log: (m) => console.log(chalk.gray(m)) })).path;
+    }
+
     for (const item of tree) {
         totalImages += item.diagrams.length;
     }
@@ -324,6 +333,7 @@ const generateImages = async (tree, options, onImageGenerated, cacheConf) => {
                     diagram.engine === 'd2'
                         ? renderD2(entryPath, { layout: options.D2_LAYOUT })
                         : renderDiagram(diagram.content, {
+                              javaBin,
                               jarPath,
                               includePath: item.dir,
                               format: needsRaster ? 'svg' : outFormat,

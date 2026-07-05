@@ -8,6 +8,7 @@ const Configstore = require('configstore');
 
 const cmdHelp = require('./cli.help');
 const cmdNewProject = require('./cli.new');
+const cmdJre = require('./cli.jre');
 const cmdList = require('./cli.list');
 const cmdSite = require('./cli.site');
 const cmdCollect = require('./cli.collect');
@@ -68,6 +69,7 @@ module.exports = async () => {
         .option('--new', 'create a new project from template')
         .option('--name <name>', 'project name for --new (skips the name prompt)')
         .option('-y, --yes', 'non-interactive --new: defaults, no prompts (requires --name)')
+        .option('--force', 'for `jre install`: force JRE download even if system java is present')
         .option('--config', 'change configuration for the current directory')
         .option('-c, --config-file <.c4builder>', 'set the configuration file relative path')
         .option('--list', 'display the current configuration')
@@ -77,9 +79,13 @@ module.exports = async () => {
         .option('-o, --open', 'open the generated site in the browser (with --site)')
         .option('--docs', 'a brief explanation for the available configuration options')
         .option('-p, --port <n>', 'port used for serving the generated site', parseInt)
+        .allowExcessArguments() // позиционные аргументы подкоманды `jre <action>`
         .parse(process.argv);
 
     const opts = program.opts();
+
+    // Прогрев JRE — до загрузки конфига проекта и intro: команда самостоятельна.
+    if (program.args[0] === 'jre') return cmdJre(program.args.slice(1), { force: opts.force });
 
     let conf = { get: () => {} };
     let cacheConf = { get: () => {}, set: () => {}, clear: () => {} };
