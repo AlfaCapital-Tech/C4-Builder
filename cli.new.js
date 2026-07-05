@@ -110,20 +110,6 @@ module.exports = async (opts = {}) => {
         projectName = responses.projectName;
     }
 
-    // --- VSCode-сниппеты: явный флаг или --yes → без промпта (дефолт true) ---
-    let isVSCode;
-    if (opts.vscodeExplicit || nonInteractive) {
-        isVSCode = opts.vscode !== false;
-    } else {
-        const responses = await inquirer.prompt({
-            type: 'confirm',
-            name: 'isVSCode',
-            message: 'Include the VSCode autocomplete?',
-            default: true
-        });
-        isVSCode = responses.isVSCode;
-    }
-
     await makeDirectory(projectName);
     await generateTemplate(path.join(__dirname, 'template'), projectName);
 
@@ -141,12 +127,6 @@ module.exports = async (opts = {}) => {
 
     let readme = await readFile(path.join(__dirname, 'template', 'readme.md'));
     await writeFile(path.join(process.cwd(), projectName, 'README.MD'), `# ${projectName}\n\n${readme}`);
-
-    if (isVSCode) {
-        const snippets = await readFile(path.join(__dirname, 'vendor', 'C4-PlantUML', 'C4.code-snippets'));
-        await makeDirectory(path.join(projectName, '.vscode'));
-        await writeFile(path.join(process.cwd(), projectName, '.vscode', 'C4.code-snippets'), snippets);
-    }
 
     console.log(chalk.green(`the project was created`));
     console.log(chalk.gray(`run the following commands`));

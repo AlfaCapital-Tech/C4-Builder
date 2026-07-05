@@ -67,8 +67,6 @@ module.exports = async () => {
         .version(pkg.version)
         .option('--new', 'create a new project from template')
         .option('--name <name>', 'project name for --new (skips the name prompt)')
-        .option('--vscode', 'include VSCode snippets for --new (default)')
-        .option('--no-vscode', 'exclude VSCode snippets for --new')
         .option('-y, --yes', 'non-interactive --new: defaults, no prompts (requires --name)')
         .option('--config', 'change configuration for the current directory')
         .option('-c, --config-file <.c4builder>', 'set the configuration file relative path')
@@ -122,13 +120,7 @@ module.exports = async () => {
         console.log(`you can always change the configuration by running > c4builder config\n`);
     }
 
-    if (opts.new)
-        return cmdNewProject({
-            ...opts,
-            // Отличить явный --vscode/--no-vscode от дефолта: в интерактиве заданный
-            // флагом vscode пропускает промпт, незаданный — спрашивается.
-            vscodeExplicit: program.getOptionValueSource('vscode') === 'cli'
-        });
+    if (opts.new) return cmdNewProject(opts);
     if (opts.list) return cmdList(options);
 
     if (opts.reset) {
