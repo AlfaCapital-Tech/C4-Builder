@@ -68,6 +68,19 @@ describe('golden-сборка fixture (template/src)', () => {
         expect(svg).toContain('Клиент');
         expect(svg).toMatch(/[А-Яа-яЁё]/);
     });
+
+    it('D2-диаграмма отрендерена, импорт _c4lib применён, кириллица сохранена', () => {
+        const files = Object.keys(firstRun);
+        // .d2 рендерится вторым бэкендом (D2/WASM) → SVG рядом с прочими выходами
+        expect(files).toContain('4 D2 Example/landscape.svg');
+        // общая библиотека _c4lib.d2 импортируется, но (как _-файл) не рендерится
+        expect(files).not.toContain('_c4lib.svg');
+        expect(files).not.toContain('4 D2 Example/_c4lib.svg');
+
+        const svg = decodeXmlEntities(firstRun['4 D2 Example/landscape.svg'].text);
+        expect(svg).toContain('Клиент'); // кириллица в D2-SVG
+        expect(svg).toMatch(/#0b4884/i); // C4-класс person из импортированного ../_c4lib.d2
+    });
 });
 
 describe('повторная сборка с тёплым кэшем (.c4builder.cache)', () => {

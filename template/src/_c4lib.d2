@@ -1,0 +1,29 @@
+# Общая C4-библиотека демо-проекта для D2 (аналог styles.iuml для PlantUML).
+# Имя с префиксом `_`: как и все `_`-файлы, c4builder не рендерит её как отдельную
+# диаграмму, но резолвит как импорт. Подключается спред-импортом из диаграммы:
+# `...@_c4lib` (из корня src) или `...@../_c4lib` (из вложенной папки).
+
+classes: {
+  person: {
+    shape: person
+    style: {
+      fill: "#0b4884"
+      stroke: "#052e56"
+      font-color: "#ffffff"
+    }
+  }
+  system: {
+    style: {
+      fill: "#1168bd"
+      stroke: "#0b4884"
+      font-color: "#ffffff"
+    }
+  }
+  external: {
+    style: {
+      fill: "#999999"
+      stroke: "#6b6b6b"
+      font-color: "#ffffff"
+    }
+  }
+}

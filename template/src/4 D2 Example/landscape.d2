@@ -1,0 +1,20 @@
+# C4-контекст на D2. C4-классы (person/system/external) вливаются спред-импортом
+# из общего ../_c4lib.d2 — так же, как PlantUML-диаграммы подключают ../styles.iuml.
+...@../_c4lib
+
+client: Клиент банка {
+  class: person
+}
+ib: Интернет-банк {
+  class: system
+}
+abs: АБС {
+  class: external
+}
+email: Почтовый шлюз {
+  class: external
+}
+
+client -> ib: Пользуется
+ib -> abs: Читает счета и проводки
+ib -> email: Шлёт уведомления

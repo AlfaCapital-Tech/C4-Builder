@@ -9,6 +9,7 @@
       * [Extended Docs](#Extended-Docs)
   * [2 Deployment](#2-Deployment)
   * [3 Локализация](#3-%D0%9B%D0%BE%D0%BA%D0%B0%D0%BB%D0%B8%D0%B7%D0%B0%D1%86%D0%B8%D1%8F)
+  * [4 D2 Example](#4-D2-Example)
 
 ---
 
@@ -198,3 +199,20 @@ A deployment diagram allows you to illustrate how containers in the static model
 
 
 ![diagram](localization.svg)
+
+## 4 D2 Example
+
+`/4 D2 Example`
+
+[Overview](#golden-fixture)
+
+**Диаграмма на D2 (второй бэкенд рендера)**
+
+Эта страница демонстрирует второй бэкенд диаграмм — [D2](https://d2lang.com). Файл с расширением `.d2` рендерится движком D2 (WASM → SVG) наравне с `.puml`; бэкенд выбирается по расширению.
+
+C4-стили (классы `person`, `system`, `external` с фирменными цветами) вынесены в общий `../c4lib.d2` и подключаются спред-импортом `...@../c4lib` — это D2-аналог `!include ../styles.iuml` у PlantUML. Импорты собирает сам c4builder и подаёт движку через виртуальную файловую систему, поэтому внешних обращений в интернет нет и сборка работает в закрытом контуре.
+
+**Область применения**: показать, что `.d2`-диаграммы, их импорты и кириллица корректно попадают в собранный сайт и SVG.
+
+
+![diagram](landscape.svg)

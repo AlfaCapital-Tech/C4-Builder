@@ -120,6 +120,37 @@ c4builder comes with a wizard for managing configuration for each project folder
 
 **Diagrams can be placed at arbitrary positions by adding them to the markdown file like this: `![name](<diagram name>.puml)`**
 
+### D2 diagrams (second render backend)
+
+Besides PlantUML (`.puml`), c4builder renders [D2](https://d2lang.com) diagrams
+(`.d2`). The backend is chosen by file extension — `.puml` → PlantUML, `.d2` → D2
+(WASM → SVG, no external binaries) — and both can live side by side in the same
+project. Reference a `.d2` from markdown exactly like a `.puml`:
+`![name](<diagram name>.d2)`.
+
+The D2 engine is an **optional dependency** (`@terrastruct/d2`, ~60 MB) loaded
+lazily only when the project actually contains a `.d2` file. Install it once:
+
+```bash
+npm install @terrastruct/d2
+```
+
+If a `.d2` is present but the package is missing, the build stops with an explicit
+install hint instead of a cryptic module error.
+
+**Imports and shared styles.** D2 [imports](https://d2lang.com/tour/imports)
+(`@file` / spread `...@file`) let you factor reusable classes and vars into a shared
+`.d2` — the D2 counterpart of PlantUML's `.iuml`. c4builder resolves the import graph
+itself and feeds it to the engine, so no network access is needed. Prefix a shared
+library file with `_` (e.g. `_c4lib.d2`) so it is not rendered as a standalone
+diagram — like every `_`-prefixed file it is skipped by the build, yet it is still
+resolved when imported (`...@../_c4lib`). Editing an imported file invalidates the
+cache of every diagram that imports it. See the demo project's
+`4 D2 Example/landscape.d2` importing `...@../_c4lib`.
+
+**Layout.** The `d2Layout` config option selects the layout engine (`dagre`, the
+default, or `elk`). The golden test pins a specific engine for reproducibility.
+
 ## The output
 
 Using the configuration wizard you can choose any combination of outputs. By default all are enabled.

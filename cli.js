@@ -51,6 +51,7 @@ const getOptions = (conf) => {
         HAS_RUN: conf.get('hasRun'),
         PLANTUML_SERVER_URL: conf.get('plantumlServerUrl'),
         DIAGRAM_FORMAT: conf.get('diagramFormat'),
+        D2_LAYOUT: conf.get('d2Layout') || 'dagre',
         MD_FILE_NAME: 'README',
         WEB_FILE_NAME: conf.get('webFileName'),
         SUPPORT_SEARCH: conf.get('supportSearch'),

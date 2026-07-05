@@ -49,5 +49,8 @@
   },
   "devDependencies": {
     "vitest": "^4.1.9"
+  },
+  "optionalDependencies": {
+    "@terrastruct/d2": "0.1.33"
   }
 }

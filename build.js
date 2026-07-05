@@ -24,7 +24,15 @@ const {
     plantUmlServerUrl,
     plantumlVersions
 } = require('./utils.js');
+// D2-бэкенд: только статические хелперы (парсинг импортов) грузятся сразу; сам
+// движок @terrastruct/d2 тянется лениво внутри renderD2/teardownD2.
+const { renderD2, foldD2Imports, teardownD2 } = require('./d2renderer.js');
 const { date } = require('joi');
+
+// Формат выходного изображения диаграммы: D2 всегда SVG (PNG — отдельная фича),
+// PlantUML — png для ditaa, иначе выбранный формат.
+const diagramOutputFormat = (diagram, options) =>
+    diagram.engine === 'd2' ? 'svg' : diagram.isDitaa ? 'png' : options.DIAGRAM_FORMAT;
 
 const getMime = (format) => {
     if (format == 'svg') return `image/svg+xml`;
@@ -75,7 +83,7 @@ const generateTree = async (dir, options) => {
                 level: dir.split(path.sep).length,
                 parent: parent,
                 mdFiles: [],
-                pumlFiles: [],
+                diagrams: [],
                 descendants: []
             };
             tree.push(item);
@@ -107,21 +115,28 @@ const generateTree = async (dir, options) => {
             const fileContents = await readFile(path.join(dir, mdFile));
             item.mdFiles.push(fileContents);
         }
-        const pumlFiles = files.filter((x) => path.extname(x).toLowerCase() === '.puml');
-        for (const pumlFile of pumlFiles) {
-            const fileContents = await readFile(path.join(dir, pumlFile));
-            const isDitaa = !!(fileContents ? fileContents.toString() : '').match(/(@startditaa)/gi);
-            item.pumlFiles.push({ dir: pumlFile, content: fileContents, isDitaa });
+        // Диаграммы обоих бэкендов: .puml → PlantUML, .d2 → D2. Поле dir — имя файла
+        // (историческое), engine выбирает рендерер, isDitaa — только для PlantUML.
+        const diagramFiles = files.filter((x) => ['.puml', '.d2'].includes(path.extname(x).toLowerCase()));
+        for (const diagramFile of diagramFiles) {
+            const ext = path.extname(diagramFile).toLowerCase();
+            const engine = ext === '.d2' ? 'd2' : 'plantuml';
+            const fileContents = await readFile(path.join(dir, diagramFile));
+            const isDitaa =
+                engine === 'plantuml' && !!(fileContents ? fileContents.toString() : '').match(/(@startditaa)/gi);
+            item.diagrams.push({ dir: diagramFile, ext, engine, content: fileContents, isDitaa });
         }
-        item.pumlFiles.sort(function (a, b) {
+        item.diagrams.sort(function (a, b) {
             return ('' + a.dir).localeCompare(b.dir);
         });
 
-        //copy all other files
+        //copy all other files (.d2 исходники, как и .puml, не копируем — они рендерятся)
         const otherFiles = options.EXCLUDE_OTHER_FILES
             ? []
             : files.filter(
-                  (x) => x.charAt(0) === '_' || ['.md', '.puml'].indexOf(path.extname(x).toLowerCase()) === -1
+                  (x) =>
+                      x.charAt(0) === '_' ||
+                      ['.md', '.puml', '.d2'].indexOf(path.extname(x).toLowerCase()) === -1
               );
 
         for (const otherFile of otherFiles) {
@@ -138,6 +153,22 @@ const generateTree = async (dir, options) => {
     };
 
     await build(dir);
+
+    // Диаграммы именуются по basename исходника, поэтому foo.puml и foo.d2 в одной
+    // папке при одном формате дают один выходной файл и затирают друг друга —
+    // отлавливаем это явной ошибкой, а не молчаливой потерей одной из диаграмм.
+    for (const item of tree) {
+        const seen = new Map();
+        for (const d of item.diagrams) {
+            const out = `${path.parse(d.dir).name}.${diagramOutputFormat(d, options)}`;
+            if (seen.has(out))
+                throw new Error(
+                    `Коллизия имени выхода '${out}' в ${item.dir}: '${seen.get(out)}' и '${d.dir}' ` +
+                        `рендерятся в один файл. Переименуйте одну из диаграмм.`
+                );
+            seen.set(out, d.dir);
+        }
+    }
 
     return tree;
 };
@@ -237,48 +268,53 @@ const generateImages = async (tree, options, onImageGenerated, cacheConf) => {
     const crypto = require('crypto');
 
     for (const item of tree) {
-        totalImages += item.pumlFiles.length;
+        totalImages += item.diagrams.length;
     }
 
     let taskList = [];
 
     for (const item of tree) {
-        for (const pumlFile of item.pumlFiles) {
-            // Calculate hash of current puml content + its resolved !include graph (.iuml и пр.),
-            // чтобы правка включённого файла инвалидировала кэш диаграмм, которые его включают.
-            const pumlBody = '' + (pumlFile.content || '');
-            const includes = foldIncludes(pumlBody, item.dir, item.dir, new Set());
+        for (const diagram of item.diagrams) {
+            // Чексумма = контент диаграммы + свёрнутый граф её зависимостей, чтобы
+            // правка включаемого/импортируемого файла инвалидировала кэш: PlantUML —
+            // !include-граф (.iuml и пр.), D2 — граф @/...@-импортов.
+            const body = '' + (diagram.content || '');
+            // entryPath нужен только D2 (граф импортов + рендер); для PlantUML не считаем.
+            const entryPath = diagram.engine === 'd2' ? path.join(item.dir, diagram.dir) : null;
+            const includes =
+                diagram.engine === 'd2'
+                    ? foldD2Imports(entryPath)
+                    : foldIncludes(body, item.dir, item.dir, new Set());
             let cksum = crypto
                 .createHash('sha256')
-                .update(pumlBody + includes, 'utf-8')
+                .update(body + includes, 'utf-8')
                 .digest('hex');
 
+            const outName = `${path.parse(diagram.dir).name}.${diagramOutputFormat(diagram, options)}`;
+
             // path to backup image file
-            let bkFilePath = path.join(
-                bkFolderName,
-                item.dir.replace(options.ROOT_FOLDER, ''),
-                `${path.parse(pumlFile.dir).name}.${pumlFile.isDitaa ? 'png' : options.DIAGRAM_FORMAT}`
-            );
+            let bkFilePath = path.join(bkFolderName, item.dir.replace(options.ROOT_FOLDER, ''), outName);
 
             // path to image in dist folder
-            let filePath = path.join(
-                options.DIST_FOLDER,
-                item.dir.replace(options.ROOT_FOLDER, ''),
-                `${path.parse(pumlFile.dir).name}.${pumlFile.isDitaa ? 'png' : options.DIAGRAM_FORMAT}`
-            );
+            let filePath = path.join(options.DIST_FOLDER, item.dir.replace(options.ROOT_FOLDER, ''), outName);
 
-            // if checksum exists (PUML untouched) and file/image exists - copy image back from backup folder
+            // if checksum exists (diagram untouched) and file/image exists - copy image back from backup folder
             if (oldChecksums.find((x) => x === cksum) && (await fs.existsSync(bkFilePath))) {
                 await fsextra.copyFileSync(bkFilePath, filePath);
             } else {
-                //render diagram to image via direct java call (Smetana layout, vendored font)
-                const render = renderDiagram(pumlFile.content, {
-                    jarPath,
-                    includePath: item.dir,
-                    format: pumlFile.isDitaa ? 'png' : options.DIAGRAM_FORMAT,
-                    charset: options.CHARSET,
-                    isDitaa: pumlFile.isDitaa
-                }).then((image) => writeFile(filePath, image));
+                // render diagram to image: D2 через WASM, PlantUML — прямым вызовом java
+                const render =
+                    diagram.engine === 'd2'
+                        ? renderD2(entryPath, { layout: options.D2_LAYOUT }).then((image) =>
+                              writeFile(filePath, image)
+                          )
+                        : renderDiagram(diagram.content, {
+                              jarPath,
+                              includePath: item.dir,
+                              format: diagramOutputFormat(diagram, options),
+                              charset: options.CHARSET,
+                              isDitaa: diagram.isDitaa
+                          }).then((image) => writeFile(filePath, image));
 
                 taskList.push(render);
             }
@@ -290,7 +326,7 @@ const generateImages = async (tree, options, onImageGenerated, cacheConf) => {
 
             await taskPromises;
 
-            // Add puml checksum
+            // Add diagram checksum
             newChecksums.push(cksum);
         }
     }
@@ -321,32 +357,32 @@ const injectAfterFirstH1 = (md, block) => {
 
 const compileDocument = async (md, item, options, getDiagram) => {
     let MD = md;
-    const alreadyIncludedPumls = [];
+    const alreadyIncluded = [];
     const texts = [];
     const diagrams = [];
-    const regex = /(?:!\[.*?\]\()(.*\.puml)(\))/g;
+    const regex = /(?:!\[.*?\]\()(.*\.(?:puml|d2))(\))/g;
 
     for (const mdFile of item.mdFiles) {
         let content = mdFile.toString();
 
-        let pumlRef;
-        while ((pumlRef = regex.exec(content)) !== null) {
-            if (pumlRef && pumlRef[1]) {
-                const pumlFile = item.pumlFiles.find((x) => x.dir === pumlRef[1]);
-                if (pumlFile) {
-                    alreadyIncludedPumls.push(pumlRef[1]);
-                    content = content.replace(pumlRef[0], await getDiagram(item, pumlFile, options));
+        let diagramRef;
+        while ((diagramRef = regex.exec(content)) !== null) {
+            if (diagramRef && diagramRef[1]) {
+                const diagram = item.diagrams.find((x) => x.dir === diagramRef[1]);
+                if (diagram) {
+                    alreadyIncluded.push(diagramRef[1]);
+                    content = content.replace(diagramRef[0], await getDiagram(item, diagram, options));
                 }
             }
         }
         texts.push(content);
     }
-    for (const pumlFile of item.pumlFiles) {
-        if (alreadyIncludedPumls.find((x) => x === pumlFile.dir)) {
+    for (const diagram of item.diagrams) {
+        if (alreadyIncluded.find((x) => x === diagram.dir)) {
             continue;
         }
 
-        diagrams.push(await getDiagram(item, pumlFile, options));
+        diagrams.push(await getDiagram(item, diagram, options));
     }
 
     let fullDoc = [];
@@ -391,18 +427,18 @@ const generateCompleteMD = async (tree, options) => {
         }
 
         //concatenate markdown files
-        MD = await compileDocument(MD, item, options, async (item, pumlFile, options) => {
+        MD = await compileDocument(MD, item, options, async (item, diagram, options) => {
             let diagramUrl = encodeURIPath(
                 path.join(
-                    path.dirname(pumlFile.dir),
-                    path.parse(pumlFile.dir).name + `.${pumlFile.isDitaa ? 'png' : options.DIAGRAM_FORMAT}`
+                    path.dirname(diagram.dir),
+                    path.parse(diagram.dir).name + `.${diagramOutputFormat(diagram, options)}`
                 )
             );
-            if (!options.GENERATE_LOCAL_IMAGES)
+            if (!options.GENERATE_LOCAL_IMAGES && diagram.engine === 'plantuml')
                 diagramUrl = plantUmlServerUrl(
                     options.PLANTUML_SERVER_URL,
-                    pumlFile.isDitaa ? 'png' : options.DIAGRAM_FORMAT,
-                    pumlFile.content
+                    diagramOutputFormat(diagram, options),
+                    diagram.content
                 );
 
             if (options.EMBED_DIAGRAM) {
@@ -419,17 +455,17 @@ const generateCompleteMD = async (tree, options) => {
                     ).toString('base64');
                 else imgContent = await httpGet(diagramUrl);
 
-                let diagramImage = `\n![${path.parse(pumlFile.dir).name}](data:${getMime(
-                    pumlFile.isDitaa ? 'png' : options.DIAGRAM_FORMAT
+                let diagramImage = `\n![${path.parse(diagram.dir).name}](data:${getMime(
+                    diagramOutputFormat(diagram, options)
                 )};base64,${imgContent})\n`;
 
-                let diagramLink = `\n[Download ${path.parse(pumlFile.dir).name} diagram](${encodeURIPath(
+                let diagramLink = `\n[Download ${path.parse(diagram.dir).name} diagram](${encodeURIPath(
                     path.join(item.dir.replace(options.ROOT_FOLDER, ''), diagramUrl)
                 )} ':ignore')`;
                 return diagramImage + diagramLink;
             } else {
                 let diagramImage = `![diagram](${diagramUrl})`;
-                let diagramLink = `[Go to ${path.parse(pumlFile.dir).name} diagram](${encodeURIPath(
+                let diagramLink = `[Go to ${path.parse(diagram.dir).name} diagram](${encodeURIPath(
                     path.join(item.dir.replace(options.ROOT_FOLDER, ''), diagramUrl)
                 )})`;
                 if (!options.INCLUDE_LINK_TO_DIAGRAM)
@@ -469,18 +505,18 @@ const generateCompletePDF = async (tree, options) => {
         }
 
         //concatenate markdown files
-        MD = await compileDocument(MD, item, options, async (item, pumlFile, options) => {
+        MD = await compileDocument(MD, item, options, async (item, diagram, options) => {
             let diagramUrl = encodeURIPath(
                 path.join(
                     item.dir.replace(options.ROOT_FOLDER, ''),
-                    path.parse(pumlFile.dir).name + `.${pumlFile.isDitaa ? 'png' : options.DIAGRAM_FORMAT}`
+                    path.parse(diagram.dir).name + `.${diagramOutputFormat(diagram, options)}`
                 )
             );
-            if (!options.GENERATE_LOCAL_IMAGES)
+            if (!options.GENERATE_LOCAL_IMAGES && diagram.engine === 'plantuml')
                 diagramUrl = plantUmlServerUrl(
                     options.PLANTUML_SERVER_URL,
-                    pumlFile.isDitaa ? 'png' : options.DIAGRAM_FORMAT,
-                    pumlFile.content
+                    diagramOutputFormat(diagram, options),
+                    diagram.content
                 );
 
             let diagramImage = `![diagram](${diagramUrl})`;
@@ -594,18 +630,18 @@ const generateMD = async (tree, options, onProgress) => {
         if (!ownH1) MD += chrome;
 
         //concatenate markdown files
-        MD = await compileDocument(MD, item, options, async (item, pumlFile, options) => {
+        MD = await compileDocument(MD, item, options, async (item, diagram, options) => {
             let diagramUrl = encodeURIPath(
                 path.join(
-                    path.dirname(pumlFile.dir),
-                    path.parse(pumlFile.dir).name + `.${pumlFile.isDitaa ? 'png' : options.DIAGRAM_FORMAT}`
+                    path.dirname(diagram.dir),
+                    path.parse(diagram.dir).name + `.${diagramOutputFormat(diagram, options)}`
                 )
             );
-            if (!options.GENERATE_LOCAL_IMAGES)
+            if (!options.GENERATE_LOCAL_IMAGES && diagram.engine === 'plantuml')
                 diagramUrl = plantUmlServerUrl(
                     options.PLANTUML_SERVER_URL,
-                    pumlFile.isDitaa ? 'png' : options.DIAGRAM_FORMAT,
-                    pumlFile.content
+                    diagramOutputFormat(diagram, options),
+                    diagram.content
                 );
 
             if (options.EMBED_DIAGRAM) {
@@ -622,17 +658,17 @@ const generateMD = async (tree, options, onProgress) => {
                     ).toString('base64');
                 else imgContent = await httpGet(diagramUrl);
 
-                let diagramImage = `\n![${path.parse(pumlFile.dir).name}](data:${getMime(
-                    pumlFile.isDitaa ? 'png' : options.DIAGRAM_FORMAT
+                let diagramImage = `\n![${path.parse(diagram.dir).name}](data:${getMime(
+                    diagramOutputFormat(diagram, options)
                 )};base64,${imgContent})\n`;
 
                 let diagramLink = `[Download ${
-                    path.parse(pumlFile.dir).name
+                    path.parse(diagram.dir).name
                 } diagram](${diagramUrl} ':ignore')`;
                 return diagramImage + diagramLink;
             } else {
                 let diagramImage = `![diagram](${diagramUrl})`;
-                let diagramLink = `[Go to ${path.parse(pumlFile.dir).name} diagram](${diagramUrl})`;
+                let diagramLink = `[Go to ${path.parse(diagram.dir).name} diagram](${diagramUrl})`;
                 if (!options.INCLUDE_LINK_TO_DIAGRAM)
                     //img
                     return diagramImage;
@@ -680,15 +716,15 @@ const generatePDF = async (tree, options, onProgress) => {
         if (!ownH1) MD += chrome;
 
         //concatenate markdown files
-        MD = await compileDocument(MD, item, options, async (item, pumlFile, options) => {
+        MD = await compileDocument(MD, item, options, async (item, diagram, options) => {
             let diagramUrl = encodeURIPath(
-                path.parse(pumlFile.dir).name + `.${pumlFile.isDitaa ? 'png' : options.DIAGRAM_FORMAT}`
+                path.parse(diagram.dir).name + `.${diagramOutputFormat(diagram, options)}`
             );
-            if (!options.GENERATE_LOCAL_IMAGES)
+            if (!options.GENERATE_LOCAL_IMAGES && diagram.engine === 'plantuml')
                 diagramUrl = plantUmlServerUrl(
                     options.PLANTUML_SERVER_URL,
-                    pumlFile.isDitaa ? 'png' : options.DIAGRAM_FORMAT,
-                    pumlFile.content
+                    diagramOutputFormat(diagram, options),
+                    diagram.content
                 );
 
             let diagramImage = `![diagram](${diagramUrl})`;
@@ -794,18 +830,18 @@ const generateWebMD = async (tree, options) => {
         let MD = hasOwnH1(item) ? '' : `# ${name}`;
 
         //concatenate markdown files
-        MD = await compileDocument(MD, item, options, async (item, pumlFile, options) => {
+        MD = await compileDocument(MD, item, options, async (item, diagram, options) => {
             let diagramUrl = encodeURIPath(
                 path.join(
-                    path.dirname(pumlFile.dir),
-                    path.parse(pumlFile.dir).name + `.${pumlFile.isDitaa ? 'png' : options.DIAGRAM_FORMAT}`
+                    path.dirname(diagram.dir),
+                    path.parse(diagram.dir).name + `.${diagramOutputFormat(diagram, options)}`
                 )
             );
-            if (!options.GENERATE_LOCAL_IMAGES)
+            if (!options.GENERATE_LOCAL_IMAGES && diagram.engine === 'plantuml')
                 diagramUrl = plantUmlServerUrl(
                     options.PLANTUML_SERVER_URL,
-                    pumlFile.isDitaa ? 'png' : options.DIAGRAM_FORMAT,
-                    pumlFile.content
+                    diagramOutputFormat(diagram, options),
+                    diagram.content
                 );
 
             if (options.EMBED_DIAGRAM) {
@@ -822,18 +858,18 @@ const generateWebMD = async (tree, options) => {
                     ).toString('base64');
                 else imgContent = await httpGet(diagramUrl);
 
-                let diagramImage = `\n![${path.parse(pumlFile.dir).name}](data:${getMime(
-                    pumlFile.isDitaa ? 'png' : options.DIAGRAM_FORMAT
+                let diagramImage = `\n![${path.parse(diagram.dir).name}](data:${getMime(
+                    diagramOutputFormat(diagram, options)
                 )};base64,${imgContent})\n`;
 
                 let diagramLink = `[Download ${
-                    path.parse(pumlFile.dir).name
+                    path.parse(diagram.dir).name
                 } diagram](${diagramUrl} ':ignore')`;
 
                 return diagramImage + diagramLink;
             } else {
                 let diagramImage = `![diagram](${diagramUrl})`;
-                let diagramLink = `[Go to ${path.parse(pumlFile.dir).name} diagram](${diagramUrl})`;
+                let diagramLink = `[Go to ${path.parse(diagram.dir).name} diagram](${diagramUrl})`;
                 if (!options.INCLUDE_LINK_TO_DIAGRAM)
                     //img
                     return diagramImage;
@@ -921,6 +957,17 @@ const build = async (options, cacheConf) => {
     console.log(chalk.green(`\nbuilding documentation in ./${options.DIST_FOLDER}`));
     let tree = await generateTree(options.ROOT_FOLDER, options);
     console.log(chalk.blue(`parsed ${tree.length} folders`));
+
+    // У D2 нет онлайн-сервера рендера (в отличие от PlantUML): без локальной
+    // генерации .d2 не во что превратить — ссылки на SVG вели бы в никуда.
+    // Падаем сразу с понятной ошибкой, а не молча битым выводом.
+    if (!options.GENERATE_LOCAL_IMAGES && tree.some((item) => item.diagrams.some((d) => d.engine === 'd2'))) {
+        throw new Error(
+            'В проекте есть .d2-диаграммы, но generateLocalImages выключен. У D2 нет ' +
+                'онлайн-сервера рендера — включите локальную генерацию изображений (generateLocalImages).'
+        );
+    }
+
     if (options.GENERATE_LOCAL_IMAGES) {
         console.log(chalk.blue('generating images'));
         await generateImages(
@@ -962,6 +1009,9 @@ const build = async (options, cacheConf) => {
 
     // Remove image backup folder
     await fsextra.removeSync(bkFolderName);
+
+    // Освободить D2-инстанс (webworker), иначе процесс не завершится. No-op, если .d2 не было.
+    await teardownD2();
 
     console.log(chalk.green(`built in ${(new Date() - start_date) / 1000} seconds`));
 };
