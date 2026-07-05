@@ -1,4 +1,4 @@
-const path = require('path');
+const path = require('node:path');
 
 // Растеризатор SVG→PNG (resvg, Rust/napi, prebuilt-бинарь, без браузера). Единая
 // детерминированная стадия PNG-выхода поверх SVG обоих движков (PlantUML и D2),

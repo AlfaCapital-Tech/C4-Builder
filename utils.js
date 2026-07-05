@@ -1,4 +1,4 @@
-const fs = require('fs');
+const fs = require('node:fs');
 const zlib = require('node:zlib');
 
 const makeDirectory = (path) =>
@@ -26,7 +26,7 @@ const writeFile = (path, data) =>
         });
     });
 
-const writeOnSameLine = async (message, fn) => {
+const writeOnSameLine = async (message, _fn) => {
     process.stdout.write(`${message}\r`);
 };
 
@@ -59,9 +59,9 @@ CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFT
 DEALINGS IN THE SOFTWARE.
  */
 const urlTextFrom = (s) => {
-    let opt = { level: 9 };
-    let d = zlib.deflateRawSync(new Buffer.from(s), opt);
-    let b = encode64(String.fromCharCode(...d.subarray(0)));
+    const opt = { level: 9 };
+    const d = zlib.deflateRawSync(Buffer.from(s), opt);
+    const b = encode64(String.fromCharCode(...d.subarray(0)));
     return b;
     // from synchro.js
     /* Copyright (C) 1999 Masanao Izumo <iz@onicos.co.jp>
@@ -71,9 +71,9 @@ const urlTextFrom = (s) => {
     function encode64(data) {
         let r = '';
         for (let i = 0; i < data.length; i += 3) {
-            if (i + 2 == data.length) {
+            if (i + 2 === data.length) {
                 r += append3bytes(data.charCodeAt(i), data.charCodeAt(i + 1), 0);
-            } else if (i + 1 == data.length) {
+            } else if (i + 1 === data.length) {
                 r += append3bytes(data.charCodeAt(i), 0, 0);
             } else {
                 r += append3bytes(data.charCodeAt(i), data.charCodeAt(i + 1), data.charCodeAt(i + 2));
@@ -83,10 +83,10 @@ const urlTextFrom = (s) => {
     }
 
     function append3bytes(b1, b2, b3) {
-        let c1 = b1 >> 2;
-        let c2 = ((b1 & 0x3) << 4) | (b2 >> 4);
-        let c3 = ((b2 & 0xf) << 2) | (b3 >> 6);
-        let c4 = b3 & 0x3f;
+        const c1 = b1 >> 2;
+        const c2 = ((b1 & 0x3) << 4) | (b2 >> 4);
+        const c3 = ((b2 & 0xf) << 2) | (b3 >> 6);
+        const c4 = b3 & 0x3f;
         let r = '';
         r += encode6bit(c1 & 0x3f);
         r += encode6bit(c2 & 0x3f);
@@ -107,10 +107,10 @@ const urlTextFrom = (s) => {
             return String.fromCharCode(97 + b);
         }
         b -= 26;
-        if (b == 0) {
+        if (b === 0) {
             return '-';
         }
-        if (b == 1) {
+        if (b === 1) {
             return '_';
         }
         return '?';

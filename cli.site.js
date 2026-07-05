@@ -1,6 +1,6 @@
 const chalk = require('chalk');
-const path = require('path');
-const fs = require('fs');
+const path = require('node:path');
+const fs = require('node:fs');
 const express = require('express');
 const open = require('open');
 
@@ -80,17 +80,23 @@ module.exports = (currentConfiguration, program, reloadEmitter) => {
             const heartbeat = setInterval(() => res.write(': ping\n\n'), 15000);
 
             reloadEmitter.on('reload', onReload);
-            console.log(chalk.gray(`livereload: client connected (${reloadEmitter.listenerCount('reload')} total)`));
+            console.log(
+                chalk.gray(`livereload: client connected (${reloadEmitter.listenerCount('reload')} total)`)
+            );
 
             req.on('close', () => {
                 clearInterval(heartbeat);
                 reloadEmitter.off('reload', onReload);
-                console.log(chalk.gray(`livereload: client disconnected (${reloadEmitter.listenerCount('reload')} left)`));
+                console.log(
+                    chalk.gray(
+                        `livereload: client disconnected (${reloadEmitter.listenerCount('reload')} left)`
+                    )
+                );
             });
         });
 
         const inject = (html) => {
-            if (html.includes('</body>')) return html.replace('</body>', LIVERELOAD_SNIPPET + '</body>');
+            if (html.includes('</body>')) return html.replace('</body>', `${LIVERELOAD_SNIPPET}</body>`);
             return html + LIVERELOAD_SNIPPET;
         };
 
@@ -99,7 +105,7 @@ module.exports = (currentConfiguration, program, reloadEmitter) => {
             let urlPath;
             try {
                 urlPath = decodeURIComponent(req.path);
-            } catch (e) {
+            } catch (_e) {
                 return next();
             }
             let filePath;
@@ -133,10 +139,11 @@ module.exports = (currentConfiguration, program, reloadEmitter) => {
 
     return new Promise((resolve, reject) => {
         const server = app.listen(port, '127.0.0.1', () => {
-            const url = 'http://localhost:' + port;
+            const url = `http://localhost:${port}`;
             console.log('serving your docsify site');
             console.log(`go to ${chalk.green(url)}`);
-            if (liveReloadEnabled) console.log(chalk.gray('livereload enabled (browser auto-reload on rebuild)'));
+            if (liveReloadEnabled)
+                console.log(chalk.gray('livereload enabled (browser auto-reload on rebuild)'));
             // --open: открываем браузер один раз при старте; BROWSER=none отключает (CI/headless)
             if (program.open && process.env.BROWSER !== 'none')
                 open(url).catch(() => console.log(chalk.gray('could not open the browser automatically')));
@@ -144,7 +151,9 @@ module.exports = (currentConfiguration, program, reloadEmitter) => {
         });
         server.on('error', (err) => {
             if (err.code === 'EADDRINUSE') {
-                console.log(chalk.red(`port ${port} is already in use — pass a different one with -p <port>`));
+                console.log(
+                    chalk.red(`port ${port} is already in use — pass a different one with -p <port>`)
+                );
             } else {
                 console.log(chalk.red(`server error: ${err.message}`));
             }

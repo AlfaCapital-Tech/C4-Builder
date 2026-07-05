@@ -1,7 +1,7 @@
 const inquirer = require('inquirer');
 const joi = require('joi');
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 const { defaultConfig } = require('./defaults.js');
 
 const validate = (schema) => (answers) => {
@@ -43,12 +43,12 @@ module.exports = async (currentConfiguration, conf, program) => {
             message: 'Root documentation folder',
             default: currentConfiguration.ROOT_FOLDER || defaultConfig.rootFolder,
             validate: (answers) => {
-                let isValid = validate(joi.string().trim().optional())(answers);
+                const isValid = validate(joi.string().trim().optional())(answers);
                 if (isValid) {
                     if (answers.indexOf('/') !== -1 || answers.indexOf('\\') !== -1) return false;
 
                     //check it's an actual folder
-                    let isDirectory = fs.statSync(path.join(process.cwd(), answers)).isDirectory();
+                    const isDirectory = fs.statSync(path.join(process.cwd(), answers)).isDirectory();
                     if (isDirectory) return true;
                 }
                 return false;
@@ -64,7 +64,7 @@ module.exports = async (currentConfiguration, conf, program) => {
             message: 'Destination folder',
             default: currentConfiguration.DIST_FOLDER || defaultConfig.distFolder,
             validate: (answers) => {
-                let isValid = validate(joi.string().trim().optional());
+                const isValid = validate(joi.string().trim().optional());
                 if (isValid) {
                     if (answers.indexOf('/') !== -1 || answers.indexOf('\\') !== -1) return false;
                     return true;
@@ -81,28 +81,28 @@ module.exports = async (currentConfiguration, conf, program) => {
         currentConfiguration.GENERATE_WEBSITE === undefined ||
         program.config
     ) {
-        let defaults = [
+        const defaults = [
             currentConfiguration.GENERATE_MD === undefined
                 ? defaultConfig.generateMD
                     ? 'generateMD'
                     : null
                 : currentConfiguration.GENERATE_MD
-                ? 'generateMD'
-                : null,
+                  ? 'generateMD'
+                  : null,
             currentConfiguration.GENERATE_COMPLETE_MD_FILE === undefined
                 ? defaultConfig.generateCompleteMD
                     ? 'generateCompleteMD'
                     : null
                 : currentConfiguration.GENERATE_COMPLETE_MD_FILE
-                ? 'generateCompleteMD'
-                : null,
+                  ? 'generateCompleteMD'
+                  : null,
             currentConfiguration.GENERATE_WEBSITE === undefined
                 ? defaultConfig.generateWEB
                     ? 'generateWEB'
                     : null
                 : currentConfiguration.GENERATE_WEBSITE
-                ? 'generateWEB'
-                : null
+                  ? 'generateWEB'
+                  : null
         ];
 
         responses = await inquirer.prompt({
@@ -130,7 +130,7 @@ module.exports = async (currentConfiguration, conf, program) => {
         conf.set('generateCompleteMD', !!responses.generate.find((x) => x === 'generateCompleteMD'));
         conf.set('generateWEB', !!responses.generate.find((x) => x === 'generateWEB'));
 
-        if (!!responses.generate.find((x) => x === 'generateMD')) {
+        if (responses.generate.find((x) => x === 'generateMD')) {
             let mdOptions = await inquirer.prompt({
                 type: 'confirm',
                 name: 'includeNavigation',
@@ -154,7 +154,7 @@ module.exports = async (currentConfiguration, conf, program) => {
             conf.set('includeTableOfContents', mdOptions.includeTableOfContents);
         }
 
-        if (!!responses.generate.find((x) => x === 'generateWEB')) {
+        if (responses.generate.find((x) => x === 'generateWEB')) {
             let webOptions = await inquirer.prompt({
                 type: 'input',
                 name: 'webTheme',
@@ -206,7 +206,6 @@ module.exports = async (currentConfiguration, conf, program) => {
             });
             conf.set('webPort', webOptions.webPort);
         }
-
     }
 
     if (
@@ -217,51 +216,51 @@ module.exports = async (currentConfiguration, conf, program) => {
         currentConfiguration.EXCLUDE_OTHER_FILES === undefined ||
         program.config
     ) {
-        let defaults = [
+        const defaults = [
             currentConfiguration.INCLUDE_BREADCRUMBS === undefined
                 ? defaultConfig.includeBreadcrumbs
                     ? 'includeBreadcrumbs'
                     : null
                 : currentConfiguration.INCLUDE_BREADCRUMBS
-                ? 'includeBreadcrumbs'
-                : null,
+                  ? 'includeBreadcrumbs'
+                  : null,
             currentConfiguration.GENERATE_LOCAL_IMAGES === undefined
                 ? defaultConfig.generateLocalImages
                     ? 'generateLocalImages'
                     : null
                 : currentConfiguration.GENERATE_LOCAL_IMAGES
-                ? 'generateLocalImages'
-                : null,
+                  ? 'generateLocalImages'
+                  : null,
             currentConfiguration.INCLUDE_LINK_TO_DIAGRAM === undefined
                 ? defaultConfig.includeLinkToDiagram
                     ? 'includeLinkToDiagram'
                     : null
                 : currentConfiguration.INCLUDE_LINK_TO_DIAGRAM
-                ? 'includeLinkToDiagram'
-                : null,
+                  ? 'includeLinkToDiagram'
+                  : null,
             currentConfiguration.DIAGRAMS_ON_TOP === undefined
                 ? defaultConfig.diagramsOnTop
                     ? 'diagramsOnTop'
                     : null
                 : currentConfiguration.DIAGRAMS_ON_TOP
-                ? 'diagramsOnTop'
-                : null,
+                  ? 'diagramsOnTop'
+                  : null,
             currentConfiguration.EMBED_DIAGRAM === undefined
                 ? defaultConfig.embedDiagram
                     ? 'embedDiagram'
                     : null
                 : currentConfiguration.EMBED_DIAGRAM
-                ? 'embedDiagram'
-                : null,
+                  ? 'embedDiagram'
+                  : null,
             currentConfiguration.EXCLUDE_OTHER_FILES === undefined
                 ? defaultConfig.excludeOtherFiles
                     ? 'excludeOtherFiles'
                     : null
                 : currentConfiguration.EXCLUDE_OTHER_FILES
-                ? 'excludeOtherFiles'
-                : null
+                  ? 'excludeOtherFiles'
+                  : null
         ];
-        let choices = [
+        const choices = [
             {
                 name: 'Include breadcrumbs',
                 value: 'includeBreadcrumbs'

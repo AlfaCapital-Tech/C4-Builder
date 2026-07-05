@@ -18,7 +18,18 @@ export const TMP_ROOT = path.join(__dirname, '.tmp');
 export const ACTUAL_DIR = path.join(TMP_ROOT, 'actual');
 
 // Расширение '' покрывает файлы без расширения (.nojekyll)
-const TEXT_EXTENSIONS = new Set(['.md', '.svg', '.html', '.css', '.js', '.json', '.iuml', '.puml', '.txt', '']);
+const TEXT_EXTENSIONS = new Set([
+    '.md',
+    '.svg',
+    '.html',
+    '.css',
+    '.js',
+    '.json',
+    '.iuml',
+    '.puml',
+    '.txt',
+    ''
+]);
 
 const isText = (rel) => TEXT_EXTENSIONS.has(path.posix.extname(rel).toLowerCase());
 
@@ -108,7 +119,7 @@ export const updateGolden = (tree) => {
             fs.writeFileSync(target, file.buf);
         }
     }
-    fs.writeFileSync(GOLDEN_MANIFEST, JSON.stringify({ files }, null, 2) + '\n');
+    fs.writeFileSync(GOLDEN_MANIFEST, `${JSON.stringify({ files }, null, 2)}\n`);
 };
 
 // Нормализованная копия фактического выхода — для отладки и как CI-артефакт,

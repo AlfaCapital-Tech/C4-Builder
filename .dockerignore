@@ -6,7 +6,7 @@ node_modules
 .npmrc
 .npmignore
 .gitignore
-.prettierrc
+biome.json
 Dockerfile
 .dockerignore
 README.MD

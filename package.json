@@ -6,6 +6,24 @@
   "bin": {
     "c4builder": "./index.js"
   },
+  "files": [
+    "index.js",
+    "cli*.js",
+    "build.js",
+    "utils.js",
+    "defaults.js",
+    "d2renderer.js",
+    "pngraster.js",
+    "jre.js",
+    "docsify.template.js",
+    "template/",
+    "vendor/",
+    "README.MD",
+    "license"
+  ],
+  "engines": {
+    "node": ">=20.19"
+  },
   "homepage": "https://github.com/AlfaCapital-Tech/C4-Builder",
   "bugs": {
     "url": "https://github.com/AlfaCapital-Tech/C4-Builder/issues"
@@ -15,6 +33,10 @@
     "url": "https://github.com/AlfaCapital-Tech/C4-Builder.git"
   },
   "scripts": {
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "check": "biome ci .",
     "test": "vitest run",
     "test:golden": "vitest run test/golden.test.mjs",
     "test:golden:update": "UPDATE_GOLDEN=1 vitest run test/golden.test.mjs"
@@ -49,6 +71,7 @@
     "yauzl": "3.4.0"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.5.2",
     "vitest": "^4.1.9"
   },
   "optionalDependencies": {

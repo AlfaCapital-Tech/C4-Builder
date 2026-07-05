@@ -1,8 +1,8 @@
-const figlet = require('figlet');
+const _figlet = require('figlet');
 const inquirer = require('inquirer');
 const chalk = require('chalk');
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 const fsextra = require('fs-extra');
 const Configstore = require('configstore');
 
@@ -12,7 +12,7 @@ const { defaultConfig } = require('./defaults.js');
 // Общая проверка имени проекта: возвращает текст ошибки или null (валидно).
 // Интерактив показывает её и переспрашивает; --yes падает с ней (exit≠0), без ре-промпта.
 const validateProjectName = (name) => {
-    if (!name || !name.trim()) return 'имя проекта не задано';
+    if (!name?.trim()) return 'имя проекта не задано';
     if (name.indexOf('/') !== -1 || name.indexOf('\\') !== -1)
         return 'имя проекта не должно содержать «/» или «\\»';
     const target = path.join(process.cwd(), name);
@@ -22,8 +22,8 @@ const validateProjectName = (name) => {
 };
 
 const generateTemplate = async (dir, projectName) => {
-    const build = async (dir, parent) => {
-        let files = fs.readdirSync(dir);
+    const build = async (dir, _parent) => {
+        const files = fs.readdirSync(dir);
         for (const file of files) {
             if (fs.statSync(path.join(dir, file)).isDirectory()) {
                 await makeDirectory(
@@ -113,7 +113,7 @@ module.exports = async (opts = {}) => {
     await makeDirectory(projectName);
     await generateTemplate(path.join(__dirname, 'template'), projectName);
 
-    let conf = new Configstore(
+    const conf = new Configstore(
         path.join(process.cwd(), projectName).split(path.sep).splice(1).join('_'),
         {},
         { configPath: path.join(process.cwd(), projectName, '.c4builder') }
@@ -125,7 +125,7 @@ module.exports = async (opts = {}) => {
     }
     conf.set('projectName', projectName);
 
-    let readme = await readFile(path.join(__dirname, 'template', 'readme.md'));
+    const readme = await readFile(path.join(__dirname, 'template', 'readme.md'));
     await writeFile(path.join(process.cwd(), projectName, 'README.MD'), `# ${projectName}\n\n${readme}`);
 
     console.log(chalk.green(`the project was created`));

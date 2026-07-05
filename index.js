@@ -1,5 +1,5 @@
 #!/usr/bin/env node
 
 //entry point
-let cli = require('./cli');
+const cli = require('./cli');
 cli();

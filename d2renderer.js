@@ -1,5 +1,5 @@
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 
 // Второй бэкенд рендера: D2 (terrastruct) через @terrastruct/d2 (WASM → SVG).
 // Пакет ~60 МБ и поднимает webworker, поэтому это опциональная зависимость с
@@ -57,7 +57,7 @@ const teardownD2 = async () => {
 const resolveImport = (ref, fromDir) => {
     const segs = ref.split('.');
     for (let i = segs.length; i >= 1; i--) {
-        const candidate = path.resolve(fromDir, segs.slice(0, i).join('.') + '.d2');
+        const candidate = path.resolve(fromDir, `${segs.slice(0, i).join('.')}.d2`);
         if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) return candidate;
     }
     return null;

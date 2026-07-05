@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 
 const chalk = require('chalk');
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 const fsextra = require('fs-extra');
-const { spawn } = require('child_process');
+const { spawn } = require('node:child_process');
 let docsifyTemplate = require('./docsify.template.js');
-const http = require('http');
+const _http = require('node:http');
 
 const DIST_BACKUP_FOLDER_SUFFIX = '_bk';
 
@@ -29,16 +29,14 @@ const { renderD2, foldD2Imports, teardownD2 } = require('./d2renderer.js');
 const { resolveJava } = require('./jre.js');
 // PNG-выход: SVG обоих движков растеризуется resvg (ленивая загрузка внутри модуля).
 const { rasterizeSvgToPng } = require('./pngraster.js');
-const { date } = require('joi');
 
 // Формат выходного файла диаграммы: ditaa всегда PNG (нативный, без SVG-представления),
 // иначе — выбранный DIAGRAM_FORMAT. При png не-ditaa рендерится в SVG и растеризуется
 // (см. рендер ниже), поэтому D2 тоже честно поддерживает png (раньше молча оставался SVG).
-const diagramOutputFormat = (diagram, options) =>
-    diagram.isDitaa ? 'png' : options.DIAGRAM_FORMAT;
+const diagramOutputFormat = (diagram, options) => (diagram.isDitaa ? 'png' : options.DIAGRAM_FORMAT);
 
 const getMime = (format) => {
-    if (format == 'svg') return `image/svg+xml`;
+    if (format === 'svg') return `image/svg+xml`;
     return `image/${format}`;
 };
 
@@ -46,11 +44,11 @@ const httpGet = async (url) => {
     // return new pending promise
     return new Promise((resolve, reject) => {
         // select http or https module, depending on reqested url
-        const lib = url.startsWith('https') ? require('https') : require('http');
+        const lib = url.startsWith('https') ? require('node:https') : require('node:http');
         const request = lib.get(url, (response) => {
             // handle http errors
             if (response.statusCode < 200 || response.statusCode > 299) {
-                reject(new Error('Failed to load page ' + url + ', status code: ' + response.statusCode));
+                reject(new Error(`Failed to load page ${url}, status code: ${response.statusCode}`));
             }
             // temporary data holder
             const body = [];
@@ -69,7 +67,7 @@ const getFolderName = (dir, root, homepage) => {
 };
 
 const generateTree = async (dir, options) => {
-    let tree = [];
+    const tree = [];
 
     const build = async (dir, parent) => {
         // Skip output folder - this allows a user to use the top-level folder as ROOT_FOLDER.
@@ -77,7 +75,7 @@ const generateTree = async (dir, options) => {
             return;
         }
 
-        let name = getFolderName(dir, options.ROOT_FOLDER, options.HOMEPAGE_NAME);
+        const name = getFolderName(dir, options.ROOT_FOLDER, options.HOMEPAGE_NAME);
         let item = tree.find((x) => x.dir === dir);
         if (!item) {
             item = {
@@ -93,17 +91,13 @@ const generateTree = async (dir, options) => {
         }
 
         const IGNORED_FILES = ['CLAUDE.md'];
-        let files = fs.readdirSync(dir).filter((x) => x.charAt(0) !== '_' && !IGNORED_FILES.includes(x));
+        const files = fs.readdirSync(dir).filter((x) => x.charAt(0) !== '_' && !IGNORED_FILES.includes(x));
         for (const file of files) {
             //if folder
             if (fs.statSync(path.join(dir, file)).isDirectory()) {
                 item.descendants.push(file);
                 //create corresponding dist folder
-                if (
-                    options.GENERATE_WEBSITE ||
-                    options.GENERATE_MD ||
-                    options.GENERATE_LOCAL_IMAGES
-                )
+                if (options.GENERATE_WEBSITE || options.GENERATE_MD || options.GENERATE_LOCAL_IMAGES)
                     await makeDirectory(
                         path.join(options.DIST_FOLDER, dir.replace(options.ROOT_FOLDER, ''), file)
                     );
@@ -125,12 +119,11 @@ const generateTree = async (dir, options) => {
             const engine = ext === '.d2' ? 'd2' : 'plantuml';
             const fileContents = await readFile(path.join(dir, diagramFile));
             const isDitaa =
-                engine === 'plantuml' && !!(fileContents ? fileContents.toString() : '').match(/(@startditaa)/gi);
+                engine === 'plantuml' &&
+                !!(fileContents ? fileContents.toString() : '').match(/(@startditaa)/gi);
             item.diagrams.push({ dir: diagramFile, ext, engine, content: fileContents, isDitaa });
         }
-        item.diagrams.sort(function (a, b) {
-            return ('' + a.dir).localeCompare(b.dir);
-        });
+        item.diagrams.sort((a, b) => `${a.dir}`.localeCompare(b.dir));
 
         //copy all other files (.d2 исходники, как и .puml, не копируем — они рендерятся)
         const otherFiles = options.EXCLUDE_OTHER_FILES
@@ -182,8 +175,13 @@ const foldIncludes = (content, fileDir, searchDir, visited) => {
     const re = /^[ \t]*!include(?:_once|_many|sub|url)?[ \t]+(.+?)[ \t]*$/gim;
     let out = '';
     let m;
+    // biome-ignore lint/suspicious/noAssignInExpressions: идиома regex.exec() в условии while
     while ((m = re.exec(content)) !== null) {
-        const ref = m[1].trim().replace(/^["']|["']$/g, '').split('!')[0].trim(); // снять кавычки и !subpart
+        const ref = m[1]
+            .trim()
+            .replace(/^["']|["']$/g, '')
+            .split('!')[0]
+            .trim(); // снять кавычки и !subpart
         if (!ref || /^https?:\/\//i.test(ref) || ref.startsWith('<')) continue;
         // PlantUML резолвит include от каталога файла с директивой, затем от include-пути (item.dir)
         const resolved = [path.resolve(fileDir, ref), path.resolve(searchDir, ref)].find(
@@ -244,7 +242,7 @@ const renderDiagram = (content, { javaBin, jarPath, includePath, format, charset
             if (code !== 0) {
                 return reject(new Error(`PlantUML завершился с кодом ${code}\n${errText}`));
             }
-            if (errText) process.stderr.write(errText + '\n');
+            if (errText) process.stderr.write(`${errText}\n`);
             resolve(Buffer.concat(stdout));
         });
 
@@ -255,8 +253,8 @@ const renderDiagram = (content, { javaBin, jarPath, includePath, format, charset
 
 const generateImages = async (tree, options, onImageGenerated, cacheConf) => {
     // Get the old checksums (from last run) of all PUML-files
-    let oldChecksums = cacheConf.get('checksums') || [];
-    let newChecksums = [];
+    const oldChecksums = cacheConf.get('checksums') || [];
+    const newChecksums = [];
     const bkFolderName = options.DIST_FOLDER + DIST_BACKUP_FOLDER_SUFFIX;
 
     let totalImages = 0;
@@ -277,7 +275,7 @@ const generateImages = async (tree, options, onImageGenerated, cacheConf) => {
         );
     }
 
-    const crypto = require('crypto');
+    const crypto = require('node:crypto');
 
     // JRE резолвится ЛЕНИВО и один раз за сборку: только если в дереве есть хотя бы одна
     // PlantUML-диаграмма. Проект целиком на D2 java не трогает (скачивание не инициируется).
@@ -291,21 +289,21 @@ const generateImages = async (tree, options, onImageGenerated, cacheConf) => {
         totalImages += item.diagrams.length;
     }
 
-    let taskList = [];
+    const taskList = [];
 
     for (const item of tree) {
         for (const diagram of item.diagrams) {
             // Чексумма = контент диаграммы + свёрнутый граф её зависимостей, чтобы
             // правка включаемого/импортируемого файла инвалидировала кэш: PlantUML —
             // !include-граф (.iuml и пр.), D2 — граф @/...@-импортов.
-            const body = '' + (diagram.content || '');
+            const body = `${diagram.content || ''}`;
             // entryPath нужен только D2 (граф импортов + рендер); для PlantUML не считаем.
             const entryPath = diagram.engine === 'd2' ? path.join(item.dir, diagram.dir) : null;
             const includes =
                 diagram.engine === 'd2'
                     ? foldD2Imports(entryPath)
                     : foldIncludes(body, item.dir, item.dir, new Set());
-            let cksum = crypto
+            const cksum = crypto
                 .createHash('sha256')
                 .update(body + includes, 'utf-8')
                 .digest('hex');
@@ -313,10 +311,14 @@ const generateImages = async (tree, options, onImageGenerated, cacheConf) => {
             const outName = `${path.parse(diagram.dir).name}.${diagramOutputFormat(diagram, options)}`;
 
             // path to backup image file
-            let bkFilePath = path.join(bkFolderName, item.dir.replace(options.ROOT_FOLDER, ''), outName);
+            const bkFilePath = path.join(bkFolderName, item.dir.replace(options.ROOT_FOLDER, ''), outName);
 
             // path to image in dist folder
-            let filePath = path.join(options.DIST_FOLDER, item.dir.replace(options.ROOT_FOLDER, ''), outName);
+            const filePath = path.join(
+                options.DIST_FOLDER,
+                item.dir.replace(options.ROOT_FOLDER, ''),
+                outName
+            );
 
             // if checksum exists (diagram untouched) and file/image exists - copy image back from backup folder
             if (oldChecksums.find((x) => x === cksum) && (await fs.existsSync(bkFilePath))) {
@@ -348,7 +350,7 @@ const generateImages = async (tree, options, onImageGenerated, cacheConf) => {
                 taskList.push(render);
             }
 
-            var taskPromises = Promise.all(taskList).then((result) => {
+            const taskPromises = Promise.all(taskList).then(() => {
                 processedImages++;
                 if (onImageGenerated) onImageGenerated(processedImages, totalImages);
             });
@@ -380,7 +382,7 @@ const hasOwnH1 = (item) => {
 const injectAfterFirstH1 = (md, block) => {
     if (!block) return md;
     const m = md.match(/^([\s\S]*?#\s+[^\n]*\n)/);
-    if (!m) return block + '\n\n' + md;
+    if (!m) return `${block}\n\n${md}`;
     return m[1] + block + md.slice(m[1].length);
 };
 
@@ -395,8 +397,9 @@ const compileDocument = async (md, item, options, getDiagram) => {
         let content = mdFile.toString();
 
         let diagramRef;
+        // biome-ignore lint/suspicious/noAssignInExpressions: идиома regex.exec() в условии while
         while ((diagramRef = regex.exec(content)) !== null) {
-            if (diagramRef && diagramRef[1]) {
+            if (diagramRef?.[1]) {
                 const diagram = item.diagrams.find((x) => x.dir === diagramRef[1]);
                 if (diagram) {
                     alreadyIncluded.push(diagramRef[1]);
@@ -430,7 +433,7 @@ const compileDocument = async (md, item, options, getDiagram) => {
 };
 
 const generateCompleteMD = async (tree, options) => {
-    let filePromises = [];
+    const filePromises = [];
 
     //title
     let MD = `# ${options.PROJECT_NAME}`;
@@ -443,7 +446,7 @@ const generateCompleteMD = async (tree, options) => {
     MD += `\n\n${tableOfContents}\n---`;
 
     for (const item of tree) {
-        let name = getFolderName(item.dir, options.ROOT_FOLDER, options.HOMEPAGE_NAME);
+        const name = getFolderName(item.dir, options.ROOT_FOLDER, options.HOMEPAGE_NAME);
 
         //title
         MD += `\n\n## ${name}`;
@@ -460,7 +463,7 @@ const generateCompleteMD = async (tree, options) => {
             let diagramUrl = encodeURIPath(
                 path.join(
                     path.dirname(diagram.dir),
-                    path.parse(diagram.dir).name + `.${diagramOutputFormat(diagram, options)}`
+                    `${path.parse(diagram.dir).name}.${diagramOutputFormat(diagram, options)}`
                 )
             );
             if (!options.GENERATE_LOCAL_IMAGES && diagram.engine === 'plantuml')
@@ -484,17 +487,17 @@ const generateCompleteMD = async (tree, options) => {
                     ).toString('base64');
                 else imgContent = await httpGet(diagramUrl);
 
-                let diagramImage = `\n![${path.parse(diagram.dir).name}](data:${getMime(
+                const diagramImage = `\n![${path.parse(diagram.dir).name}](data:${getMime(
                     diagramOutputFormat(diagram, options)
                 )};base64,${imgContent})\n`;
 
-                let diagramLink = `\n[Download ${path.parse(diagram.dir).name} diagram](${encodeURIPath(
+                const diagramLink = `\n[Download ${path.parse(diagram.dir).name} diagram](${encodeURIPath(
                     path.join(item.dir.replace(options.ROOT_FOLDER, ''), diagramUrl)
                 )} ':ignore')`;
                 return diagramImage + diagramLink;
             } else {
-                let diagramImage = `![diagram](${diagramUrl})`;
-                let diagramLink = `[Go to ${path.parse(diagram.dir).name} diagram](${encodeURIPath(
+                const diagramImage = `![diagram](${diagramUrl})`;
+                const diagramLink = `[Go to ${path.parse(diagram.dir).name} diagram](${encodeURIPath(
                     path.join(item.dir.replace(options.ROOT_FOLDER, ''), diagramUrl)
                 )})`;
                 if (!options.INCLUDE_LINK_TO_DIAGRAM)
@@ -514,11 +517,11 @@ const generateCompleteMD = async (tree, options) => {
 
 const generateMD = async (tree, options, onProgress) => {
     let processedCount = 0;
-    let totalCount = tree.length;
+    const totalCount = tree.length;
 
-    let filePromises = [];
+    const filePromises = [];
     for (const item of tree) {
-        let name = getFolderName(item.dir, options.ROOT_FOLDER, options.HOMEPAGE_NAME);
+        const name = getFolderName(item.dir, options.ROOT_FOLDER, options.HOMEPAGE_NAME);
         const ownH1 = hasOwnH1(item);
         //title
         let MD = ownH1 ? '' : `# ${name}`;
@@ -534,7 +537,7 @@ const generateMD = async (tree, options, onProgress) => {
         if (options.INCLUDE_TABLE_OF_CONTENTS) {
             let tableOfContents = '';
             for (const _item of tree) {
-                let label = `${item.dir === _item.dir ? '**' : ''}${_item.name}${
+                const label = `${item.dir === _item.dir ? '**' : ''}${_item.name}${
                     item.dir === _item.dir ? '**' : ''
                 }`;
                 tableOfContents += `${'  '.repeat(_item.level - 1)}* [${label}](${encodeURIPath(
@@ -550,7 +553,7 @@ const generateMD = async (tree, options, onProgress) => {
         }
         //parent menu
         if (item.parent && options.INCLUDE_NAVIGATION) {
-            let parentName = getFolderName(item.parent, options.ROOT_FOLDER, options.HOMEPAGE_NAME);
+            const parentName = getFolderName(item.parent, options.ROOT_FOLDER, options.HOMEPAGE_NAME);
             chrome += `\n\n[${parentName} (up)](${encodeURIPath(
                 path.join(
                     './',
@@ -588,7 +591,7 @@ const generateMD = async (tree, options, onProgress) => {
             let diagramUrl = encodeURIPath(
                 path.join(
                     path.dirname(diagram.dir),
-                    path.parse(diagram.dir).name + `.${diagramOutputFormat(diagram, options)}`
+                    `${path.parse(diagram.dir).name}.${diagramOutputFormat(diagram, options)}`
                 )
             );
             if (!options.GENERATE_LOCAL_IMAGES && diagram.engine === 'plantuml')
@@ -612,17 +615,17 @@ const generateMD = async (tree, options, onProgress) => {
                     ).toString('base64');
                 else imgContent = await httpGet(diagramUrl);
 
-                let diagramImage = `\n![${path.parse(diagram.dir).name}](data:${getMime(
+                const diagramImage = `\n![${path.parse(diagram.dir).name}](data:${getMime(
                     diagramOutputFormat(diagram, options)
                 )};base64,${imgContent})\n`;
 
-                let diagramLink = `[Download ${
+                const diagramLink = `[Download ${
                     path.parse(diagram.dir).name
                 } diagram](${diagramUrl} ':ignore')`;
                 return diagramImage + diagramLink;
             } else {
-                let diagramImage = `![diagram](${diagramUrl})`;
-                let diagramLink = `[Go to ${path.parse(diagram.dir).name} diagram](${diagramUrl})`;
+                const diagramImage = `![diagram](${diagramUrl})`;
+                const diagramLink = `[Go to ${path.parse(diagram.dir).name} diagram](${diagramUrl})`;
                 if (!options.INCLUDE_LINK_TO_DIAGRAM)
                     //img
                     return diagramImage;
@@ -654,7 +657,7 @@ const generateMD = async (tree, options, onProgress) => {
 };
 
 const generateWebMD = async (tree, options) => {
-    let filePromises = [];
+    const filePromises = [];
     let docsifySideBar = '';
 
     const getWebFileName = (originalFileName) => options.WEB_FILE_NAME || originalFileName;
@@ -678,7 +681,7 @@ const generateWebMD = async (tree, options) => {
                 path.join(...path.join(item.dir).split(path.sep).splice(1), getWebFileName(item.name))
             )})\n`;
         }
-        let name = getFolderName(item.dir, options.ROOT_FOLDER, options.HOMEPAGE_NAME);
+        const name = getFolderName(item.dir, options.ROOT_FOLDER, options.HOMEPAGE_NAME);
 
         //title
         let MD = hasOwnH1(item) ? '' : `# ${name}`;
@@ -688,7 +691,7 @@ const generateWebMD = async (tree, options) => {
             let diagramUrl = encodeURIPath(
                 path.join(
                     path.dirname(diagram.dir),
-                    path.parse(diagram.dir).name + `.${diagramOutputFormat(diagram, options)}`
+                    `${path.parse(diagram.dir).name}.${diagramOutputFormat(diagram, options)}`
                 )
             );
             if (!options.GENERATE_LOCAL_IMAGES && diagram.engine === 'plantuml')
@@ -712,18 +715,18 @@ const generateWebMD = async (tree, options) => {
                     ).toString('base64');
                 else imgContent = await httpGet(diagramUrl);
 
-                let diagramImage = `\n![${path.parse(diagram.dir).name}](data:${getMime(
+                const diagramImage = `\n![${path.parse(diagram.dir).name}](data:${getMime(
                     diagramOutputFormat(diagram, options)
                 )};base64,${imgContent})\n`;
 
-                let diagramLink = `[Download ${
+                const diagramLink = `[Download ${
                     path.parse(diagram.dir).name
                 } diagram](${diagramUrl} ':ignore')`;
 
                 return diagramImage + diagramLink;
             } else {
-                let diagramImage = `![diagram](${diagramUrl})`;
-                let diagramLink = `[Go to ${path.parse(diagram.dir).name} diagram](${diagramUrl})`;
+                const diagramImage = `![diagram](${diagramUrl})`;
+                const diagramLink = `[Go to ${path.parse(diagram.dir).name} diagram](${diagramUrl})`;
                 if (!options.INCLUDE_LINK_TO_DIAGRAM)
                     //img
                     return diagramImage;
@@ -777,9 +780,7 @@ const generateWebMD = async (tree, options) => {
     //copy local docsify vendor files to dist
     const docsifyVendorSrc = path.join(__dirname, 'vendor', 'docsify');
     if (fs.existsSync(docsifyVendorSrc)) {
-        filePromises.push(
-            fsextra.copy(docsifyVendorSrc, path.join(options.DIST_FOLDER, 'vendor'))
-        );
+        filePromises.push(fsextra.copy(docsifyVendorSrc, path.join(options.DIST_FOLDER, 'vendor')));
     }
 
     //github pages preparation
@@ -792,7 +793,7 @@ const generateWebMD = async (tree, options) => {
 };
 
 const build = async (options, cacheConf) => {
-    let start_date = new Date();
+    const start_date = new Date();
     const bkFolderName = options.DIST_FOLDER + DIST_BACKUP_FOLDER_SUFFIX;
 
     // Generating local images, remove old backup image folder, rename current dist folder to new backup
@@ -809,7 +810,7 @@ const build = async (options, cacheConf) => {
 
     //actual build
     console.log(chalk.green(`\nbuilding documentation in ./${options.DIST_FOLDER}`));
-    let tree = await generateTree(options.ROOT_FOLDER, options);
+    const tree = await generateTree(options.ROOT_FOLDER, options);
     console.log(chalk.blue(`parsed ${tree.length} folders`));
 
     // У D2 нет онлайн-сервера рендера (в отличие от PlantUML): без локальной
@@ -852,7 +853,7 @@ const build = async (options, cacheConf) => {
     // PDF-вывод удалён. Легаси-конфиг с truthy generatePDF/generateCompletePDF не
     // роняем: печатаем предупреждение с реально присутствующими ключами и собираем
     // остальные выходы (exit 0). Конфиг НЕ мутируем — только подсказка пользователю.
-    if (options.LEGACY_PDF_KEYS && options.LEGACY_PDF_KEYS.length) {
+    if (options.LEGACY_PDF_KEYS?.length) {
         console.log(chalk.bold(chalk.yellow('WARNING:')));
         console.log(
             chalk.yellow(
@@ -869,6 +870,6 @@ const build = async (options, cacheConf) => {
     // Освободить D2-инстанс (webworker), иначе процесс не завершится. No-op, если .d2 не было.
     await teardownD2();
 
-    console.log(chalk.green(`built in ${(new Date() - start_date) / 1000} seconds`));
+    console.log(chalk.green(`built in ${(Date.now() - start_date) / 1000} seconds`));
 };
 exports.build = build;

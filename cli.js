@@ -2,7 +2,7 @@ const figlet = require('figlet');
 const { program } = require('commander');
 const pkg = require('./package.json');
 const chalk = require('chalk');
-const path = require('path');
+const path = require('node:path');
 
 const Configstore = require('configstore');
 
@@ -14,7 +14,7 @@ const cmdSite = require('./cli.site');
 const cmdCollect = require('./cli.collect');
 const { build } = require('./build');
 const watch = require('node-watch');
-const { EventEmitter } = require('events');
+const { EventEmitter } = require('node:events');
 
 const { clearConsole } = require('./utils.js');
 
@@ -41,7 +41,10 @@ const getOptions = (conf) => {
         PROJECT_NAME: conf.get('projectName'),
         REPO_NAME: conf.get('repoUrl'),
         HOMEPAGE_NAME: conf.get('homepageName'),
-        WEB_THEME: conf.get('webTheme') === '//unpkg.com/docsify/lib/themes/vue.css' ? 'vendor/vue.css' : conf.get('webTheme'),
+        WEB_THEME:
+            conf.get('webTheme') === '//unpkg.com/docsify/lib/themes/vue.css'
+                ? 'vendor/vue.css'
+                : conf.get('webTheme'),
         DOCSIFY_TEMPLATE: conf.get('docsifyTemplate'),
         INCLUDE_NAVIGATION: conf.get('includeNavigation'),
         INCLUDE_BREADCRUMBS: conf.get('includeBreadcrumbs'),
@@ -93,11 +96,7 @@ module.exports = async () => {
         const projectKey = process.cwd().split(path.sep).splice(1).join('_');
         const configPath = path.join(process.cwd(), opts.configFile ?? '.c4builder');
         conf = new Configstore(projectKey, {}, { configPath });
-        cacheConf = new Configstore(
-            projectKey + '_cache',
-            {},
-            { configPath: configPath + '.cache' }
-        );
+        cacheConf = new Configstore(`${projectKey}_cache`, {}, { configPath: `${configPath}.cache` });
 
         // Миграция: чексуммы раньше жили в .c4builder, переносим их в .c4builder.cache,
         // чтобы рабочий конфиг перестал «дёргаться» в git при каждой сборке.
@@ -147,7 +146,7 @@ module.exports = async () => {
         const reloadEmitter = new EventEmitter();
         reloadEmitter.setMaxListeners(0);
         if (opts.watch) {
-            watch(options.ROOT_FOLDER, { recursive: true }, async (evt, name) => {
+            watch(options.ROOT_FOLDER, { recursive: true }, async (_evt, name) => {
                 // clearConsole();
                 // intro();
                 console.log(chalk.gray(`\n${name} changed. Rebuilding...`));
@@ -176,7 +175,7 @@ module.exports = async () => {
                 } catch (err) {
                     buildOk = false;
                     attemptedWatchBuild = false;
-                    console.log(chalk.red(`build failed: ${err && err.stack ? err.stack : err}`));
+                    console.log(chalk.red(`build failed: ${err?.stack ? err.stack : err}`));
                 } finally {
                     isBuilding = false;
                 }

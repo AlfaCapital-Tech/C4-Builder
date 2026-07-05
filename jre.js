@@ -6,12 +6,12 @@
 // Корпоративные/приватные зеркала намеренно не вводятся: единственный сетевой
 // источник — публичный api.adoptium.net.
 
-const fs = require('fs');
-const path = require('path');
-const os = require('os');
-const https = require('https');
-const crypto = require('crypto');
-const { spawnSync } = require('child_process');
+const fs = require('node:fs');
+const path = require('node:path');
+const os = require('node:os');
+const https = require('node:https');
+const crypto = require('node:crypto');
+const { spawnSync } = require('node:child_process');
 
 const MAJOR_MIN = 17; // минимальная годная мажорная версия системной java
 const TEMURIN_FEATURE = 21; // скачиваем ровно Temurin 21 JRE
@@ -19,10 +19,10 @@ const JAVA_BIN = process.platform === 'win32' ? 'java.exe' : 'java';
 
 // --- платформа: process.* → параметры Adoptium ---
 const adoptiumOs = () =>
-    ({ win32: 'windows', darwin: 'mac', linux: 'linux' }[process.platform] || process.platform);
+    ({ win32: 'windows', darwin: 'mac', linux: 'linux' })[process.platform] || process.platform;
 
 const adoptiumArch = () =>
-    ({ x64: 'x64', arm64: 'aarch64', ppc64: 'ppc64le', s390x: 's390x' }[process.arch] || process.arch);
+    ({ x64: 'x64', arm64: 'aarch64', ppc64: 'ppc64le', s390x: 's390x' })[process.arch] || process.arch;
 
 // Мажорная версия из вывода `java -version`: `... version "21.0.11"` → 21,
 // `... version "1.8.0_302"` → 8 (легаси-схема 1.x). null, если не распознано.
@@ -83,7 +83,12 @@ const cacheRoot = () =>
         : process.env.XDG_CACHE_HOME || path.join(os.homedir(), '.cache');
 
 const jreCacheDir = () =>
-    path.join(cacheRoot(), 'c4builder', 'jre', `temurin-${TEMURIN_FEATURE}-${adoptiumOs()}-${adoptiumArch()}`);
+    path.join(
+        cacheRoot(),
+        'c4builder',
+        'jre',
+        `temurin-${TEMURIN_FEATURE}-${adoptiumOs()}-${adoptiumArch()}`
+    );
 
 // Ищем bin/java в корне кеша или на один уровень ниже (архив несёт каталог jdk-*-jre;
 // на macOS бинарь лежит в Contents/Home/bin). null → установка невалидна/битая.
@@ -100,7 +105,10 @@ const findJavaUnder = (root) => {
     for (const e of entries) {
         if (!e.isDirectory()) continue;
         const sub = path.join(root, e.name);
-        for (const rel of [['bin', JAVA_BIN], ['Contents', 'Home', 'bin', JAVA_BIN]]) {
+        for (const rel of [
+            ['bin', JAVA_BIN],
+            ['Contents', 'Home', 'bin', JAVA_BIN]
+        ]) {
             const p = path.join(sub, ...rel);
             if (fs.existsSync(p)) return p;
         }
@@ -146,7 +154,7 @@ const fetchAssetMeta = async () => {
         `https://api.adoptium.net/v3/assets/latest/${TEMURIN_FEATURE}/hotspot` +
         `?image_type=jre&vendor=eclipse&os=${adoptiumOs()}&architecture=${adoptiumArch()}`;
     const json = await httpGetJson(url);
-    const asset = Array.isArray(json) ? json.find((a) => a.binary && a.binary.package) : null;
+    const asset = Array.isArray(json) ? json.find((a) => a.binary?.package) : null;
     if (!asset) {
         throw new Error(
             `Adoptium не отдал JRE-сборку под ${adoptiumOs()}/${adoptiumArch()} (Temurin ${TEMURIN_FEATURE})`
@@ -240,7 +248,7 @@ const failureMessage = (cause) =>
         'Ни системная java (17+), ни кеш, ни скачивание с Adoptium не сработали. Сделайте одно из двух:',
         '  • установите JRE 17+ (например, Eclipse Temurin) — java на PATH или задайте JAVA_HOME;',
         '  • выполните `c4builder jre install`, чтобы загрузить JRE в локальный кеш.',
-        cause && cause.message ? `Причина: ${cause.message}` : ''
+        cause?.message ? `Причина: ${cause.message}` : ''
     ]
         .filter(Boolean)
         .join('\n');
