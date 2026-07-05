@@ -1,5 +1,5 @@
-const fs = require('node:fs');
-const path = require('node:path');
+import fs from 'node:fs';
+import path from 'node:path';
 
 // Второй бэкенд рендера: D2 (terrastruct) через @terrastruct/d2 (WASM → SVG).
 // Пакет ~60 МБ и поднимает webworker, поэтому это опциональная зависимость с
@@ -11,8 +11,9 @@ const path = require('node:path');
 // параллельных первых вызова оба увидят null и создадут по воркеру — один утечёт.
 let d2Promise = null;
 
-// Ленивый singleton. @terrastruct/d2 — ESM-only (dist/node-cjs использует
-// import.meta), поэтому из CommonJS грузим динамическим import(), а не require().
+// Ленивый singleton через динамический import(): @terrastruct/d2 (~60 МБ, поднимает
+// webworker) — опциональная зависимость, поэтому грузится только при первом вызове,
+// а не на импорте модуля.
 const getD2 = () => {
     if (d2Promise) return d2Promise;
     d2Promise = (async () => {
@@ -142,4 +143,4 @@ const foldD2Imports = (entryAbs) => {
         .join('');
 };
 
-module.exports = { renderD2, foldD2Imports, teardownD2 };
+export { renderD2, foldD2Imports, teardownD2 };

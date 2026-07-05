@@ -29,4 +29,4 @@ const defaultConfig = {
     charset: 'UTF-8'
 };
 
-module.exports = { defaultConfig };
+export { defaultConfig };

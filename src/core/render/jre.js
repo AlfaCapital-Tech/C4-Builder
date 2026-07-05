@@ -6,12 +6,17 @@
 // Корпоративные/приватные зеркала намеренно не вводятся: единственный сетевой
 // источник — публичный api.adoptium.net.
 
-const fs = require('node:fs');
-const path = require('node:path');
-const os = require('node:os');
-const https = require('node:https');
-const crypto = require('node:crypto');
-const { spawnSync } = require('node:child_process');
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
+import https from 'node:https';
+import crypto from 'node:crypto';
+import { createRequire } from 'node:module';
+import { spawnSync } from 'node:child_process';
+
+// yauzl/tar грузятся лениво (только при распаковке скачанного JRE) — сохраняем это
+// синхронным require через createRequire, а не тянем их на импорте модуля.
+const require = createRequire(import.meta.url);
 
 const MAJOR_MIN = 17; // минимальная годная мажорная версия системной java
 const TEMURIN_FEATURE = 21; // скачиваем ровно Temurin 21 JRE
@@ -269,7 +274,7 @@ const resolveJava = async ({ force = false, log } = {}) => {
     }
 };
 
-module.exports = {
+export {
     resolveJava,
     detectSystemJava,
     cachedJava,

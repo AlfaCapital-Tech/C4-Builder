@@ -1,6 +1,6 @@
-const chalk = require('chalk');
+import chalk from 'chalk';
 
-module.exports = (currentConfiguration) => {
+export default (currentConfiguration) => {
     console.log(`
 CURRENT CONFIGURATION
 

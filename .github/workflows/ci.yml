@@ -52,6 +52,10 @@ jobs:
 
       - run: npm ci --ignore-scripts
 
+      # Тесты гоняют собранный CLI из dist/ — компилируем до прогрева JRE и golden.
+      # Ошибка tsc роняет job (красный статус PR наравне с линтом/тестами).
+      - run: npm run build
+
       # Golden-рендер идёт на пиновом managed-JRE (Temurin, см. jre.js TEMURIN_FEATURE),
       # а не на setup-java: тест подставляет его JAVA_HOME. Кешируем между прогонами,
       # ключ — от os/arch (feature=21 зашит в jre.js; при бампе обновить суффикс ключа).
@@ -63,7 +67,7 @@ jobs:
 
       # Прогрев кеша до тестов: сеть под контролем шага, таймауты сборок не тратятся
       # на скачивание. --force минует системную java (это и есть managed-JRE).
-      - run: node index.js jre install --force
+      - run: node dist/index.js jre install --force
 
       - run: npm test
 

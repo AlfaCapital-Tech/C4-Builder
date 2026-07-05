@@ -1,22 +1,22 @@
-const figlet = require('figlet');
-const { program } = require('commander');
-const pkg = require('./package.json');
-const chalk = require('chalk');
-const path = require('node:path');
+import figlet from 'figlet';
+import { program } from 'commander';
+import chalk from 'chalk';
+import path from 'node:path';
 
-const Configstore = require('configstore');
+import Configstore from 'configstore';
 
-const cmdHelp = require('./cli.help');
-const cmdNewProject = require('./cli.new');
-const cmdJre = require('./cli.jre');
-const cmdList = require('./cli.list');
-const cmdSite = require('./cli.site');
-const cmdCollect = require('./cli.collect');
-const { build } = require('./build');
-const watch = require('node-watch');
-const { EventEmitter } = require('node:events');
+import cmdHelp from './commands/help.js';
+import cmdNewProject from './commands/new.js';
+import cmdJre from './commands/jre.js';
+import cmdList from './commands/list.js';
+import cmdSite from './commands/site.js';
+import cmdCollect from './wizard/collect.js';
+import { build } from '../core/build.js';
+import watch from 'node-watch';
+import { EventEmitter } from 'node:events';
 
-const { clearConsole } = require('./utils.js');
+import { clearConsole } from '../util/utils.js';
+import { packageJson as pkg } from '../util/paths.js';
 
 const intro = () => {
     console.log(chalk.blue(figlet.textSync('c4builder')));
@@ -66,7 +66,7 @@ const getOptions = (conf) => {
     };
 };
 
-module.exports = async () => {
+export default async () => {
     program
         .version(pkg.version)
         .option('--new', 'create a new project from template')

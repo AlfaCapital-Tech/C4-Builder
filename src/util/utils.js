@@ -1,5 +1,5 @@
-const fs = require('node:fs');
-const zlib = require('node:zlib');
+import fs from 'node:fs';
+import zlib from 'node:zlib';
 
 const makeDirectory = (path) =>
     new Promise((resolve) => {
@@ -133,7 +133,7 @@ const VENDORED_JAR = {
     jar: 'plantuml-1.2025.2.jar'
 };
 
-module.exports = {
+export {
     makeDirectory,
     readFile,
     writeFile,

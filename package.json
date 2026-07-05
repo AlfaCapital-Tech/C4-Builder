@@ -2,20 +2,13 @@
   "name": "@alfacapital-tech/c4builder",
   "version": "0.2.25",
   "description": "A CLI tool designed to compile a folder structure of markdowns and plant uml files into a site, single file markdown or a collection of markdowns with links",
-  "main": "index.js",
+  "type": "module",
+  "main": "dist/index.js",
   "bin": {
-    "c4builder": "./index.js"
+    "c4builder": "./dist/index.js"
   },
   "files": [
-    "index.js",
-    "cli*.js",
-    "build.js",
-    "utils.js",
-    "defaults.js",
-    "d2renderer.js",
-    "pngraster.js",
-    "jre.js",
-    "docsify.template.js",
+    "dist/",
     "template/",
     "vendor/",
     "README.MD",
@@ -33,13 +26,16 @@
     "url": "https://github.com/AlfaCapital-Tech/C4-Builder.git"
   },
   "scripts": {
+    "build": "tsc",
+    "prepack": "npm run build",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",
     "check": "biome ci .",
+    "pretest": "npm run build",
     "test": "vitest run",
-    "test:golden": "vitest run test/golden.test.mjs",
-    "test:golden:update": "UPDATE_GOLDEN=1 vitest run test/golden.test.mjs"
+    "test:golden": "npm run build && vitest run test/golden.test.mjs",
+    "test:golden:update": "npm run build && UPDATE_GOLDEN=1 vitest run test/golden.test.mjs"
   },
   "keywords": [
     "C4",
@@ -72,6 +68,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.2",
+    "typescript": "5.9.3",
     "vitest": "^4.1.9"
   },
   "optionalDependencies": {

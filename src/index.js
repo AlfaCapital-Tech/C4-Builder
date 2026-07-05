@@ -1,5 +1,5 @@
 #!/usr/bin/env node
 
 //entry point
-const cli = require('./cli');
+import cli from './cli/dispatch.js';
 cli();

@@ -2,6 +2,7 @@
 .github
 .vscode
 docs
+dist
 node_modules
 .npmrc
 .npmignore

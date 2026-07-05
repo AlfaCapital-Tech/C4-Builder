@@ -1,4 +1,8 @@
 node_modules
+
+# сборка tsc (артефакт, в git не хранится — собирается из src/)
+dist/
+
 template/docs/
 template/.c4builder
 

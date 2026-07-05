@@ -1,34 +1,41 @@
-#!/usr/bin/env node
+import chalk from 'chalk';
+import fs from 'node:fs';
+import path from 'node:path';
+import http from 'node:http';
+import https from 'node:https';
+import crypto from 'node:crypto';
+import fsextra from 'fs-extra';
+import { spawn } from 'node:child_process';
+import { createRequire } from 'node:module';
 
-const chalk = require('chalk');
-const fs = require('node:fs');
-const path = require('node:path');
-const fsextra = require('fs-extra');
-const { spawn } = require('node:child_process');
-let docsifyTemplate = require('./docsify.template.js');
-const _http = require('node:http');
-
-const DIST_BACKUP_FOLDER_SUFFIX = '_bk';
-
-// Вендорный шрифт: ширина текста в SVG считается из AWT-метрик, поэтому
-// шрифт пинуется, чтобы рендер не зависел от того, что установлено на машине.
-const FONTS_DIR = path.join(__dirname, 'vendor', 'fonts');
-const DEFAULT_FONT_NAME = 'Liberation Sans';
-
-const {
+import defaultDocsifyTemplate from './compose/docsify.template.js';
+import {
     encodeURIPath,
     makeDirectory,
     readFile,
     writeFile,
     plantUmlServerUrl,
     VENDORED_JAR
-} = require('./utils.js');
+} from '../util/utils.js';
 // D2-бэкенд: только статические хелперы (парсинг импортов) грузятся сразу; сам
 // движок @terrastruct/d2 тянется лениво внутри renderD2/teardownD2.
-const { renderD2, foldD2Imports, teardownD2 } = require('./d2renderer.js');
-const { resolveJava } = require('./jre.js');
+import { renderD2, foldD2Imports, teardownD2 } from './render/d2renderer.js';
+import { resolveJava } from './render/jre.js';
 // PNG-выход: SVG обоих движков растеризуется resvg (ленивая загрузка внутри модуля).
-const { rasterizeSvgToPng } = require('./pngraster.js');
+import { rasterizeSvgToPng } from './render/pngraster.js';
+import { VENDOR_DIR } from '../util/paths.js';
+
+// docsifyTemplate можно переопределить пользовательским шаблоном (см. generateWebMD),
+// поэтому это mutable-локаль, а не const-импорт; user-шаблон грузим синхронно через createRequire.
+const require = createRequire(import.meta.url);
+let docsifyTemplate = defaultDocsifyTemplate;
+
+const DIST_BACKUP_FOLDER_SUFFIX = '_bk';
+
+// Вендорный шрифт: ширина текста в SVG считается из AWT-метрик, поэтому
+// шрифт пинуется, чтобы рендер не зависел от того, что установлено на машине.
+const FONTS_DIR = path.join(VENDOR_DIR, 'fonts');
+const DEFAULT_FONT_NAME = 'Liberation Sans';
 
 // Формат выходного файла диаграммы: ditaa всегда PNG (нативный, без SVG-представления),
 // иначе — выбранный DIAGRAM_FORMAT. При png не-ditaa рендерится в SVG и растеризуется
@@ -44,7 +51,7 @@ const httpGet = async (url) => {
     // return new pending promise
     return new Promise((resolve, reject) => {
         // select http or https module, depending on reqested url
-        const lib = url.startsWith('https') ? require('node:https') : require('node:http');
+        const lib = url.startsWith('https') ? https : http;
         const request = lib.get(url, (response) => {
             // handle http errors
             if (response.statusCode < 200 || response.statusCode > 299) {
@@ -263,7 +270,7 @@ const generateImages = async (tree, options, onImageGenerated, cacheConf) => {
     // Рендерим единственным вендорным JAR — выбора версии больше нет. Легаси-ключ
     // plantumlVersion в старых .c4builder игнорируем; предупреждаем однократно, только
     // если он пинует конкретную удалённую версию (≠ latest и ≠ версии вендорного JAR).
-    const jarPath = path.join(__dirname, 'vendor', VENDORED_JAR.jar);
+    const jarPath = path.join(VENDOR_DIR, VENDORED_JAR.jar);
     const pinned = options.LEGACY_PLANTUML_VERSION;
     if (pinned && pinned !== 'latest' && pinned !== VENDORED_JAR.version) {
         console.log(chalk.bold(chalk.yellow('WARNING:')));
@@ -274,8 +281,6 @@ const generateImages = async (tree, options, onImageGenerated, cacheConf) => {
             )
         );
     }
-
-    const crypto = require('node:crypto');
 
     // JRE резолвится ЛЕНИВО и один раз за сборку: только если в дереве есть хотя бы одна
     // PlantUML-диаграмма. Проект целиком на D2 java не трогает (скачивание не инициируется).
@@ -778,7 +783,7 @@ const generateWebMD = async (tree, options) => {
     );
 
     //copy local docsify vendor files to dist
-    const docsifyVendorSrc = path.join(__dirname, 'vendor', 'docsify');
+    const docsifyVendorSrc = path.join(VENDOR_DIR, 'docsify');
     if (fs.existsSync(docsifyVendorSrc)) {
         filePromises.push(fsextra.copy(docsifyVendorSrc, path.join(options.DIST_FOLDER, 'vendor')));
     }
@@ -872,4 +877,4 @@ const build = async (options, cacheConf) => {
 
     console.log(chalk.green(`built in ${(Date.now() - start_date) / 1000} seconds`));
 };
-exports.build = build;
+export { build };

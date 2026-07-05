@@ -1,8 +1,8 @@
-const chalk = require('chalk');
-const path = require('node:path');
-const fs = require('node:fs');
-const express = require('express');
-const open = require('open');
+import chalk from 'chalk';
+import path from 'node:path';
+import fs from 'node:fs';
+import express from 'express';
+import open from 'open';
 
 const LIVERELOAD_PATH = '/__livereload';
 const LIVERELOAD_SNIPPET = `
@@ -53,7 +53,7 @@ const LIVERELOAD_SNIPPET = `
 })();
 </script>`;
 
-module.exports = (currentConfiguration, program, reloadEmitter) => {
+export default (currentConfiguration, program, reloadEmitter) => {
     if (!currentConfiguration.DIST_FOLDER) return console.log(chalk.red('No destination folder configured'));
 
     const app = express();

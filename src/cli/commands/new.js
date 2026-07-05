@@ -1,13 +1,13 @@
-const _figlet = require('figlet');
-const inquirer = require('inquirer');
-const chalk = require('chalk');
-const fs = require('node:fs');
-const path = require('node:path');
-const fsextra = require('fs-extra');
-const Configstore = require('configstore');
+import inquirer from 'inquirer';
+import chalk from 'chalk';
+import fs from 'node:fs';
+import path from 'node:path';
+import fsextra from 'fs-extra';
+import Configstore from 'configstore';
 
-const { readFile, writeFile, makeDirectory } = require('./utils.js');
-const { defaultConfig } = require('./defaults.js');
+import { readFile, writeFile, makeDirectory } from '../../util/utils.js';
+import { defaultConfig } from '../../config/defaults.js';
+import { TEMPLATE_DIR } from '../../util/paths.js';
 
 // Общая проверка имени проекта: возвращает текст ошибки или null (валидно).
 // Интерактив показывает её и переспрашивает; --yes падает с ней (exit≠0), без ре-промпта.
@@ -27,12 +27,7 @@ const generateTemplate = async (dir, projectName) => {
         for (const file of files) {
             if (fs.statSync(path.join(dir, file)).isDirectory()) {
                 await makeDirectory(
-                    path.join(
-                        process.cwd(),
-                        projectName,
-                        dir.replace(path.join(__dirname, 'template'), ''),
-                        file
-                    )
+                    path.join(process.cwd(), projectName, dir.replace(TEMPLATE_DIR, ''), file)
                 );
                 await build(path.join(dir, file), dir);
             }
@@ -42,24 +37,14 @@ const generateTemplate = async (dir, projectName) => {
         for (const mdFile of mdFiles) {
             await fsextra.copy(
                 path.join(dir, mdFile),
-                path.join(
-                    process.cwd(),
-                    projectName,
-                    dir.replace(path.join(__dirname, 'template'), ''),
-                    mdFile
-                )
+                path.join(process.cwd(), projectName, dir.replace(TEMPLATE_DIR, ''), mdFile)
             );
         }
         const pumlFiles = files.filter((x) => path.extname(x).toLowerCase() === '.puml');
         for (const pumlFile of pumlFiles) {
             const fileContents = await readFile(path.join(dir, pumlFile));
             await writeFile(
-                path.join(
-                    process.cwd(),
-                    projectName,
-                    dir.replace(path.join(__dirname, 'template'), ''),
-                    pumlFile
-                ),
+                path.join(process.cwd(), projectName, dir.replace(TEMPLATE_DIR, ''), pumlFile),
                 fileContents
             );
         }
@@ -71,12 +56,7 @@ const generateTemplate = async (dir, projectName) => {
 
             await fsextra.copy(
                 path.join(dir, otherFile),
-                path.join(
-                    process.cwd(),
-                    projectName,
-                    dir.replace(path.join(__dirname, 'template'), ''),
-                    otherFile
-                )
+                path.join(process.cwd(), projectName, dir.replace(TEMPLATE_DIR, ''), otherFile)
             );
         }
     };
@@ -84,7 +64,7 @@ const generateTemplate = async (dir, projectName) => {
     await build(dir);
 };
 
-module.exports = async (opts = {}) => {
+export default async (opts = {}) => {
     const nonInteractive = !!opts.yes;
 
     // --- имя проекта: флаг --name пропускает промпт; --yes без имени — фатально ---
@@ -111,7 +91,7 @@ module.exports = async (opts = {}) => {
     }
 
     await makeDirectory(projectName);
-    await generateTemplate(path.join(__dirname, 'template'), projectName);
+    await generateTemplate(TEMPLATE_DIR, projectName);
 
     const conf = new Configstore(
         path.join(process.cwd(), projectName).split(path.sep).splice(1).join('_'),
@@ -125,7 +105,7 @@ module.exports = async (opts = {}) => {
     }
     conf.set('projectName', projectName);
 
-    const readme = await readFile(path.join(__dirname, 'template', 'readme.md'));
+    const readme = await readFile(path.join(TEMPLATE_DIR, 'readme.md'));
     await writeFile(path.join(process.cwd(), projectName, 'README.MD'), `# ${projectName}\n\n${readme}`);
 
     console.log(chalk.green(`the project was created`));

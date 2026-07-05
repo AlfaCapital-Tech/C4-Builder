@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { cachedJava, resolveJava } from '../jre.js';
+import { cachedJava, resolveJava } from '../dist/core/render/jre.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -71,7 +71,7 @@ export const createFixture = (variant) => {
 
 export const runBuild = (dir) => {
     if (!managedJavaHome) throw new Error('ensureManagedJre() не вызван до runBuild — JAVA_HOME не пинован');
-    const res = spawnSync(process.execPath, [path.join(REPO_ROOT, 'index.js')], {
+    const res = spawnSync(process.execPath, [path.join(REPO_ROOT, 'dist', 'index.js')], {
         cwd: dir,
         encoding: 'utf8',
         timeout: 240_000,

@@ -1,10 +1,17 @@
-const path = require('node:path');
+import { createRequire } from 'node:module';
+import path from 'node:path';
+import { VENDOR_DIR } from '../../util/paths.js';
+
+// @resvg/resvg-js — CJS-нативный аддон, грузим синхронно через createRequire
+// (ленивая загрузка ниже сохраняет прежнюю семантику: пакет тянется при первой
+// растеризации, не на импорте модуля).
+const require = createRequire(import.meta.url);
 
 // Растеризатор SVG→PNG (resvg, Rust/napi, prebuilt-бинарь, без браузера). Единая
 // детерминированная стадия PNG-выхода поверх SVG обоих движков (PlantUML и D2),
 // см. change resvg-png. Вендорный шрифт (тот же, что у java-direct) даёт кириллицу
 // и повторяемые метрики независимо от машины; системные шрифты отключены.
-const FONTS_DIR = path.join(__dirname, 'vendor', 'fonts');
+const FONTS_DIR = path.join(VENDOR_DIR, 'fonts');
 const DEFAULT_FONT_NAME = 'Liberation Sans';
 
 // Ленивая загрузка (как у D2): resvg тянется только при первой растеризации —
@@ -39,4 +46,4 @@ const rasterizeSvgToPng = (svg) => {
     return resvg.render().asPng();
 };
 
-module.exports = { rasterizeSvgToPng };
+export { rasterizeSvgToPng };

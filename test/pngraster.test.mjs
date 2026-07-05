@@ -1,9 +1,9 @@
 import { createRequire } from 'node:module';
 import { describe, it, expect } from 'vitest';
 
-// pngraster.js — CommonJS; из ESM-теста грузим через createRequire.
+// pngraster — нативный CJS-аддон (resvg); из ESM-теста грузим собранный модуль через createRequire.
 const require = createRequire(import.meta.url);
-const { rasterizeSvgToPng } = require('../pngraster.js');
+const { rasterizeSvgToPng } = require('../dist/core/render/pngraster.js');
 
 const svg = (inner) =>
     `<svg xmlns="http://www.w3.org/2000/svg" width="220" height="60">` +

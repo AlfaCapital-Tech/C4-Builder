@@ -1,7 +1,7 @@
-const figlet = require('figlet');
-const chalk = require('chalk');
+import figlet from 'figlet';
+import chalk from 'chalk';
 
-module.exports = () => {
+export default () => {
     console.log(chalk.blue(figlet.textSync('c4builder')));
     console.log(`
 Full documentation

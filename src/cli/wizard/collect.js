@@ -1,8 +1,8 @@
-const inquirer = require('inquirer');
-const joi = require('joi');
-const fs = require('node:fs');
-const path = require('node:path');
-const { defaultConfig } = require('./defaults.js');
+import inquirer from 'inquirer';
+import joi from 'joi';
+import fs from 'node:fs';
+import path from 'node:path';
+import { defaultConfig } from '../../config/defaults.js';
 
 const validate = (schema) => (answers) => {
     //just in case
@@ -13,7 +13,10 @@ const validate = (schema) => (answers) => {
     }
 };
 
-module.exports = async (currentConfiguration, conf, program) => {
+export default async (currentConfiguration, conf, program) => {
+    // ESM исполняется в strict mode: под CommonJS `responses` был неявным глобалом,
+    // здесь объявляем его явно (иначе присваивание бросит ReferenceError).
+    let responses;
     if (!currentConfiguration.PROJECT_NAME || program.config) {
         responses = await inquirer.prompt({
             type: 'input',

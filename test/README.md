@@ -15,7 +15,7 @@
 
 1. Копирует `template/src` во временную директорию (`test/.tmp/fixture-<variant>-*`)
    и кладёт готовый `.c4builder` варианта — неинтерактивный эквивалент `c4builder new`.
-2. Запускает реальный CLI (`node index.js`) с `cwd` во временной директории.
+2. Запускает реальный собранный CLI (`node dist/index.js`) с `cwd` во временной директории.
 3. Сравнивает полное дерево `docs/` с эталоном варианта `test/golden/<variant>/`
    после нормализации: из SVG вырезаются XML-комментарии, переводы строк — LF.
 
@@ -40,7 +40,7 @@ Layout считает встроенный в PlantUML Java-движок (Smetan
 локально и на CI, системная java в golden не участвует. Продуктовый код не меняется —
 `detectSystemJava` уже проверяет `JAVA_HOME` первым.
 
-CI прогревает кеш шагом `node index.js jre install --force` и кеширует
+CI прогревает кеш шагом `node dist/index.js jre install --force` и кеширует
 `~/.cache/c4builder/jre` между прогонами; `setup-java` остаётся только средой для
 юнит-тестов `jre.js` (веткам `detectSystemJava` нужна системная java).
 
