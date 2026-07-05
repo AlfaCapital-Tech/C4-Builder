@@ -5,58 +5,56 @@
 tasks в своей папке; реализуется через `/opsx:apply` (или вручную по `tasks.md`).
 Все проходят `openspec validate <name> --strict`.
 
-## Граф зависимостей
+Предыдущая волна (template-offline → golden-test-ci → java-direct/d2 → remove-pdf,
+remove-plantuml-version, new-noninteractive, resvg-png, remove-vscode-snippets,
+jre-resolver) целиком в `archive/`.
+
+## Текущая волна: переход на современный стек (TS)
+
+Решения explore-сессии 2026-07-05: Biome 2 (один линтер/форматтер), чистый
+`tsc → dist/` без бандлера, ESM-синтаксис, engines `>=20.19`, npm остаётся;
+рефакторинг структуры ведётся вместе с портом («структура свободна, поведение
+фиксировано»), апгрейды зависимостей — после порта отдельными change'ами.
 
 ```
- АРХИВ (реализовано):
-   template-offline → golden-test-ci → plantuml-java-direct
-                                        d2-backend
-
  PENDING:
-   remove-pdf ─────────────┐
-   (independent cleanup)   │
-                           ├──▶ new-noninteractive
-   remove-plantuml-version ┘    (после обоих cleanup)
-   (independent cleanup)
-
-   [java-direct ✓] ─┬─▶ resvg-png        (независим от cleanup-ветки)
-   [d2-backend  ✓] ─┘
-   [java-direct ✓] ───▶ jre-resolver     (⚠ отдельная ветка/PR)
-
- ДАЛЕЕ (ещё не пропозалы): TS-порт → teavm-движок
+   golden-matrix ──▶ dev-toolchain ──▶ (далее, ещё не пропозалы:)
+   сетка ×3 конфига    Biome, lint-CI,     ts-scaffold (src/dist, tsc, ESM, Docker 24)
+   + пин JVM           files/engines       → порт по кластерам: config → scan/render
+                                             → compose → cli+wizard
+                                           → deps-модернизация (chalk@5, @inquirer,
+                                             свой config-store, joi→zod, express)
+                                           → teavm-движок (экспериментальный флаг)
 ```
 
 ## Рекомендованный порядок
 
 | # | Change | Зависит от | Capability | Ветка |
 |---|--------|-----------|-----------|-------|
-| 1 | `remove-pdf` | — | output-formats (new) | refactor/phoenix |
-| 2 | `remove-plantuml-version` | — | diagram-rendering (mod) | refactor/phoenix |
-| 3 | `new-noninteractive` | 1, 2 | project-scaffold (new) | refactor/phoenix |
-| 4 | `resvg-png` | java-direct, d2 (архив) | diagram-rendering (mod) | refactor/phoenix |
-| 5 | `jre-resolver` | java-direct (архив) | jre-resolution (new) + diagram-rendering (mod) | **openspec/jre-resolver (PR #9)** |
+| 1 | `golden-matrix` | — | regression-testing (mod) | refactor/phoenix |
+| 2 | `dev-toolchain` | 1 (желательно) | dev-toolchain (new) + ci-validation (mod) | refactor/phoenix |
 
-1–2 независимы между собой (можно параллельно). 4 независим от 1–3. 5 на отдельной
-ветке — вливается отдельным PR.
+`dev-toolchain` формально не зависит от `golden-matrix`, но порядок 1 → 2 держит
+правило волны: сначала страховочная сетка, потом правки (формат-коммит и
+lint-автофиксы уже проверяются расширенной матрицей).
 
 ## Ключевые сцепки и решения
 
-- **`remove-plantuml-version` ↔ `new-noninteractive`.** Первый убирает выбор версии
-  PlantUML; поэтому второй НЕ вводит флаг `--plantuml-version`. Порядок: сначала
-  `remove-plantuml-version`. (Уже согласовано в спеках обоих.)
-- **Легаси-конфиги не ломаем.** `remove-pdf`: truthy `generatePDF` → warn+exit 0, без
-  мутации. `remove-plantuml-version`: `plantumlVersion` игнорируется, warn только на
-  пине удалённой версии. Главный потребитель `arch` (`plantumlVersion:"latest"`,
-  `generateLocalImages:true`, `svg`) проходит без предупреждений.
-- **Golden неизменен** во всех cleanup-change'ах: fixture на `svg`, PDF выключен,
-  версия `1.2025.2` = оставляемый JAR. `resvg-png` не трогает `ditaa.png` (нативный PNG).
-- **`resvg-png` растеризует SVG→PNG** единым `@resvg/resvg-js` для обоих движков; ditaa —
-  исключение (остаётся нативным PlantUML-PNG).
+- **`golden-matrix` — страховка всей волны.** Три fixture-конфига (default,
+  links-top, embed-png) фиксируют ветки compose-слоя ДО рефакторинга build.js;
+  golden-сборки идут на пиновом managed-JRE (кеш jre-резолвера, `JAVA_HOME`) —
+  закрывает периодические расхождения SVG локально/CI из-за разных JVM.
+- **`dev-toolchain` не меняет поведение.** Формат-коммит и автофиксы — с зелёным
+  golden после каждого коммита; правила, требующие рефакторинга, откладываются
+  до звеньев порта (`TODO(ts-port)`).
+- **Известные дефекты легаси-кода** (implicit-глобал `responses` и мёртвая
+  joi-валидация в cli.collect.js, `EXECUTE_SCRIPT`-опечатка) чинятся НЕ здесь,
+  а в звене порта wizard — списком в его proposal, по каждому отдельное решение.
+- **Wizard тестируется без TTI**: шаги-данные + инъекция prompt-runner'а
+  (решение сессии) — оформится в звене порта cli+wizard.
 
-## Вне объёма этих change'ей
+## Вне объёма этой волны
 
-- Онлайн-сервер `PLANTUML_SERVER_URL` — отдельная чистка из плана (в `arch` не
-  используется, `generateLocalImages:true`).
-- Флаги выбора форматов для `new` (`--md/--website/...`) — тонкая настройка правкой
-  `.c4builder`.
-- TS-порт и экспериментальный TeaVM-движок — следующие звенья, пропозалы ещё не оформлены.
+- Онлайн-сервер `PLANTUML_SERVER_URL` (`generateLocalImages=false`) — путь под
+  удаление, golden его сознательно не фиксирует.
+- Флаги выбора форматов для `new` — тонкая настройка правкой `.c4builder`.
