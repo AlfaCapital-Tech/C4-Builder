@@ -23,7 +23,7 @@
 
 ## 4. Эталоны
 
-- [~] 4.1 `UPDATE_GOLDEN=1`: сгенерировать `test/golden/{default,links-top,embed-png}/`, удалить старые `test/golden/{manifest.json,tree/}` — старый эталон удалён; генерация/коммит эталонов отложены на CI-снимок (решение: эталоны не коммитить локально, т.к. Arch расходится с CI по `class.svg`/`ditaa.png`, а CI-байты бинарников невосстановимы) → см. 5.4
+- [x] 4.1 `UPDATE_GOLDEN=1`: сгенерировать `test/golden/{default,links-top,embed-png}/`, удалить старые `test/golden/{manifest.json,tree/}` — старый эталон удалён; эталоны трёх вариантов сняты с CI (артефакт `golden-actual-node22`, прогон 28750752826) — канон CI, т.к. Arch расходится по `class.svg`/`ditaa.png`, а CI-байты бинарников невосстановимы локально
 - [x] 4.2 Просмотреть дифф эталонов: default идентичен старому (только путь), в links-top/embed-png ветки видны глазами — проверено на локально сгенерированных эталонах: default байт-в-байт совпал со старым, кроме `class.svg` (форма глифов) и `ditaa.png` (нативный PNG); ветки links-top/embed-png подтверждены контентными проверками (7/7 зелёных)
 
 ## 5. CI и документация
@@ -31,4 +31,4 @@
 - [x] 5.1 `.github/workflows/ci.yml`: шаг `node index.js jre install --force` до `npm test` + `actions/cache` на `~/.cache/c4builder/jre` (ключ от `TEMURIN_FEATURE` и os/arch)
 - [x] 5.2 Проверить упаковку артефакта: `test/.tmp/actual/<variant>/` попадают в `golden-actual.tar.gz` — по построению (`writeActualTree` пишет в `test/.tmp/actual/<variant>/`, шаг `tar -C test/.tmp actual` пакует весь каталог)
 - [x] 5.3 `test/README.md`: матрица вариантов, пин JVM (как и зачем), обновлённая процедура регенерации эталона
-- [ ] 5.4 Прогнать CI на ветке: golden зелёный на node 22 и 24, время джобы приемлемо — **человеку**: push ветки → первый CI красный (эталонов нет) → скачать артефакт `golden-actual-node22` → `node test/golden-from-dir.mjs /tmp/actual` → закоммитить эталоны → CI зелёный
+- [x] 5.4 Прогнать CI на ветке: golden зелёный на node 22 и 24, время джобы приемлемо — прогон 28750826914 (PR #8) зелёный: lint + test(node22) + test(node24); весь прогон 74 с (test-джобы ~65–71 с на трёх вариантах, JRE из кеша)
