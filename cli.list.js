@@ -40,25 +40,6 @@ Generate a single complete markdown file: ${
             ? chalk.green(currentConfiguration.GENERATE_COMPLETE_MD_FILE)
             : chalk.red('not set')
     }
-Generate multiple pdf files: ${
-        currentConfiguration.GENERATE_PDF !== undefined
-            ? chalk.green(currentConfiguration.GENERATE_PDF)
-            : chalk.red('not set')
-    }
-Generate a single complete pdf file: ${
-        currentConfiguration.GENERATE_COMPLETE_PDF_FILE !== undefined
-            ? chalk.green(currentConfiguration.GENERATE_COMPLETE_PDF_FILE)
-            : chalk.red('not set')
-    }
-    ${
-        currentConfiguration.generatePDF || currentConfiguration.GENERATE_COMPLETE_PDF_FILE
-            ? `Custom pdf css: ${
-                  currentConfiguration.PDF_CSS
-                      ? chalk.green(currentConfiguration.PDF_CSS)
-                      : chalk.red('not set')
-              }`
-            : ''
-    }
 Generate website: ${
         currentConfiguration.GENERATE_WEBSITE !== undefined
             ? chalk.green(currentConfiguration.GENERATE_WEBSITE)

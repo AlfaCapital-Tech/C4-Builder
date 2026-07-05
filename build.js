@@ -6,7 +6,6 @@ const path = require('path');
 const fsextra = require('fs-extra');
 const { spawn } = require('child_process');
 let docsifyTemplate = require('./docsify.template.js');
-const markdownpdf = require('md-to-pdf').mdToPdf;
 const http = require('http');
 
 const DIST_BACKUP_FOLDER_SUFFIX = '_bk';
@@ -99,7 +98,6 @@ const generateTree = async (dir, options) => {
                 if (
                     options.GENERATE_WEBSITE ||
                     options.GENERATE_MD ||
-                    options.GENERATE_PDF ||
                     options.GENERATE_LOCAL_IMAGES
                 )
                     await makeDirectory(
@@ -142,12 +140,12 @@ const generateTree = async (dir, options) => {
         for (const otherFile of otherFiles) {
             if (fs.statSync(path.join(dir, otherFile)).isDirectory()) continue;
 
-            if (options.GENERATE_MD || options.GENERATE_PDF || options.GENERATE_WEBSITE)
+            if (options.GENERATE_MD || options.GENERATE_WEBSITE)
                 await fsextra.copy(
                     path.join(dir, otherFile),
                     path.join(options.DIST_FOLDER, dir.replace(options.ROOT_FOLDER, ''), otherFile)
                 );
-            if (options.GENERATE_COMPLETE_PDF_FILE || options.GENERATE_COMPLETE_MD_FILE)
+            if (options.GENERATE_COMPLETE_MD_FILE)
                 await fsextra.copy(path.join(dir, otherFile), path.join(options.DIST_FOLDER, otherFile));
         }
     };
@@ -483,81 +481,6 @@ const generateCompleteMD = async (tree, options) => {
     return Promise.all(filePromises);
 };
 
-const generateCompletePDF = async (tree, options) => {
-    //title
-    let MD = `# ${options.PROJECT_NAME}`;
-    //table of contents
-    let tableOfContents = '';
-    for (const item of tree)
-        tableOfContents += `${'  '.repeat(item.level - 1)}* [${item.name}](#${encodeURIPath(
-            item.name
-        ).replace(/%20/g, '-')})\n`;
-    MD += `\n\n${tableOfContents}\n---`;
-
-    for (const item of tree) {
-        let name = getFolderName(item.dir, options.ROOT_FOLDER, options.HOMEPAGE_NAME);
-
-        //title
-        MD += `\n\n## ${name}`;
-        //bradcrumbs
-        if (name !== options.HOMEPAGE_NAME) {
-            if (options.INCLUDE_BREADCRUMBS) MD += `\n\n\`${item.dir.replace(options.ROOT_FOLDER, '')}\``;
-        }
-
-        //concatenate markdown files
-        MD = await compileDocument(MD, item, options, async (item, diagram, options) => {
-            let diagramUrl = encodeURIPath(
-                path.join(
-                    item.dir.replace(options.ROOT_FOLDER, ''),
-                    path.parse(diagram.dir).name + `.${diagramOutputFormat(diagram, options)}`
-                )
-            );
-            if (!options.GENERATE_LOCAL_IMAGES && diagram.engine === 'plantuml')
-                diagramUrl = plantUmlServerUrl(
-                    options.PLANTUML_SERVER_URL,
-                    diagramOutputFormat(diagram, options),
-                    diagram.content
-                );
-
-            let diagramImage = `![diagram](${diagramUrl})`;
-
-            return diagramImage;
-        });
-    }
-
-    //write temp file
-    await writeFile(path.join(options.DIST_FOLDER, `${options.PROJECT_NAME}_TEMP.md`), MD);
-    //convert to pdf
-    await markdownpdf(
-        {
-            path: './' + path.join(options.DIST_FOLDER, `${options.PROJECT_NAME}_TEMP.md`)
-        },
-        {
-            stylesheet: [options.PDF_CSS],
-            pdf_options: {
-                scale: 1,
-                displayHeaderFooter: false,
-                printBackground: true,
-                landscape: false,
-                pageRanges: '',
-                format: 'A4',
-                width: '',
-                height: '',
-                margin: {
-                    top: '1.5cm',
-                    right: '1cm',
-                    bottom: '1cm',
-                    left: '1cm'
-                }
-            },
-            dest: path.join(options.DIST_FOLDER, `${options.PROJECT_NAME}.pdf`)
-        }
-    ).catch(console.error);
-
-    // remove temp file
-    await fsextra.remove(path.join(options.DIST_FOLDER, `${options.PROJECT_NAME}_TEMP.md`));
-};
-
 const generateMD = async (tree, options, onProgress) => {
     let processedCount = 0;
     let totalCount = tree.length;
@@ -693,106 +616,6 @@ const generateMD = async (tree, options, onProgress) => {
                 processedCount++;
                 if (onProgress) onProgress(processedCount, totalCount);
             })
-        );
-    }
-
-    return Promise.all(filePromises);
-};
-
-const generatePDF = async (tree, options, onProgress) => {
-    let processedCount = 0;
-    let totalCount = tree.length;
-
-    let filePromises = [];
-    for (const item of tree) {
-        let name = getFolderName(item.dir, options.ROOT_FOLDER, options.HOMEPAGE_NAME);
-        const ownH1 = hasOwnH1(item);
-        //title
-        let MD = ownH1 ? '' : `# ${name}`;
-
-        let chrome = '';
-        if (options.INCLUDE_BREADCRUMBS && name !== options.HOMEPAGE_NAME)
-            chrome += `\n\n\`${item.dir.replace(options.ROOT_FOLDER, '')}\``;
-        if (!ownH1) MD += chrome;
-
-        //concatenate markdown files
-        MD = await compileDocument(MD, item, options, async (item, diagram, options) => {
-            let diagramUrl = encodeURIPath(
-                path.parse(diagram.dir).name + `.${diagramOutputFormat(diagram, options)}`
-            );
-            if (!options.GENERATE_LOCAL_IMAGES && diagram.engine === 'plantuml')
-                diagramUrl = plantUmlServerUrl(
-                    options.PLANTUML_SERVER_URL,
-                    diagramOutputFormat(diagram, options),
-                    diagram.content
-                );
-
-            let diagramImage = `![diagram](${diagramUrl})`;
-
-            return diagramImage;
-        });
-
-        if (ownH1) MD = injectAfterFirstH1(MD, chrome);
-
-        //write temp file
-        filePromises.push(
-            writeFile(
-                path.join(
-                    options.DIST_FOLDER,
-                    item.dir.replace(options.ROOT_FOLDER, ''),
-                    `${options.MD_FILE_NAME}_TEMP.md`
-                ),
-                MD.trimStart()
-            )
-                .then(() => {
-                    return markdownpdf(
-                        {
-                            path: path.join(
-                                options.DIST_FOLDER,
-                                item.dir.replace(options.ROOT_FOLDER, ''),
-                                `${options.MD_FILE_NAME}_TEMP.md`
-                            )
-                        },
-                        {
-                            stylesheet: [options.PDF_CSS],
-                            pdf_options: {
-                                scale: 1,
-                                displayHeaderFooter: false,
-                                printBackground: true,
-                                landscape: false,
-                                pageRanges: '',
-                                format: 'A4',
-                                width: '',
-                                height: '',
-                                margin: {
-                                    top: '1.5cm',
-                                    right: '1cm',
-                                    bottom: '1cm',
-                                    left: '1cm'
-                                }
-                            },
-                            dest: path.join(
-                                options.DIST_FOLDER,
-                                item.dir.replace(options.ROOT_FOLDER, ''),
-                                `${name}.pdf`
-                            )
-                        }
-                    ).catch(console.error);
-                })
-                .then(() => {
-                    //remove temp file
-                    fsextra.removeSync(
-                        path.join(
-                            options.DIST_FOLDER,
-                            item.dir.replace(options.ROOT_FOLDER, ''),
-                            `${options.MD_FILE_NAME}_TEMP.md`
-                        )
-                    );
-                })
-                .then(() => {
-                    processedCount++;
-                    if (onProgress) onProgress(processedCount, totalCount);
-                })
         );
     }
 
@@ -995,16 +818,18 @@ const build = async (options, cacheConf) => {
         console.log(chalk.blue('generating complete markdown file'));
         await generateCompleteMD(tree, options);
     }
-    if (options.GENERATE_COMPLETE_PDF_FILE) {
-        console.log(chalk.blue('generating complete pdf file'));
-        await generateCompletePDF(tree, options);
-    }
-    if (options.GENERATE_PDF) {
-        console.log(chalk.blue('generating pdf files'));
-        await generatePDF(tree, options, (count, total) => {
-            process.stdout.write(`processed ${count}/${total} files\r`);
-        });
-        console.log('');
+    // PDF-вывод удалён. Легаси-конфиг с truthy generatePDF/generateCompletePDF не
+    // роняем: печатаем предупреждение с реально присутствующими ключами и собираем
+    // остальные выходы (exit 0). Конфиг НЕ мутируем — только подсказка пользователю.
+    if (options.LEGACY_PDF_KEYS && options.LEGACY_PDF_KEYS.length) {
+        console.log(chalk.bold(chalk.yellow('WARNING:')));
+        console.log(
+            chalk.yellow(
+                `PDF-вывод больше не поддерживается. Удалите вручную из .c4builder: ${options.LEGACY_PDF_KEYS.join(
+                    ', '
+                )}.`
+            )
+        );
     }
 
     // Remove image backup folder

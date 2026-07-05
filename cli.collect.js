@@ -79,8 +79,6 @@ module.exports = async (currentConfiguration, conf, program) => {
     if (
         currentConfiguration.GENERATE_MD === undefined ||
         currentConfiguration.GENERATE_COMPLETE_MD_FILE === undefined ||
-        currentConfiguration.GENERATE_PDF === undefined ||
-        currentConfiguration.GENERATE_COMPLETE_PDF_FILE === undefined ||
         currentConfiguration.GENERATE_WEBSITE === undefined ||
         program.config
     ) {
@@ -90,20 +88,10 @@ module.exports = async (currentConfiguration, conf, program) => {
                 : currentConfiguration.GENERATE_MD
                 ? 'generateMD'
                 : null,
-            currentConfiguration.GENERATE_PDF === undefined
-                ? 'generatePDF'
-                : currentConfiguration.GENERATE_PDF
-                ? 'generatePDF'
-                : null,
             currentConfiguration.GENERATE_COMPLETE_MD_FILE === undefined
                 ? null
                 : currentConfiguration.GENERATE_COMPLETE_MD_FILE
                 ? 'generateCompleteMD'
-                : null,
-            currentConfiguration.GENERATE_COMPLETE_PDF_FILE === undefined
-                ? 'generateCompletePDF'
-                : currentConfiguration.GENERATE_COMPLETE_PDF_FILE
-                ? 'generateCompletePDF'
                 : null,
             currentConfiguration.GENERATE_WEBSITE === undefined
                 ? 'generateWEB'
@@ -127,14 +115,6 @@ module.exports = async (currentConfiguration, conf, program) => {
                     value: 'generateCompleteMD'
                 },
                 {
-                    name: 'Generate multiple pdf files',
-                    value: 'generatePDF'
-                },
-                {
-                    name: 'Generate a single complete pdf file',
-                    value: 'generateCompletePDF'
-                },
-                {
                     name: 'Generate website',
                     value: 'generateWEB'
                 }
@@ -142,9 +122,7 @@ module.exports = async (currentConfiguration, conf, program) => {
         });
 
         conf.set('generateMD', !!responses.generate.find((x) => x === 'generateMD'));
-        conf.set('generatePDF', !!responses.generate.find((x) => x === 'generatePDF'));
         conf.set('generateCompleteMD', !!responses.generate.find((x) => x === 'generateCompleteMD'));
-        conf.set('generateCompletePDF', !!responses.generate.find((x) => x === 'generateCompletePDF'));
         conf.set('generateWEB', !!responses.generate.find((x) => x === 'generateWEB'));
 
         if (!!responses.generate.find((x) => x === 'generateMD')) {
@@ -224,15 +202,6 @@ module.exports = async (currentConfiguration, conf, program) => {
             conf.set('webPort', webOptions.webPort);
         }
 
-        if (!!responses.generate.find((x) => x === 'generatePDF' || x === 'generateCompletePDF')) {
-            let pdfOptions = await inquirer.prompt({
-                type: 'input',
-                name: 'pdfCss',
-                message: 'Add a custom css for the pdf (filename)?',
-                default: currentConfiguration.PDF_CSS
-            });
-            conf.set('pdfCss', pdfOptions.pdfCss);
-        }
     }
 
     let plantumlVersion, ver;

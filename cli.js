@@ -26,10 +26,11 @@ const getOptions = (conf) => {
     return {
         PLANTUML_VERSION: conf.get('plantumlVersion'),
         GENERATE_MD: conf.get('generateMD'),
-        GENERATE_PDF: conf.get('generatePDF'),
         GENERATE_WEBSITE: conf.get('generateWEB'),
         GENERATE_COMPLETE_MD_FILE: conf.get('generateCompleteMD'),
-        GENERATE_COMPLETE_PDF_FILE: conf.get('generateCompletePDF'),
+        // Легаси-детект: PDF-вывод удалён, но truthy-ключи в старых .c4builder
+        // ловим здесь (где доступен conf) и отдаём build.js для предупреждения.
+        LEGACY_PDF_KEYS: ['generatePDF', 'generateCompletePDF'].filter((k) => conf.get(k)),
         GENERATE_LOCAL_IMAGES: conf.get('generateLocalImages'),
         EMBED_DIAGRAM: conf.get('embedDiagram'),
         ROOT_FOLDER: conf.get('rootFolder'),
@@ -44,7 +45,6 @@ const getOptions = (conf) => {
         INCLUDE_TABLE_OF_CONTENTS: conf.get('includeTableOfContents'),
         INCLUDE_LINK_TO_DIAGRAM: conf.get('includeLinkToDiagram'),
         EXCLUDE_SIDEBAR_FOLDER_BY_PATH: conf.get('excludeSidebarFolderByPath'),
-        PDF_CSS: conf.get('pdfCss') || path.join(__dirname, 'pdf.css'),
         DIAGRAMS_ON_TOP: conf.get('diagramsOnTop'),
         CHARSET: conf.get('charset'),
         WEB_PORT: conf.get('webPort'),
@@ -143,15 +143,11 @@ module.exports = async () => {
                 console.log(chalk.gray(`\n${name} changed. Rebuilding...`));
                 if (isBuilding) {
                     attemptedWatchBuild = true;
-                    if (
-                        options.GENERATE_PDF ||
-                        options.GENERATE_COMPLETE_PDF_FILE ||
-                        options.GENERATE_LOCAL_IMAGES
-                    )
+                    if (options.GENERATE_LOCAL_IMAGES)
                         console.log(
                             chalk.bold(
                                 chalk.yellow(
-                                    'Build already in progress, consider disabling pdf or local image generation '
+                                    'Build already in progress, consider disabling local image generation '
                                 )
                             )
                         );

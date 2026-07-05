@@ -27,12 +27,6 @@ The directory structure from the destination folder will be the same as the root
     It includes a tree style table of contents at the top of each file.
 ${chalk.cyan('Generate a single complete markdown file')}
 Compiles the documentation into a single markdown file. Each section will have a return to top link.
-${chalk.cyan('Generate multiple pdf files')}
-Similar to multiple markdown files. It will follow the the same directory structure but it will export a pdf version instead of markdown.
-${chalk.cyan('Generate a single complete pdf file')}
-Compiles the documentation into a single pdf file.
-    ${chalk.cyan('Custom PDF CSS')}
-    Change the default pdf used for the pdf generation. Useful for changing font size on higher resolution displays
 ${chalk.cyan('Generate website')}
 Uses docsify to generate a website with a sidebar for navigation. The site can be easily deployed to github pages.
     ${chalk.cyan('Website docsify theme')}
