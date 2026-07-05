@@ -4,18 +4,27 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { cachedJava, resolveJava } from '../jre.js';
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export const REPO_ROOT = path.join(__dirname, '..');
 const TEMPLATE_SRC = path.join(REPO_ROOT, 'template', 'src');
-const FIXTURE_CONFIG = path.join(__dirname, 'fixture.c4builder.json');
 
-export const GOLDEN_DIR = path.join(__dirname, 'golden');
-const GOLDEN_MANIFEST = path.join(GOLDEN_DIR, 'manifest.json');
-const GOLDEN_TREE = path.join(GOLDEN_DIR, 'tree');
+// Матрица вариантов: одни исходники template/src, разные fixture-конфиги.
+// default — базовый контракт; links-top/embed-png фиксируют ветки compose-слоя.
+export const VARIANTS = ['default', 'links-top', 'embed-png'];
+const FIXTURES_DIR = path.join(__dirname, 'fixtures');
+const fixtureConfig = (variant) => path.join(FIXTURES_DIR, `${variant}.c4builder.json`);
+
+const GOLDEN_ROOT = path.join(__dirname, 'golden');
+export const goldenDir = (variant) => path.join(GOLDEN_ROOT, variant);
+const goldenManifest = (variant) => path.join(goldenDir(variant), 'manifest.json');
+const goldenTree = (variant) => path.join(goldenDir(variant), 'tree');
 
 export const TMP_ROOT = path.join(__dirname, '.tmp');
-export const ACTUAL_DIR = path.join(TMP_ROOT, 'actual');
+const ACTUAL_ROOT = path.join(TMP_ROOT, 'actual');
+export const actualDir = (variant) => path.join(ACTUAL_ROOT, variant);
 
 // Расширение '' покрывает файлы без расширения (.nojekyll)
 const TEXT_EXTENSIONS = new Set([
@@ -37,20 +46,36 @@ const isText = (rel) => TEXT_EXTENSIONS.has(path.posix.extname(rel).toLowerCase(
 // (1.8 МБ, прямая копия vendor/docsify) — только sha256 в манифесте.
 export const isDiffable = (rel) => isText(rel) && !rel.startsWith('vendor/');
 
-// Неинтерактивный эквивалент `c4builder new`: копия template/src + готовый .c4builder
-export const createFixture = () => {
+// --- пин managed-JVM ---
+// Golden-рендер обязан идти на одной managed-JVM (Temurin) локально и на CI, а не
+// на произвольной системной java: берём кешированный JRE (при отсутствии — качаем,
+// минуя системную java) и подставляем его JAVA_HOME сборке. detectSystemJava в
+// продуктовом коде проверяет JAVA_HOME первым, правок jre.js не требуется.
+let managedJavaHome;
+export const ensureManagedJre = async () => {
+    if (managedJavaHome) return managedJavaHome;
+    const jre = cachedJava() ?? (await resolveJava({ force: true }));
+    // <root>/bin/java → <root> (macOS: <root>/Contents/Home/bin/java → <root>/Contents/Home)
+    managedJavaHome = path.dirname(path.dirname(jre.path));
+    return managedJavaHome;
+};
+
+// Неинтерактивный эквивалент `c4builder new`: копия template/src + готовый .c4builder варианта
+export const createFixture = (variant) => {
     fs.mkdirSync(TMP_ROOT, { recursive: true });
-    const dir = fs.mkdtempSync(path.join(TMP_ROOT, 'fixture-'));
+    const dir = fs.mkdtempSync(path.join(TMP_ROOT, `fixture-${variant}-`));
     fs.cpSync(TEMPLATE_SRC, path.join(dir, 'src'), { recursive: true });
-    fs.copyFileSync(FIXTURE_CONFIG, path.join(dir, '.c4builder'));
+    fs.copyFileSync(fixtureConfig(variant), path.join(dir, '.c4builder'));
     return dir;
 };
 
 export const runBuild = (dir) => {
+    if (!managedJavaHome) throw new Error('ensureManagedJre() не вызван до runBuild — JAVA_HOME не пинован');
     const res = spawnSync(process.execPath, [path.join(REPO_ROOT, 'index.js')], {
         cwd: dir,
         encoding: 'utf8',
-        timeout: 240_000
+        timeout: 240_000,
+        env: { ...process.env, JAVA_HOME: managedJavaHome }
     });
     if (res.status !== 0) {
         throw new Error(
@@ -94,12 +119,13 @@ export const collectNormalizedTree = (root) => {
     return tree;
 };
 
-export const goldenExists = () => fs.existsSync(GOLDEN_MANIFEST);
+export const goldenExists = (variant) => fs.existsSync(goldenManifest(variant));
 
-export const readGoldenTreeFile = (rel) => fs.readFileSync(path.join(GOLDEN_TREE, rel), 'utf8');
+export const readGoldenTreeFile = (variant, rel) =>
+    fs.readFileSync(path.join(goldenTree(variant), rel), 'utf8');
 
-export const compareWithGolden = (tree) => {
-    const manifest = JSON.parse(fs.readFileSync(GOLDEN_MANIFEST, 'utf8')).files;
+export const compareWithGolden = (tree, variant) => {
+    const manifest = JSON.parse(fs.readFileSync(goldenManifest(variant), 'utf8')).files;
     return {
         missing: Object.keys(manifest).filter((rel) => !(rel in tree)),
         extra: Object.keys(tree).filter((rel) => !(rel in manifest)),
@@ -107,27 +133,27 @@ export const compareWithGolden = (tree) => {
     };
 };
 
-export const updateGolden = (tree) => {
-    fs.rmSync(GOLDEN_DIR, { recursive: true, force: true });
-    fs.mkdirSync(GOLDEN_TREE, { recursive: true });
+export const updateGolden = (tree, variant) => {
+    fs.rmSync(goldenDir(variant), { recursive: true, force: true });
+    fs.mkdirSync(goldenTree(variant), { recursive: true });
     const files = {};
     for (const [rel, file] of Object.entries(tree)) {
         files[rel] = file.sha;
         if (isDiffable(rel)) {
-            const target = path.join(GOLDEN_TREE, rel);
+            const target = path.join(goldenTree(variant), rel);
             fs.mkdirSync(path.dirname(target), { recursive: true });
             fs.writeFileSync(target, file.buf);
         }
     }
-    fs.writeFileSync(GOLDEN_MANIFEST, `${JSON.stringify({ files }, null, 2)}\n`);
+    fs.writeFileSync(goldenManifest(variant), `${JSON.stringify({ files }, null, 2)}\n`);
 };
 
 // Нормализованная копия фактического выхода — для отладки и как CI-артефакт,
 // из которого регенерируется эталон (см. test/README.md)
-export const writeActualTree = (tree) => {
-    fs.rmSync(ACTUAL_DIR, { recursive: true, force: true });
+export const writeActualTree = (tree, variant) => {
+    fs.rmSync(actualDir(variant), { recursive: true, force: true });
     for (const [rel, file] of Object.entries(tree)) {
-        const target = path.join(ACTUAL_DIR, rel);
+        const target = path.join(actualDir(variant), rel);
         fs.mkdirSync(path.dirname(target), { recursive: true });
         fs.writeFileSync(target, file.buf);
     }

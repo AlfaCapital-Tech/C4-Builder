@@ -52,6 +52,19 @@ jobs:
 
       - run: npm ci --ignore-scripts
 
+      # Golden-рендер идёт на пиновом managed-JRE (Temurin, см. jre.js TEMURIN_FEATURE),
+      # а не на setup-java: тест подставляет его JAVA_HOME. Кешируем между прогонами,
+      # ключ — от os/arch (feature=21 зашит в jre.js; при бампе обновить суффикс ключа).
+      - name: Cache managed JRE
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/c4builder/jre
+          key: c4builder-jre-temurin21-${{ runner.os }}-${{ runner.arch }}
+
+      # Прогрев кеша до тестов: сеть под контролем шага, таймауты сборок не тратятся
+      # на скачивание. --force минует системную java (это и есть managed-JRE).
+      - run: node index.js jre install --force
+
       - run: npm test
 
       # Нормализованный фактический выход сборки — из него регенерируется
