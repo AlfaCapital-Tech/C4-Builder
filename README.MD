@@ -34,6 +34,11 @@ I strongly encourage people to check them out first but if you want to dive righ
 Graphviz is **not** required — layout is computed by PlantUML's built-in Java engine
 (Smetana). The PlantUML jar and the diagram font are bundled with c4builder.
 
+With `diagramFormat: png`, diagrams are produced by rasterizing their SVG with
+[`@resvg/resvg-js`](https://github.com/thx/resvg-js) (a bundled dependency, prebuilt
+native binary, no browser). This gives a single deterministic PNG for both PlantUML and
+D2, using the bundled font. ditaa diagrams stay native PlantUML PNG.
+
 The easiest way to get started is with the _new project_ template.
 
 ![new](docs/images/new.gif)

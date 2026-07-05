@@ -26,12 +26,15 @@ const {
 // D2-бэкенд: только статические хелперы (парсинг импортов) грузятся сразу; сам
 // движок @terrastruct/d2 тянется лениво внутри renderD2/teardownD2.
 const { renderD2, foldD2Imports, teardownD2 } = require('./d2renderer.js');
+// PNG-выход: SVG обоих движков растеризуется resvg (ленивая загрузка внутри модуля).
+const { rasterizeSvgToPng } = require('./pngraster.js');
 const { date } = require('joi');
 
-// Формат выходного изображения диаграммы: D2 всегда SVG (PNG — отдельная фича),
-// PlantUML — png для ditaa, иначе выбранный формат.
+// Формат выходного файла диаграммы: ditaa всегда PNG (нативный, без SVG-представления),
+// иначе — выбранный DIAGRAM_FORMAT. При png не-ditaa рендерится в SVG и растеризуется
+// (см. рендер ниже), поэтому D2 тоже честно поддерживает png (раньше молча оставался SVG).
 const diagramOutputFormat = (diagram, options) =>
-    diagram.engine === 'd2' ? 'svg' : diagram.isDitaa ? 'png' : options.DIAGRAM_FORMAT;
+    diagram.isDitaa ? 'png' : options.DIAGRAM_FORMAT;
 
 const getMime = (format) => {
     if (format == 'svg') return `image/svg+xml`;
@@ -310,19 +313,27 @@ const generateImages = async (tree, options, onImageGenerated, cacheConf) => {
             if (oldChecksums.find((x) => x === cksum) && (await fs.existsSync(bkFilePath))) {
                 await fsextra.copyFileSync(bkFilePath, filePath);
             } else {
-                // render diagram to image: D2 через WASM, PlantUML — прямым вызовом java
-                const render =
+                const outFormat = diagramOutputFormat(diagram, options);
+                // PNG-выход не-ditaa диаграмм — растеризацией SVG (resvg), а не нативным
+                // движком: единый детерминированный PNG для PlantUML и D2. ditaa остаётся
+                // нативным PlantUML-PNG (у него нет SVG-представления) — не растеризуем.
+                const needsRaster = outFormat === 'png' && !diagram.isDitaa;
+                // render diagram to image: D2 через WASM, PlantUML — прямым вызовом java.
+                // Для растеризации PlantUML не-ditaa рендерим в svg (не -tpng), затем resvg.
+                const rendered =
                     diagram.engine === 'd2'
-                        ? renderD2(entryPath, { layout: options.D2_LAYOUT }).then((image) =>
-                              writeFile(filePath, image)
-                          )
+                        ? renderD2(entryPath, { layout: options.D2_LAYOUT })
                         : renderDiagram(diagram.content, {
                               jarPath,
                               includePath: item.dir,
-                              format: diagramOutputFormat(diagram, options),
+                              format: needsRaster ? 'svg' : outFormat,
                               charset: options.CHARSET,
                               isDitaa: diagram.isDitaa
-                          }).then((image) => writeFile(filePath, image));
+                          });
+
+                const render = rendered
+                    .then((image) => (needsRaster ? rasterizeSvgToPng(image) : image))
+                    .then((image) => writeFile(filePath, image));
 
                 taskList.push(render);
             }
