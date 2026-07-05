@@ -2,6 +2,7 @@ const inquirer = require('inquirer');
 const joi = require('joi');
 const fs = require('fs');
 const path = require('path');
+const { defaultConfig } = require('./defaults.js');
 
 const validate = (schema) => (answers) => {
     //just in case
@@ -29,7 +30,7 @@ module.exports = async (currentConfiguration, conf, program) => {
             type: 'input',
             name: 'homepageName',
             message: 'HomePage Name',
-            default: currentConfiguration.HOMEPAGE_NAME || 'Overview',
+            default: currentConfiguration.HOMEPAGE_NAME || defaultConfig.homepageName,
             validate: validate(joi.string().trim().optional())
         });
         conf.set('homepageName', responses.homepageName);
@@ -40,7 +41,7 @@ module.exports = async (currentConfiguration, conf, program) => {
             type: 'input',
             name: 'rootFolder',
             message: 'Root documentation folder',
-            default: currentConfiguration.ROOT_FOLDER || 'src',
+            default: currentConfiguration.ROOT_FOLDER || defaultConfig.rootFolder,
             validate: (answers) => {
                 let isValid = validate(joi.string().trim().optional())(answers);
                 if (isValid) {
@@ -61,7 +62,7 @@ module.exports = async (currentConfiguration, conf, program) => {
             type: 'input',
             name: 'distFolder',
             message: 'Destination folder',
-            default: currentConfiguration.DIST_FOLDER || 'docs',
+            default: currentConfiguration.DIST_FOLDER || defaultConfig.distFolder,
             validate: (answers) => {
                 let isValid = validate(joi.string().trim().optional());
                 if (isValid) {
@@ -82,17 +83,23 @@ module.exports = async (currentConfiguration, conf, program) => {
     ) {
         let defaults = [
             currentConfiguration.GENERATE_MD === undefined
-                ? null
+                ? defaultConfig.generateMD
+                    ? 'generateMD'
+                    : null
                 : currentConfiguration.GENERATE_MD
                 ? 'generateMD'
                 : null,
             currentConfiguration.GENERATE_COMPLETE_MD_FILE === undefined
-                ? null
+                ? defaultConfig.generateCompleteMD
+                    ? 'generateCompleteMD'
+                    : null
                 : currentConfiguration.GENERATE_COMPLETE_MD_FILE
                 ? 'generateCompleteMD'
                 : null,
             currentConfiguration.GENERATE_WEBSITE === undefined
-                ? 'generateWEB'
+                ? defaultConfig.generateWEB
+                    ? 'generateWEB'
+                    : null
                 : currentConfiguration.GENERATE_WEBSITE
                 ? 'generateWEB'
                 : null
@@ -130,7 +137,7 @@ module.exports = async (currentConfiguration, conf, program) => {
                 message: 'Include basic navigation?',
                 default:
                     currentConfiguration.INCLUDE_NAVIGATION === undefined
-                        ? false
+                        ? defaultConfig.includeNavigation
                         : currentConfiguration.INCLUDE_NAVIGATION
             });
             conf.set('includeNavigation', mdOptions.includeNavigation);
@@ -141,7 +148,7 @@ module.exports = async (currentConfiguration, conf, program) => {
                 message: 'Include navigable table of contents?',
                 default:
                     currentConfiguration.INCLUDE_TABLE_OF_CONTENTS === undefined
-                        ? true
+                        ? defaultConfig.includeTableOfContents
                         : currentConfiguration.INCLUDE_TABLE_OF_CONTENTS
             });
             conf.set('includeTableOfContents', mdOptions.includeTableOfContents);
@@ -152,7 +159,7 @@ module.exports = async (currentConfiguration, conf, program) => {
                 type: 'input',
                 name: 'webTheme',
                 message: 'Change the default docsify theme?',
-                default: currentConfiguration.WEB_THEME || 'vendor/vue.css'
+                default: currentConfiguration.WEB_THEME || defaultConfig.webTheme
             });
             conf.set('webTheme', webOptions.webTheme);
 
@@ -160,7 +167,7 @@ module.exports = async (currentConfiguration, conf, program) => {
                 type: 'input',
                 name: 'supportSearch',
                 message: 'Support search on navbar?',
-                default: true
+                default: defaultConfig.supportSearch
             });
             conf.set('supportSearch', webOptions.supportSearch);
 
@@ -168,7 +175,7 @@ module.exports = async (currentConfiguration, conf, program) => {
                 type: 'input',
                 name: 'repoUrl',
                 message: 'Include a repository url?',
-                default: currentConfiguration.REPO_NAME
+                default: currentConfiguration.REPO_NAME || defaultConfig.repoUrl
             });
             conf.set('repoUrl', webOptions.repoUrl);
 
@@ -178,7 +185,7 @@ module.exports = async (currentConfiguration, conf, program) => {
                 message: 'Support script execution and OpenAPI rendering?',
                 default:
                     currentConfiguration.executeScript === undefined
-                        ? false
+                        ? defaultConfig.executeScript
                         : currentConfiguration.executeScript
             });
             conf.set('executeScript', webOptions.executeScript);
@@ -187,7 +194,7 @@ module.exports = async (currentConfiguration, conf, program) => {
                 type: 'input',
                 name: 'docsifyTemplate',
                 message: 'Path to a specific Docsify template?',
-                default: ''
+                default: defaultConfig.docsifyTemplate
             });
             conf.set('docsifyTemplate', webOptions.docsifyTemplate);
 
@@ -195,7 +202,7 @@ module.exports = async (currentConfiguration, conf, program) => {
                 type: 'input',
                 name: 'webPort',
                 message: 'Change the default serve port?',
-                default: currentConfiguration.WEB_PORT || '3000'
+                default: currentConfiguration.WEB_PORT || defaultConfig.webPort
             });
             conf.set('webPort', webOptions.webPort);
         }
@@ -212,32 +219,44 @@ module.exports = async (currentConfiguration, conf, program) => {
     ) {
         let defaults = [
             currentConfiguration.INCLUDE_BREADCRUMBS === undefined
-                ? 'includeBreadcrumbs'
+                ? defaultConfig.includeBreadcrumbs
+                    ? 'includeBreadcrumbs'
+                    : null
                 : currentConfiguration.INCLUDE_BREADCRUMBS
                 ? 'includeBreadcrumbs'
                 : null,
             currentConfiguration.GENERATE_LOCAL_IMAGES === undefined
-                ? null
+                ? defaultConfig.generateLocalImages
+                    ? 'generateLocalImages'
+                    : null
                 : currentConfiguration.GENERATE_LOCAL_IMAGES
                 ? 'generateLocalImages'
                 : null,
             currentConfiguration.INCLUDE_LINK_TO_DIAGRAM === undefined
-                ? null
+                ? defaultConfig.includeLinkToDiagram
+                    ? 'includeLinkToDiagram'
+                    : null
                 : currentConfiguration.INCLUDE_LINK_TO_DIAGRAM
                 ? 'includeLinkToDiagram'
                 : null,
             currentConfiguration.DIAGRAMS_ON_TOP === undefined
-                ? 'diagramsOnTop'
+                ? defaultConfig.diagramsOnTop
+                    ? 'diagramsOnTop'
+                    : null
                 : currentConfiguration.DIAGRAMS_ON_TOP
                 ? 'diagramsOnTop'
                 : null,
             currentConfiguration.EMBED_DIAGRAM === undefined
-                ? null
+                ? defaultConfig.embedDiagram
+                    ? 'embedDiagram'
+                    : null
                 : currentConfiguration.EMBED_DIAGRAM
                 ? 'embedDiagram'
                 : null,
             currentConfiguration.EXCLUDE_OTHER_FILES === undefined
-                ? null
+                ? defaultConfig.excludeOtherFiles
+                    ? 'excludeOtherFiles'
+                    : null
                 : currentConfiguration.EXCLUDE_OTHER_FILES
                 ? 'excludeOtherFiles'
                 : null
@@ -290,7 +309,7 @@ module.exports = async (currentConfiguration, conf, program) => {
             type: 'input',
             name: 'plantumlServerUrl',
             message: 'PlantUML Server URL',
-            default: currentConfiguration.PLANTUML_SERVER_URL || 'https://www.plantuml.com/plantuml',
+            default: currentConfiguration.PLANTUML_SERVER_URL || defaultConfig.plantumlServerUrl,
             validate: validate(joi.string().trim().optional())
         });
         conf.set('plantumlServerUrl', responses.plantumlServerUrl);
@@ -301,7 +320,7 @@ module.exports = async (currentConfiguration, conf, program) => {
             type: 'input',
             name: 'diagramFormat',
             message: 'Diagram Image Format',
-            default: currentConfiguration.DIAGRAM_FORMAT || 'svg',
+            default: currentConfiguration.DIAGRAM_FORMAT || defaultConfig.diagramFormat,
             validate: validate(joi.string().trim().optional())
         });
         conf.set('diagramFormat', responses.diagramFormat);
@@ -312,7 +331,7 @@ module.exports = async (currentConfiguration, conf, program) => {
             type: 'input',
             name: 'charset',
             message: 'Change the default charset',
-            default: currentConfiguration.CHARSET || 'UTF-8'
+            default: currentConfiguration.CHARSET || defaultConfig.charset
         });
         conf.set('charset', responses.charset);
     }

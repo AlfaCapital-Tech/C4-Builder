@@ -1,6 +1,5 @@
 const figlet = require('figlet');
 const inquirer = require('inquirer');
-const joi = require('joi');
 const chalk = require('chalk');
 const fs = require('fs');
 const path = require('path');
@@ -8,14 +7,18 @@ const fsextra = require('fs-extra');
 const Configstore = require('configstore');
 
 const { readFile, writeFile, makeDirectory } = require('./utils.js');
+const { defaultConfig } = require('./defaults.js');
 
-const validate = (schema) => (answers) => {
-    //just in case
-    if (joi.validate) {
-        return !joi.validate(answers, schema).error;
-    } else {
-        return !schema.validate(answers).error;
-    }
+// Общая проверка имени проекта: возвращает текст ошибки или null (валидно).
+// Интерактив показывает её и переспрашивает; --yes падает с ней (exit≠0), без ре-промпта.
+const validateProjectName = (name) => {
+    if (!name || !name.trim()) return 'имя проекта не задано';
+    if (name.indexOf('/') !== -1 || name.indexOf('\\') !== -1)
+        return 'имя проекта не должно содержать «/» или «\\»';
+    const target = path.join(process.cwd(), name);
+    if (fs.existsSync(target) && fs.readdirSync(target).length > 0)
+        return `папка «${name}» уже существует и не пуста`;
+    return null;
 };
 
 const generateTemplate = async (dir, projectName) => {
@@ -81,40 +84,45 @@ const generateTemplate = async (dir, projectName) => {
     await build(dir);
 };
 
-module.exports = async () => {
-    console.log('\nThis will create a new folder with the name of the project');
+module.exports = async (opts = {}) => {
+    const nonInteractive = !!opts.yes;
 
-    let responses;
-
-    responses = await inquirer.prompt({
-        type: 'input',
-        name: 'projectName',
-        message: 'Project Name',
-        validate: (answers) => {
-            let isValid = validate(joi.string().trim().optional())(answers);
-            if (isValid) {
-                if (answers.indexOf('/') !== -1 || answers.indexOf('\\') !== -1) return false;
-
-                //check if it already exists
-                if (fs.existsSync(path.join(process.cwd(), answers))) {
-                    let files = fs.readdirSync(path.join(process.cwd(), answers));
-                    if (files.length > 0) throw `Folder ${answers} is not empty`;
-                }
-                return true;
-            }
-            return false;
+    // --- имя проекта: флаг --name пропускает промпт; --yes без имени — фатально ---
+    let projectName;
+    if (opts.name) {
+        const err = validateProjectName(opts.name);
+        if (err) {
+            console.log(chalk.red(`ОШИБКА: ${err}`));
+            process.exit(1);
         }
-    });
-    let projectName = responses.projectName;
+        projectName = opts.name;
+    } else if (nonInteractive) {
+        console.log(chalk.red('ОШИБКА: режим --yes требует --name <name>'));
+        process.exit(1);
+    } else {
+        console.log('\nThis will create a new folder with the name of the project');
+        const responses = await inquirer.prompt({
+            type: 'input',
+            name: 'projectName',
+            message: 'Project Name',
+            validate: (answers) => validateProjectName(answers) || true
+        });
+        projectName = responses.projectName;
+    }
 
-    responses = await inquirer.prompt({
-        type: 'confirm',
-        name: 'isVSCode',
-        message: 'Include the VSCode autocomplete?',
-        default: true
-    });
-    let isVSCode = responses.isVSCode;
-    console.log(isVSCode);
+    // --- VSCode-сниппеты: явный флаг или --yes → без промпта (дефолт true) ---
+    let isVSCode;
+    if (opts.vscodeExplicit || nonInteractive) {
+        isVSCode = opts.vscode !== false;
+    } else {
+        const responses = await inquirer.prompt({
+            type: 'confirm',
+            name: 'isVSCode',
+            message: 'Include the VSCode autocomplete?',
+            default: true
+        });
+        isVSCode = responses.isVSCode;
+    }
 
     await makeDirectory(projectName);
     await generateTemplate(path.join(__dirname, 'template'), projectName);
@@ -124,6 +132,11 @@ module.exports = async () => {
         {},
         { configPath: path.join(process.cwd(), projectName, '.c4builder') }
     );
+    // --yes: полный конфиг из единого defaultConfig → последующий c4builder собирает
+    // без wizard'а. Интерактив пишет только projectName (первая сборка ведёт через wizard).
+    if (nonInteractive) {
+        for (const [key, value] of Object.entries(defaultConfig)) conf.set(key, value);
+    }
     conf.set('projectName', projectName);
 
     let readme = await readFile(path.join(__dirname, 'template', 'readme.md'));
@@ -139,7 +152,8 @@ module.exports = async () => {
     console.log(chalk.gray(`run the following commands`));
     console.log(`> cd ${projectName}`);
     console.log(`> c4builder`);
-    console.log(chalk.gray(`the wizard will guide you through the rest of the configuration`));
+    if (!nonInteractive)
+        console.log(chalk.gray(`the wizard will guide you through the rest of the configuration`));
     console.log(chalk.gray(`check out the ./${projectName}/docs folder created`));
     return;
 };
