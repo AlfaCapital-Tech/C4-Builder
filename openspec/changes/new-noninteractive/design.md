@@ -1,10 +1,12 @@
 ## Context
 
 `c4builder --new` (`--new`-флаг, не подкоманда) вызывает `cmdNewProject()`, который
-игнорирует `opts` и всегда задаёт три `inquirer`-вопроса: `projectName` (с валидацией
-на слэши и непустую папку), `plantumlVersion` (список + `latest`), `isVSCode`. Затем
-копирует шаблон, пишет `.c4builder` (только `projectName` + `plantumlVersion`
-[+ `generateLocalImages` для пинованной версии]), README и опц. `.vscode`-сниппеты.
+игнорирует `opts` и всегда задаёт `inquirer`-вопросы: `projectName` (с валидацией на
+слэши и непустую папку) и `isVSCode`. Затем копирует шаблон, пишет `.c4builder`
+(`projectName` [+ рендер-настройки]), README и опц. `.vscode`-сниппеты.
+
+Предусловие: этот change идёт после `remove-plantuml-version`, поэтому вопрос/флаг
+версии PlantUML здесь уже не существует (был `plantumlVersion`-промпт — удалён там).
 
 Отдельно `cmdCollect` (wizard сборки) пишет полный набор ключей (`generateMD`,
 `generateWEB`, `includeNavigation`, `diagramFormat`, `charset`, …). Поэтому даже после
@@ -13,7 +15,7 @@
 ## Goals / Non-Goals
 
 **Goals:**
-- Флаги для всех трёх вопросов `--new` + явный `--yes` (ноль промптов).
+- Флаги для вопросов `--new` (имя, VSCode) + явный `--yes` (ноль промптов).
 - В `--yes` валидация как ошибки+exit≠0 (CI-безопасно), а не ре-промпт.
 - В `--yes` — полный `.c4builder`, чтобы последующая сборка не спрашивала.
 - Единый `defaultConfig` для `new --yes` и wizard'а (дефолты не разъезжаются).
@@ -52,11 +54,12 @@ wizard (как `default` в inquirer-промптах).
 
 - **Дрейф «полного конфига» от реального набора ключей wizard'а** → единый
   `defaultConfig` + (желательно) тест: `new --yes` → `c4builder` собирает без промптов.
-- **`latest`-версия и офлайн-рендер**: при `latest` `generateLocalImages` исторически
-  не форсится; для headless важно, чтобы дефолт рендера был согласован (локальный).
-  Зафиксировать в `defaultConfig`, не полагаться на ветку «только для пинованной версии».
-- **Зависимость от `remove-pdf`**: если делать до него, «полный конфиг» вынужден решать
-  про `generatePDF`. Рекомендация — после `remove-pdf`.
+- **Дефолт рендера для headless**: `generateLocalImages` должен быть согласован
+  (локальный рендер) прямо в `defaultConfig`, чтобы headless-сборка не зависела от
+  внешних условий.
+- **Зависимости**: делать после `remove-pdf` (иначе «полный конфиг» решает про
+  `generatePDF`) и после `remove-plantuml-version` (иначе пришлось бы вводить флаг
+  `--plantuml-version`, который тот change убирает).
 
 ## Open Questions
 

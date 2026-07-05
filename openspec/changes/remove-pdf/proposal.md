@@ -1,5 +1,8 @@
 # Удаление PDF-вывода
 
+> **Зависит от:** — (независимый cleanup; можно параллельно с `remove-plantuml-version`).
+> **Порядок:** до `new-noninteractive`.
+
 ## Why
 
 PDF-вывод в c4builder держится на `md-to-pdf`, а тот тянет headless-браузер

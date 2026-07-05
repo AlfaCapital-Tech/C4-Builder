@@ -1,5 +1,8 @@
 # PNG-вывод через растеризацию SVG (resvg)
 
+> **Зависит от:** `plantuml-java-direct`, `d2-backend` (оба в архиве — предусловие выполнено).
+> **Порядок:** независим от cleanup-ветки (remove-pdf / remove-plantuml-version / new-noninteractive).
+
 ## Why
 
 `DIAGRAM_FORMAT=png` коллеги иногда используют, но после перехода на java-direct и
