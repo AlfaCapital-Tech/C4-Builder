@@ -1,0 +1,6 @@
+# Коммиты сплошного переформатирования (Biome) — git blame их пропускает.
+# Включить: git config blame.ignoreRevsFile .git-blame-ignore-revs
+# (или git blame --ignore-revs-file .git-blame-ignore-revs)
+
+# dev-toolchain: заведение Biome + формат всего репо
+e18a4653cefb3ee8ac5b2bfdb7a732ccecff6e9d
