@@ -3,33 +3,40 @@
 Это карта незаархивированных пропозалов линии модернизации C4-Builder для того, кто
 берёт их в реализацию. Каждый change — самодостаточный proposal + design + specs +
 tasks в своей папке; реализуется через `/opsx:apply` (или вручную по `tasks.md`).
-Все проходят `openspec validate <name> --strict`.
+Все проходят `openspec validate <name>`.
 
 Предыдущие волны в `archive/`: template-offline → golden-test-ci → java-direct/d2
 → remove-pdf, remove-plantuml-version, new-noninteractive, resvg-png,
-remove-vscode-snippets, jre-resolver → **golden-matrix, dev-toolchain**
-(страховочная сетка ×3 конфига + Biome/lint-CI/files/engines — оба реализованы).
+remove-vscode-snippets, jre-resolver → golden-matrix, dev-toolchain →
+**ts-scaffold** (ESM-флип, tsc → dist/ Стойка 2, домены src/ — реализован;
+src/ теперь честный ESM, но все 16 модулей ещё `.js` под `allowJs`).
 
 ## Текущая волна: собственно порт на TypeScript
 
-Решения explore-сессии 2026-07-05: **Стойка 2** — чистый `tsc → dist/` без бандлера,
-`rewriteRelativeImportExtensions` + `allowImportingTsExtensions` (пишем `.ts` в
-импортах, эмит — `.js`; `typescript >= 5.7`), ESM, `engines >=20.19` (Node 20
-держим — `require(esm)` доступен с 20.19). Глубокая доменная раскладка `src/`
-(cli / core{scan,render,compose} / config / util). Рефакторинг вместе с портом
-(«структура свободна, поведение фиксировано»); каждый шаг под зелёным golden.
+Пересмотр 2026-07-06 (explore-сессия): вместо четырёх кластеров порта
+(`util+config` → `scan+render` → `compose` → `cli+wizard`) — **один change
+полного порта**; база мала (~2600 строк), golden-матрица — страховочная сетка.
+Дробление монолита `build.ts` отделено от порта в собственный change: в диффе
+порта видно «переименовал+типизировал», в диффе дробления — «перенёс».
 
 ```
  АКТИВНО (proposal готов):
-   ts-scaffold ── tsconfig(Стойка 2) + атомарный CJS→ESM флип + переезд в
-   │              src/<домены> + сборка dist/ + Docker. build.js едет целиком.
-   │              Поведение: 0 правок.
+   ts-port-full ── все 16 src/**/*.js → .ts под strict, BuildOptions в
+   │               config/options.ts (оптимистичный тип), @types/*,
+   │               финал — allowJs:false. build.ts остаётся монолитом.
+   │               Домены = группы задач: config → util → core → cli → index.
    ▼
- PENDING (ещё не пропозалы) — порт по кластерам, .js→.ts + типы:
-   port·util+config ─▶ port·scan+render ─▶ port·compose ─▶ port·cli+wizard
-                          дробим build.js по фазам           чиним 3 легаси-дефекта
+   build-split ─── дробление build.ts по фактическим швам: scan/tree.ts,
+   │               render/diagrams.ts, compose/markdown.ts; build.ts —
+   │               оркестратор (~100 строк). Rename-only, поведение фикс.
    ▼
-   deps-модернизация (chalk@5, @inquirer, свой config-store, joi→zod)
+ PENDING (ещё не пропозалы):
+   legacy-fixes (дефекты, вскрытые типизацией: writeOnSameLine-заглушка,
+   │             makeDirectory глотает ошибки, мёртвая joi-валидация)
+   ▼
+   deps-модернизация (chalk@5, @inquirer, свой config-store, joi→zod —
+   │                  по одному change'у; zod закрывает «оптимистичность»
+   │                  типа BuildOptions рантайм-валидацией)
    ▼
    teavm-движок (экспериментальный флаг)
 ```
@@ -38,29 +45,21 @@ remove-vscode-snippets, jre-resolver → **golden-matrix, dev-toolchain**
 
 | # | Change | Зависит от | Capability | Ветка |
 |---|--------|-----------|-----------|-------|
-| 1 | `ts-scaffold` | — (golden-matrix/dev-toolchain в архиве) | build-pipeline (new) + ci-validation, dev-toolchain (mod) | refactor/phoenix |
-| 2 | `port·util+config` | 1 | — (рефактор, поведение фикс.) | refactor/phoenix |
-| 3 | `port·scan+render` | 2 | — | refactor/phoenix |
-| 4 | `port·compose` | 3 | — | refactor/phoenix |
-| 5 | `port·cli+wizard` | 4 | — | refactor/phoenix |
-
-Кластеры 2–5 — пока не оформлены пропозалами; оформляются по мере подхода.
+| 1 | `ts-port-full` | — (ts-scaffold в архиве) | build-pipeline (mod: всё .ts, strict, allowJs off) | refactor/phoenix |
+| 2 | `build-split` | 1 (строго после) | build-pipeline (add: пофазная модульность ядра) | refactor/phoenix |
 
 ## Ключевые сцепки и решения
 
-- **`ts-scaffold` механический.** ESM-флип атомарен (`"type":"module"` — глобальный
-  рубильник), `build.js` переезжает в `core/build.js` целиком; дробление монолита
-  и типы — в кластерах порта. Мины ESM (`__dirname`, `require(json)`, пути к
-  `vendor/`/`template/` после переезда в `dist/`) сняты единым `util/paths.ts`
-  (резолв корня пакета от `import.meta.url`) — см. `ts-scaffold/design.md`.
-- **Дробление `build.js`** идёт в кластере `scan+render` (tree/foldIncludes→scan;
-  renderDiagram/images/d2/png/jre→render) и `compose` (compile/MD/CompleteMD/WebMD
-  + тонкий `build()`), под зелёным golden-матрицей.
-- **Известные дефекты легаси-кода** (implicit-глобал `responses` и мёртвая
-  joi-валидация в cli.collect.js, `EXECUTE_SCRIPT`-опечатка) чинятся в кластере
-  порта `cli+wizard` — списком в его proposal, по каждому отдельное решение.
+- **Тип `BuildOptions` оптимистичный** (поля обязательны): wizard и `--new --yes`
+  гарантируют полный конфиг; честный `| undefined` потребовал бы сотни проверок
+  по монолиту — риск поведенческого дрейфа. Честность на входе добавит звено zod.
+- **Правило смеси на время порта**: непортированные `.js` импортируют `'./x.js'` —
+  nodenext подставляет `x.ts`, потребители при переименовании цели не правятся.
+  Портированные `.ts` пишут `.ts`-импорты (Стойка 2).
+- **Легаси типизируется как есть** — рантайм в обоих changes не правится вообще;
+  вскрытые дефекты собираются пометками в бэклог `legacy-fixes`.
 - **Wizard тестируется без TTY**: шаги-данные {when, buildPrompt, apply} + инъекция
-  prompt-runner'а — оформится в кластере `cli+wizard`.
+  prompt-runner'а — оформится волной deps (переезд на @inquirer/prompts).
 
 ## Вне объёма этой волны
 
