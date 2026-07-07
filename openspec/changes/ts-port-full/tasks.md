@@ -1,6 +1,6 @@
 ## 1. Типы зависимостей
 
-- [ ] 1.1 devDeps: `@types/node`, `@types/configstore`, `@types/inquirer@^8`, `@types/figlet`, `@types/fs-extra`, `@types/express@^4`; проверить, чьи типы встроены (`commander`, `chalk@2`, `@resvg/resvg-js`, `node-watch`, `@terrastruct/d2`, `joi`); несовпадения — локальный `src/types/<pkg>.d.ts`; `npm run build` зелёный
+- [x] 1.1 devDeps: `@types/node`, `@types/configstore`, `@types/inquirer@^8`, `@types/figlet`, `@types/fs-extra`, `@types/express@^4`; проверить, чьи типы встроены (`commander`, `chalk@2`, `@resvg/resvg-js`, `node-watch`, `@terrastruct/d2`, `joi`); несовпадения — локальный `src/types/<pkg>.d.ts`; `npm run build` зелёный
 
 ## 2. config/
 
