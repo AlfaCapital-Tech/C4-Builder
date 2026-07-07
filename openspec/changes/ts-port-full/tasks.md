@@ -4,8 +4,8 @@
 
 ## 2. config/
 
-- [ ] 2.1 Новый `src/config/options.ts`: `C4ConfigFile` (camelCase-ключи `.c4builder`) и `BuildOptions` (SCREAMING_CASE, оптимистичный — поля обязательны; легаси-поля с пометкой)
-- [ ] 2.2 `defaults.js → defaults.ts` (`defaultConfig` типизирован через `C4ConfigFile`); golden зелёный; коммит группы
+- [x] 2.1 Новый `src/config/options.ts`: `C4ConfigFile` (camelCase-ключи `.c4builder`) и `BuildOptions` (SCREAMING_CASE, оптимистичный — поля обязательны; легаси-поля с пометкой)
+- [x] 2.2 `defaults.js → defaults.ts` (`defaultConfig` типизирован через `C4ConfigFile`); golden зелёный; коммит группы
 
 ## 3. util/
 
