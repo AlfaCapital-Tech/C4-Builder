@@ -8,9 +8,9 @@
 
 ## 3. Фаза compose
 
-- [ ] 3.1 `src/core/compose/markdown.ts`: перенести `compileDocument`, `hasOwnH1`, `injectAfterFirstH1`, `generateMD`, `generateCompleteMD`, `generateWebMD` (тип дерева — импорт из scan); golden зелёный; коммит
+- [x] 3.1 `src/core/compose/markdown.ts`: перенести `compileDocument`, `hasOwnH1`, `injectAfterFirstH1`, `generateMD`, `generateCompleteMD`, `generateWebMD` (тип дерева — импорт из scan); golden зелёный; коммит
 
 ## 4. Оркестратор
 
-- [ ] 4.1 Ревизия остатка `build.ts`: только оркестрация (бэкап/восстановление dist, вызовы фаз, прогресс); константы — к модулям-владельцам
+- [x] 4.1 Ревизия остатка `build.ts`: только оркестрация (бэкап/восстановление dist, вызовы фаз, прогресс); константы — к модулям-владельцам
 - [ ] 4.2 Финальная проверка: `npm run build`, golden, `npm pack --dry-run`; коммит
