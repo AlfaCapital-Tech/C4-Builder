@@ -9,8 +9,8 @@
 
 ## 3. util/
 
-- [ ] 3.1 `paths.js → paths.ts` (типизировать `packageJson` по фактическому потреблению)
-- [ ] 3.2 `utils.js → utils.ts` (сигнатуры как есть: `writeOnSameLine`, `makeDirectory` не чинить); golden зелёный; коммит группы
+- [x] 3.1 `paths.js → paths.ts` (типизировать `packageJson` по фактическому потреблению)
+- [x] 3.2 `utils.js → utils.ts` (сигнатуры как есть: `writeOnSameLine`, `makeDirectory` не чинить); golden зелёный; коммит группы
 
 ## 4. core/
 

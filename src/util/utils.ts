@@ -1,14 +1,17 @@
 import fs from 'node:fs';
 import zlib from 'node:zlib';
 
-const makeDirectory = (path) =>
+// makeDirectory намеренно резолвится и при ошибке mkdir (легаси-поведение — не чинить).
+const makeDirectory = (path: string): Promise<void> =>
     new Promise((resolve) => {
         fs.mkdir(path, () => {
             return resolve();
         });
     });
 
-const readFile = (path, type) =>
+// type не передаётся ни одним вызовом → encoding отсутствует → data приходит Buffer'ом;
+// сохраняем union из оверлоада fs (потребители зовут .toString()/шаблоны).
+const readFile = (path: string, type?: BufferEncoding): Promise<string | Buffer> =>
     new Promise((resolve, reject) => {
         fs.readFile(path, type, (err, data) => {
             if (err) return reject(err);
@@ -17,20 +20,22 @@ const readFile = (path, type) =>
         });
     });
 
-const writeFile = (path, data) =>
+const writeFile = (path: string, data: string | NodeJS.ArrayBufferView): Promise<void> =>
     new Promise((resolve, reject) => {
-        fs.writeFile(path, data, (err, res) => {
+        // res опционален: fs.writeFile отдаёт NoParamCallback, второй аргумент — всегда undefined.
+        fs.writeFile(path, data, (err: NodeJS.ErrnoException | null, res?: undefined) => {
             if (err) return reject(err);
 
             return resolve(res);
         });
     });
 
-const writeOnSameLine = async (message, _fn) => {
+// _fn игнорируется (легаси-заглушка — не чинить).
+const writeOnSameLine = async (message: string, _fn?: unknown): Promise<void> => {
     process.stdout.write(`${message}\r`);
 };
 
-const encodeURIPath = (path) => {
+const encodeURIPath = (path: string): string => {
     path = path.split('\\').join('/');
     return encodeURI(path);
 };
@@ -58,7 +63,7 @@ THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABI
 CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
 DEALINGS IN THE SOFTWARE.
  */
-const urlTextFrom = (s) => {
+const urlTextFrom = (s: string): string => {
     const opt = { level: 9 };
     const d = zlib.deflateRawSync(Buffer.from(s), opt);
     const b = encode64(String.fromCharCode(...d.subarray(0)));
@@ -68,7 +73,7 @@ const urlTextFrom = (s) => {
      * Version: 1.0.1
      * LastModified: Dec 25 1999
      */
-    function encode64(data) {
+    function encode64(data: string): string {
         let r = '';
         for (let i = 0; i < data.length; i += 3) {
             if (i + 2 === data.length) {
@@ -82,7 +87,7 @@ const urlTextFrom = (s) => {
         return r;
     }
 
-    function append3bytes(b1, b2, b3) {
+    function append3bytes(b1: number, b2: number, b3: number): string {
         const c1 = b1 >> 2;
         const c2 = ((b1 & 0x3) << 4) | (b2 >> 4);
         const c3 = ((b2 & 0xf) << 2) | (b3 >> 6);
@@ -94,7 +99,7 @@ const urlTextFrom = (s) => {
         r += encode6bit(c4 & 0x3f);
         return r;
     }
-    function encode6bit(b) {
+    function encode6bit(b: number): string {
         if (b < 10) {
             return String.fromCharCode(48 + b);
         }
@@ -117,10 +122,10 @@ const urlTextFrom = (s) => {
     }
 };
 
-const plantUmlServerUrl = (baseURL, imageFormat, content) =>
+const plantUmlServerUrl = (baseURL: string, imageFormat: string, content: string): string =>
     `${baseURL}/${imageFormat}/0/${urlTextFrom(content)}`;
 
-const clearConsole = () => {
+const clearConsole = (): void => {
     process.stdout.write('\x1b[2J');
     process.stdout.write('\x1b[0f');
 };
