@@ -5,16 +5,22 @@ import path from 'node:path';
 import { defaultConfig } from '../../config/defaults.ts';
 import type { BuildOptions } from '../../config/options.ts';
 
+// Ответы inquirer.prompt — динамический словарь (Record<string, any> в типах inquirer).
+type PromptAnswers = Awaited<ReturnType<typeof inquirer.prompt>>;
+
 // Двухветочная обёртка joi.validate — легаси как есть (joi@17 не несёт .validate,
 // живёт else-ветка). Мёртвая if-ветка сохранена под каст — бэклог legacy-fixes.
-const validate = (schema: joi.Schema) => (answers: unknown): boolean => {
-    //just in case
-    if ((joi as any).validate) {
-        return !(joi as any).validate(answers, schema).error;
-    } else {
-        return !schema.validate(answers).error;
-    }
-};
+const validate =
+    (schema: joi.Schema) =>
+    (answers: unknown): boolean => {
+        //just in case: joi@17 не несёт module-level .validate — if-ветка мертва (легаси).
+        const legacyJoi = joi as { validate?: (answers: unknown, schema: joi.Schema) => { error?: unknown } };
+        if (legacyJoi.validate) {
+            return !legacyJoi.validate(answers, schema).error;
+        } else {
+            return !schema.validate(answers).error;
+        }
+    };
 
 export default async (
     currentConfiguration: BuildOptions,
@@ -23,7 +29,7 @@ export default async (
 ): Promise<void> => {
     // ESM исполняется в strict mode: под CommonJS `responses` был неявным глобалом,
     // здесь объявляем его явно (иначе присваивание бросит ReferenceError).
-    let responses: any;
+    let responses: PromptAnswers;
     if (!currentConfiguration.PROJECT_NAME || program.config) {
         responses = await inquirer.prompt({
             type: 'input',
@@ -142,7 +148,7 @@ export default async (
         conf.set('generateWEB', !!responses.generate.find((x: string) => x === 'generateWEB'));
 
         if (responses.generate.find((x: string) => x === 'generateMD')) {
-            let mdOptions: any = await inquirer.prompt({
+            let mdOptions: PromptAnswers = await inquirer.prompt({
                 type: 'confirm',
                 name: 'includeNavigation',
                 message: 'Include basic navigation?',
@@ -166,7 +172,7 @@ export default async (
         }
 
         if (responses.generate.find((x: string) => x === 'generateWEB')) {
-            let webOptions: any = await inquirer.prompt({
+            let webOptions: PromptAnswers = await inquirer.prompt({
                 type: 'input',
                 name: 'webTheme',
                 message: 'Change the default docsify theme?',
@@ -196,9 +202,9 @@ export default async (
                 message: 'Support script execution and OpenAPI rendering?',
                 default:
                     // легаси-дефект: camelCase-ключ (нет в BuildOptions) → всегда undefined-ветка. Бэклог.
-                    (currentConfiguration as any).executeScript === undefined
+                    (currentConfiguration as { executeScript?: boolean }).executeScript === undefined
                         ? defaultConfig.executeScript
-                        : (currentConfiguration as any).executeScript
+                        : (currentConfiguration as { executeScript?: boolean }).executeScript
             });
             conf.set('executeScript', webOptions.executeScript);
 
@@ -307,12 +313,18 @@ export default async (
             choices: choices
         });
         conf.set('includeBreadcrumbs', !!responses.generate.find((x: string) => x === 'includeBreadcrumbs'));
-        conf.set('includeLinkToDiagram', !!responses.generate.find((x: string) => x === 'includeLinkToDiagram'));
+        conf.set(
+            'includeLinkToDiagram',
+            !!responses.generate.find((x: string) => x === 'includeLinkToDiagram')
+        );
         conf.set('diagramsOnTop', !!responses.generate.find((x: string) => x === 'diagramsOnTop'));
         conf.set('embedDiagram', !!responses.generate.find((x: string) => x === 'embedDiagram'));
         conf.set('excludeOtherFiles', !!responses.generate.find((x: string) => x === 'excludeOtherFiles'));
 
-        conf.set('generateLocalImages', !!responses.generate.find((x: string) => x === 'generateLocalImages'));
+        conf.set(
+            'generateLocalImages',
+            !!responses.generate.find((x: string) => x === 'generateLocalImages')
+        );
     }
 
     if (!currentConfiguration.PLANTUML_SERVER_URL || program.config) {

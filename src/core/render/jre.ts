@@ -12,7 +12,7 @@ import os from 'node:os';
 import https from 'node:https';
 import crypto from 'node:crypto';
 import { createRequire } from 'node:module';
-import { spawnSync } from 'node:child_process';
+import { spawnSync, type SpawnSyncReturns } from 'node:child_process';
 import type { IncomingMessage } from 'node:http';
 
 // Результат резолва Java: путь к бинарю, источник (system/cache/download) и,
@@ -33,11 +33,11 @@ const JAVA_BIN = process.platform === 'win32' ? 'java.exe' : 'java';
 
 // --- платформа: process.* → параметры Adoptium ---
 const adoptiumOs = (): string =>
-    ({ win32: 'windows', darwin: 'mac', linux: 'linux' } as Record<string, string>)[process.platform] ||
+    (({ win32: 'windows', darwin: 'mac', linux: 'linux' }) as Record<string, string>)[process.platform] ||
     process.platform;
 
 const adoptiumArch = (): string =>
-    ({ x64: 'x64', arm64: 'aarch64', ppc64: 'ppc64le', s390x: 's390x' } as Record<string, string>)[
+    (({ x64: 'x64', arm64: 'aarch64', ppc64: 'ppc64le', s390x: 's390x' }) as Record<string, string>)[
         process.arch
     ] || process.arch;
 
@@ -51,7 +51,7 @@ const parseMajor = (versionOutput: string): number | null => {
 };
 
 const javaMajor = (javaPath: string): number | null => {
-    let res;
+    let res: SpawnSyncReturns<string>;
     try {
         res = spawnSync(javaPath, ['-version'], { encoding: 'utf8' });
     } catch {
@@ -113,7 +113,7 @@ const findJavaUnder = (root: string): string | null => {
     if (!fs.existsSync(root)) return null;
     const direct = path.join(root, 'bin', JAVA_BIN);
     if (fs.existsSync(direct)) return direct;
-    let entries;
+    let entries: fs.Dirent[];
     try {
         entries = fs.readdirSync(root, { withFileTypes: true });
     } catch {
@@ -159,7 +159,7 @@ const httpGet = (url: string): Promise<IncomingMessage> =>
             .on('error', reject);
     });
 
-const httpGetJson = async (url: string): Promise<any> => {
+const httpGetJson = async (url: string): Promise<unknown> => {
     const res = await httpGet(url);
     const chunks: Buffer[] = [];
     for await (const c of res) chunks.push(c);
@@ -187,11 +187,7 @@ const fetchAssetMeta = async (): Promise<{
     return { link: pkg.link, sha256: pkg.checksum, name: pkg.name, release: asset.release_name };
 };
 
-const downloadAndVerify = async (
-    link: string,
-    expectedSha: string,
-    destFile: string
-): Promise<void> => {
+const downloadAndVerify = async (link: string, expectedSha: string, destFile: string): Promise<void> => {
     const res = await httpGet(link);
     const hash = crypto.createHash('sha256');
     await new Promise((resolve, reject) => {
@@ -208,18 +204,32 @@ const downloadAndVerify = async (
     }
 };
 
+// Минимальный контракт yauzl (внешняя опц. зависимость без @types): только то,
+// что реально использует extractZip — без привязки к полному API либы.
+interface YauzlEntry {
+    fileName: string;
+    externalFileAttributes: number;
+}
+interface YauzlZipFile {
+    on(event: 'entry', listener: (entry: YauzlEntry) => void): void;
+    on(event: 'end', listener: () => void): void;
+    on(event: 'error', listener: (err: Error) => void): void;
+    readEntry(): void;
+    openReadStream(entry: YauzlEntry, cb: (err: Error | null, stream: NodeJS.ReadableStream) => void): void;
+}
+
 const extractZip = (archive: string, destDir: string): Promise<void> =>
     new Promise((resolve, reject) => {
-        require('yauzl').open(archive, { lazyEntries: true }, (err: any, zip: any) => {
+        require('yauzl').open(archive, { lazyEntries: true }, (err: Error | null, zip: YauzlZipFile) => {
             if (err) return reject(err);
-            zip.on('entry', (entry: any) => {
+            zip.on('entry', (entry: YauzlEntry) => {
                 const dest = path.join(destDir, entry.fileName);
                 if (entry.fileName.endsWith('/')) {
                     fs.mkdirSync(dest, { recursive: true });
                     return zip.readEntry();
                 }
                 fs.mkdirSync(path.dirname(dest), { recursive: true });
-                zip.openReadStream(entry, (e: any, rs: any) => {
+                zip.openReadStream(entry, (e: Error | null, rs: NodeJS.ReadableStream) => {
                     if (e) return reject(e);
                     const ws = fs.createWriteStream(dest);
                     ws.on('error', reject);
@@ -285,7 +295,10 @@ const failureMessage = (cause?: { message?: string }): string =>
 const resolveJava = async ({
     force = false,
     log
-}: { force?: boolean; log?: (msg: string) => void } = {}): Promise<JreResolution> => {
+}: {
+    force?: boolean;
+    log?: (msg: string) => void;
+} = {}): Promise<JreResolution> => {
     if (!force) {
         const sys = detectSystemJava();
         if (sys) return sys;

@@ -71,7 +71,9 @@ export default (
     // (в окне build.js → emptyDir(DIST_FOLDER) перед записью).
     let lastIndexHtml: string | null = null;
 
-    if (liveReloadEnabled) {
+    // reloadEmitter в условии — сужает тип до EventEmitter внутри блока (liveReloadEnabled
+    // истинно ⟺ reloadEmitter задан), поэтому дальше без non-null assertions.
+    if (liveReloadEnabled && reloadEmitter) {
         app.get(LIVERELOAD_PATH, (req, res) => {
             res.set({
                 'Content-Type': 'text/event-stream',
@@ -85,17 +87,17 @@ export default (
             const onReload = () => res.write('event: reload\ndata: {}\n\n');
             const heartbeat = setInterval(() => res.write(': ping\n\n'), 15000);
 
-            reloadEmitter!.on('reload', onReload); // liveReloadEnabled ⇒ reloadEmitter задан
+            reloadEmitter.on('reload', onReload); // liveReloadEnabled ⇒ reloadEmitter задан
             console.log(
-                chalk.gray(`livereload: client connected (${reloadEmitter!.listenerCount('reload')} total)`)
+                chalk.gray(`livereload: client connected (${reloadEmitter.listenerCount('reload')} total)`)
             );
 
             req.on('close', () => {
                 clearInterval(heartbeat);
-                reloadEmitter!.off('reload', onReload);
+                reloadEmitter.off('reload', onReload);
                 console.log(
                     chalk.gray(
-                        `livereload: client disconnected (${reloadEmitter!.listenerCount('reload')} left)`
+                        `livereload: client disconnected (${reloadEmitter.listenerCount('reload')} left)`
                     )
                 );
             });
@@ -108,13 +110,13 @@ export default (
 
         app.use((req, res, next) => {
             if (req.method !== 'GET') return next();
-            let urlPath;
+            let urlPath: string;
             try {
                 urlPath = decodeURIComponent(req.path);
             } catch (_e) {
                 return next();
             }
-            let filePath;
+            let filePath: string;
             const isIndex = urlPath.endsWith('/');
             if (isIndex) {
                 filePath = path.join(distFolder, urlPath, 'index.html');

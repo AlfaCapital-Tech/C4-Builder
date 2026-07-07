@@ -22,7 +22,9 @@ import type { BuildOptions } from '../config/options.ts';
 // Configstore-подобное хранилище конфига/кэша. Реальный инстанс — Configstore;
 // заглушки (режим --new, где проектного конфига ещё нет) кастуются к нему.
 interface ConfStore {
-    get(key: string): any;
+    // Значение конфига/кэша типизируется по месту чтения (T выводится из целевого
+    // поля BuildOptions) — вместо any на границе Configstore, который отдаёт unknown.
+    get<T = unknown>(key: string): T;
     set(key: string, value: unknown): void;
     delete(key: string): void;
     clear(): void;

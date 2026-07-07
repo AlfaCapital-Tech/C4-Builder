@@ -32,7 +32,7 @@ Generate multiple markdown files: ${
     }    
     ${
         // легаси-дефект: читается camelCase-ключ (в BuildOptions его нет) → блок мёртв. Бэклог legacy-fixes.
-        (currentConfiguration as any).generateMD
+        (currentConfiguration as { generateMD?: boolean }).generateMD
             ? `include basic navigation: ${chalk.green(currentConfiguration.INCLUDE_NAVIGATION || false)}
     include table of contents: ${chalk.green(currentConfiguration.INCLUDE_TABLE_OF_CONTENTS || false)}`
             : ''

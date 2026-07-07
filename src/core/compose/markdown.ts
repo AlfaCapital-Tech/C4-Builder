@@ -59,9 +59,10 @@ const compileDocument = async (
         // biome-ignore lint/suspicious/noAssignInExpressions: идиома regex.exec() в условии while
         while ((diagramRef = regex.exec(content)) !== null) {
             if (diagramRef?.[1]) {
-                const diagram = item.diagrams.find((x) => x.dir === diagramRef![1]);
+                const ref = diagramRef[1]; // const → сужение держится в замыкании .find
+                const diagram = item.diagrams.find((x) => x.dir === ref);
                 if (diagram) {
-                    alreadyIncluded.push(diagramRef[1]);
+                    alreadyIncluded.push(ref);
                     content = content.replace(diagramRef[0], await getDiagram(item, diagram, options));
                 }
             }
@@ -91,7 +92,7 @@ const compileDocument = async (
     return MD;
 };
 
-export const generateCompleteMD = async (tree: TreeItem[], options: BuildOptions): Promise<void[]> => {
+export const generateCompleteMD = async (tree: TreeItem[], options: BuildOptions): Promise<void> => {
     const filePromises: Promise<void>[] = [];
 
     //title
@@ -136,13 +137,13 @@ export const generateCompleteMD = async (tree: TreeItem[], options: BuildOptions
                 let imgContent = '';
                 if (options.GENERATE_LOCAL_IMAGES)
                     imgContent = (
-                        await readFile(
+                        (await readFile(
                             path.join(
                                 options.DIST_FOLDER,
                                 item.dir.replace(options.ROOT_FOLDER, ''),
                                 diagramUrl
                             )
-                        ) as Buffer
+                        )) as Buffer
                     ).toString('base64');
                 else imgContent = await httpGet(diagramUrl);
 
@@ -171,14 +172,14 @@ export const generateCompleteMD = async (tree: TreeItem[], options: BuildOptions
     //write file to disk
     filePromises.push(writeFile(path.join(options.DIST_FOLDER, `${options.PROJECT_NAME}.md`), MD));
 
-    return Promise.all(filePromises);
+    await Promise.all(filePromises);
 };
 
 export const generateMD = async (
     tree: TreeItem[],
     options: BuildOptions,
     onProgress?: (processed: number, total: number) => void
-): Promise<void[]> => {
+): Promise<void> => {
     let processedCount = 0;
     const totalCount = tree.length;
 
@@ -268,13 +269,13 @@ export const generateMD = async (
                 let imgContent = '';
                 if (options.GENERATE_LOCAL_IMAGES)
                     imgContent = (
-                        await readFile(
+                        (await readFile(
                             path.join(
                                 options.DIST_FOLDER,
                                 item.dir.replace(options.ROOT_FOLDER, ''),
                                 diagramUrl
                             )
-                        ) as Buffer
+                        )) as Buffer
                     ).toString('base64');
                 else imgContent = await httpGet(diagramUrl);
 
@@ -316,15 +317,14 @@ export const generateMD = async (
         );
     }
 
-    return Promise.all(filePromises);
+    await Promise.all(filePromises);
 };
 
-export const generateWebMD = async (tree: TreeItem[], options: BuildOptions): Promise<void[]> => {
+export const generateWebMD = async (tree: TreeItem[], options: BuildOptions): Promise<void> => {
     const filePromises: Promise<void>[] = [];
     let docsifySideBar = '';
 
-    const getWebFileName = (originalFileName: string): string =>
-        options.WEB_FILE_NAME || originalFileName;
+    const getWebFileName = (originalFileName: string): string => options.WEB_FILE_NAME || originalFileName;
 
     const isExcluded = (dir: string) => {
         if (!Array.isArray(options.EXCLUDE_SIDEBAR_FOLDER_BY_PATH)) return false;
@@ -369,13 +369,13 @@ export const generateWebMD = async (tree: TreeItem[], options: BuildOptions): Pr
                 let imgContent = '';
                 if (options.GENERATE_LOCAL_IMAGES)
                     imgContent = (
-                        await readFile(
+                        (await readFile(
                             path.join(
                                 options.DIST_FOLDER,
                                 item.dir.replace(options.ROOT_FOLDER, ''),
                                 diagramUrl
                             )
-                        ) as Buffer
+                        )) as Buffer
                     ).toString('base64');
                 else imgContent = await httpGet(diagramUrl);
 
@@ -418,7 +418,13 @@ export const generateWebMD = async (tree: TreeItem[], options: BuildOptions): Pr
         docsifyTemplate = require(path.join(process.cwd(), options.DOCSIFY_TEMPLATE));
     }
 
-    const getRootName = (): TreeItem | undefined => tree.find((item) => !item.parent);
+    // Имя корневого элемента дерева (без parent) для homepage docsify. Считается лениво
+    // (только если не задан WEB_FILE_NAME); отсутствие корня — явная ошибка вместо assertion.
+    const rootName = (): string => {
+        const root = tree.find((item) => !item.parent);
+        if (!root) throw new Error('docsify: корневой элемент дерева не найден');
+        return root.name;
+    };
 
     //docsify homepage
     filePromises.push(
@@ -429,7 +435,7 @@ export const generateWebMD = async (tree: TreeItem[], options: BuildOptions): Pr
                 repo: options.REPO_NAME,
                 loadSidebar: true,
                 auto2top: true,
-                homepage: `${options.WEB_FILE_NAME || getRootName()!.name}.md`,
+                homepage: `${options.WEB_FILE_NAME || rootName()}.md`,
                 plantuml: {
                     skin: 'classic'
                 },
@@ -453,5 +459,5 @@ export const generateWebMD = async (tree: TreeItem[], options: BuildOptions): Pr
     //sidebar
     filePromises.push(writeFile(path.join(options.DIST_FOLDER, '_sidebar.md'), docsifySideBar));
 
-    return Promise.all(filePromises);
+    await Promise.all(filePromises);
 };

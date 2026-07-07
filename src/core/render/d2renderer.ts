@@ -7,16 +7,28 @@ import path from 'node:path';
 // в дереве есть .d2. Импорты D2 (`@`/`...@`) c4builder резолвит сам и подаёт
 // движку виртуальной файловой системой — тот же граф питает и чексумму кэша.
 
+// Минимальный контракт движка @terrastruct/d2 (внешний, без привязки к его типам,
+// skipLibCheck-политика) — только то, что реально используется здесь.
+interface D2Compiled {
+    diagram: unknown;
+    renderOptions: unknown;
+}
+interface D2Engine {
+    ready?: Promise<unknown>;
+    worker?: { terminate(): Promise<void> };
+    compile(request: unknown): Promise<D2Compiled>;
+    render(diagram: unknown, renderOptions: unknown): Promise<string>;
+}
+
 // Кешируем сам промис инициализации (а не разрешённый инстанс): иначе два
 // параллельных первых вызова оба увидят null и создадут по воркеру — один утечёт.
-// Инстанс движка держим как any: типы @terrastruct/d2 внешние, к контракту его
-// вызовов не привязываемся (skipLibCheck-политика). null — «ещё не грузили».
-let d2Promise: Promise<any> | null = null;
+// null — «ещё не грузили».
+let d2Promise: Promise<D2Engine> | null = null;
 
 // Ленивый singleton через динамический import(): @terrastruct/d2 (~60 МБ, поднимает
 // webworker) — опциональная зависимость, поэтому грузится только при первом вызове,
 // а не на импорте модуля.
-const getD2 = (): Promise<any> => {
+const getD2 = (): Promise<D2Engine> => {
     if (d2Promise) return d2Promise;
     d2Promise = (async () => {
         let mod: typeof import('@terrastruct/d2');
@@ -31,7 +43,7 @@ const getD2 = (): Promise<any> => {
                     `Исходная ошибка: ${e.message || e}`
             );
         }
-        return new mod.D2();
+        return new mod.D2() as unknown as D2Engine;
     })();
     return d2Promise;
 };
@@ -42,7 +54,7 @@ const teardownD2 = async (): Promise<void> => {
     if (!d2Promise) return;
     const pending = d2Promise;
     d2Promise = null;
-    let inst: any;
+    let inst: D2Engine;
     try {
         inst = await pending;
     } catch {
@@ -74,7 +86,7 @@ const IMPORT_RE = /(?<![\w])@([\w./-]+)/g;
 const collectFiles = (entryAbs: string, acc: Map<string, string> = new Map()): Map<string, string> => {
     const abs = path.resolve(entryAbs);
     if (acc.has(abs)) return acc;
-    let content;
+    let content: string;
     try {
         content = fs.readFileSync(abs, 'utf-8');
     } catch {
@@ -116,10 +128,13 @@ const buildCompileRequest = (entryAbs: string): { fs: Record<string, string>; in
 };
 
 // Рендер .d2 → SVG (Buffer). Ошибки компиляции пробрасываются с путём файла.
-const renderD2 = async (entryAbs: string, { layout = 'dagre' }: { layout?: string } = {}): Promise<Buffer> => {
+const renderD2 = async (
+    entryAbs: string,
+    { layout = 'dagre' }: { layout?: string } = {}
+): Promise<Buffer> => {
     const d2 = await getD2();
     const { fs: fsMap, inputPath } = buildCompileRequest(entryAbs);
-    let result: any;
+    let result: D2Compiled;
     try {
         result = await d2.compile({ fs: fsMap, inputPath, options: { layout } });
     } catch (err) {

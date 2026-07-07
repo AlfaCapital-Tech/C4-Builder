@@ -21,7 +21,7 @@ import type { BuildOptions } from '../../config/options.ts';
 // cacheConf: Configstore-подобная заглушка чексумм картинок (см. cli/dispatch).
 // Владелец — generateImages; build() лишь пробрасывает её из dispatch.
 export interface CacheConf {
-    get(key: string): any;
+    get(key: string): unknown;
     set(key: string, value: unknown): void;
 }
 
@@ -101,9 +101,14 @@ export const renderDiagram = (
         const stdout: Buffer[] = [];
         const stderr: Buffer[] = [];
 
-        // stdio по умолчанию 'pipe' → потоки заведомо не null (assert снимает strict-null).
-        child.stdout!.on('data', (chunk) => stdout.push(chunk));
-        child.stderr!.on('data', (chunk) => stderr.push(chunk));
+        // stdio по умолчанию 'pipe' → потоки заведомо не null; берём их деструктуризацией
+        // с одним guard вместо non-null assertion на каждом обращении.
+        const { stdin, stdout: childOut, stderr: childErr } = child;
+        if (!stdin || !childOut || !childErr) {
+            return reject(new Error('PlantUML: не удалось открыть stdio-потоки процесса java'));
+        }
+        childOut.on('data', (chunk) => stdout.push(chunk));
+        childErr.on('data', (chunk) => stderr.push(chunk));
         child.on('error', reject); // java не найдена и пр.
         child.on('close', (code) => {
             // Smetana печатает диагностический шум (UNSURE_ABOUT…) — это не ошибка
@@ -120,9 +125,9 @@ export const renderDiagram = (
             resolve(Buffer.concat(stdout));
         });
 
-        child.stdin!.on('error', () => {}); // EPIPE, если java упала до чтения stdin
-        child.stdin!.write(content);
-        child.stdin!.end();
+        stdin.on('error', () => {}); // EPIPE, если java упала до чтения stdin
+        stdin.write(content);
+        stdin.end();
     });
 
 // bkFolderName — каталог бэкапа dist, откуда восстанавливаются неизменённые картинки
@@ -136,7 +141,7 @@ export const generateImages = async (
     bkFolderName: string
 ): Promise<void> => {
     // Get the old checksums (from last run) of all PUML-files
-    const oldChecksums: string[] = cacheConf.get('checksums') || [];
+    const oldChecksums = (cacheConf.get('checksums') as string[] | undefined) || [];
     const newChecksums: string[] = [];
 
     let totalImages = 0;
@@ -178,10 +183,11 @@ export const generateImages = async (
             // !include-граф (.iuml и пр.), D2 — граф @/...@-импортов.
             const body = `${diagram.content || ''}`;
             // entryPath нужен только D2 (граф импортов + рендер); для PlantUML не считаем.
+            // entryPath !== null ⟺ engine === 'd2' — используем как сужение типа вместо assertion.
             const entryPath = diagram.engine === 'd2' ? path.join(item.dir, diagram.dir) : null;
             const includes =
-                diagram.engine === 'd2'
-                    ? foldD2Imports(entryPath!)
+                entryPath !== null
+                    ? foldD2Imports(entryPath)
                     : foldIncludes(body, item.dir, item.dir, new Set());
             const cksum = crypto
                 .createHash('sha256')
@@ -211,17 +217,21 @@ export const generateImages = async (
                 const needsRaster = outFormat === 'png' && !diagram.isDitaa;
                 // render diagram to image: D2 через WASM, PlantUML — прямым вызовом java.
                 // Для растеризации PlantUML не-ditaa рендерим в svg (не -tpng), затем resvg.
-                const rendered =
-                    diagram.engine === 'd2'
-                        ? renderD2(entryPath!, { layout: options.D2_LAYOUT })
-                        : renderDiagram(diagram.content, {
-                              javaBin: javaBin!, // needsJava → резолвнут для plantuml-ветки
-                              jarPath,
-                              includePath: item.dir,
-                              format: needsRaster ? 'svg' : outFormat,
-                              charset: options.CHARSET,
-                              isDitaa: diagram.isDitaa
-                          });
+                let rendered: Promise<Buffer>;
+                if (entryPath !== null) {
+                    rendered = renderD2(entryPath, { layout: options.D2_LAYOUT });
+                } else {
+                    // needsJava гарантирует резолв для plantuml-ветки; guard — нарратив для типов.
+                    if (!javaBin) throw new Error('PlantUML: JRE не резолвнут для plantuml-диаграммы');
+                    rendered = renderDiagram(diagram.content, {
+                        javaBin,
+                        jarPath,
+                        includePath: item.dir,
+                        format: needsRaster ? 'svg' : outFormat,
+                        charset: options.CHARSET,
+                        isDitaa: diagram.isDitaa
+                    });
+                }
 
                 const render = rendered
                     .then((image) => (needsRaster ? rasterizeSvgToPng(image) : image))

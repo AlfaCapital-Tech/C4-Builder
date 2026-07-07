@@ -149,7 +149,7 @@ export const foldIncludes = (
 ): string => {
     const re = /^[ \t]*!include(?:_once|_many|sub|url)?[ \t]+(.+?)[ \t]*$/gim;
     let out = '';
-    let m;
+    let m: RegExpExecArray | null;
     // biome-ignore lint/suspicious/noAssignInExpressions: идиома regex.exec() в условии while
     while ((m = re.exec(content)) !== null) {
         const ref = m[1]
