@@ -4,7 +4,7 @@
 
 ## 2. Фаза render
 
-- [ ] 2.1 `src/core/render/diagrams.ts`: перенести `renderDiagram`, `generateImages`, `diagramOutputFormat`, `getMime`, `httpGet` + типы задач рендера/колбэка прогресса; golden зелёный; коммит
+- [x] 2.1 `src/core/render/diagrams.ts`: перенести `renderDiagram`, `generateImages`, `diagramOutputFormat`, `getMime`, `httpGet` + типы задач рендера/колбэка прогресса; golden зелёный; коммит
 
 ## 3. Фаза compose
 
