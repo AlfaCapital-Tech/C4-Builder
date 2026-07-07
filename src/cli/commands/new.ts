@@ -5,13 +5,13 @@ import path from 'node:path';
 import fsextra from 'fs-extra';
 import Configstore from 'configstore';
 
-import { readFile, writeFile, makeDirectory } from '../../util/utils.js';
-import { defaultConfig } from '../../config/defaults.js';
-import { TEMPLATE_DIR } from '../../util/paths.js';
+import { readFile, writeFile, makeDirectory } from '../../util/utils.ts';
+import { defaultConfig } from '../../config/defaults.ts';
+import { TEMPLATE_DIR } from '../../util/paths.ts';
 
 // Общая проверка имени проекта: возвращает текст ошибки или null (валидно).
 // Интерактив показывает её и переспрашивает; --yes падает с ней (exit≠0), без ре-промпта.
-const validateProjectName = (name) => {
+const validateProjectName = (name?: string): string | null => {
     if (!name?.trim()) return 'имя проекта не задано';
     if (name.indexOf('/') !== -1 || name.indexOf('\\') !== -1)
         return 'имя проекта не должно содержать «/» или «\\»';
@@ -21,8 +21,8 @@ const validateProjectName = (name) => {
     return null;
 };
 
-const generateTemplate = async (dir, projectName) => {
-    const build = async (dir, _parent) => {
+const generateTemplate = async (dir: string, projectName: string): Promise<void> => {
+    const build = async (dir: string, _parent?: string): Promise<void> => {
         const files = fs.readdirSync(dir);
         for (const file of files) {
             if (fs.statSync(path.join(dir, file)).isDirectory()) {
@@ -64,11 +64,11 @@ const generateTemplate = async (dir, projectName) => {
     await build(dir);
 };
 
-export default async (opts = {}) => {
+export default async (opts: { yes?: boolean; name?: string } = {}): Promise<void> => {
     const nonInteractive = !!opts.yes;
 
     // --- имя проекта: флаг --name пропускает промпт; --yes без имени — фатально ---
-    let projectName;
+    let projectName: string;
     if (opts.name) {
         const err = validateProjectName(opts.name);
         if (err) {

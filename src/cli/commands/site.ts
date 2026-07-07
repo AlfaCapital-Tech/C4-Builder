@@ -3,6 +3,8 @@ import path from 'node:path';
 import fs from 'node:fs';
 import express from 'express';
 import open from 'open';
+import type { EventEmitter } from 'node:events';
+import type { BuildOptions } from '../../config/options.ts';
 
 const LIVERELOAD_PATH = '/__livereload';
 const LIVERELOAD_SNIPPET = `
@@ -53,7 +55,11 @@ const LIVERELOAD_SNIPPET = `
 })();
 </script>`;
 
-export default (currentConfiguration, program, reloadEmitter) => {
+export default (
+    currentConfiguration: BuildOptions,
+    program: { port?: number; watch?: boolean; open?: boolean },
+    reloadEmitter?: EventEmitter
+) => {
     if (!currentConfiguration.DIST_FOLDER) return console.log(chalk.red('No destination folder configured'));
 
     const app = express();
@@ -63,7 +69,7 @@ export default (currentConfiguration, program, reloadEmitter) => {
 
     // Кеш index.html — отдаём его из памяти, если на диске его временно нет
     // (в окне build.js → emptyDir(DIST_FOLDER) перед записью).
-    let lastIndexHtml = null;
+    let lastIndexHtml: string | null = null;
 
     if (liveReloadEnabled) {
         app.get(LIVERELOAD_PATH, (req, res) => {
@@ -79,23 +85,23 @@ export default (currentConfiguration, program, reloadEmitter) => {
             const onReload = () => res.write('event: reload\ndata: {}\n\n');
             const heartbeat = setInterval(() => res.write(': ping\n\n'), 15000);
 
-            reloadEmitter.on('reload', onReload);
+            reloadEmitter!.on('reload', onReload); // liveReloadEnabled ⇒ reloadEmitter задан
             console.log(
-                chalk.gray(`livereload: client connected (${reloadEmitter.listenerCount('reload')} total)`)
+                chalk.gray(`livereload: client connected (${reloadEmitter!.listenerCount('reload')} total)`)
             );
 
             req.on('close', () => {
                 clearInterval(heartbeat);
-                reloadEmitter.off('reload', onReload);
+                reloadEmitter!.off('reload', onReload);
                 console.log(
                     chalk.gray(
-                        `livereload: client disconnected (${reloadEmitter.listenerCount('reload')} left)`
+                        `livereload: client disconnected (${reloadEmitter!.listenerCount('reload')} left)`
                     )
                 );
             });
         });
 
-        const inject = (html) => {
+        const inject = (html: string): string => {
             if (html.includes('</body>')) return html.replace('</body>', `${LIVERELOAD_SNIPPET}</body>`);
             return html + LIVERELOAD_SNIPPET;
         };
@@ -138,7 +144,7 @@ export default (currentConfiguration, program, reloadEmitter) => {
     app.get('/*', express.static(distFolder));
 
     return new Promise((resolve, reject) => {
-        const server = app.listen(port, '127.0.0.1', () => {
+        const server = app.listen(port as number, '127.0.0.1', () => {
             const url = `http://localhost:${port}`;
             console.log('serving your docsify site');
             console.log(`go to ${chalk.green(url)}`);
@@ -149,7 +155,7 @@ export default (currentConfiguration, program, reloadEmitter) => {
                 open(url).catch(() => console.log(chalk.gray('could not open the browser automatically')));
             resolve(server);
         });
-        server.on('error', (err) => {
+        server.on('error', (err: NodeJS.ErrnoException) => {
             if (err.code === 'EADDRINUSE') {
                 console.log(
                     chalk.red(`port ${port} is already in use — pass a different one with -p <port>`)

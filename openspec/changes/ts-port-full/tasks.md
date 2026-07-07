@@ -20,10 +20,10 @@
 
 ## 5. cli/
 
-- [ ] 5.1 `commands/{help,list,new,site,jre}.js → .ts`
-- [ ] 5.2 `wizard/collect.js → collect.ts` (joi-обёртка `validate` как есть)
-- [ ] 5.3 `dispatch.js → dispatch.ts`: `getOptions(): BuildOptions`, типизировать заглушки `conf`/`cacheConf`
-- [ ] 5.4 `index.js → index.ts` (shebang сохраняется в эмите); golden зелёный; коммит группы
+- [x] 5.1 `commands/{help,list,new,site,jre}.js → .ts`
+- [x] 5.2 `wizard/collect.js → collect.ts` (joi-обёртка `validate` как есть)
+- [x] 5.3 `dispatch.js → dispatch.ts`: `getOptions(): BuildOptions`, типизировать заглушки `conf`/`cacheConf`
+- [x] 5.4 `index.js → index.ts` (shebang сохраняется в эмите); golden зелёный; коммит группы
 
 ## 6. Финальный флип строгости
 

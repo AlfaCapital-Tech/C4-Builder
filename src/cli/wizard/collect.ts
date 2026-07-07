@@ -2,21 +2,28 @@ import inquirer from 'inquirer';
 import joi from 'joi';
 import fs from 'node:fs';
 import path from 'node:path';
-import { defaultConfig } from '../../config/defaults.js';
+import { defaultConfig } from '../../config/defaults.ts';
+import type { BuildOptions } from '../../config/options.ts';
 
-const validate = (schema) => (answers) => {
+// Двухветочная обёртка joi.validate — легаси как есть (joi@17 не несёт .validate,
+// живёт else-ветка). Мёртвая if-ветка сохранена под каст — бэклог legacy-fixes.
+const validate = (schema: joi.Schema) => (answers: unknown): boolean => {
     //just in case
-    if (joi.validate) {
-        return !joi.validate(answers, schema).error;
+    if ((joi as any).validate) {
+        return !(joi as any).validate(answers, schema).error;
     } else {
         return !schema.validate(answers).error;
     }
 };
 
-export default async (currentConfiguration, conf, program) => {
+export default async (
+    currentConfiguration: BuildOptions,
+    conf: { set(key: string, value: unknown): void },
+    program: { config?: boolean }
+): Promise<void> => {
     // ESM исполняется в strict mode: под CommonJS `responses` был неявным глобалом,
     // здесь объявляем его явно (иначе присваивание бросит ReferenceError).
-    let responses;
+    let responses: any;
     if (!currentConfiguration.PROJECT_NAME || program.config) {
         responses = await inquirer.prompt({
             type: 'input',
@@ -67,7 +74,8 @@ export default async (currentConfiguration, conf, program) => {
             message: 'Destination folder',
             default: currentConfiguration.DIST_FOLDER || defaultConfig.distFolder,
             validate: (answers) => {
-                const isValid = validate(joi.string().trim().optional());
+                // легаси-дефект: обёртка не вызвана с answers → isValid всегда истинна. Бэклог.
+                const isValid: unknown = validate(joi.string().trim().optional());
                 if (isValid) {
                     if (answers.indexOf('/') !== -1 || answers.indexOf('\\') !== -1) return false;
                     return true;
@@ -129,12 +137,12 @@ export default async (currentConfiguration, conf, program) => {
             ]
         });
 
-        conf.set('generateMD', !!responses.generate.find((x) => x === 'generateMD'));
-        conf.set('generateCompleteMD', !!responses.generate.find((x) => x === 'generateCompleteMD'));
-        conf.set('generateWEB', !!responses.generate.find((x) => x === 'generateWEB'));
+        conf.set('generateMD', !!responses.generate.find((x: string) => x === 'generateMD'));
+        conf.set('generateCompleteMD', !!responses.generate.find((x: string) => x === 'generateCompleteMD'));
+        conf.set('generateWEB', !!responses.generate.find((x: string) => x === 'generateWEB'));
 
-        if (responses.generate.find((x) => x === 'generateMD')) {
-            let mdOptions = await inquirer.prompt({
+        if (responses.generate.find((x: string) => x === 'generateMD')) {
+            let mdOptions: any = await inquirer.prompt({
                 type: 'confirm',
                 name: 'includeNavigation',
                 message: 'Include basic navigation?',
@@ -157,8 +165,8 @@ export default async (currentConfiguration, conf, program) => {
             conf.set('includeTableOfContents', mdOptions.includeTableOfContents);
         }
 
-        if (responses.generate.find((x) => x === 'generateWEB')) {
-            let webOptions = await inquirer.prompt({
+        if (responses.generate.find((x: string) => x === 'generateWEB')) {
+            let webOptions: any = await inquirer.prompt({
                 type: 'input',
                 name: 'webTheme',
                 message: 'Change the default docsify theme?',
@@ -187,9 +195,10 @@ export default async (currentConfiguration, conf, program) => {
                 name: 'executeScript',
                 message: 'Support script execution and OpenAPI rendering?',
                 default:
-                    currentConfiguration.executeScript === undefined
+                    // легаси-дефект: camelCase-ключ (нет в BuildOptions) → всегда undefined-ветка. Бэклог.
+                    (currentConfiguration as any).executeScript === undefined
                         ? defaultConfig.executeScript
-                        : currentConfiguration.executeScript
+                        : (currentConfiguration as any).executeScript
             });
             conf.set('executeScript', webOptions.executeScript);
 
@@ -297,13 +306,13 @@ export default async (currentConfiguration, conf, program) => {
             default: defaults,
             choices: choices
         });
-        conf.set('includeBreadcrumbs', !!responses.generate.find((x) => x === 'includeBreadcrumbs'));
-        conf.set('includeLinkToDiagram', !!responses.generate.find((x) => x === 'includeLinkToDiagram'));
-        conf.set('diagramsOnTop', !!responses.generate.find((x) => x === 'diagramsOnTop'));
-        conf.set('embedDiagram', !!responses.generate.find((x) => x === 'embedDiagram'));
-        conf.set('excludeOtherFiles', !!responses.generate.find((x) => x === 'excludeOtherFiles'));
+        conf.set('includeBreadcrumbs', !!responses.generate.find((x: string) => x === 'includeBreadcrumbs'));
+        conf.set('includeLinkToDiagram', !!responses.generate.find((x: string) => x === 'includeLinkToDiagram'));
+        conf.set('diagramsOnTop', !!responses.generate.find((x: string) => x === 'diagramsOnTop'));
+        conf.set('embedDiagram', !!responses.generate.find((x: string) => x === 'embedDiagram'));
+        conf.set('excludeOtherFiles', !!responses.generate.find((x: string) => x === 'excludeOtherFiles'));
 
-        conf.set('generateLocalImages', !!responses.generate.find((x) => x === 'generateLocalImages'));
+        conf.set('generateLocalImages', !!responses.generate.find((x: string) => x === 'generateLocalImages'));
     }
 
     if (!currentConfiguration.PLANTUML_SERVER_URL || program.config) {

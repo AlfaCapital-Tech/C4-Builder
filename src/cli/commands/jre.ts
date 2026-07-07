@@ -1,10 +1,10 @@
 import chalk from 'chalk';
-import { resolveJava, detectSystemJava, TEMURIN_FEATURE } from '../../core/render/jre.js';
+import { resolveJava, detectSystemJava, TEMURIN_FEATURE } from '../../core/render/jre.ts';
 
 // Прогрев кеша: `c4builder jre install [--force]`. Резолвит/скачивает JRE заранее
 // (CI/офлайн) без полной сборки. При годной системной java по умолчанию сообщает,
 // что скачивание не требуется; `--force` форсирует загрузку Temurin в кеш.
-export default async (args = [], { force = false } = {}) => {
+export default async (args: string[] = [], { force = false }: { force?: boolean } = {}): Promise<void> => {
     const action = args[0];
     if (action !== 'install') {
         console.log(chalk.red(`неизвестная подкоманда: c4builder jre ${action || ''}`.trim()));
@@ -27,7 +27,7 @@ export default async (args = [], { force = false } = {}) => {
         const from = resolved.source === 'download' ? `Temurin ${TEMURIN_FEATURE}, скачан` : resolved.source;
         console.log(chalk.green(`JRE готов (${from}): ${resolved.path}`));
     } catch (e) {
-        console.log(chalk.red(e.message));
+        console.log(chalk.red((e as Error).message));
         process.exit(1);
     }
 };

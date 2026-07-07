@@ -5,25 +5,35 @@ import path from 'node:path';
 
 import Configstore from 'configstore';
 
-import cmdHelp from './commands/help.js';
-import cmdNewProject from './commands/new.js';
-import cmdJre from './commands/jre.js';
-import cmdList from './commands/list.js';
-import cmdSite from './commands/site.js';
-import cmdCollect from './wizard/collect.js';
-import { build } from '../core/build.js';
+import cmdHelp from './commands/help.ts';
+import cmdNewProject from './commands/new.ts';
+import cmdJre from './commands/jre.ts';
+import cmdList from './commands/list.ts';
+import cmdSite from './commands/site.ts';
+import cmdCollect from './wizard/collect.ts';
+import { build } from '../core/build.ts';
 import watch from 'node-watch';
 import { EventEmitter } from 'node:events';
 
-import { clearConsole } from '../util/utils.js';
-import { packageJson as pkg } from '../util/paths.js';
+import { clearConsole } from '../util/utils.ts';
+import { packageJson as pkg } from '../util/paths.ts';
+import type { BuildOptions } from '../config/options.ts';
+
+// Configstore-подобное хранилище конфига/кэша. Реальный инстанс — Configstore;
+// заглушки (режим --new, где проектного конфига ещё нет) кастуются к нему.
+interface ConfStore {
+    get(key: string): any;
+    set(key: string, value: unknown): void;
+    delete(key: string): void;
+    clear(): void;
+}
 
 const intro = () => {
     console.log(chalk.blue(figlet.textSync('c4builder')));
     console.log(chalk.gray('Blow up your software documentation writing skills'));
 };
 
-const getOptions = (conf) => {
+const getOptions = (conf: ConfStore): BuildOptions => {
     return {
         // Легаси-детект: выбор версии PlantUML удалён; ключ plantumlVersion из старых
         // .c4builder отдаём build.js только для однократного предупреждения на пине.
@@ -90,8 +100,8 @@ export default async () => {
     // Прогрев JRE — до загрузки конфига проекта и intro: команда самостоятельна.
     if (program.args[0] === 'jre') return cmdJre(program.args.slice(1), { force: opts.force });
 
-    let conf = { get: () => {} };
-    let cacheConf = { get: () => {}, set: () => {}, clear: () => {} };
+    let conf: ConfStore = { get: () => {} } as unknown as ConfStore;
+    let cacheConf: ConfStore = { get: () => {}, set: () => {}, clear: () => {} } as unknown as ConfStore;
     if (!opts.new) {
         const projectKey = process.cwd().split(path.sep).splice(1).join('_');
         const configPath = path.join(process.cwd(), opts.configFile ?? '.c4builder');
@@ -146,7 +156,10 @@ export default async () => {
         const reloadEmitter = new EventEmitter();
         reloadEmitter.setMaxListeners(0);
         if (opts.watch) {
-            watch(options.ROOT_FOLDER, { recursive: true }, async (_evt, name) => {
+            // node-watch: CJS-рантайм при ESM-.d.ts (export default) — дефолт-импорт
+            // типизируется как namespace. Каст к реальной сигнатуре, рантайм не меняется.
+            const watchDir = watch as unknown as typeof import('node-watch').default;
+            watchDir(options.ROOT_FOLDER, { recursive: true }, async (_evt, name) => {
                 // clearConsole();
                 // intro();
                 console.log(chalk.gray(`\n${name} changed. Rebuilding...`));
@@ -175,7 +188,8 @@ export default async () => {
                 } catch (err) {
                     buildOk = false;
                     attemptedWatchBuild = false;
-                    console.log(chalk.red(`build failed: ${err?.stack ? err.stack : err}`));
+                    const e = err as Error;
+                    console.log(chalk.red(`build failed: ${e?.stack ? e.stack : e}`));
                 } finally {
                     isBuilding = false;
                 }

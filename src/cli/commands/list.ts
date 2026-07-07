@@ -1,6 +1,7 @@
 import chalk from 'chalk';
+import type { BuildOptions } from '../../config/options.ts';
 
-export default (currentConfiguration) => {
+export default (currentConfiguration: BuildOptions): void => {
     console.log(`
 CURRENT CONFIGURATION
 
@@ -30,7 +31,8 @@ Generate multiple markdown files: ${
             : chalk.red('not set')
     }    
     ${
-        currentConfiguration.generateMD
+        // легаси-дефект: читается camelCase-ключ (в BuildOptions его нет) → блок мёртв. Бэклог legacy-fixes.
+        (currentConfiguration as any).generateMD
             ? `include basic navigation: ${chalk.green(currentConfiguration.INCLUDE_NAVIGATION || false)}
     include table of contents: ${chalk.green(currentConfiguration.INCLUDE_TABLE_OF_CONTENTS || false)}`
             : ''

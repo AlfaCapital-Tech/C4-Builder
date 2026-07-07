@@ -1,7 +1,7 @@
 import figlet from 'figlet';
 import chalk from 'chalk';
 
-export default () => {
+export default (): void => {
     console.log(chalk.blue(figlet.textSync('c4builder')));
     console.log(`
 Full documentation
