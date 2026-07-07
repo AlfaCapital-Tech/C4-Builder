@@ -14,9 +14,9 @@
 
 ## 4. core/
 
-- [ ] 4.1 `render/jre.js → jre.ts`, `render/d2renderer.js → d2renderer.ts`, `render/pngraster.js → pngraster.ts`
-- [ ] 4.2 `compose/docsify.template.js → docsify.template.ts` (интерфейс параметров по вызову из build)
-- [ ] 4.3 `build.js → build.ts` монолитом: `build(options: BuildOptions, cacheConf)`, внутренние структуры (дерево скана и др.) — локальные интерфейсы; рантайм не менять; golden зелёный; коммит группы
+- [x] 4.1 `render/jre.js → jre.ts`, `render/d2renderer.js → d2renderer.ts`, `render/pngraster.js → pngraster.ts`
+- [x] 4.2 `compose/docsify.template.js → docsify.template.ts` (интерфейс параметров по вызову из build)
+- [x] 4.3 `build.js → build.ts` монолитом: `build(options: BuildOptions, cacheConf)`, внутренние структуры (дерево скана и др.) — локальные интерфейсы; рантайм не менять; golden зелёный; коммит группы
 
 ## 5. cli/
 

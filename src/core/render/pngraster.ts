@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
 import path from 'node:path';
-import { VENDOR_DIR } from '../../util/paths.js';
+import { VENDOR_DIR } from '../../util/paths.ts';
 
 // @resvg/resvg-js — CJS-нативный аддон, грузим синхронно через createRequire
 // (ленивая загрузка ниже сохраняет прежнюю семантику: пакет тянется при первой
@@ -16,16 +16,19 @@ const DEFAULT_FONT_NAME = 'Liberation Sans';
 
 // Ленивая загрузка (как у D2): resvg тянется только при первой растеризации —
 // SVG-проекты и «только ditaa» его не грузят. Отсутствие пакета — понятная ошибка.
-let ResvgCtor = null;
-const getResvg = () => {
+type ResvgConstructor = typeof import('@resvg/resvg-js').Resvg;
+
+let ResvgCtor: ResvgConstructor | null = null;
+const getResvg = (): ResvgConstructor => {
     if (ResvgCtor) return ResvgCtor;
     try {
-        ResvgCtor = require('@resvg/resvg-js').Resvg;
+        ResvgCtor = require('@resvg/resvg-js').Resvg as ResvgConstructor;
     } catch (err) {
+        const e = err as Error;
         throw new Error(
             'Для PNG-вывода (DIAGRAM_FORMAT=png) нужен пакет @resvg/resvg-js.\n' +
                 'Установите его: npm install @resvg/resvg-js\n' +
-                `Исходная ошибка: ${err.message || err}`
+                `Исходная ошибка: ${e.message || e}`
         );
     }
     return ResvgCtor;
@@ -34,7 +37,7 @@ const getResvg = () => {
 // SVG (Buffer или строка) → PNG (Buffer), масштаб 1:1 к размеру SVG. Вход — валидный
 // SVG движка: PlantUML ссылается на шрифт по имени (грузим из vendor/fonts), D2 несёт
 // шрифт во вшитом @font-face, но loadSystemFonts:false фиксируем в обоих случаях.
-const rasterizeSvgToPng = (svg) => {
+const rasterizeSvgToPng = (svg: string | Buffer): Buffer => {
     const Resvg = getResvg();
     const resvg = new Resvg(svg, {
         font: {

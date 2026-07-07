@@ -9,7 +9,22 @@
 //     },
 //     stylesheet: ''
 //   }
-export default (options) => {
+// Параметры по вызову из core/build (generateWebMD): сериализуются целиком в
+// window.$docsify, поэтому интерфейс перечисляет весь передаваемый объект.
+export interface DocsifyOptions {
+    name: string;
+    repo: string;
+    loadSidebar: boolean;
+    auto2top: boolean;
+    homepage: string;
+    plantuml: { skin: string };
+    stylesheet: string;
+    alias?: Record<string, string>;
+    supportSearch: boolean;
+    executeScript: boolean;
+}
+
+export default (options: DocsifyOptions): string => {
     return `<!DOCTYPE html>
     <html lang="en">
     

@@ -8,7 +8,7 @@ import fsextra from 'fs-extra';
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 
-import defaultDocsifyTemplate from './compose/docsify.template.js';
+import defaultDocsifyTemplate from './compose/docsify.template.ts';
 import {
     encodeURIPath,
     makeDirectory,
@@ -16,14 +16,53 @@ import {
     writeFile,
     plantUmlServerUrl,
     VENDORED_JAR
-} from '../util/utils.js';
+} from '../util/utils.ts';
 // D2-бэкенд: только статические хелперы (парсинг импортов) грузятся сразу; сам
 // движок @terrastruct/d2 тянется лениво внутри renderD2/teardownD2.
-import { renderD2, foldD2Imports, teardownD2 } from './render/d2renderer.js';
-import { resolveJava } from './render/jre.js';
+import { renderD2, foldD2Imports, teardownD2 } from './render/d2renderer.ts';
+import { resolveJava } from './render/jre.ts';
 // PNG-выход: SVG обоих движков растеризуется resvg (ленивая загрузка внутри модуля).
-import { rasterizeSvgToPng } from './render/pngraster.js';
-import { VENDOR_DIR } from '../util/paths.js';
+import { rasterizeSvgToPng } from './render/pngraster.ts';
+import { VENDOR_DIR } from '../util/paths.ts';
+import type { BuildOptions } from '../config/options.ts';
+
+// Внутренние структуры монолита (границы будущих модулей build-split).
+interface Diagram {
+    dir: string; // имя файла диаграммы (историческое поле)
+    ext: string;
+    engine: string; // 'plantuml' | 'd2'
+    content: string | Buffer;
+    isDitaa: boolean;
+}
+
+interface TreeItem {
+    dir: string;
+    name: string;
+    level: number;
+    parent?: string;
+    mdFiles: (string | Buffer)[];
+    diagrams: Diagram[];
+    descendants: string[];
+}
+
+// cacheConf: Configstore-подобная заглушка чексумм (см. cli/dispatch).
+interface CacheConf {
+    get(key: string): any;
+    set(key: string, value: unknown): void;
+}
+
+// Параметры прямого вызова PlantUML (renderDiagram).
+interface RenderDiagramOptions {
+    javaBin: string;
+    jarPath: string;
+    includePath: string;
+    format: string;
+    charset: string;
+    isDitaa: boolean;
+}
+
+// Стратегия подстановки диаграммы в markdown (embed/link/img) — задаётся вызывающим.
+type GetDiagram = (item: TreeItem, diagram: Diagram, options: BuildOptions) => Promise<string>;
 
 // docsifyTemplate можно переопределить пользовательским шаблоном (см. generateWebMD),
 // поэтому это mutable-локаль, а не const-импорт; user-шаблон грузим синхронно через createRequire.
@@ -40,25 +79,27 @@ const DEFAULT_FONT_NAME = 'Liberation Sans';
 // Формат выходного файла диаграммы: ditaa всегда PNG (нативный, без SVG-представления),
 // иначе — выбранный DIAGRAM_FORMAT. При png не-ditaa рендерится в SVG и растеризуется
 // (см. рендер ниже), поэтому D2 тоже честно поддерживает png (раньше молча оставался SVG).
-const diagramOutputFormat = (diagram, options) => (diagram.isDitaa ? 'png' : options.DIAGRAM_FORMAT);
+const diagramOutputFormat = (diagram: Diagram, options: BuildOptions): string =>
+    diagram.isDitaa ? 'png' : options.DIAGRAM_FORMAT;
 
-const getMime = (format) => {
+const getMime = (format: string): string => {
     if (format === 'svg') return `image/svg+xml`;
     return `image/${format}`;
 };
 
-const httpGet = async (url) => {
+const httpGet = async (url: string): Promise<string> => {
     // return new pending promise
     return new Promise((resolve, reject) => {
         // select http or https module, depending on reqested url
         const lib = url.startsWith('https') ? https : http;
         const request = lib.get(url, (response) => {
+            const status = response.statusCode as number; // ответ всегда со статусом
             // handle http errors
-            if (response.statusCode < 200 || response.statusCode > 299) {
-                reject(new Error(`Failed to load page ${url}, status code: ${response.statusCode}`));
+            if (status < 200 || status > 299) {
+                reject(new Error(`Failed to load page ${url}, status code: ${status}`));
             }
             // temporary data holder
-            const body = [];
+            const body: Buffer[] = [];
             // on every content chunk, push it to the data array
             response.on('data', (chunk) => body.push(chunk));
             // we are done, resolve promise with those joined chunks
@@ -69,14 +110,14 @@ const httpGet = async (url) => {
     });
 };
 
-const getFolderName = (dir, root, homepage) => {
+const getFolderName = (dir: string, root: string, homepage: string): string => {
     return dir === root ? homepage : path.parse(dir).base;
 };
 
-const generateTree = async (dir, options) => {
-    const tree = [];
+const generateTree = async (dir: string, options: BuildOptions): Promise<TreeItem[]> => {
+    const tree: TreeItem[] = [];
 
-    const build = async (dir, parent) => {
+    const build = async (dir: string, parent?: string): Promise<void> => {
         // Skip output folder - this allows a user to use the top-level folder as ROOT_FOLDER.
         if (dir === options.DIST_FOLDER) {
             return;
@@ -160,7 +201,7 @@ const generateTree = async (dir, options) => {
     // папке при одном формате дают один выходной файл и затирают друг друга —
     // отлавливаем это явной ошибкой, а не молчаливой потерей одной из диаграмм.
     for (const item of tree) {
-        const seen = new Map();
+        const seen = new Map<string, string>();
         for (const d of item.diagrams) {
             const out = `${path.parse(d.dir).name}.${diagramOutputFormat(d, options)}`;
             if (seen.has(out))
@@ -178,7 +219,12 @@ const generateTree = async (dir, options) => {
 // Свернуть локальные !include (.iuml и пр.) диаграммы в материал для чексуммы — рекурсивно.
 // Иначе правка включённого .iuml не инвалидирует кэш и на сайт уезжает устаревший рендер.
 // URL (!include https://…) и stdlib (!include <…>) пропускаем: локально не меняются.
-const foldIncludes = (content, fileDir, searchDir, visited) => {
+const foldIncludes = (
+    content: string,
+    fileDir: string,
+    searchDir: string,
+    visited: Set<string>
+): string => {
     const re = /^[ \t]*!include(?:_once|_many|sub|url)?[ \t]+(.+?)[ \t]*$/gim;
     let out = '';
     let m;
@@ -215,7 +261,10 @@ const foldIncludes = (content, fileDir, searchDir, visited) => {
 // ditaa рендерит собственный движок (layout не участвует), а `-Playout=smetana`
 // на нём меняет размер холста — поэтому для ditaa флаг не передаётся (выход
 // байт-в-байт совпадает с историческим).
-const renderDiagram = (content, { javaBin, jarPath, includePath, format, charset, isDitaa }) =>
+const renderDiagram = (
+    content: string | Buffer,
+    { javaBin, jarPath, includePath, format, charset, isDitaa }: RenderDiagramOptions
+): Promise<Buffer> =>
     new Promise((resolve, reject) => {
         const argv = [
             '-Djava.awt.headless=true',
@@ -232,11 +281,12 @@ const renderDiagram = (content, { javaBin, jarPath, includePath, format, charset
         ];
 
         const child = spawn(javaBin, argv);
-        const stdout = [];
-        const stderr = [];
+        const stdout: Buffer[] = [];
+        const stderr: Buffer[] = [];
 
-        child.stdout.on('data', (chunk) => stdout.push(chunk));
-        child.stderr.on('data', (chunk) => stderr.push(chunk));
+        // stdio по умолчанию 'pipe' → потоки заведомо не null (assert снимает strict-null).
+        child.stdout!.on('data', (chunk) => stdout.push(chunk));
+        child.stderr!.on('data', (chunk) => stderr.push(chunk));
         child.on('error', reject); // java не найдена и пр.
         child.on('close', (code) => {
             // Smetana печатает диагностический шум (UNSURE_ABOUT…) — это не ошибка
@@ -253,15 +303,20 @@ const renderDiagram = (content, { javaBin, jarPath, includePath, format, charset
             resolve(Buffer.concat(stdout));
         });
 
-        child.stdin.on('error', () => {}); // EPIPE, если java упала до чтения stdin
-        child.stdin.write(content);
-        child.stdin.end();
+        child.stdin!.on('error', () => {}); // EPIPE, если java упала до чтения stdin
+        child.stdin!.write(content);
+        child.stdin!.end();
     });
 
-const generateImages = async (tree, options, onImageGenerated, cacheConf) => {
+const generateImages = async (
+    tree: TreeItem[],
+    options: BuildOptions,
+    onImageGenerated: ((processed: number, total: number) => void) | undefined,
+    cacheConf: CacheConf
+): Promise<void> => {
     // Get the old checksums (from last run) of all PUML-files
-    const oldChecksums = cacheConf.get('checksums') || [];
-    const newChecksums = [];
+    const oldChecksums: string[] = cacheConf.get('checksums') || [];
+    const newChecksums: string[] = [];
     const bkFolderName = options.DIST_FOLDER + DIST_BACKUP_FOLDER_SUFFIX;
 
     let totalImages = 0;
@@ -285,7 +340,7 @@ const generateImages = async (tree, options, onImageGenerated, cacheConf) => {
     // JRE резолвится ЛЕНИВО и один раз за сборку: только если в дереве есть хотя бы одна
     // PlantUML-диаграмма. Проект целиком на D2 java не трогает (скачивание не инициируется).
     const needsJava = tree.some((item) => item.diagrams.some((d) => d.engine === 'plantuml'));
-    let javaBin = null;
+    let javaBin: string | null = null;
     if (needsJava) {
         javaBin = (await resolveJava({ log: (m) => console.log(chalk.gray(m)) })).path;
     }
@@ -294,7 +349,7 @@ const generateImages = async (tree, options, onImageGenerated, cacheConf) => {
         totalImages += item.diagrams.length;
     }
 
-    const taskList = [];
+    const taskList: Promise<void>[] = [];
 
     for (const item of tree) {
         for (const diagram of item.diagrams) {
@@ -306,7 +361,7 @@ const generateImages = async (tree, options, onImageGenerated, cacheConf) => {
             const entryPath = diagram.engine === 'd2' ? path.join(item.dir, diagram.dir) : null;
             const includes =
                 diagram.engine === 'd2'
-                    ? foldD2Imports(entryPath)
+                    ? foldD2Imports(entryPath!)
                     : foldIncludes(body, item.dir, item.dir, new Set());
             const cksum = crypto
                 .createHash('sha256')
@@ -338,9 +393,9 @@ const generateImages = async (tree, options, onImageGenerated, cacheConf) => {
                 // Для растеризации PlantUML не-ditaa рендерим в svg (не -tpng), затем resvg.
                 const rendered =
                     diagram.engine === 'd2'
-                        ? renderD2(entryPath, { layout: options.D2_LAYOUT })
+                        ? renderD2(entryPath!, { layout: options.D2_LAYOUT })
                         : renderDiagram(diagram.content, {
-                              javaBin,
+                              javaBin: javaBin!, // needsJava → резолвнут для plantuml-ветки
                               jarPath,
                               includePath: item.dir,
                               format: needsRaster ? 'svg' : outFormat,
@@ -376,7 +431,7 @@ const generateImages = async (tree, options, onImageGenerated, cacheConf) => {
 // Проверяем только первый md-файл: именно он окажется сразу за авто-заголовком
 // в compileDocument, поэтому только он может породить визуальный дубль.
 // Лидирующий BOM (﻿) учитываем — md-файлы из Windows/редакторов часто с ним.
-const hasOwnH1 = (item) => {
+const hasOwnH1 = (item: TreeItem): boolean => {
     if (!item.mdFiles || item.mdFiles.length === 0) return false;
     return /^﻿?\s*#\s+\S/.test(item.mdFiles[0].toString());
 };
@@ -384,28 +439,33 @@ const hasOwnH1 = (item) => {
 // Вставить блок (breadcrumb / TOC / навигация) сразу после первого h1.
 // Используется когда у пользователя свой h1 — авто-заголовок не ставится,
 // а служебный блок должен оказаться ПОД заголовком, как было раньше.
-const injectAfterFirstH1 = (md, block) => {
+const injectAfterFirstH1 = (md: string, block: string): string => {
     if (!block) return md;
     const m = md.match(/^([\s\S]*?#\s+[^\n]*\n)/);
     if (!m) return `${block}\n\n${md}`;
     return m[1] + block + md.slice(m[1].length);
 };
 
-const compileDocument = async (md, item, options, getDiagram) => {
+const compileDocument = async (
+    md: string,
+    item: TreeItem,
+    options: BuildOptions,
+    getDiagram: GetDiagram
+): Promise<string> => {
     let MD = md;
-    const alreadyIncluded = [];
-    const texts = [];
-    const diagrams = [];
+    const alreadyIncluded: string[] = [];
+    const texts: string[] = [];
+    const diagrams: string[] = [];
     const regex = /(?:!\[.*?\]\()(.*\.(?:puml|d2))(\))/g;
 
     for (const mdFile of item.mdFiles) {
         let content = mdFile.toString();
 
-        let diagramRef;
+        let diagramRef: RegExpExecArray | null;
         // biome-ignore lint/suspicious/noAssignInExpressions: идиома regex.exec() в условии while
         while ((diagramRef = regex.exec(content)) !== null) {
             if (diagramRef?.[1]) {
-                const diagram = item.diagrams.find((x) => x.dir === diagramRef[1]);
+                const diagram = item.diagrams.find((x) => x.dir === diagramRef![1]);
                 if (diagram) {
                     alreadyIncluded.push(diagramRef[1]);
                     content = content.replace(diagramRef[0], await getDiagram(item, diagram, options));
@@ -437,8 +497,8 @@ const compileDocument = async (md, item, options, getDiagram) => {
     return MD;
 };
 
-const generateCompleteMD = async (tree, options) => {
-    const filePromises = [];
+const generateCompleteMD = async (tree: TreeItem[], options: BuildOptions): Promise<void[]> => {
+    const filePromises: Promise<void>[] = [];
 
     //title
     let MD = `# ${options.PROJECT_NAME}`;
@@ -475,7 +535,7 @@ const generateCompleteMD = async (tree, options) => {
                 diagramUrl = plantUmlServerUrl(
                     options.PLANTUML_SERVER_URL,
                     diagramOutputFormat(diagram, options),
-                    diagram.content
+                    diagram.content as string // рендер-контент диаграммы (Buffer читается как текст)
                 );
 
             if (options.EMBED_DIAGRAM) {
@@ -488,7 +548,7 @@ const generateCompleteMD = async (tree, options) => {
                                 item.dir.replace(options.ROOT_FOLDER, ''),
                                 diagramUrl
                             )
-                        )
+                        ) as Buffer
                     ).toString('base64');
                 else imgContent = await httpGet(diagramUrl);
 
@@ -520,11 +580,15 @@ const generateCompleteMD = async (tree, options) => {
     return Promise.all(filePromises);
 };
 
-const generateMD = async (tree, options, onProgress) => {
+const generateMD = async (
+    tree: TreeItem[],
+    options: BuildOptions,
+    onProgress?: (processed: number, total: number) => void
+): Promise<void[]> => {
     let processedCount = 0;
     const totalCount = tree.length;
 
-    const filePromises = [];
+    const filePromises: Promise<void>[] = [];
     for (const item of tree) {
         const name = getFolderName(item.dir, options.ROOT_FOLDER, options.HOMEPAGE_NAME);
         const ownH1 = hasOwnH1(item);
@@ -603,7 +667,7 @@ const generateMD = async (tree, options, onProgress) => {
                 diagramUrl = plantUmlServerUrl(
                     options.PLANTUML_SERVER_URL,
                     diagramOutputFormat(diagram, options),
-                    diagram.content
+                    diagram.content as string // рендер-контент диаграммы (Buffer читается как текст)
                 );
 
             if (options.EMBED_DIAGRAM) {
@@ -616,7 +680,7 @@ const generateMD = async (tree, options, onProgress) => {
                                 item.dir.replace(options.ROOT_FOLDER, ''),
                                 diagramUrl
                             )
-                        )
+                        ) as Buffer
                     ).toString('base64');
                 else imgContent = await httpGet(diagramUrl);
 
@@ -661,13 +725,14 @@ const generateMD = async (tree, options, onProgress) => {
     return Promise.all(filePromises);
 };
 
-const generateWebMD = async (tree, options) => {
-    const filePromises = [];
+const generateWebMD = async (tree: TreeItem[], options: BuildOptions): Promise<void[]> => {
+    const filePromises: Promise<void>[] = [];
     let docsifySideBar = '';
 
-    const getWebFileName = (originalFileName) => options.WEB_FILE_NAME || originalFileName;
+    const getWebFileName = (originalFileName: string): string =>
+        options.WEB_FILE_NAME || originalFileName;
 
-    const isExcluded = (dir) => {
+    const isExcluded = (dir: string) => {
         if (!Array.isArray(options.EXCLUDE_SIDEBAR_FOLDER_BY_PATH)) return false;
 
         return options.EXCLUDE_SIDEBAR_FOLDER_BY_PATH.find((pathToExclude) => {
@@ -703,7 +768,7 @@ const generateWebMD = async (tree, options) => {
                 diagramUrl = plantUmlServerUrl(
                     options.PLANTUML_SERVER_URL,
                     diagramOutputFormat(diagram, options),
-                    diagram.content
+                    diagram.content as string // рендер-контент диаграммы (Buffer читается как текст)
                 );
 
             if (options.EMBED_DIAGRAM) {
@@ -716,7 +781,7 @@ const generateWebMD = async (tree, options) => {
                                 item.dir.replace(options.ROOT_FOLDER, ''),
                                 diagramUrl
                             )
-                        )
+                        ) as Buffer
                     ).toString('base64');
                 else imgContent = await httpGet(diagramUrl);
 
@@ -759,7 +824,7 @@ const generateWebMD = async (tree, options) => {
         docsifyTemplate = require(path.join(process.cwd(), options.DOCSIFY_TEMPLATE));
     }
 
-    const getRootName = () => tree.find((item) => !item.parent);
+    const getRootName = (): TreeItem | undefined => tree.find((item) => !item.parent);
 
     //docsify homepage
     filePromises.push(
@@ -770,7 +835,7 @@ const generateWebMD = async (tree, options) => {
                 repo: options.REPO_NAME,
                 loadSidebar: true,
                 auto2top: true,
-                homepage: `${options.WEB_FILE_NAME || getRootName().name}.md`,
+                homepage: `${options.WEB_FILE_NAME || getRootName()!.name}.md`,
                 plantuml: {
                     skin: 'classic'
                 },
@@ -797,7 +862,7 @@ const generateWebMD = async (tree, options) => {
     return Promise.all(filePromises);
 };
 
-const build = async (options, cacheConf) => {
+const build = async (options: BuildOptions, cacheConf: CacheConf): Promise<void> => {
     const start_date = new Date();
     const bkFolderName = options.DIST_FOLDER + DIST_BACKUP_FOLDER_SUFFIX;
 
@@ -875,6 +940,6 @@ const build = async (options, cacheConf) => {
     // Освободить D2-инстанс (webworker), иначе процесс не завершится. No-op, если .d2 не было.
     await teardownD2();
 
-    console.log(chalk.green(`built in ${(Date.now() - start_date) / 1000} seconds`));
+    console.log(chalk.green(`built in ${(Date.now() - start_date.getTime()) / 1000} seconds`));
 };
 export { build };

@@ -13,6 +13,15 @@ import https from 'node:https';
 import crypto from 'node:crypto';
 import { createRequire } from 'node:module';
 import { spawnSync } from 'node:child_process';
+import type { IncomingMessage } from 'node:http';
+
+// Результат резолва Java: путь к бинарю, источник (system/cache/download) и,
+// для системной java, распознанная мажорная версия.
+interface JreResolution {
+    path: string;
+    source: string;
+    major?: number;
+}
 
 // yauzl/tar грузятся лениво (только при распаковке скачанного JRE) — сохраняем это
 // синхронным require через createRequire, а не тянем их на импорте модуля.
@@ -23,22 +32,25 @@ const TEMURIN_FEATURE = 21; // скачиваем ровно Temurin 21 JRE
 const JAVA_BIN = process.platform === 'win32' ? 'java.exe' : 'java';
 
 // --- платформа: process.* → параметры Adoptium ---
-const adoptiumOs = () =>
-    ({ win32: 'windows', darwin: 'mac', linux: 'linux' })[process.platform] || process.platform;
+const adoptiumOs = (): string =>
+    ({ win32: 'windows', darwin: 'mac', linux: 'linux' } as Record<string, string>)[process.platform] ||
+    process.platform;
 
-const adoptiumArch = () =>
-    ({ x64: 'x64', arm64: 'aarch64', ppc64: 'ppc64le', s390x: 's390x' })[process.arch] || process.arch;
+const adoptiumArch = (): string =>
+    ({ x64: 'x64', arm64: 'aarch64', ppc64: 'ppc64le', s390x: 's390x' } as Record<string, string>)[
+        process.arch
+    ] || process.arch;
 
 // Мажорная версия из вывода `java -version`: `... version "21.0.11"` → 21,
 // `... version "1.8.0_302"` → 8 (легаси-схема 1.x). null, если не распознано.
-const parseMajor = (versionOutput) => {
+const parseMajor = (versionOutput: string): number | null => {
     const m = String(versionOutput).match(/version "(\d+)(?:\.(\d+))?[^"]*"/);
     if (!m) return null;
     const first = parseInt(m[1], 10);
     return first === 1 && m[2] ? parseInt(m[2], 10) : first;
 };
 
-const javaMajor = (javaPath) => {
+const javaMajor = (javaPath: string): number | null => {
     let res;
     try {
         res = spawnSync(javaPath, ['-version'], { encoding: 'utf8' });
@@ -49,7 +61,7 @@ const javaMajor = (javaPath) => {
     return parseMajor((res.stderr || '') + (res.stdout || '')); // `-version` пишет в stderr
 };
 
-const whichOnPath = (bin) => {
+const whichOnPath = (bin: string): string | null => {
     for (const dir of (process.env.PATH || '').split(path.delimiter)) {
         if (!dir) continue;
         const full = path.join(dir, bin);
@@ -64,8 +76,8 @@ const whichOnPath = (bin) => {
 
 // (1) системная java: сперва JAVA_HOME, затем PATH; годна при мажоре ≥ MAJOR_MIN.
 // Отсутствие/ошибка запуска не прерывает — вернём null (переход к следующему источнику).
-const detectSystemJava = () => {
-    const candidates = [];
+const detectSystemJava = (): JreResolution | null => {
+    const candidates: string[] = [];
     if (process.env.JAVA_HOME) candidates.push(path.join(process.env.JAVA_HOME, 'bin', JAVA_BIN));
     const onPath = whichOnPath(JAVA_BIN);
     if (onPath) candidates.push(onPath);
@@ -82,12 +94,12 @@ const detectSystemJava = () => {
 };
 
 // --- кеш: ~/.cache/c4builder/jre/temurin-21-<os>-<arch>/ (Windows — %LOCALAPPDATA%) ---
-const cacheRoot = () =>
+const cacheRoot = (): string =>
     process.platform === 'win32'
         ? process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local')
         : process.env.XDG_CACHE_HOME || path.join(os.homedir(), '.cache');
 
-const jreCacheDir = () =>
+const jreCacheDir = (): string =>
     path.join(
         cacheRoot(),
         'c4builder',
@@ -97,7 +109,7 @@ const jreCacheDir = () =>
 
 // Ищем bin/java в корне кеша или на один уровень ниже (архив несёт каталог jdk-*-jre;
 // на macOS бинарь лежит в Contents/Home/bin). null → установка невалидна/битая.
-const findJavaUnder = (root) => {
+const findJavaUnder = (root: string): string | null => {
     if (!fs.existsSync(root)) return null;
     const direct = path.join(root, 'bin', JAVA_BIN);
     if (fs.existsSync(direct)) return direct;
@@ -122,20 +134,21 @@ const findJavaUnder = (root) => {
 };
 
 // (2) кеш: валиден только при наличии исполняемого bin/java.
-const cachedJava = () => {
+const cachedJava = (): JreResolution | null => {
     const bin = findJavaUnder(jreCacheDir());
     return bin ? { path: bin, source: 'cache' } : null;
 };
 
 // --- HTTP с обработкой редиректов (assets-эндпоинт может 307-редиректить на github) ---
-const httpGet = (url) =>
+const httpGet = (url: string): Promise<IncomingMessage> =>
     new Promise((resolve, reject) => {
         https
             .get(url, { headers: { 'User-Agent': 'c4builder-jre-resolver' } }, (res) => {
-                const { statusCode, headers } = res;
+                const statusCode = res.statusCode as number; // ответ всегда со статусом
+                const { headers } = res;
                 if (statusCode >= 300 && statusCode < 400 && headers.location) {
                     res.resume();
-                    return resolve(httpGet(new URL(headers.location, url).toString()));
+                    return resolve(httpGet(new URL(headers.location as string, url).toString()));
                 }
                 if (statusCode !== 200) {
                     res.resume();
@@ -146,15 +159,20 @@ const httpGet = (url) =>
             .on('error', reject);
     });
 
-const httpGetJson = async (url) => {
+const httpGetJson = async (url: string): Promise<any> => {
     const res = await httpGet(url);
-    const chunks = [];
+    const chunks: Buffer[] = [];
     for await (const c of res) chunks.push(c);
     return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 };
 
 // Adoptium assets API отдаёт ссылку и sha256 одним запросом.
-const fetchAssetMeta = async () => {
+const fetchAssetMeta = async (): Promise<{
+    link: string;
+    sha256: string;
+    name: string;
+    release: string;
+}> => {
     const url =
         `https://api.adoptium.net/v3/assets/latest/${TEMURIN_FEATURE}/hotspot` +
         `?image_type=jre&vendor=eclipse&os=${adoptiumOs()}&architecture=${adoptiumArch()}`;
@@ -169,7 +187,11 @@ const fetchAssetMeta = async () => {
     return { link: pkg.link, sha256: pkg.checksum, name: pkg.name, release: asset.release_name };
 };
 
-const downloadAndVerify = async (link, expectedSha, destFile) => {
+const downloadAndVerify = async (
+    link: string,
+    expectedSha: string,
+    destFile: string
+): Promise<void> => {
     const res = await httpGet(link);
     const hash = crypto.createHash('sha256');
     await new Promise((resolve, reject) => {
@@ -186,18 +208,18 @@ const downloadAndVerify = async (link, expectedSha, destFile) => {
     }
 };
 
-const extractZip = (archive, destDir) =>
+const extractZip = (archive: string, destDir: string): Promise<void> =>
     new Promise((resolve, reject) => {
-        require('yauzl').open(archive, { lazyEntries: true }, (err, zip) => {
+        require('yauzl').open(archive, { lazyEntries: true }, (err: any, zip: any) => {
             if (err) return reject(err);
-            zip.on('entry', (entry) => {
+            zip.on('entry', (entry: any) => {
                 const dest = path.join(destDir, entry.fileName);
                 if (entry.fileName.endsWith('/')) {
                     fs.mkdirSync(dest, { recursive: true });
                     return zip.readEntry();
                 }
                 fs.mkdirSync(path.dirname(dest), { recursive: true });
-                zip.openReadStream(entry, (e, rs) => {
+                zip.openReadStream(entry, (e: any, rs: any) => {
                     if (e) return reject(e);
                     const ws = fs.createWriteStream(dest);
                     ws.on('error', reject);
@@ -221,12 +243,12 @@ const extractZip = (archive, destDir) =>
         });
     });
 
-const extractArchive = (archive, destDir, isZip) =>
+const extractArchive = (archive: string, destDir: string, isZip: boolean): Promise<void> =>
     isZip ? extractZip(archive, destDir) : require('tar').x({ file: archive, cwd: destDir });
 
 // (3) скачивание: assets API → sha256 (до распаковки) → распаковка в кеш.
 // Битую/старую установку затираем целиком перед распаковкой.
-const downloadJre = async ({ log } = {}) => {
+const downloadJre = async ({ log }: { log?: (msg: string) => void } = {}): Promise<JreResolution> => {
     const meta = await fetchAssetMeta();
     const dir = jreCacheDir();
     const isZip = adoptiumOs() === 'windows';
@@ -247,7 +269,7 @@ const downloadJre = async ({ log } = {}) => {
     return { path: bin, source: 'download' };
 };
 
-const failureMessage = (cause) =>
+const failureMessage = (cause?: { message?: string }): string =>
     [
         'Не удалось получить Java для рендеринга PlantUML-диаграмм.',
         'Ни системная java (17+), ни кеш, ни скачивание с Adoptium не сработали. Сделайте одно из двух:',
@@ -260,7 +282,10 @@ const failureMessage = (cause) =>
 
 // Резолв по цепочке. { force } пропускает систему и кеш (форс-скачивание для
 // `jre install --force`). Возвращает { path, source }.
-const resolveJava = async ({ force = false, log } = {}) => {
+const resolveJava = async ({
+    force = false,
+    log
+}: { force?: boolean; log?: (msg: string) => void } = {}): Promise<JreResolution> => {
     if (!force) {
         const sys = detectSystemJava();
         if (sys) return sys;
@@ -270,7 +295,7 @@ const resolveJava = async ({ force = false, log } = {}) => {
     try {
         return await downloadJre({ log });
     } catch (e) {
-        throw new Error(failureMessage(e));
+        throw new Error(failureMessage(e as Error));
     }
 };
 
