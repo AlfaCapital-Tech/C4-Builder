@@ -15,7 +15,7 @@ import { resolveJava } from './jre.ts';
 // PNG-выход: SVG обоих движков растеризуется resvg (ленивая загрузка внутри модуля).
 import { rasterizeSvgToPng } from './pngraster.ts';
 import { VENDOR_DIR } from '../../util/paths.ts';
-import { foldIncludes, diagramOutputFormat, type TreeItem, type Diagram } from '../scan/tree.ts';
+import { foldIncludes, diagramOutputFormat, type TreeItem } from '../scan/tree.ts';
 import type { BuildOptions } from '../../config/options.ts';
 
 // cacheConf: Configstore-подобная заглушка чексумм картинок (см. cli/dispatch).
