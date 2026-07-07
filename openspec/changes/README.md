@@ -8,8 +8,9 @@ tasks в своей папке; реализуется через `/opsx:apply` 
 Предыдущие волны в `archive/`: template-offline → golden-test-ci → java-direct/d2
 → remove-pdf, remove-plantuml-version, new-noninteractive, resvg-png,
 remove-vscode-snippets, jre-resolver → golden-matrix, dev-toolchain →
-**ts-scaffold** (ESM-флип, tsc → dist/ Стойка 2, домены src/ — реализован;
-src/ теперь честный ESM, но все 16 модулей ещё `.js` под `allowJs`).
+ts-scaffold (ESM-флип, tsc → dist/ Стойка 2, домены src/) →
+**ts-port-full** (все 16 модулей `src/` → `.ts` под `strict`, `allowJs` off —
+реализован; src/ на 100% TypeScript).
 
 ## Текущая волна: собственно порт на TypeScript
 
@@ -20,12 +21,12 @@ src/ теперь честный ESM, но все 16 модулей ещё `.js`
 порта видно «переименовал+типизировал», в диффе дробления — «перенёс».
 
 ```
- АКТИВНО (proposal готов):
+ РЕАЛИЗОВАНО (в archive/2026-07-07-ts-port-full):
    ts-port-full ── все 16 src/**/*.js → .ts под strict, BuildOptions в
-   │               config/options.ts (оптимистичный тип), @types/*,
-   │               финал — allowJs:false. build.ts остаётся монолитом.
-   │               Домены = группы задач: config → util → core → cli → index.
+                   config/options.ts (оптимистичный тип), @types/*,
+                   allowJs:false. build.ts остаётся монолитом.
    ▼
+ АКТИВНО (proposal готов):
    build-split ─── дробление build.ts по фактическим швам: scan/tree.ts,
    │               render/diagrams.ts, compose/markdown.ts; build.ts —
    │               оркестратор (~100 строк). Rename-only, поведение фикс.
@@ -45,8 +46,8 @@ src/ теперь честный ESM, но все 16 модулей ещё `.js`
 
 | # | Change | Зависит от | Capability | Ветка |
 |---|--------|-----------|-----------|-------|
-| 1 | `ts-port-full` | — (ts-scaffold в архиве) | build-pipeline (mod: всё .ts, strict, allowJs off) | refactor/phoenix |
-| 2 | `build-split` | 1 (строго после) | build-pipeline (add: пофазная модульность ядра) | refactor/phoenix |
+| ~~1~~ | ~~`ts-port-full`~~ | — | build-pipeline (mod: всё .ts, strict, allowJs off) | ✅ архив 2026-07-07 |
+| 2 | `build-split` | 1 (в архиве) | build-pipeline (add: пофазная модульность ядра) | refactor/phoenix |
 
 ## Ключевые сцепки и решения
 
