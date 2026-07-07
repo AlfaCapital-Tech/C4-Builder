@@ -27,5 +27,5 @@
 
 ## 6. Финальный флип строгости
 
-- [ ] 6.1 `tsconfig.json`: `allowJs: false`; убедиться `find src -name '*.js'` пуст; `npm run build` + golden зелёные
-- [ ] 6.2 Санити состава пакета: `npm pack --dry-run` — `dist/` полон, лишнего нет; коммит
+- [x] 6.1 `tsconfig.json`: `allowJs: false`; убедиться `find src -name '*.js'` пуст; `npm run build` + golden зелёные
+- [x] 6.2 Санити состава пакета: `npm pack --dry-run` — `dist/` полон, лишнего нет; коммит

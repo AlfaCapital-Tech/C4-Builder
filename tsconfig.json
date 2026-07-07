@@ -7,7 +7,7 @@
     "outDir": "dist",
     "allowImportingTsExtensions": true,
     "rewriteRelativeImportExtensions": true,
-    "allowJs": true,
+    "allowJs": false,
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
