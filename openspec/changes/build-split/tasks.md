@@ -1,6 +1,6 @@
 ## 1. Фаза scan
 
-- [ ] 1.1 `src/core/scan/tree.ts`: перенести `generateTree`, `foldIncludes`, `getFolderName` + экспортируемый тип дерева скана; `build.ts` импортирует; golden зелёный; коммит
+- [x] 1.1 `src/core/scan/tree.ts`: перенести `generateTree`, `foldIncludes`, `getFolderName` + экспортируемый тип дерева скана; `build.ts` импортирует; golden зелёный; коммит
 
 ## 2. Фаза render
 
