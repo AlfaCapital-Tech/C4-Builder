@@ -21,8 +21,8 @@
 
 ## 5. ESM-апгрейды и минорные
 
-- [ ] 5.1 Поднять `chalk` 2→5, `open` 8→10, `configstore` 4→7 (+ `@types/configstore`), `commander` 14→15; починить несовместимые вызовы (проверка tsc; сверить commander 14→15 breaking по changelog)
-- [ ] 5.2 Подтянуть `figlet`, `fs-extra`, `@types/*`; tsc + golden зелёные; коммит
+- [x] 5.1 Поднять `chalk` 2→5, `open` 8→10, `configstore` 4→7 (`@types/configstore` снят — v7 несёт свои типы; `ConfStore.get` выровнен на `T|undefined`), `commander` 14→15; починить несовместимые вызовы (проверка tsc; сверить commander 14→15 breaking по changelog)
+- [x] 5.2 Подтянуть `figlet`, `fs-extra`, `@types/*`; tsc + golden зелёные; коммит
 
 ## 6. CI аудит-гейт и финальная проверка
 

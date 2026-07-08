@@ -25,7 +25,7 @@ import { configSchema } from '../config/schema.ts';
 interface ConfStore {
     // Значение конфига/кэша типизируется по месту чтения (T выводится из целевого
     // поля BuildOptions) — вместо any на границе Configstore, который отдаёт unknown.
-    get<T = unknown>(key: string): T;
+    get<T = unknown>(key: string): T | undefined;
     // Весь конфиг разом — вход для zod-валидации в getOptions (заглушки его не несут).
     readonly all?: Record<string, unknown>;
     set(key: string, value: unknown): void;
