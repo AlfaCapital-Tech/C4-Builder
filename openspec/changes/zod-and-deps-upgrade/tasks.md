@@ -11,8 +11,8 @@
 
 ## 3. Апгрейд inquirer 8 → 12
 
-- [ ] 3.1 Поднять `inquirer` до 12, снять `@types/inquirer`; адаптировать `collect.ts` под ESM/типы v12 (легаси `.prompt([...])`-API, типы ответов через `Awaited<ReturnType<typeof inquirer.prompt>>`)
-- [ ] 3.2 Убедиться, что транзитивный `lodash` ушёл (`npm ls lodash` / audit); tsc + biome зелёные; прогон визарда; коммит
+- [x] 3.1 Поднять `inquirer` до 12, снять `@types/inquirer`; адаптировать `collect.ts` под ESM/типы v12 (легаси `.prompt([...])`-API, типы ответов через `Awaited<ReturnType<typeof inquirer.prompt>>`)
+- [x] 3.2 Убедиться, что транзитивный `lodash` ушёл (`npm ls lodash` / audit); tsc + biome зелёные; прогон визарда; коммит
 
 ## 4. Апгрейд express 4 → 5
 
