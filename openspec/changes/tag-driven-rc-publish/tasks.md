@@ -14,7 +14,7 @@
 
 ## 3. Проверка вживую
 
-- [ ] 3.1 С ветки `refactor/phoenix`: `npm version 0.3.0-rc.1 -m "rc: %s"` + `git push --follow-tags`
-- [ ] 3.2 Убедиться, что workflow опубликовал пакет под dist-tag `rc`, а `latest` остался `0.2.25` (`npm view @alfacapital-tech/c4builder dist-tags`)
-- [ ] 3.3 Проверить, что `npm install @alfacapital-tech/c4builder@rc` ставит `0.3.0-rc.1`, а `npm install` без тега — `0.2.25`
-- [ ] 3.4 Проверить гейты: повторный запуск для той же версии → skip без ошибки; тег с несовпадающей версией → workflow падает
+- [x] 3.1 С ветки `refactor/phoenix`: `npm version 0.3.0-rc.1 -m "rc: %s"` + `git push --follow-tags`
+- [x] 3.2 Убедиться, что workflow опубликовал пакет под dist-tag `rc`, а `latest` остался `0.2.25` (`npm view @alfacapital-tech/c4builder dist-tags`)
+- [x] 3.3 Проверить, что `npm install @alfacapital-tech/c4builder@rc` ставит `0.3.0-rc.1`, а `npm install` без тега — `0.2.25`
+- [x] 3.4 Проверить гейты: повторный запуск для той же версии → skip без ошибки (проверено вживую) — тег с несовпадающей версией → exit 1 проверено dry-run в shell (живой прогон в CI пропущен по решению пользователя, чтобы не пушить лишний тег в публичный репозиторий)
