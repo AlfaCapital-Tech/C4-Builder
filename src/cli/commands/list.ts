@@ -1,7 +1,7 @@
 import chalk from 'chalk';
 import type { BuildOptions } from '../../config/options.ts';
 
-export default (currentConfiguration: BuildOptions): void => {
+export default (currentConfiguration: Partial<BuildOptions>): void => {
     console.log(`
 CURRENT CONFIGURATION
 

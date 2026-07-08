@@ -17,7 +17,8 @@ import { EventEmitter } from 'node:events';
 
 import { clearConsole } from '../util/utils.ts';
 import { packageJson as pkg } from '../util/paths.ts';
-import type { BuildOptions } from '../config/options.ts';
+import type { BuildOptions, C4ConfigFile } from '../config/options.ts';
+import { configSchema } from '../config/schema.ts';
 
 // Configstore-подобное хранилище конфига/кэша. Реальный инстанс — Configstore;
 // заглушки (режим --new, где проектного конфига ещё нет) кастуются к нему.
@@ -25,6 +26,8 @@ interface ConfStore {
     // Значение конфига/кэша типизируется по месту чтения (T выводится из целевого
     // поля BuildOptions) — вместо any на границе Configstore, который отдаёт unknown.
     get<T = unknown>(key: string): T;
+    // Весь конфиг разом — вход для zod-валидации в getOptions (заглушки его не несут).
+    readonly all?: Record<string, unknown>;
     set(key: string, value: unknown): void;
     delete(key: string): void;
     clear(): void;
@@ -35,48 +38,71 @@ const intro = () => {
     console.log(chalk.gray('Blow up your software documentation writing skills'));
 };
 
-const getOptions = (conf: ConfStore): BuildOptions => {
+// Валидирует сырой `.c4builder` zod-схемой и маппит в BuildOptions (SCREAMING_CASE).
+// applyDefaults=true (сборка) — недостающие поля дополняются дефолтами схемы, тип полон.
+// applyDefaults=false (визард/--list) — остаются лишь заданные пользователем ключи
+// (недостающее = undefined, как читалось до валидации), чтобы визард спросил их на
+// первом запуске. Значение неверного типа отклоняется понятной ошибкой (exit ≠ 0).
+function getOptions(conf: ConfStore): BuildOptions;
+function getOptions(conf: ConfStore, applyDefaults: false): Partial<BuildOptions>;
+function getOptions(conf: ConfStore, applyDefaults?: boolean): BuildOptions | Partial<BuildOptions> {
+    const raw = (conf.all ?? {}) as Record<string, unknown>;
+    const parsed = configSchema.safeParse(raw);
+    if (!parsed.success) {
+        const issue = parsed.error.issues[0];
+        const key = issue?.path.join('.') || '(корень)';
+        console.error(
+            chalk.red(`Ошибка в .c4builder: ключ «${key}» — ${issue?.message ?? 'неверное значение'}`)
+        );
+        process.exit(1);
+    }
+    const full = parsed.data;
+    const c: Partial<C4ConfigFile> =
+        applyDefaults === false
+            ? (Object.fromEntries(
+                  Object.keys(full)
+                      .filter((k) => k in raw)
+                      .map((k) => [k, full[k as keyof typeof full]])
+              ) as Partial<C4ConfigFile>)
+            : full;
     return {
         // Легаси-детект: выбор версии PlantUML удалён; ключ plantumlVersion из старых
         // .c4builder отдаём build.js только для однократного предупреждения на пине.
-        LEGACY_PLANTUML_VERSION: conf.get('plantumlVersion'),
-        GENERATE_MD: conf.get('generateMD'),
-        GENERATE_WEBSITE: conf.get('generateWEB'),
-        GENERATE_COMPLETE_MD_FILE: conf.get('generateCompleteMD'),
+        LEGACY_PLANTUML_VERSION: c.plantumlVersion,
+        GENERATE_MD: c.generateMD,
+        GENERATE_WEBSITE: c.generateWEB,
+        GENERATE_COMPLETE_MD_FILE: c.generateCompleteMD,
         // Легаси-детект: PDF-вывод удалён, но truthy-ключи в старых .c4builder
         // ловим здесь (где доступен conf) и отдаём build.js для предупреждения.
-        LEGACY_PDF_KEYS: ['generatePDF', 'generateCompletePDF'].filter((k) => conf.get(k)),
-        GENERATE_LOCAL_IMAGES: conf.get('generateLocalImages'),
-        EMBED_DIAGRAM: conf.get('embedDiagram'),
-        ROOT_FOLDER: conf.get('rootFolder'),
-        DIST_FOLDER: conf.get('distFolder'),
-        PROJECT_NAME: conf.get('projectName'),
-        REPO_NAME: conf.get('repoUrl'),
-        HOMEPAGE_NAME: conf.get('homepageName'),
-        WEB_THEME:
-            conf.get('webTheme') === '//unpkg.com/docsify/lib/themes/vue.css'
-                ? 'vendor/vue.css'
-                : conf.get('webTheme'),
-        DOCSIFY_TEMPLATE: conf.get('docsifyTemplate'),
-        INCLUDE_NAVIGATION: conf.get('includeNavigation'),
-        INCLUDE_BREADCRUMBS: conf.get('includeBreadcrumbs'),
-        INCLUDE_TABLE_OF_CONTENTS: conf.get('includeTableOfContents'),
-        INCLUDE_LINK_TO_DIAGRAM: conf.get('includeLinkToDiagram'),
-        EXCLUDE_SIDEBAR_FOLDER_BY_PATH: conf.get('excludeSidebarFolderByPath'),
-        DIAGRAMS_ON_TOP: conf.get('diagramsOnTop'),
-        CHARSET: conf.get('charset'),
-        WEB_PORT: conf.get('webPort'),
-        HAS_RUN: conf.get('hasRun'),
-        PLANTUML_SERVER_URL: conf.get('plantumlServerUrl'),
-        DIAGRAM_FORMAT: conf.get('diagramFormat'),
-        D2_LAYOUT: conf.get('d2Layout') || 'dagre',
+        LEGACY_PDF_KEYS: (['generatePDF', 'generateCompletePDF'] as const).filter((k) => c[k]),
+        GENERATE_LOCAL_IMAGES: c.generateLocalImages,
+        EMBED_DIAGRAM: c.embedDiagram,
+        ROOT_FOLDER: c.rootFolder,
+        DIST_FOLDER: c.distFolder,
+        PROJECT_NAME: c.projectName,
+        REPO_NAME: c.repoUrl,
+        HOMEPAGE_NAME: c.homepageName,
+        WEB_THEME: c.webTheme === '//unpkg.com/docsify/lib/themes/vue.css' ? 'vendor/vue.css' : c.webTheme,
+        DOCSIFY_TEMPLATE: c.docsifyTemplate,
+        INCLUDE_NAVIGATION: c.includeNavigation,
+        INCLUDE_BREADCRUMBS: c.includeBreadcrumbs,
+        INCLUDE_TABLE_OF_CONTENTS: c.includeTableOfContents,
+        INCLUDE_LINK_TO_DIAGRAM: c.includeLinkToDiagram,
+        EXCLUDE_SIDEBAR_FOLDER_BY_PATH: c.excludeSidebarFolderByPath,
+        DIAGRAMS_ON_TOP: c.diagramsOnTop,
+        CHARSET: c.charset,
+        WEB_PORT: c.webPort,
+        HAS_RUN: c.hasRun,
+        PLANTUML_SERVER_URL: c.plantumlServerUrl,
+        DIAGRAM_FORMAT: c.diagramFormat,
+        D2_LAYOUT: c.d2Layout || 'dagre',
         MD_FILE_NAME: 'README',
-        WEB_FILE_NAME: conf.get('webFileName'),
-        SUPPORT_SEARCH: conf.get('supportSearch'),
-        EXECUTE_SCRIPT: conf.get('executeScript'),
-        EXCLUDE_OTHER_FILES: conf.get('excludeOtherFiles')
+        WEB_FILE_NAME: c.webFileName,
+        SUPPORT_SEARCH: c.supportSearch,
+        EXECUTE_SCRIPT: c.executeScript,
+        EXCLUDE_OTHER_FILES: c.excludeOtherFiles
     };
-};
+}
 
 export default async () => {
     program
@@ -123,14 +149,15 @@ export default async () => {
 
     if (opts.docs) return cmdHelp();
 
-    //initial options
-    let options = getOptions(conf);
+    // Начальный конфиг для визарда/--list: raw-вид (незаданные поля = undefined),
+    // чтобы визард спросил недостающее на первом запуске.
+    const currentConfig = getOptions(conf, false);
 
-    if (opts.new || opts.config || !options.HAS_RUN) clearConsole();
+    if (opts.new || opts.config || !currentConfig.HAS_RUN) clearConsole();
 
     intro();
 
-    if (!options.HAS_RUN && !opts.new) {
+    if (!currentConfig.HAS_RUN && !opts.new) {
         console.log(
             `\nif you created the project using the 'c4model new' command you can just press enter and go with the default options to get a basic idea of how it works.\n`
         );
@@ -138,7 +165,7 @@ export default async () => {
     }
 
     if (opts.new) return cmdNewProject(opts);
-    if (opts.list) return cmdList(options);
+    if (opts.list) return cmdList(currentConfig);
 
     if (opts.reset) {
         conf.clear();
@@ -147,14 +174,14 @@ export default async () => {
         return;
     }
 
-    await cmdCollect(options, conf, opts);
+    await cmdCollect(currentConfig, conf, opts);
     if (!opts.config) {
         conf.set('hasRun', true);
 
         let isBuilding = false;
         let attemptedWatchBuild = false;
-        //get options after wizard
-        options = getOptions(conf);
+        // Опции сборки после визарда: полный вид с дефолтами (базовые поля гарантированы).
+        const options = getOptions(conf);
         const reloadEmitter = new EventEmitter();
         reloadEmitter.setMaxListeners(0);
         if (opts.watch) {

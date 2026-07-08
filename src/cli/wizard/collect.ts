@@ -23,7 +23,7 @@ const validate =
     };
 
 export default async (
-    currentConfiguration: BuildOptions,
+    currentConfiguration: Partial<BuildOptions>,
     conf: { set(key: string, value: unknown): void },
     program: { config?: boolean }
 ): Promise<void> => {

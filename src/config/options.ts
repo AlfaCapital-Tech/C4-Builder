@@ -2,57 +2,16 @@
 // потому что результат getOptions() (BuildOptions) потребляет build() — он
 // портируется раньше, чем cli/dispatch, где getOptions() физически живёт.
 
-/**
- * Ключи файла `.c4builder` (camelCase). Супертип `defaultConfig`: базовые поля
- * обязательны (их пишет `--new --yes`, ими же дефолтится wizard), а задаваемые
- * вне дефолтов и легаси-ключи — опциональны.
- */
-export interface C4ConfigFile {
-    homepageName: string;
-    rootFolder: string;
-    distFolder: string;
-    generateMD: boolean;
-    generateCompleteMD: boolean;
-    generateWEB: boolean;
-    includeNavigation: boolean;
-    includeTableOfContents: boolean;
-    webTheme: string;
-    supportSearch: boolean;
-    repoUrl: string;
-    executeScript: boolean;
-    docsifyTemplate: string;
-    webPort: string;
-    includeBreadcrumbs: boolean;
-    includeLinkToDiagram: boolean;
-    diagramsOnTop: boolean;
-    embedDiagram: boolean;
-    excludeOtherFiles: boolean;
-    generateLocalImages: boolean;
-    plantumlServerUrl: string;
-    diagramFormat: string;
-    charset: string;
-
-    // Задаётся явно (флаг --name / промпт), в defaultConfig не входит.
-    projectName?: string;
-    // Тонкая настройка, только правкой .c4builder.
-    d2Layout?: string;
-    webFileName?: string;
-    excludeSidebarFolderByPath?: string[];
-    hasRun?: boolean;
-
-    // Легаси-ключи старых .c4builder — читаются лишь для однократного предупреждения.
-    plantumlVersion?: string;
-    generatePDF?: boolean;
-    generateCompletePDF?: boolean;
-    checksums?: unknown;
-}
+// Форма файла `.c4builder` (camelCase) — единый тип задаёт zod-схема (config/schema),
+// её же валидацией опирается загрузка опций сборки. Ре-экспорт: потребители типа
+// (defaults, dispatch) продолжают импортировать его отсюда.
+export type { C4ConfigFile } from './schema.ts';
 
 /**
  * Опции сборки (SCREAMING_CASE), собираемые `getOptions()` из `.c4builder`.
- * Оптимистичный тип: базовые поля обязательны и не `undefined` — wizard и
- * `--new --yes` гарантируют полный конфиг; честная рантайм-валидация неполных
- * (рукописных) конфигов — отдельное звено `zod`. Поля-исключения помечены
- * опциональными: они реально бывают `undefined` и защищены проверками в рантайме.
+ * Базовые поля обязательны и не `undefined`: сырой конфиг проходит через zod-схему,
+ * которая дополняет отсутствующие поля дефолтами (см. config/schema). Поля-исключения
+ * помечены опциональными: их нет в дефолтах и они реально бывают `undefined`.
  */
 export interface BuildOptions {
     GENERATE_MD: boolean;

@@ -3,8 +3,8 @@
 //  - интерактивный wizard (`cli.collect.js`) берёт отсюда дефолты своих промптов.
 // Так «полный конфиг» и дефолты wizard'а не разъезжаются (см. change new-noninteractive).
 // projectName сюда не входит — он всегда задаётся явно (флагом --name или промптом).
-import type { C4ConfigFile } from './options.ts';
-
+// Единый источник формы конфига — zod-схема (config/schema) выводит из этих значений
+// и типы, и дефолты; полноту набора ключей гарантируют ссылки `.default(defaultConfig.X)`.
 const defaultConfig = {
     homepageName: 'Overview',
     rootFolder: 'src',
@@ -29,6 +29,6 @@ const defaultConfig = {
     plantumlServerUrl: 'https://www.plantuml.com/plantuml',
     diagramFormat: 'svg',
     charset: 'UTF-8'
-} satisfies C4ConfigFile;
+};
 
 export { defaultConfig };
