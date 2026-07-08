@@ -28,7 +28,10 @@ I strongly encourage people to check them out first but if you want to dive righ
 
 # Getting started
 
-`npm i -g c4builder`
+`npm i -g @alfacapital-tech/c4builder`
+
+`npm install` (no tag) always installs the latest stable release. Release candidates are
+opt-in only — see [Installing a release candidate](#installing-a-release-candidate).
 
 **Requirements:** local diagram generation needs a Java runtime (JRE 17+) on `PATH`.
 Graphviz is **not** required — layout is computed by PlantUML's built-in Java engine
@@ -262,6 +265,38 @@ If defined, this css is used in the generation of the pdf files.
 I would like to bind the **build** phase to the C4 model. It could parse the diagrams and know what Person/System/Component/Container is related to what and help with additional validation. Maybe even export to [structurizr](https://structurizr.com/) or vice versa.
 
 The project is still in it's early phase and I intend on using it on some actual projects in order to find more use cases and fix bugs.
+
+## Installing a release candidate
+
+Pre-release builds (`0.x.y-rc.N`) are published under the npm dist-tag `rc` and never touch
+`latest`:
+
+`npm i @alfacapital-tech/c4builder@rc`
+
+`npm install` without a tag keeps installing the latest stable version.
+
+## Releasing
+
+Publishing is triggered by pushing a git tag `v<version>` — pushes/merges to `master` alone
+do not publish.
+
+**Release candidate** (from `refactor/phoenix`, no merge to `master` needed):
+
+```
+npm version 0.3.0-rc.1 -m "rc: %s"
+git push --follow-tags
+```
+
+Publishes to dist-tag `rc`.
+
+**Final release:**
+
+```
+npm version 0.3.0 -m "release: %s"
+git push --follow-tags
+```
+
+Publishes to dist-tag `latest`.
 
 # Change log
 
