@@ -6,8 +6,8 @@
 
 ## 2. joi → zod в визарде
 
-- [ ] 2.1 `cli/wizard/collect.ts`: заменить `joi`-валидаторы на zod (`safeParse` → boolean / строка ошибки для inquirer), удалить мёртвую `joi.validate`-ветку
-- [ ] 2.2 Удалить `joi` из зависимостей; `npm audit` без joi-уязвимости; прогон визарда вручную; коммит
+- [x] 2.1 `cli/wizard/collect.ts`: заменить `joi`-валидаторы на zod (`safeParse` → boolean / строка ошибки для inquirer), удалить мёртвую `joi.validate`-ветку
+- [x] 2.2 Удалить `joi` из зависимостей; `npm audit` без joi-уязвимости; прогон визарда вручную; коммит
 
 ## 3. Апгрейд inquirer 8 → 12
 

@@ -1,5 +1,5 @@
 import inquirer from 'inquirer';
-import joi from 'joi';
+import { z } from 'zod';
 import fs from 'node:fs';
 import path from 'node:path';
 import { defaultConfig } from '../../config/defaults.ts';
@@ -8,19 +8,11 @@ import type { BuildOptions } from '../../config/options.ts';
 // Ответы inquirer.prompt — динамический словарь (Record<string, any> в типах inquirer).
 type PromptAnswers = Awaited<ReturnType<typeof inquirer.prompt>>;
 
-// Двухветочная обёртка joi.validate — легаси как есть (joi@17 не несёт .validate,
-// живёт else-ветка). Мёртвая if-ветка сохранена под каст — бэклог legacy-fixes.
+// Валидатор ответа визарда: zod safeParse → boolean (true = валидно) для inquirer.
 const validate =
-    (schema: joi.Schema) =>
-    (answers: unknown): boolean => {
-        //just in case: joi@17 не несёт module-level .validate — if-ветка мертва (легаси).
-        const legacyJoi = joi as { validate?: (answers: unknown, schema: joi.Schema) => { error?: unknown } };
-        if (legacyJoi.validate) {
-            return !legacyJoi.validate(answers, schema).error;
-        } else {
-            return !schema.validate(answers).error;
-        }
-    };
+    (schema: z.ZodType) =>
+    (answer: unknown): boolean =>
+        schema.safeParse(answer).success;
 
 export default async (
     currentConfiguration: Partial<BuildOptions>,
@@ -36,7 +28,7 @@ export default async (
             name: 'projectName',
             message: 'Project Name',
             default: currentConfiguration.PROJECT_NAME || path.parse(process.cwd()).name,
-            validate: validate(joi.string().trim().optional())
+            validate: validate(z.string().trim().optional())
         });
         conf.set('projectName', responses.projectName);
     }
@@ -47,7 +39,7 @@ export default async (
             name: 'homepageName',
             message: 'HomePage Name',
             default: currentConfiguration.HOMEPAGE_NAME || defaultConfig.homepageName,
-            validate: validate(joi.string().trim().optional())
+            validate: validate(z.string().trim().optional())
         });
         conf.set('homepageName', responses.homepageName);
     }
@@ -59,7 +51,7 @@ export default async (
             message: 'Root documentation folder',
             default: currentConfiguration.ROOT_FOLDER || defaultConfig.rootFolder,
             validate: (answers) => {
-                const isValid = validate(joi.string().trim().optional())(answers);
+                const isValid = validate(z.string().trim().optional())(answers);
                 if (isValid) {
                     if (answers.indexOf('/') !== -1 || answers.indexOf('\\') !== -1) return false;
 
@@ -81,7 +73,7 @@ export default async (
             default: currentConfiguration.DIST_FOLDER || defaultConfig.distFolder,
             validate: (answers) => {
                 // легаси-дефект: обёртка не вызвана с answers → isValid всегда истинна. Бэклог.
-                const isValid: unknown = validate(joi.string().trim().optional());
+                const isValid: unknown = validate(z.string().trim().optional());
                 if (isValid) {
                     if (answers.indexOf('/') !== -1 || answers.indexOf('\\') !== -1) return false;
                     return true;
@@ -333,7 +325,7 @@ export default async (
             name: 'plantumlServerUrl',
             message: 'PlantUML Server URL',
             default: currentConfiguration.PLANTUML_SERVER_URL || defaultConfig.plantumlServerUrl,
-            validate: validate(joi.string().trim().optional())
+            validate: validate(z.string().trim().optional())
         });
         conf.set('plantumlServerUrl', responses.plantumlServerUrl);
     }
@@ -344,7 +336,7 @@ export default async (
             name: 'diagramFormat',
             message: 'Diagram Image Format',
             default: currentConfiguration.DIAGRAM_FORMAT || defaultConfig.diagramFormat,
-            validate: validate(joi.string().trim().optional())
+            validate: validate(z.string().trim().optional())
         });
         conf.set('diagramFormat', responses.diagramFormat);
     }
