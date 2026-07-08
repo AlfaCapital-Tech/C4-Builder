@@ -143,7 +143,9 @@ export default (
         });
     }
 
-    app.get('/*', express.static(distFolder));
+    // express 5 / path-to-regexp v8 запрещает голый '/*' как путь маршрута — раздаём
+    // статику через app.use (тот же эффект: fallthrough-обработчик всех GET).
+    app.use(express.static(distFolder));
 
     return new Promise((resolve, reject) => {
         const server = app.listen(port as number, '127.0.0.1', () => {

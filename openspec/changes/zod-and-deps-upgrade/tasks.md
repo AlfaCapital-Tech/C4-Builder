@@ -16,8 +16,8 @@
 
 ## 4. Апгрейд express 4 → 5
 
-- [ ] 4.1 Поднять `express` до 5 (+ `@types/express` в лад); в `cli/commands/site.ts` заменить `app.get('/*', express.static(dist))` на `app.use(express.static(dist))`; сверить остальные вызовы по гайду 4→5
-- [ ] 4.2 Ручная проверка `c4builder --site` (раздача статики, `-w` livereload, `--open`); `qs`/`body-parser`-уязвимости закрыты; tsc; коммит
+- [x] 4.1 Поднять `express` до 5 (+ `@types/express` в лад); в `cli/commands/site.ts` заменить `app.get('/*', express.static(dist))` на `app.use(express.static(dist))`; сверить остальные вызовы по гайду 4→5
+- [x] 4.2 Ручная проверка `c4builder --site` (раздача статики, `-w` livereload, `--open`); `qs`/`body-parser`-уязвимости закрыты; tsc; коммит
 
 ## 5. ESM-апгрейды и минорные
 
