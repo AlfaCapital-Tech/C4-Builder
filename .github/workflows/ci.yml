@@ -28,6 +28,25 @@ jobs:
 
       - run: npx biome ci .
 
+  # Аудит зависимостей — быстрая джоба вне node-матрицы: красный статус, если в
+  # рантайм-деревe появилась известная уязвимость уровня ≥ high (регресс не проходит
+  # молча). --omit=dev: гейт по поставляемым (рантайм) зависимостям, dev-инструменты
+  # (biome/vitest/tsc) не в счёт — их шум не относится к безопасности пакета.
+  audit:
+    name: audit
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - run: npm ci --ignore-scripts
+
+      - run: npm audit --audit-level=high --omit=dev
+
   test:
     name: test (node ${{ matrix.node }})
     # runner пинован как страховка: layout считает Java-движок Smetana + вендорный

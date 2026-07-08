@@ -26,5 +26,5 @@
 
 ## 6. CI аудит-гейт и финальная проверка
 
-- [ ] 6.1 Добавить джобу `audit` в `.github/workflows/ci.yml` (`npm audit --audit-level=high`); `npm audit` чистый локально
-- [ ] 6.2 Финальная проверка: `npm run build`, весь vitest (golden без регрессий), `biome ci`, `npm pack --dry-run`; коммит
+- [x] 6.1 Добавить джобу `audit` в `.github/workflows/ci.yml` (`npm audit --audit-level=high --omit=dev`); `npm audit` чистый локально (0 уязвимостей)
+- [x] 6.2 Финальная проверка: `npm run build`, весь vitest (golden без регрессий — 7 passed; 3 красных варианта средовые на Arch, идентичны baseline), `biome ci`, `npm pack --dry-run`; коммит
