@@ -6,8 +6,15 @@ import { createRequire } from 'node:module';
 import defaultDocsifyTemplate from './docsify.template.ts';
 import { encodeURIPath, readFile, writeFile, plantUmlServerUrl } from '../../util/utils.ts';
 import { VENDOR_DIR } from '../../util/paths.ts';
-// Фаза scan: тип дерева и его элементов + производные (имя папки, формат выхода диаграммы).
-import { getFolderName, diagramOutputFormat, type TreeItem, type Diagram } from '../scan/tree.ts';
+// Фаза scan: тип дерева и его элементов + производные (имя папки, формат выхода диаграммы)
+// и единый реестр расширений диаграмм (источник истины для regex ссылок ниже).
+import {
+    getFolderName,
+    diagramOutputFormat,
+    DIAGRAM_ENGINES,
+    type TreeItem,
+    type Diagram
+} from '../scan/tree.ts';
 // Фаза render: mime-тип формата и загрузка удалённо отрендеренной картинки (embed-ветка).
 import { getMime, httpGet } from '../render/diagrams.ts';
 import type { BuildOptions } from '../../config/options.ts';
@@ -40,6 +47,83 @@ const injectAfterFirstH1 = (md: string, block: string): string => {
     return m[1] + block + md.slice(m[1].length);
 };
 
+// Расширения диаграмм без точки, экранированные для regex. Источник истины — реестр
+// DIAGRAM_ENGINES из фазы scan (scan/tree.ts): добавление движка там автоматически
+// расширяет regex ссылок здесь, без синхронной правки. Экранируем на случай спецсимволов.
+const diagramExtAlternation = (): string =>
+    DIAGRAM_ENGINES.map((e) => e.ext.slice(1).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+
+// Ссылка на диаграмму в markdown: ![alt](path.puml|d2). Путь ленивый и не пересекает ')',
+// иначе две ссылки на одной строке склеились бы в один матч и не заменились. Свежий объект
+// на вызов — чтобы matchAll не тянул чужой lastIndex. Экспортируется для тестов согласованности
+// с реестром DIAGRAM_ENGINES.
+export const diagramRefRegex = (): RegExp =>
+    new RegExp(`!\\[.*?\\]\\(([^)]*?\\.(?:${diagramExtAlternation()}))\\)`, 'g');
+
+// Кеш base64 отрендеренных диаграмм на время ОДНОЙ сборки: один файл читают все три
+// генератора (per-page md / docsify / complete). clearDiagramCache() зовётся в начале build() —
+// иначе в watch-режиме (build() вызывается повторно) вернулись бы данные до правки файла.
+const diagramBase64Cache = new Map<string, string>();
+export const clearDiagramCache = (): void => diagramBase64Cache.clear();
+
+const readDiagramBase64 = async (absPath: string): Promise<string> => {
+    const cached = diagramBase64Cache.get(absPath);
+    if (cached !== undefined) return cached;
+    const b64 = ((await readFile(absPath)) as Buffer).toString('base64');
+    diagramBase64Cache.set(absPath, b64);
+    return b64;
+};
+
+// Единый рендер markdown одной диаграммы для всех трёх генераторов. В complete-документе
+// ссылки «скачать/перейти» префиксуются папкой элемента, а Download отбивается переводом
+// строки (историческая вёрстка). Признак — variant, а не пустота префикса: у диаграмм в
+// корневой папке префикс пуст, и complete всё равно обязан отбить ссылку.
+const buildDiagramMarkdown = async (
+    item: TreeItem,
+    diagram: Diagram,
+    options: BuildOptions,
+    variant: 'page' | 'complete'
+): Promise<string> => {
+    const isComplete = variant === 'complete';
+    const name = path.parse(diagram.dir).name;
+    const format = diagramOutputFormat(diagram, options);
+    // rawPath — сырой путь (для чтения файла и как основа ссылок), кодируем ровно один раз.
+    const rawPath = path.join(path.dirname(diagram.dir), `${name}.${format}`);
+    // Онлайн-рендер PlantUML отдаёт абсолютный URL сервера: его нельзя ни префиксовать
+    // папкой, ни повторно кодировать (encodeURI сломал бы схему https:// и '+' в base64).
+    const isRemoteUrl = !options.GENERATE_LOCAL_IMAGES && diagram.engine === 'plantuml';
+    const diagramUrl = isRemoteUrl
+        ? plantUmlServerUrl(
+              options.PLANTUML_SERVER_URL,
+              format,
+              diagram.content as string // рендер-контент диаграммы (Buffer читается как текст)
+          )
+        : encodeURIPath(rawPath);
+
+    // В complete-документе ссылка «скачать/перейти» префиксуется папкой элемента. Склеиваем
+    // СЫРЫЕ сегменты и кодируем один раз (иначе % из первого encodeURI превратился бы в %25).
+    // Абсолютный URL онлайн-рендера отдаём как есть — без папки и без повторного encodeURI.
+    const linkHref =
+        isComplete && !isRemoteUrl
+            ? encodeURIPath(path.join(item.dir.replace(options.ROOT_FOLDER, ''), rawPath))
+            : diagramUrl;
+
+    if (options.EMBED_DIAGRAM) {
+        const imgContent = options.GENERATE_LOCAL_IMAGES
+            ? await readDiagramBase64(
+                  path.join(options.DIST_FOLDER, item.dir.replace(options.ROOT_FOLDER, ''), rawPath)
+              )
+            : await httpGet(diagramUrl);
+        const diagramImage = `\n![${name}](data:${getMime(format)};base64,${imgContent})\n`;
+        const diagramLink = `${isComplete ? '\n' : ''}[Download ${name} diagram](${linkHref} ':ignore')`;
+        return diagramImage + diagramLink;
+    }
+
+    const diagramImage = `![diagram](${diagramUrl})`;
+    if (!options.INCLUDE_LINK_TO_DIAGRAM) return diagramImage;
+    return `[Go to ${name} diagram](${linkHref})`;
+};
+
 const compileDocument = async (
     md: string,
     item: TreeItem,
@@ -50,24 +134,25 @@ const compileDocument = async (
     const alreadyIncluded: string[] = [];
     const texts: string[] = [];
     const diagrams: string[] = [];
-    const regex = /(?:!\[.*?\]\()(.*\.(?:puml|d2))(\))/g;
+    const regex = diagramRefRegex();
 
     for (const mdFile of item.mdFiles) {
-        let content = mdFile.toString();
+        const content = mdFile.toString();
 
-        let diagramRef: RegExpExecArray | null;
-        // biome-ignore lint/suspicious/noAssignInExpressions: идиома regex.exec() в условии while
-        while ((diagramRef = regex.exec(content)) !== null) {
-            if (diagramRef?.[1]) {
-                const ref = diagramRef[1]; // const → сужение держится в замыкании .find
-                const diagram = item.diagrams.find((x) => x.dir === ref);
-                if (diagram) {
-                    alreadyIncluded.push(ref);
-                    content = content.replace(diagramRef[0], await getDiagram(item, diagram, options));
-                }
-            }
+        // Один проход matchAll + сборка из срезов: каждая ссылка заменяется ровно один раз.
+        // (Прежний regex.exec + переприсваивание content пропускал ссылки при укорачивающей замене.)
+        let result = '';
+        let lastIndex = 0;
+        for (const m of content.matchAll(regex)) {
+            const ref = m[1];
+            const diagram = item.diagrams.find((x) => x.dir === ref);
+            if (!diagram) continue; // ссылка без соответствующей диаграммы — оставляем сырой markdown
+            alreadyIncluded.push(ref);
+            result += content.slice(lastIndex, m.index) + (await getDiagram(item, diagram, options));
+            lastIndex = m.index + m[0].length;
         }
-        texts.push(content);
+        result += content.slice(lastIndex);
+        texts.push(result);
     }
     for (const diagram of item.diagrams) {
         if (alreadyIncluded.find((x) => x === diagram.dir)) {
@@ -119,54 +204,10 @@ export const generateCompleteMD = async (tree: TreeItem[], options: BuildOptions
         }
 
         //concatenate markdown files
-        MD = await compileDocument(MD, item, options, async (item, diagram, options) => {
-            let diagramUrl = encodeURIPath(
-                path.join(
-                    path.dirname(diagram.dir),
-                    `${path.parse(diagram.dir).name}.${diagramOutputFormat(diagram, options)}`
-                )
-            );
-            if (!options.GENERATE_LOCAL_IMAGES && diagram.engine === 'plantuml')
-                diagramUrl = plantUmlServerUrl(
-                    options.PLANTUML_SERVER_URL,
-                    diagramOutputFormat(diagram, options),
-                    diagram.content as string // рендер-контент диаграммы (Buffer читается как текст)
-                );
-
-            if (options.EMBED_DIAGRAM) {
-                let imgContent = '';
-                if (options.GENERATE_LOCAL_IMAGES)
-                    imgContent = (
-                        (await readFile(
-                            path.join(
-                                options.DIST_FOLDER,
-                                item.dir.replace(options.ROOT_FOLDER, ''),
-                                diagramUrl
-                            )
-                        )) as Buffer
-                    ).toString('base64');
-                else imgContent = await httpGet(diagramUrl);
-
-                const diagramImage = `\n![${path.parse(diagram.dir).name}](data:${getMime(
-                    diagramOutputFormat(diagram, options)
-                )};base64,${imgContent})\n`;
-
-                const diagramLink = `\n[Download ${path.parse(diagram.dir).name} diagram](${encodeURIPath(
-                    path.join(item.dir.replace(options.ROOT_FOLDER, ''), diagramUrl)
-                )} ':ignore')`;
-                return diagramImage + diagramLink;
-            } else {
-                const diagramImage = `![diagram](${diagramUrl})`;
-                const diagramLink = `[Go to ${path.parse(diagram.dir).name} diagram](${encodeURIPath(
-                    path.join(item.dir.replace(options.ROOT_FOLDER, ''), diagramUrl)
-                )})`;
-                if (!options.INCLUDE_LINK_TO_DIAGRAM)
-                    //img
-                    return diagramImage;
-                //link
-                else return diagramLink;
-            }
-        });
+        MD = await compileDocument(MD, item, options, (item, diagram, options) =>
+            // complete: ссылки на диаграммы префиксуются папкой элемента.
+            buildDiagramMarkdown(item, diagram, options, 'complete')
+        );
     }
 
     //write file to disk
@@ -251,52 +292,9 @@ export const generateMD = async (
         if (!ownH1) MD += chrome;
 
         //concatenate markdown files
-        MD = await compileDocument(MD, item, options, async (item, diagram, options) => {
-            let diagramUrl = encodeURIPath(
-                path.join(
-                    path.dirname(diagram.dir),
-                    `${path.parse(diagram.dir).name}.${diagramOutputFormat(diagram, options)}`
-                )
-            );
-            if (!options.GENERATE_LOCAL_IMAGES && diagram.engine === 'plantuml')
-                diagramUrl = plantUmlServerUrl(
-                    options.PLANTUML_SERVER_URL,
-                    diagramOutputFormat(diagram, options),
-                    diagram.content as string // рендер-контент диаграммы (Buffer читается как текст)
-                );
-
-            if (options.EMBED_DIAGRAM) {
-                let imgContent = '';
-                if (options.GENERATE_LOCAL_IMAGES)
-                    imgContent = (
-                        (await readFile(
-                            path.join(
-                                options.DIST_FOLDER,
-                                item.dir.replace(options.ROOT_FOLDER, ''),
-                                diagramUrl
-                            )
-                        )) as Buffer
-                    ).toString('base64');
-                else imgContent = await httpGet(diagramUrl);
-
-                const diagramImage = `\n![${path.parse(diagram.dir).name}](data:${getMime(
-                    diagramOutputFormat(diagram, options)
-                )};base64,${imgContent})\n`;
-
-                const diagramLink = `[Download ${
-                    path.parse(diagram.dir).name
-                } diagram](${diagramUrl} ':ignore')`;
-                return diagramImage + diagramLink;
-            } else {
-                const diagramImage = `![diagram](${diagramUrl})`;
-                const diagramLink = `[Go to ${path.parse(diagram.dir).name} diagram](${diagramUrl})`;
-                if (!options.INCLUDE_LINK_TO_DIAGRAM)
-                    //img
-                    return diagramImage;
-                //link
-                else return diagramLink;
-            }
-        });
+        MD = await compileDocument(MD, item, options, (item, diagram, options) =>
+            buildDiagramMarkdown(item, diagram, options, 'page')
+        );
 
         // Если был свой h1 — вставляем chrome (breadcrumbs/TOC/nav) после него.
         if (ownH1) MD = injectAfterFirstH1(MD, chrome);
@@ -351,53 +349,9 @@ export const generateWebMD = async (tree: TreeItem[], options: BuildOptions): Pr
         let MD = hasOwnH1(item) ? '' : `# ${name}`;
 
         //concatenate markdown files
-        MD = await compileDocument(MD, item, options, async (item, diagram, options) => {
-            let diagramUrl = encodeURIPath(
-                path.join(
-                    path.dirname(diagram.dir),
-                    `${path.parse(diagram.dir).name}.${diagramOutputFormat(diagram, options)}`
-                )
-            );
-            if (!options.GENERATE_LOCAL_IMAGES && diagram.engine === 'plantuml')
-                diagramUrl = plantUmlServerUrl(
-                    options.PLANTUML_SERVER_URL,
-                    diagramOutputFormat(diagram, options),
-                    diagram.content as string // рендер-контент диаграммы (Buffer читается как текст)
-                );
-
-            if (options.EMBED_DIAGRAM) {
-                let imgContent = '';
-                if (options.GENERATE_LOCAL_IMAGES)
-                    imgContent = (
-                        (await readFile(
-                            path.join(
-                                options.DIST_FOLDER,
-                                item.dir.replace(options.ROOT_FOLDER, ''),
-                                diagramUrl
-                            )
-                        )) as Buffer
-                    ).toString('base64');
-                else imgContent = await httpGet(diagramUrl);
-
-                const diagramImage = `\n![${path.parse(diagram.dir).name}](data:${getMime(
-                    diagramOutputFormat(diagram, options)
-                )};base64,${imgContent})\n`;
-
-                const diagramLink = `[Download ${
-                    path.parse(diagram.dir).name
-                } diagram](${diagramUrl} ':ignore')`;
-
-                return diagramImage + diagramLink;
-            } else {
-                const diagramImage = `![diagram](${diagramUrl})`;
-                const diagramLink = `[Go to ${path.parse(diagram.dir).name} diagram](${diagramUrl})`;
-                if (!options.INCLUDE_LINK_TO_DIAGRAM)
-                    //img
-                    return diagramImage;
-                //link
-                else return diagramLink;
-            }
-        });
+        MD = await compileDocument(MD, item, options, (item, diagram, options) =>
+            buildDiagramMarkdown(item, diagram, options, 'page')
+        );
 
         MD = MD.trimStart();
 

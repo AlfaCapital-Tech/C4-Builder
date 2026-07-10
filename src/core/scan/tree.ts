@@ -25,6 +25,22 @@ export interface TreeItem {
     descendants: string[];
 }
 
+// Единый реестр движков диаграмм: расширение (с точкой) → рендерер. ЕДИНСТВЕННЫЙ
+// источник истины о том, какие файлы считаются диаграммами. Из него строятся и фильтр
+// scan (ниже), и regex ссылок в compose/markdown.ts. Добавление движка = одна строка
+// здесь; обе фазы подхватят его без синхронной правки.
+export const DIAGRAM_ENGINES = [
+    { ext: '.puml', engine: 'plantuml' },
+    { ext: '.d2', engine: 'd2' }
+] as const satisfies ReadonlyArray<{ ext: string; engine: string }>;
+
+export type DiagramExt = (typeof DIAGRAM_ENGINES)[number]['ext'];
+export type DiagramEngine = (typeof DIAGRAM_ENGINES)[number]['engine'];
+
+// Расширение (lowercase, с точкой) → движок. undefined ⇒ файл не диаграмма.
+export const engineForExt = (ext: string): DiagramEngine | undefined =>
+    DIAGRAM_ENGINES.find((e) => e.ext === ext)?.engine;
+
 export const getFolderName = (dir: string, root: string, homepage: string): string => {
     return dir === root ? homepage : path.parse(dir).base;
 };
@@ -81,12 +97,12 @@ export const generateTree = async (dir: string, options: BuildOptions): Promise<
             const fileContents = await readFile(path.join(dir, mdFile));
             item.mdFiles.push(fileContents);
         }
-        // Диаграммы обоих бэкендов: .puml → PlantUML, .d2 → D2. Поле dir — имя файла
+        // Диаграммы: расширение → движок берём из DIAGRAM_ENGINES. Поле dir — имя файла
         // (историческое), engine выбирает рендерер, isDitaa — только для PlantUML.
-        const diagramFiles = files.filter((x) => ['.puml', '.d2'].includes(path.extname(x).toLowerCase()));
-        for (const diagramFile of diagramFiles) {
+        for (const diagramFile of files) {
             const ext = path.extname(diagramFile).toLowerCase();
-            const engine = ext === '.d2' ? 'd2' : 'plantuml';
+            const engine = engineForExt(ext);
+            if (!engine) continue; // не диаграмма — пропускаем
             const fileContents = await readFile(path.join(dir, diagramFile));
             const isDitaa =
                 engine === 'plantuml' &&
@@ -98,11 +114,11 @@ export const generateTree = async (dir: string, options: BuildOptions): Promise<
         //copy all other files (.d2 исходники, как и .puml, не копируем — они рендерятся)
         const otherFiles = options.EXCLUDE_OTHER_FILES
             ? []
-            : files.filter(
-                  (x) =>
-                      x.charAt(0) === '_' ||
-                      ['.md', '.puml', '.d2'].indexOf(path.extname(x).toLowerCase()) === -1
-              );
+            : files.filter((x) => {
+                  const ext = path.extname(x).toLowerCase();
+                  // копируем всё, кроме .md и исходников диаграмм (их рендерим); _-файлы всегда.
+                  return x.charAt(0) === '_' || (ext !== '.md' && engineForExt(ext) === undefined);
+              });
 
         for (const otherFile of otherFiles) {
             if (fs.statSync(path.join(dir, otherFile)).isDirectory()) continue;
