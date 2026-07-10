@@ -10,6 +10,8 @@
   "files": [
     "dist/",
     "template/",
+    "!template/docs",
+    "!template/.c4builder",
     "vendor/",
     "README.MD",
     "license"

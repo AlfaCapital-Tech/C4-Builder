@@ -75,18 +75,29 @@ jobs:
       # Ошибка tsc роняет job (красный статус PR наравне с линтом/тестами).
       - run: npm run build
 
-      # Golden-рендер идёт на пиновом managed-JRE (Temurin, см. jre.js TEMURIN_FEATURE),
+      # Мажор managed-JRE — из единственного источника истины (jre.ts TEMURIN_FEATURE),
+      # чтобы суффикс ключа кеша не рассинхронился при бампе версии вручную.
+      - name: Определить мажор managed-JRE
+        id: jre
+        run: echo "feature=$(grep -oP 'TEMURIN_FEATURE\s*=\s*\K\d+' src/core/render/jre.ts)" >> "$GITHUB_OUTPUT"
+
+      # Golden-рендер идёт на пиновом managed-JRE (Temurin, см. jre.ts TEMURIN_FEATURE),
       # а не на setup-java: тест подставляет его JAVA_HOME. Кешируем между прогонами,
-      # ключ — от os/arch (feature=21 зашит в jre.js; при бампе обновить суффикс ключа).
+      # ключ — от мажора JRE + os/arch.
       - name: Cache managed JRE
+        id: jre-cache
         uses: actions/cache@v4
         with:
           path: ~/.cache/c4builder/jre
-          key: c4builder-jre-temurin21-${{ runner.os }}-${{ runner.arch }}
+          key: c4builder-jre-temurin${{ steps.jre.outputs.feature }}-${{ runner.os }}-${{ runner.arch }}
 
-      # Прогрев кеша до тестов: сеть под контролем шага, таймауты сборок не тратятся
-      # на скачивание. --force минует системную java (это и есть managed-JRE).
-      - run: node dist/index.js jre install --force
+      # Прогрев только при промахе кеша: на попадании переиспользуем восстановленный
+      # каталог. При промахе --force качает managed-JRE (минуя системную java от
+      # setup-java), чтобы кеш наполнился именно им; на попадании --force снёс бы
+      # свежевосстановленный каталог и качал ~50 МБ заново каждый прогон.
+      - name: Прогрев managed-JRE (только при промахе кеша)
+        if: steps.jre-cache.outputs.cache-hit != 'true'
+        run: node dist/index.js jre install --force
 
       - run: npm test
 
