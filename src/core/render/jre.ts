@@ -133,30 +133,62 @@ const findJavaUnder = (root: string): string | null => {
     return null;
 };
 
-// (2) кеш: валиден только при наличии исполняемого bin/java.
+// Маркер завершённости распаковки: кладётся ПОСЛЕДНИМ в staging и едет в кеш вместе
+// с ним. cachedJava доверяет кешу только при его наличии — иначе прерванная (Ctrl+C)
+// или гоночная распаковка (bin/java уже есть, lib/modules ещё нет) навсегда выдавалась
+// бы за валидный JRE. Проверка дешёвая: существование файла, без запуска JVM.
+const MARKER_NAME = '.c4builder-jre-ready.json';
+const markerPath = (root: string): string => path.join(root, MARKER_NAME);
+
+// (2) кеш: валиден только при наличии маркера завершённости И исполняемого bin/java.
 const cachedJava = (): JreResolution | null => {
-    const bin = findJavaUnder(jreCacheDir());
+    const root = jreCacheDir();
+    if (!fs.existsSync(markerPath(root))) return null;
+    const bin = findJavaUnder(root);
     return bin ? { path: bin, source: 'cache' } : null;
 };
 
 // --- HTTP с обработкой редиректов (assets-эндпоинт может 307-редиректить на github) ---
-const httpGet = (url: string): Promise<IncomingMessage> =>
+// Лимит редиректов гасит петли (A→B→A), таймауты — зависшие сокеты: молча повисший
+// коннект/приём не должен подвешивать `jre install`/сборку навсегда. Значения можно
+// переопределить env-переменными (в т.ч. для тестов).
+const posInt = (v: string | undefined, dflt: number): number => {
+    const n = Number(v);
+    return Number.isFinite(n) && n > 0 ? n : dflt;
+};
+const CONNECT_TIMEOUT_MS = posInt(process.env.C4BUILDER_JRE_CONNECT_TIMEOUT_MS, 30_000);
+const IDLE_TIMEOUT_MS = posInt(process.env.C4BUILDER_JRE_IDLE_TIMEOUT_MS, 60_000);
+const MAX_REDIRECTS = 5;
+
+const httpGet = (url: string, redirectsLeft = MAX_REDIRECTS): Promise<IncomingMessage> =>
     new Promise((resolve, reject) => {
-        https
-            .get(url, { headers: { 'User-Agent': 'c4builder-jre-resolver' } }, (res) => {
+        const req = https.get(
+            url,
+            { headers: { 'User-Agent': 'c4builder-jre-resolver' }, timeout: CONNECT_TIMEOUT_MS },
+            (res) => {
                 const statusCode = res.statusCode as number; // ответ всегда со статусом
                 const { headers } = res;
                 if (statusCode >= 300 && statusCode < 400 && headers.location) {
                     res.resume();
-                    return resolve(httpGet(new URL(headers.location as string, url).toString()));
+                    if (redirectsLeft <= 0) {
+                        return reject(new Error(`Слишком много редиректов (>${MAX_REDIRECTS}) для ${url}`));
+                    }
+                    const next = new URL(headers.location as string, url).toString();
+                    return resolve(httpGet(next, redirectsLeft - 1));
                 }
                 if (statusCode !== 200) {
                     res.resume();
                     return reject(new Error(`HTTP ${statusCode} для ${url}`));
                 }
+                // Коннект установлен, заголовки получены → с таймаута коннекта переключаемся
+                // на idle-таймаут приёма (архив ~50 МБ тянется дольше): молчащий посреди
+                // приёма сокет уронит таймаут, а не подвесит сборку.
+                req.setTimeout(IDLE_TIMEOUT_MS);
                 resolve(res);
-            })
-            .on('error', reject);
+            }
+        );
+        req.on('timeout', () => req.destroy(new Error(`Таймаут сети (${url})`)));
+        req.on('error', reject);
     });
 
 const httpGetJson = async (url: string): Promise<unknown> => {
@@ -166,7 +198,9 @@ const httpGetJson = async (url: string): Promise<unknown> => {
     return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 };
 
-// Adoptium assets API отдаёт ссылку и sha256 одним запросом.
+// Adoptium assets API отдаёт ссылку и sha256 одним запросом. ВАЖНО: link и checksum
+// приходят из ОДНОГО ответа API — sha256 защищает лишь от повреждения при передаче
+// (усечённый/битый архив), но НЕ от компрометации самого API/ответа.
 const fetchAssetMeta = async (): Promise<{
     link: string;
     sha256: string;
@@ -184,6 +218,14 @@ const fetchAssetMeta = async (): Promise<{
         );
     }
     const pkg = asset.binary.package;
+    if (!pkg.link) throw new Error('Adoptium не вернул ссылку на архив JRE');
+    // Отсутствие checksum — ошибка, а не молчаливый пропуск проверки целостности.
+    if (!pkg.checksum) {
+        throw new Error(
+            `Adoptium не вернул sha256 для ${pkg.name || 'архива JRE'}: ` +
+                'отказ принимать архив без проверки целостности'
+        );
+    }
     return { link: pkg.link, sha256: pkg.checksum, name: pkg.name, release: asset.release_name };
 };
 
@@ -198,8 +240,9 @@ const downloadAndVerify = async (link: string, expectedSha: string, destFile: st
         out.on('finish', resolve);
         res.pipe(out);
     });
-    const actual = hash.digest('hex');
-    if (expectedSha && actual.toLowerCase() !== expectedSha.toLowerCase()) {
+    const actual = hash.digest('hex').toLowerCase();
+    if (!expectedSha) throw new Error('Нет ожидаемого sha256 — проверка целостности архива невозможна');
+    if (actual !== expectedSha.toLowerCase()) {
         throw new Error(`sha256 архива не совпал: ожидалось ${expectedSha}, получено ${actual}`);
     }
 };
@@ -256,23 +299,37 @@ const extractZip = (archive: string, destDir: string): Promise<void> =>
 const extractArchive = (archive: string, destDir: string, isZip: boolean): Promise<void> =>
     isZip ? extractZip(archive, destDir) : require('tar').x({ file: archive, cwd: destDir });
 
-// (3) скачивание: assets API → sha256 (до распаковки) → распаковка в кеш.
-// Битую/старую установку затираем целиком перед распаковкой.
+// (3) скачивание: assets API → sha256 (до распаковки) → распаковка в staging →
+// атомарная замена кеша. Распаковываем НЕ в финальный каталог, а в свой staging
+// (<dir>.tmp-<pid>, уникальный на процесс → параллельные сборки не топчут друг друга),
+// кладём маркер и лишь затем атомарным rename заменяем кеш. Прерывание (Ctrl+C) или
+// гонка не оставят финальный каталог полураспакованным.
 const downloadJre = async ({ log }: { log?: (msg: string) => void } = {}): Promise<JreResolution> => {
     const meta = await fetchAssetMeta();
     const dir = jreCacheDir();
     const isZip = adoptiumOs() === 'windows';
     const parent = path.dirname(dir);
     fs.mkdirSync(parent, { recursive: true });
-    const tmp = path.join(parent, `.download-${process.pid}${isZip ? '.zip' : '.tar.gz'}`);
+    const tmpArchive = path.join(parent, `.download-${process.pid}${isZip ? '.zip' : '.tar.gz'}`);
+    const stageDir = `${dir}.tmp-${process.pid}`;
     try {
         if (log) log(`Скачивание Temurin ${TEMURIN_FEATURE} JRE (${meta.release || meta.name})…`);
-        await downloadAndVerify(meta.link, meta.sha256, tmp);
-        fs.rmSync(dir, { recursive: true, force: true });
-        fs.mkdirSync(dir, { recursive: true });
-        await extractArchive(tmp, dir, isZip);
+        await downloadAndVerify(meta.link, meta.sha256, tmpArchive);
+        fs.rmSync(stageDir, { recursive: true, force: true });
+        fs.mkdirSync(stageDir, { recursive: true });
+        await extractArchive(tmpArchive, stageDir, isZip);
+        if (!findJavaUnder(stageDir)) {
+            throw new Error('JRE распакован, но исполняемый bin/java не найден');
+        }
+        fs.writeFileSync(
+            markerPath(stageDir),
+            JSON.stringify({ feature: TEMURIN_FEATURE, release: meta.release, sha256: meta.sha256 })
+        );
+        fs.rmSync(dir, { recursive: true, force: true }); // окно rm→rename минимально, rename атомарен
+        fs.renameSync(stageDir, dir);
     } finally {
-        fs.rmSync(tmp, { force: true });
+        fs.rmSync(tmpArchive, { force: true });
+        fs.rmSync(stageDir, { recursive: true, force: true }); // подчистить staging при ошибке
     }
     const bin = findJavaUnder(dir);
     if (!bin) throw new Error('JRE распакован, но исполняемый bin/java не найден');
@@ -290,6 +347,12 @@ const failureMessage = (cause?: { message?: string }): string =>
         .filter(Boolean)
         .join('\n');
 
+// Мемо результата резолва на процесс: watch-режим не платит скан PATH + spawnSync
+// `java -version` (~50-300 мс) на каждый ребилд. Кешируем сам промис (как d2Promise
+// в d2renderer.ts). force обходит кеш (для `jre install --force`), но успешный резолв —
+// в т.ч. после force — его обновляет; провал не кешируем.
+let resolvePromise: Promise<JreResolution> | null = null;
+
 // Резолв по цепочке. { force } пропускает систему и кеш (форс-скачивание для
 // `jre install --force`). Возвращает { path, source }.
 const resolveJava = async ({
@@ -299,27 +362,29 @@ const resolveJava = async ({
     force?: boolean;
     log?: (msg: string) => void;
 } = {}): Promise<JreResolution> => {
-    if (!force) {
-        const sys = detectSystemJava();
-        if (sys) return sys;
-        const cached = cachedJava();
-        if (cached) return cached;
-    }
+    if (!force && resolvePromise) return resolvePromise;
+    const run = (async (): Promise<JreResolution> => {
+        if (!force) {
+            const sys = detectSystemJava();
+            if (sys) return sys;
+            const cached = cachedJava();
+            if (cached) return cached;
+        }
+        try {
+            return await downloadJre({ log });
+        } catch (e) {
+            throw new Error(failureMessage(e as Error));
+        }
+    })();
+    resolvePromise = run;
     try {
-        return await downloadJre({ log });
+        return await run;
     } catch (e) {
-        throw new Error(failureMessage(e as Error));
+        if (resolvePromise === run) resolvePromise = null; // провал не кешируем — даём повторить
+        throw e;
     }
 };
 
-export {
-    resolveJava,
-    detectSystemJava,
-    cachedJava,
-    jreCacheDir,
-    adoptiumOs,
-    adoptiumArch,
-    parseMajor,
-    MAJOR_MIN,
-    TEMURIN_FEATURE
-};
+// Публичный API модуля. jreCacheDir/adoptiumOs/adoptiumArch/parseMajor/MAJOR_MIN —
+// module-private (снаружи не используются; CI хардкодит путь кеша и суффикс ключа).
+export { resolveJava, detectSystemJava, cachedJava, TEMURIN_FEATURE };

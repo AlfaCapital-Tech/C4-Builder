@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
-import path from 'node:path';
-import { VENDOR_DIR } from '../../util/paths.ts';
+// Шрифт-пин общий с java-direct рендером (одна точка правды, см. fonts.ts).
+import { FONTS_DIR, DEFAULT_FONT_NAME } from './fonts.ts';
 
 // @resvg/resvg-js — CJS-нативный аддон, грузим синхронно через createRequire
 // (ленивая загрузка ниже сохраняет прежнюю семантику: пакет тянется при первой
@@ -11,8 +11,6 @@ const require = createRequire(import.meta.url);
 // детерминированная стадия PNG-выхода поверх SVG обоих движков (PlantUML и D2),
 // см. change resvg-png. Вендорный шрифт (тот же, что у java-direct) даёт кириллицу
 // и повторяемые метрики независимо от машины; системные шрифты отключены.
-const FONTS_DIR = path.join(VENDOR_DIR, 'fonts');
-const DEFAULT_FONT_NAME = 'Liberation Sans';
 
 // Ленивая загрузка (как у D2): resvg тянется только при первой растеризации —
 // SVG-проекты и «только ditaa» его не грузят. Отсутствие пакета — понятная ошибка.

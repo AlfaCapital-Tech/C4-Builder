@@ -51,6 +51,7 @@ const getD2 = (): Promise<D2Engine> => {
 // Явный teardown: webworker иначе держит процесс и CLI не завершается. Воркер
 // завершаем в finally, чтобы освободить его даже если init (inst.ready) упал.
 const teardownD2 = async (): Promise<void> => {
+    filesMemo = null; // граф импортов кешируется на одну сборку — сбрасываем на выходе
     if (!d2Promise) return;
     const pending = d2Promise;
     d2Promise = null;
@@ -80,8 +81,14 @@ const resolveImport = (ref: string, fromDir: string): string | null => {
 };
 
 // Собрать граф импортов от входного .d2 рекурсивно: { абсолютный путь -> контент }.
-// Лидирующий `@` не после word-символа отсекает почтовые адреса и т.п.
-const IMPORT_RE = /(?<![\w])@([\w./-]+)/g;
+// Лидирующий `@` не после word-символа отсекает почтовые адреса (`foo@bar`).
+// Путь импорта поддерживает пробелы и юникод (папки `4 D2 Example`, `3 Локализация`),
+// а также закавыченную форму `@"путь с пробелом"` — движок @terrastruct/d2
+// принимает все три (проверено эмпирически). Незакавыченный путь читается до
+// терминатора statement (`#` комментарий, `;`, `}`, перевод строки) минус хвостовой
+// пробел — иначе инлайновый spread `x: { ...@lib }` захватил бы `lib }`. Флаг `u` —
+// корректный юникод. Хвостовые `.key`-сегменты частичного импорта отрезает resolveImport.
+const IMPORT_RE = /(?<!\w)@(?:"([^"\n]+)"|([^\s"#;}\n][^#;}\n]*?)\s*(?=[#;}\n]|$))/gu;
 
 const collectFiles = (entryAbs: string, acc: Map<string, string> = new Map()): Map<string, string> => {
     const abs = path.resolve(entryAbs);
@@ -97,10 +104,28 @@ const collectFiles = (entryAbs: string, acc: Map<string, string> = new Map()): M
     // между вложенными вызовами — иначе рекурсия затирала бы позицию глобального
     // regex и вложенные (2-го уровня) импорты молча терялись бы.
     for (const m of content.matchAll(IMPORT_RE)) {
-        const resolved = resolveImport(m[1], path.dirname(abs));
+        const ref = m[1] ?? m[2]; // закавыченный | незакавыченный путь
+        if (!ref) continue;
+        const resolved = resolveImport(ref, path.dirname(abs));
         if (resolved) collectFiles(resolved, acc);
     }
     return acc;
+};
+
+// Мемоизация графа на время одной сборки: foldD2Imports (чексумма) и
+// buildCompileRequest (рендер) иначе читают один и тот же граф с диска дважды.
+// Ключ — абсолютный путь входного файла. Сбрасывается в teardownD2() (конец сборки),
+// иначе watch-режим отдавал бы устаревшее содержимое. Возвращаемую Map потребители
+// НЕ мутируют (foldD2Imports исключает входной файл фильтром, не delete).
+let filesMemo: Map<string, Map<string, string>> | null = null;
+const collectFilesCached = (entryAbs: string): Map<string, string> => {
+    const abs = path.resolve(entryAbs);
+    if (!filesMemo) filesMemo = new Map();
+    const hit = filesMemo.get(abs);
+    if (hit) return hit;
+    const built = collectFiles(abs);
+    filesMemo.set(abs, built);
+    return built;
 };
 
 // Общий корень набора путей — чтобы ключи виртуальной fs были относительны ему и
@@ -119,7 +144,7 @@ const commonAncestor = (files: string[]): string => {
 
 // Подготовить аргументы compile(): виртуальная fs (все файлы графа) + inputPath.
 const buildCompileRequest = (entryAbs: string): { fs: Record<string, string>; inputPath: string } => {
-    const files = collectFiles(entryAbs);
+    const files = collectFilesCached(entryAbs);
     const root = commonAncestor([...files.keys()]);
     const toKey = (abs: string): string => path.relative(root, abs).split(path.sep).join('/');
     const fsMap: Record<string, string> = {};
@@ -155,11 +180,14 @@ const renderD2 = async (
 // хэшируется отдельно). Правка импортируемого .d2 меняет чексумму зависимой
 // диаграммы — аналог foldIncludes для PlantUML.
 const foldD2Imports = (entryAbs: string): string => {
-    const files = collectFiles(entryAbs);
-    files.delete(path.resolve(entryAbs));
+    const abs = path.resolve(entryAbs);
+    const files = collectFilesCached(entryAbs);
+    // Мемоизированную Map не мутируем (её же использует buildCompileRequest) —
+    // входной файл исключаем фильтром, а не delete.
     return [...files.entries()]
+        .filter(([p]) => p !== abs)
         .sort((a, b) => a[0].localeCompare(b[0]))
-        .map(([abs, content]) => ` ${abs} ${content}`)
+        .map(([p, content]) => ` ${p} ${content}`)
         .join('');
 };
 
