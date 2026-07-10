@@ -69,26 +69,56 @@ export const createFixture = (variant) => {
     return dir;
 };
 
+// Таймаут одной сборки. Согласован с hookTimeout в vitest.config.mjs: тот покрывает
+// сумму (ensureManagedJre + 3×BUILD_TIMEOUT_MS), чтобы внятная ошибка ниже срабатывала
+// раньше, чем невнятный «hook timed out» от vitest.
+export const BUILD_TIMEOUT_MS = 240_000;
+
 export const runBuild = (dir) => {
     if (!managedJavaHome) throw new Error('ensureManagedJre() не вызван до runBuild — JAVA_HOME не пинован');
     const res = spawnSync(process.execPath, [path.join(REPO_ROOT, 'dist', 'index.js')], {
         cwd: dir,
         encoding: 'utf8',
-        timeout: 240_000,
+        timeout: BUILD_TIMEOUT_MS,
         env: { ...process.env, JAVA_HOME: managedJavaHome }
     });
+    // При таймауте spawnSync возвращает status=null и заполняет res.error — иначе
+    // сообщение «exit=null» скрыло бы факт зависания JVM-рендера.
+    if (res.error?.code === 'ETIMEDOUT') {
+        throw new Error(
+            `сборка c4builder не уложилась в таймаут ${BUILD_TIMEOUT_MS} мс (JVM-рендер завис?)\nstdout:\n${res.stdout}\nstderr:\n${res.stderr}`
+        );
+    }
     if (res.status !== 0) {
         throw new Error(
-            `сборка c4builder упала (exit=${res.status})\nstdout:\n${res.stdout}\nstderr:\n${res.stderr}`
+            `сборка c4builder упала (exit=${res.status}${res.signal ? `, signal=${res.signal}` : ''})\nstdout:\n${res.stdout}\nstderr:\n${res.stderr}`
         );
     }
 };
 
-// Нормализация недетерминизма: XML-комментарии в SVG (версия PlantUML и пр.), CRLF -> LF
+// Шрифтозависимые выходы: ditaa рисует текст собственным AWT-движком, который берёт шрифт
+// мимо -SdefaultFontName, мимо вендорного sun.java2d.fontpath и мимо fontconfig, поэтому
+// растр отличается между дистрибутивами (Ubuntu-CI vs Arch). Пин -SCircledCharacterFontName
+// снял эту зависимость у бэджей классов, но на ditaa он не распространяется. Такие файлы
+// сверяем на валидность PNG, а не побайтно, иначе golden красный вне CI.
+const isFontSensitive = (rel) => path.basename(rel) === 'ditaa.png';
+const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const fontSensitiveSha = (buf) =>
+    buf.subarray(0, 8).equals(PNG_MAGIC) && buf.length > 0
+        ? 'font-sensitive:png-ok'
+        : 'font-sensitive:BROKEN';
+
+// Нормализация недетерминизма: XML-комментарии в SVG (версия PlantUML и пр.), CRLF -> LF,
+// а также base64 шрифтозависимой ditaa-картинки, встроенной в md (режим embedDiagram).
 const normalize = (rel, buf) => {
     if (!isText(rel)) return buf;
     let text = buf.toString('utf8').replace(/\r\n/g, '\n');
     if (rel.endsWith('.svg')) text = text.replace(/<!--[\s\S]*?-->/g, '');
+    if (rel.endsWith('.md'))
+        text = text.replace(
+            /(!\[ditaa\]\(data:image\/[\w+.-]+;base64,)[A-Za-z0-9+/=]+/g,
+            '$1<FONT-SENSITIVE>'
+        );
     return Buffer.from(text, 'utf8');
 };
 
@@ -110,7 +140,9 @@ export const collectNormalizedTree = (root) => {
         const buf = normalize(rel, fs.readFileSync(path.join(root, rel)));
         tree[rel] = {
             buf,
-            sha: crypto.createHash('sha256').update(buf).digest('hex'),
+            sha: isFontSensitive(rel)
+                ? fontSensitiveSha(buf)
+                : crypto.createHash('sha256').update(buf).digest('hex'),
             get text() {
                 return buf.toString('utf8');
             }

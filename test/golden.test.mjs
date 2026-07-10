@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import {
     VARIANTS,
@@ -18,6 +18,10 @@ import {
 } from './helpers.mjs';
 
 const UPDATE = process.env.UPDATE_GOLDEN === '1';
+// Каталоги фикстур во временном test/.tmp по умолчанию удаляются после прогона.
+// KEEP_FIXTURES=1 или падение любого теста оставляет их для отладки.
+const KEEP_FIXTURES = process.env.KEEP_FIXTURES === '1';
+let anyFailed = false;
 
 // variant -> { dir, tree }
 const runs = {};
@@ -30,6 +34,17 @@ beforeAll(async () => {
         const tree = collectNormalizedTree(path.join(dir, 'docs'));
         writeActualTree(tree, variant);
         runs[variant] = { dir, tree };
+    }
+});
+
+afterEach((ctx) => {
+    if (ctx?.task?.result?.state === 'fail') anyFailed = true;
+});
+
+afterAll(() => {
+    if (KEEP_FIXTURES || anyFailed) return; // оставляем фикстуры для отладки
+    for (const { dir } of Object.values(runs)) {
+        fs.rmSync(dir, { recursive: true, force: true });
     }
 });
 
