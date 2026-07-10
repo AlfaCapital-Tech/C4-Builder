@@ -1,7 +1,7 @@
 import chalk from 'chalk';
-import type { BuildOptions } from '../../config/options.ts';
+import type { BuildOptions, ConfigIssue } from '../../config/options.ts';
 
-export default (currentConfiguration: Partial<BuildOptions>): void => {
+export default (currentConfiguration: Partial<BuildOptions>, issues: ConfigIssue[] = []): void => {
     console.log(`
 CURRENT CONFIGURATION
 
@@ -121,5 +121,17 @@ Exclude other files: ${
             : chalk.red('not set')
     }
 `);
+    // Битые ключи показаны выше как «not set» (щадящий разбор их выбросил); помечаем их
+    // сырым значением и причиной, чтобы было видно, что и почему требует правки/визарда.
+    if (issues.length) {
+        console.log(
+            chalk.yellow(
+                '⚠ Невалидные ключи в .c4builder (показаны как «not set», чините через `c4builder --config`):'
+            )
+        );
+        for (const { key, value, message } of issues)
+            console.log(chalk.yellow(`  ⚠ ${key}: ${JSON.stringify(value)} — ${message}`));
+        console.log('');
+    }
     return;
 };

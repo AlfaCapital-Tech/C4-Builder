@@ -5,7 +5,9 @@
 // Форма файла `.c4builder` (camelCase) — единый тип задаёт zod-схема (config/schema),
 // её же валидацией опирается загрузка опций сборки. Ре-экспорт: потребители типа
 // (defaults, dispatch) продолжают импортировать его отсюда.
-export type { C4ConfigFile } from './schema.ts';
+import { configSchema } from './schema.ts';
+import type { C4ConfigFile } from './schema.ts';
+export type { C4ConfigFile };
 
 /**
  * Опции сборки (SCREAMING_CASE), собираемые `getOptions()` из `.c4builder`.
@@ -48,4 +50,48 @@ export interface BuildOptions {
     LEGACY_PLANTUML_VERSION?: string;
     LEGACY_PDF_KEYS?: string[];
     HAS_RUN?: boolean;
+}
+
+/** Один невалидный ключ `.c4builder`: имя ключа верхнего уровня, его сырое значение и причина. */
+export interface ConfigIssue {
+    key: string;
+    value: unknown;
+    message: string;
+}
+
+/**
+ * Результат разбора `.c4builder` zod-схемой (config/schema).
+ * - `ok:true`  — конфиг валиден, `value` дополнен дефолтами схемы (путь сборки).
+ * - `ok:false` — есть невалидные ключи (`issues`). `salvaged` — тот же конфиг, но с
+ *   ВЫБРОШЕННЫМИ битыми ключами: их значения трактуются как «не заданы» (получат
+ *   дефолт схемы), чтобы `--list`/визард работали, а визард мог их перезаписать.
+ */
+export type ConfigParseResult =
+    | { ok: true; value: C4ConfigFile }
+    | { ok: false; issues: ConfigIssue[]; salvaged: C4ConfigFile };
+
+/**
+ * Разбирает сырой объект `.c4builder`, разделяя строгий и щадящий пути. Сам НЕ печатает
+ * и НЕ завершает процесс — решение (ошибка+выход либо предупреждение) принимает CLI.
+ * Битые ключи определяются по первому сегменту `issue.path`; `salvaged` получается
+ * повторным разбором очищенного от них конфига — без дублирования схемы.
+ */
+export function parseConfig(raw: Record<string, unknown>): ConfigParseResult {
+    const parsed = configSchema.safeParse(raw);
+    if (parsed.success) return { ok: true, value: parsed.data };
+
+    const issues: ConfigIssue[] = [];
+    const brokenKeys = new Set<string>();
+    for (const issue of parsed.error.issues) {
+        const key = issue.path.length ? String(issue.path[0]) : '(корень)';
+        if (brokenKeys.has(key)) continue; // один ключ — одно сообщение (напр. массив с N битых элементов)
+        brokenKeys.add(key);
+        issues.push({ key, value: raw[key], message: issue.message });
+    }
+
+    const cleaned = Object.fromEntries(Object.entries(raw).filter(([k]) => !brokenKeys.has(k)));
+    const salvagedParse = configSchema.safeParse(cleaned);
+    // cleaned свободен от всех проблемных ключей → валиден; фолбэк на пустой конфиг — страховка.
+    const salvaged = salvagedParse.success ? salvagedParse.data : configSchema.parse({});
+    return { ok: false, issues, salvaged };
 }

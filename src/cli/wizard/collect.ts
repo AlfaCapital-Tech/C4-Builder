@@ -8,11 +8,17 @@ import type { BuildOptions } from '../../config/options.ts';
 // Ответы inquirer.prompt — динамический словарь (Record<string, any> в типах inquirer).
 type PromptAnswers = Awaited<ReturnType<typeof inquirer.prompt>>;
 
-// Валидатор ответа визарда: zod safeParse → boolean (true = валидно) для inquirer.
+// Непустая строка: в zod `.trim()` — трансформ, а не проверка, поэтому пустую строку
+// и пробелы отсекает явный `.min(1)`.
+const nonEmptyString = z.string().trim().min(1);
+
+// Валидатор ответа визарда: true при успешном safeParse, иначе текст ошибки для inquirer.
+// Пустой Enter уже подставил дефолт (answer = value || default) — сообщение получают
+// только явно введённые пробелы/пустая строка при отсутствии дефолта.
 const validate =
-    (schema: z.ZodType) =>
-    (answer: unknown): boolean =>
-        schema.safeParse(answer).success;
+    (schema: z.ZodType, message = 'значение обязательно') =>
+    (answer: unknown): string | true =>
+        schema.safeParse(answer).success || message;
 
 export default async (
     currentConfiguration: Partial<BuildOptions>,
@@ -28,7 +34,7 @@ export default async (
             name: 'projectName',
             message: 'Project Name',
             default: currentConfiguration.PROJECT_NAME || path.parse(process.cwd()).name,
-            validate: validate(z.string().trim().optional())
+            validate: validate(nonEmptyString, 'укажите имя проекта')
         });
         conf.set('projectName', responses.projectName);
     }
@@ -39,7 +45,7 @@ export default async (
             name: 'homepageName',
             message: 'HomePage Name',
             default: currentConfiguration.HOMEPAGE_NAME || defaultConfig.homepageName,
-            validate: validate(z.string().trim().optional())
+            validate: validate(nonEmptyString, 'укажите имя главной страницы')
         });
         conf.set('homepageName', responses.homepageName);
     }
@@ -50,16 +56,19 @@ export default async (
             name: 'rootFolder',
             message: 'Root documentation folder',
             default: currentConfiguration.ROOT_FOLDER || defaultConfig.rootFolder,
-            validate: (answers) => {
-                const isValid = validate(z.string().trim().optional())(answers);
-                if (isValid) {
-                    if (answers.indexOf('/') !== -1 || answers.indexOf('\\') !== -1) return false;
-
-                    //check it's an actual folder
-                    const isDirectory = fs.statSync(path.join(process.cwd(), answers)).isDirectory();
-                    if (isDirectory) return true;
+            validate: (answer: string): string | true => {
+                if (!nonEmptyString.safeParse(answer).success) return 'укажите папку с документацией';
+                if (answer.indexOf('/') !== -1 || answer.indexOf('\\') !== -1)
+                    return 'имя папки не должно содержать «/» или «\\»';
+                // statSync бросает ENOENT для несуществующего пути — ловим и превращаем в
+                // сообщение, иначе async-хендлер inquirer уронит процесс сырым стектрейсом.
+                try {
+                    if (!fs.statSync(path.join(process.cwd(), answer)).isDirectory())
+                        return 'указанный путь не является каталогом';
+                } catch {
+                    return 'папка не найдена';
                 }
-                return false;
+                return true;
             }
         });
         conf.set('rootFolder', responses.rootFolder);
@@ -173,7 +182,9 @@ export default async (
             conf.set('webTheme', webOptions.webTheme);
 
             webOptions = await inquirer.prompt({
-                type: 'input',
+                // confirm возвращает boolean — схема требует строгий z.boolean();
+                // input сохранял бы строку ('y') и валил последующий safeParse конфига.
+                type: 'confirm',
                 name: 'supportSearch',
                 message: 'Support search on navbar?',
                 default: defaultConfig.supportSearch
@@ -325,7 +336,7 @@ export default async (
             name: 'plantumlServerUrl',
             message: 'PlantUML Server URL',
             default: currentConfiguration.PLANTUML_SERVER_URL || defaultConfig.plantumlServerUrl,
-            validate: validate(z.string().trim().optional())
+            validate: validate(nonEmptyString, 'укажите URL сервера PlantUML')
         });
         conf.set('plantumlServerUrl', responses.plantumlServerUrl);
     }
@@ -336,7 +347,7 @@ export default async (
             name: 'diagramFormat',
             message: 'Diagram Image Format',
             default: currentConfiguration.DIAGRAM_FORMAT || defaultConfig.diagramFormat,
-            validate: validate(z.string().trim().optional())
+            validate: validate(nonEmptyString, 'укажите формат изображения диаграмм')
         });
         conf.set('diagramFormat', responses.diagramFormat);
     }

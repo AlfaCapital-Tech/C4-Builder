@@ -16,8 +16,11 @@ const validateProjectName = (name?: string): string | null => {
     if (name.indexOf('/') !== -1 || name.indexOf('\\') !== -1)
         return 'имя проекта не должно содержать «/» или «\\»';
     const target = path.join(process.cwd(), name);
-    if (fs.existsSync(target) && fs.readdirSync(target).length > 0)
-        return `папка «${name}» уже существует и не пуста`;
+    if (fs.existsSync(target)) {
+        // readdirSync по файлу бросает ENOTDIR — сперва различаем файл и каталог.
+        if (!fs.statSync(target).isDirectory()) return `«${name}» уже существует и является файлом`;
+        if (fs.readdirSync(target).length > 0) return `папка «${name}» уже существует и не пуста`;
+    }
     return null;
 };
 

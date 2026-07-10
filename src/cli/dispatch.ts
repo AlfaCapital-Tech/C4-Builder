@@ -17,8 +17,8 @@ import { EventEmitter } from 'node:events';
 
 import { clearConsole } from '../util/utils.ts';
 import { packageJson as pkg } from '../util/paths.ts';
-import type { BuildOptions, C4ConfigFile } from '../config/options.ts';
-import { configSchema } from '../config/schema.ts';
+import type { BuildOptions, C4ConfigFile, ConfigIssue } from '../config/options.ts';
+import { parseConfig } from '../config/options.ts';
 
 // Configstore-подобное хранилище конфига/кэша. Реальный инстанс — Configstore;
 // заглушки (режим --new, где проектного конфига ещё нет) кастуются к нему.
@@ -26,7 +26,7 @@ interface ConfStore {
     // Значение конфига/кэша типизируется по месту чтения (T выводится из целевого
     // поля BuildOptions) — вместо any на границе Configstore, который отдаёт unknown.
     get<T = unknown>(key: string): T | undefined;
-    // Весь конфиг разом — вход для zod-валидации в getOptions (заглушки его не несут).
+    // Весь конфиг разом — вход для zod-разбора (parseConfig); заглушки его не несут.
     readonly all?: Record<string, unknown>;
     set(key: string, value: unknown): void;
     delete(key: string): void;
@@ -38,33 +38,47 @@ const intro = () => {
     console.log(chalk.gray('Blow up your software documentation writing skills'));
 };
 
-// Валидирует сырой `.c4builder` zod-схемой и маппит в BuildOptions (SCREAMING_CASE).
-// applyDefaults=true (сборка) — недостающие поля дополняются дефолтами схемы, тип полон.
-// applyDefaults=false (визард/--list) — остаются лишь заданные пользователем ключи
-// (недостающее = undefined, как читалось до валидации), чтобы визард спросил их на
-// первом запуске. Значение неверного типа отклоняется понятной ошибкой (exit ≠ 0).
-function getOptions(conf: ConfStore): BuildOptions;
-function getOptions(conf: ConfStore, applyDefaults: false): Partial<BuildOptions>;
-function getOptions(conf: ConfStore, applyDefaults?: boolean): BuildOptions | Partial<BuildOptions> {
+// Читает сырой `.c4builder` и разбирает его щадяще (config/parseConfig): для визарда и
+// `--list`. Возвращает лишь ЗАДАННЫЕ пользователем и ВАЛИДНЫЕ ключи (недостающее и битое
+// = undefined, как читалось до валидации), чтобы визард спросил их на первом запуске,
+// а `--list` всё равно показал конфиг. Битые ключи — в `issues` для предупреждения.
+function readLenientConfig(conf: ConfStore): { config: Partial<C4ConfigFile>; issues: ConfigIssue[] } {
     const raw = (conf.all ?? {}) as Record<string, unknown>;
-    const parsed = configSchema.safeParse(raw);
-    if (!parsed.success) {
-        const issue = parsed.error.issues[0];
-        const key = issue?.path.join('.') || '(корень)';
-        console.error(
-            chalk.red(`Ошибка в .c4builder: ключ «${key}» — ${issue?.message ?? 'неверное значение'}`)
-        );
-        process.exit(1);
-    }
-    const full = parsed.data;
-    const c: Partial<C4ConfigFile> =
-        applyDefaults === false
-            ? (Object.fromEntries(
-                  Object.keys(full)
-                      .filter((k) => k in raw)
-                      .map((k) => [k, full[k as keyof typeof full]])
-              ) as Partial<C4ConfigFile>)
-            : full;
+    const result = parseConfig(raw);
+    const source: C4ConfigFile = result.ok ? result.value : result.salvaged;
+    const broken = new Set(result.ok ? [] : result.issues.map((i) => i.key));
+    const config = Object.fromEntries(
+        Object.keys(source)
+            .filter((k) => k in raw && !broken.has(k))
+            .map((k) => [k, source[k as keyof C4ConfigFile]])
+    ) as Partial<C4ConfigFile>;
+    return { config, issues: result.ok ? [] : result.issues };
+}
+
+// Строгий путь (сборка) не терпит битого конфига: печатает внятную ошибку и завершает
+// процесс с ненулевым кодом. Держим решение о выходе здесь, в CLI, а не в config/*.
+function failOnConfigIssues(issues: ConfigIssue[]): never {
+    console.error(chalk.red('Ошибка в .c4builder — невалидные значения не дают собрать документацию:'));
+    for (const { key, message } of issues) console.error(chalk.red(`  ${key} — ${message}`));
+    process.exit(1);
+}
+
+// Щадящий путь (--config/первый запуск визарда) предупреждает о битых ключах: они
+// трактуются как «не задано» и будут перезаписаны валидными значениями после визарда.
+function warnConfigIssues(issues: ConfigIssue[]): void {
+    console.log(
+        chalk.yellow('\n⚠ Невалидные ключи в .c4builder (трактуются как «не задано», визард их перезапишет):')
+    );
+    for (const { key, value, message } of issues)
+        console.log(chalk.yellow(`  ⚠ ${key}: ${JSON.stringify(value)} — ${message}`));
+}
+
+// Маппит разобранный `.c4builder` (camelCase) в BuildOptions (SCREAMING_CASE).
+// Полный конфиг (после дефолтов схемы) → полный BuildOptions; частичный (щадящий вид
+// визарда/--list) → Partial, где недостающие/битые поля остаются undefined.
+function getOptions(c: C4ConfigFile): BuildOptions;
+function getOptions(c: Partial<C4ConfigFile>): Partial<BuildOptions>;
+function getOptions(c: Partial<C4ConfigFile>): BuildOptions | Partial<BuildOptions> {
     return {
         // Легаси-детект: выбор версии PlantUML удалён; ключ plantumlVersion из старых
         // .c4builder отдаём build.js только для однократного предупреждения на пине.
@@ -95,7 +109,7 @@ function getOptions(conf: ConfStore, applyDefaults?: boolean): BuildOptions | Pa
         HAS_RUN: c.hasRun,
         PLANTUML_SERVER_URL: c.plantumlServerUrl,
         DIAGRAM_FORMAT: c.diagramFormat,
-        D2_LAYOUT: c.d2Layout || 'dagre',
+        D2_LAYOUT: c.d2Layout,
         MD_FILE_NAME: 'README',
         WEB_FILE_NAME: c.webFileName,
         SUPPORT_SEARCH: c.supportSearch,
@@ -149,9 +163,21 @@ export default async () => {
 
     if (opts.docs) return cmdHelp();
 
-    // Начальный конфиг для визарда/--list: raw-вид (незаданные поля = undefined),
-    // чтобы визард спросил недостающее на первом запуске.
-    const currentConfig = getOptions(conf, false);
+    // --reset чистит .c4builder при ЛЮБОМ его содержимом — до строгой проверки конфига,
+    // чтобы сломанное значение не мешало собственному сбросу.
+    if (opts.reset && !opts.new) {
+        clearConsole();
+        intro();
+        conf.clear();
+        cacheConf.clear();
+        console.log(`configuration was reset`);
+        return;
+    }
+
+    // Начальный конфиг для визарда/--list: щадящий разбор (незаданные и битые поля =
+    // undefined), чтобы визард спросил недостающее, а --list всё равно показал конфиг.
+    const { config: rawConfig, issues: configIssues } = readLenientConfig(conf);
+    const currentConfig = getOptions(rawConfig);
 
     if (opts.new || opts.config || !currentConfig.HAS_RUN) clearConsole();
 
@@ -165,13 +191,15 @@ export default async () => {
     }
 
     if (opts.new) return cmdNewProject(opts);
-    if (opts.list) return cmdList(currentConfig);
+    if (opts.list) return cmdList(currentConfig, configIssues);
 
-    if (opts.reset) {
-        conf.clear();
-        cacheConf.clear();
-        console.log(`configuration was reset`);
-        return;
+    // Повторная сборка установленного проекта (есть HAS_RUN, не --config) — строгий путь:
+    // битый конфиг обязан упасть с внятной ошибкой сразу, а не быть тихо «починен» визардом.
+    // Первый запуск (!HAS_RUN) и --config остаются щадящими — это штатный путь восстановления.
+    const strictBuild = !opts.config && !!currentConfig.HAS_RUN;
+    if (configIssues.length) {
+        if (strictBuild) failOnConfigIssues(configIssues);
+        warnConfigIssues(configIssues);
     }
 
     await cmdCollect(currentConfig, conf, opts);
@@ -180,8 +208,12 @@ export default async () => {
 
         let isBuilding = false;
         let attemptedWatchBuild = false;
-        // Опции сборки после визарда: полный вид с дефолтами (базовые поля гарантированы).
-        const options = getOptions(conf);
+        // Опции сборки после визарда: строгий разбор итогового конфига. Штатно валиден
+        // (визард только что записал корректные значения; повторная сборка с битым конфигом
+        // отсеяна выше) — падение здесь страхует от иного невалидного состояния.
+        const built = parseConfig((conf.all ?? {}) as Record<string, unknown>);
+        if (!built.ok) failOnConfigIssues(built.issues);
+        const options = getOptions(built.value);
         const reloadEmitter = new EventEmitter();
         reloadEmitter.setMaxListeners(0);
         if (opts.watch) {
