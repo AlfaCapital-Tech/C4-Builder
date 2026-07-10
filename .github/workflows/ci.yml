@@ -75,21 +75,26 @@ jobs:
       # Ошибка tsc роняет job (красный статус PR наравне с линтом/тестами).
       - run: npm run build
 
-      # Мажор managed-JRE — из единственного источника истины (jre.ts TEMURIN_FEATURE),
-      # чтобы суффикс ключа кеша не рассинхронился при бампе версии вручную.
+      # Мажор JRE и версия схемы кеша — из единственного источника истины (jre.ts),
+      # чтобы ключ не рассинхронился при бампе версии или смене раскладки кеша вручную.
       - name: Определить мажор managed-JRE
         id: jre
-        run: echo "feature=$(grep -oP 'TEMURIN_FEATURE\s*=\s*\K\d+' src/core/render/jre.ts)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "feature=$(grep -oP 'TEMURIN_FEATURE\s*=\s*\K\d+' src/core/render/jre.ts)" >> "$GITHUB_OUTPUT"
+          echo "schema=$(grep -oP 'JRE_CACHE_SCHEMA\s*=\s*\K\d+' src/core/render/jre.ts)" >> "$GITHUB_OUTPUT"
 
       # Golden-рендер идёт на пиновом managed-JRE (Temurin, см. jre.ts TEMURIN_FEATURE),
-      # а не на setup-java: тест подставляет его JAVA_HOME. Кешируем между прогонами,
-      # ключ — от мажора JRE + os/arch.
+      # а не на setup-java: тест подставляет его JAVA_HOME. Кешируем между прогонами.
+      # Ключ = мажор JRE + схема кеша + os/arch: при смене схемы старый каталог не
+      # «попадает» в ключ, иначе actions/cache восстанавливал бы кеш, который
+      # cachedJava() считает невалидным, и при hit уже не пересохранял бы его —
+      # прогрев пропускался, а тест молча качал JRE на каждом прогоне.
       - name: Cache managed JRE
         id: jre-cache
         uses: actions/cache@v4
         with:
           path: ~/.cache/c4builder/jre
-          key: c4builder-jre-temurin${{ steps.jre.outputs.feature }}-${{ runner.os }}-${{ runner.arch }}
+          key: c4builder-jre-temurin${{ steps.jre.outputs.feature }}-s${{ steps.jre.outputs.schema }}-${{ runner.os }}-${{ runner.arch }}
 
       # Прогрев только при промахе кеша: на попадании переиспользуем восстановленный
       # каталог. При промахе --force качает managed-JRE (минуя системную java от

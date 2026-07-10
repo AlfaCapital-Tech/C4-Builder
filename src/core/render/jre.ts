@@ -133,6 +133,12 @@ const findJavaUnder = (root: string): string | null => {
     return null;
 };
 
+// Версия схемы кеша JRE: инкрементируется при смене раскладки каталога или формата
+// маркера. Внешние кеши (ключ actions/cache в .github/workflows/ci.yml) включают её,
+// иначе кеш, снятый старой схемой, восстанавливался бы вечно: cachedJava признал бы
+// его невалидным, а actions/cache при попадании в ключ не пересохраняет каталог.
+const JRE_CACHE_SCHEMA = 1;
+
 // Маркер завершённости распаковки: кладётся ПОСЛЕДНИМ в staging и едет в кеш вместе
 // с ним. cachedJava доверяет кешу только при его наличии — иначе прерванная (Ctrl+C)
 // или гоночная распаковка (bin/java уже есть, lib/modules ещё нет) навсегда выдавалась
@@ -140,10 +146,16 @@ const findJavaUnder = (root: string): string | null => {
 const MARKER_NAME = '.c4builder-jre-ready.json';
 const markerPath = (root: string): string => path.join(root, MARKER_NAME);
 
-// (2) кеш: валиден только при наличии маркера завершённости И исполняемого bin/java.
+// (2) кеш: валиден только при маркере завершённости той же схемы И исполняемом bin/java.
 const cachedJava = (): JreResolution | null => {
     const root = jreCacheDir();
-    if (!fs.existsSync(markerPath(root))) return null;
+    let marker: { schema?: number };
+    try {
+        marker = JSON.parse(fs.readFileSync(markerPath(root), 'utf-8'));
+    } catch {
+        return null; // маркера нет или он битый — распаковка не завершилась
+    }
+    if (marker.schema !== JRE_CACHE_SCHEMA) return null; // кеш старой раскладки
     const bin = findJavaUnder(root);
     return bin ? { path: bin, source: 'cache' } : null;
 };
@@ -323,7 +335,12 @@ const downloadJre = async ({ log }: { log?: (msg: string) => void } = {}): Promi
         }
         fs.writeFileSync(
             markerPath(stageDir),
-            JSON.stringify({ feature: TEMURIN_FEATURE, release: meta.release, sha256: meta.sha256 })
+            JSON.stringify({
+                schema: JRE_CACHE_SCHEMA,
+                feature: TEMURIN_FEATURE,
+                release: meta.release,
+                sha256: meta.sha256
+            })
         );
         fs.rmSync(dir, { recursive: true, force: true }); // окно rm→rename минимально, rename атомарен
         fs.renameSync(stageDir, dir);
