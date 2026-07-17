@@ -1,5 +1,5 @@
 import figlet from 'figlet';
-import { program } from 'commander';
+import { InvalidArgumentError, program } from 'commander';
 import chalk from 'chalk';
 import path from 'node:path';
 
@@ -19,6 +19,7 @@ import { clearConsole } from '../util/utils.ts';
 import { packageJson as pkg } from '../util/paths.ts';
 import type { BuildOptions, C4ConfigFile, ConfigIssue } from '../config/options.ts';
 import { parseConfig } from '../config/options.ts';
+import { isValidPort } from '../config/schema.ts';
 
 // Configstore-подобное хранилище конфига/кэша. Реальный инстанс — Configstore;
 // заглушки (режим --new, где проектного конфига ещё нет) кастуются к нему.
@@ -42,17 +43,23 @@ const intro = () => {
 // `--list`. Возвращает лишь ЗАДАННЫЕ пользователем и ВАЛИДНЫЕ ключи (недостающее и битое
 // = undefined, как читалось до валидации), чтобы визард спросил их на первом запуске,
 // а `--list` всё равно показал конфиг. Битые ключи — в `issues` для предупреждения.
-function readLenientConfig(conf: ConfStore): { config: Partial<C4ConfigFile>; issues: ConfigIssue[] } {
+function readLenientConfig(conf: ConfStore): {
+    config: Partial<C4ConfigFile>;
+    issues: ConfigIssue[];
+    salvaged: C4ConfigFile;
+} {
     const raw = (conf.all ?? {}) as Record<string, unknown>;
     const result = parseConfig(raw);
     const source: C4ConfigFile = result.ok ? result.value : result.salvaged;
     const broken = new Set(result.ok ? [] : result.issues.map((i) => i.key));
     const config = Object.fromEntries(
         Object.keys(source)
-            .filter((k) => k in raw && !broken.has(k))
+            // null в файле = «не задан» (как отсутствие ключа): схема уже подставила
+            // дефолт, но визард обязан спросить значение, а не молча принять его.
+            .filter((k) => k in raw && raw[k] !== null && !broken.has(k))
             .map((k) => [k, source[k as keyof C4ConfigFile]])
     ) as Partial<C4ConfigFile>;
-    return { config, issues: result.ok ? [] : result.issues };
+    return { config, issues: result.ok ? [] : result.issues, salvaged: source };
 }
 
 // Строгий путь (сборка) не терпит битого конфига: печатает внятную ошибку и завершает
@@ -133,7 +140,11 @@ export default async () => {
         .option('-w, --watch', 'watch for changes and rebuild')
         .option('-o, --open', 'open the generated site in the browser (with --site)')
         .option('--docs', 'a brief explanation for the available configuration options')
-        .option('-p, --port <n>', 'port used for serving the generated site', parseInt)
+        .option('-p, --port <n>', 'port used for serving the generated site', (v) => {
+            // parseInt молча резал бы опечатку ('30OO' → 30) — валидируем строго.
+            if (!isValidPort(v)) throw new InvalidArgumentError('ожидается TCP-порт: целое число 1..65535');
+            return Number(v);
+        })
         .allowExcessArguments() // позиционные аргументы подкоманды `jre <action>`
         .parse(process.argv);
 
@@ -176,7 +187,7 @@ export default async () => {
 
     // Начальный конфиг для визарда/--list: щадящий разбор (незаданные и битые поля =
     // undefined), чтобы визард спросил недостающее, а --list всё равно показал конфиг.
-    const { config: rawConfig, issues: configIssues } = readLenientConfig(conf);
+    const { config: rawConfig, issues: configIssues, salvaged } = readLenientConfig(conf);
     const currentConfig = getOptions(rawConfig);
 
     if (opts.new || opts.config || !currentConfig.HAS_RUN) clearConsole();
@@ -200,12 +211,18 @@ export default async () => {
     if (configIssues.length) {
         if (strictBuild) failOnConfigIssues(configIssues);
         warnConfigIssues(configIssues);
+        // Битые ключи чиним физически (salvage-значение = дефолт схемы, либо удаление):
+        // визард переспрашивает не всё (вложенные блоки гейтятся generate*-флагами), а
+        // строгий parseConfig после него обязан пройти — иначе exit 1 на каждом запуске.
+        for (const { key } of configIssues) {
+            const v = salvaged[key as keyof C4ConfigFile];
+            if (v === undefined) conf.delete(key);
+            else conf.set(key, v);
+        }
     }
 
     await cmdCollect(currentConfig, conf, opts);
     if (!opts.config) {
-        conf.set('hasRun', true);
-
         let isBuilding = false;
         let attemptedWatchBuild = false;
         // Опции сборки после визарда: строгий разбор итогового конфига. Штатно валиден
@@ -213,6 +230,9 @@ export default async () => {
         // отсеяна выше) — падение здесь страхует от иного невалидного состояния.
         const built = parseConfig((conf.all ?? {}) as Record<string, unknown>);
         if (!built.ok) failOnConfigIssues(built.issues);
+        // hasRun — только ПОСЛЕ успешной валидации: битый конфиг с hasRun=true навсегда
+        // уводил бы последующие запуски на строгий путь (exit 1 до визарда).
+        conf.set('hasRun', true);
         const options = getOptions(built.value);
         const reloadEmitter = new EventEmitter();
         reloadEmitter.setMaxListeners(0);

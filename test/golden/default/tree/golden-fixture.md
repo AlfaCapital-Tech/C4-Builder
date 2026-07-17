@@ -51,7 +51,7 @@ Supporting elements: People and software systems directly connected to the conta
 
 **Notes**: This diagram says nothing about deployment scenarios, clustering, replication, failover, etc.
 
-![diagram](system.svg)
+![diagram](/1%20Internet%20Banking%20System/system.svg)
 
 ## API Application
 
@@ -72,7 +72,7 @@ Supporting elements: Containers (within the software system in scope) plus peopl
 
 **Intended audience**: Software architects and developers.
 
-![diagram](container.svg)
+![diagram](/1%20Internet%20Banking%20System/API%20Application/container.svg)
 
 ## API Specs
 
@@ -128,7 +128,7 @@ Supporting elements: Containers (within the software system in scope) plus peopl
 
 ![](2020-01-10-16-21-41.png)
 
-![diagram](container.svg)
+![diagram](/1%20Internet%20Banking%20System/Single%20Page%20Application/container.svg)
 
 ## Dynamic Diagram
 
@@ -146,7 +146,7 @@ A simple dynamic diagram can be useful when you want to show how elements in a s
 
 **Intended audience**: Technical and non-technical people, inside and outside of the software development team.
 
-![diagram](dynamic.svg)
+![diagram](/1%20Internet%20Banking%20System/Single%20Page%20Application/Dynamic%20Diagram/dynamic.svg)
 
 ## Extended Docs
 
@@ -158,14 +158,14 @@ Multiple markdowns can be ordered using `<name>.1.md, <name>.2.md .. <name>.<n>.
 
 You can choose where to place a certain diagram by using `![name](<diagram name>.puml)`
 
-![diagram](ditaa.png)
+![diagram](/1%20Internet%20Banking%20System/Single%20Page%20Application/Extended%20Docs/ditaa.png)
 
 Feel free to add any additional details necesary.
 
 
-![diagram](class.svg)
+![diagram](/1%20Internet%20Banking%20System/Single%20Page%20Application/Extended%20Docs/class.svg)
 
-![diagram](sequence.svg)
+![diagram](/1%20Internet%20Banking%20System/Single%20Page%20Application/Extended%20Docs/sequence.svg)
 
 ## 2 Deployment
 
@@ -183,7 +183,7 @@ A deployment diagram allows you to illustrate how containers in the static model
 
 **Intended audience**: Technical people inside and outside of the software development team; including software architects, developers and operations/support staff.
 
-![diagram](deployment.svg)
+![diagram](/2%20Deployment/deployment.svg)
 
 ## 3 Локализация
 
@@ -198,7 +198,7 @@ A deployment diagram allows you to illustrate how containers in the static model
 **Область применения**: проверка того, что текст на русском языке корректно попадает в собранный сайт, PDF и SVG-диаграммы.
 
 
-![diagram](localization.svg)
+![diagram](/3%20%D0%9B%D0%BE%D0%BA%D0%B0%D0%BB%D0%B8%D0%B7%D0%B0%D1%86%D0%B8%D1%8F/localization.svg)
 
 ## 4 D2 Example
 
@@ -215,4 +215,4 @@ C4-стили (классы `person`, `system`, `external` с фирменным
 **Область применения**: показать, что `.d2`-диаграммы, их импорты и кириллица корректно попадают в собранный сайт и SVG.
 
 
-![diagram](landscape.svg)
+![diagram](/4%20D2%20Example/landscape.svg)

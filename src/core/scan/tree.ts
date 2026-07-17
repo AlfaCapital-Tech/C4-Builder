@@ -80,7 +80,12 @@ export const generateTree = async (dir: string, options: BuildOptions): Promise<
         const files = fs.readdirSync(dir).filter((x) => x.charAt(0) !== '_' && !IGNORED_FILES.includes(x));
         for (const file of files) {
             //if folder
-            if (fs.statSync(path.join(dir, file)).isDirectory()) {
+            const childDir = path.join(dir, file);
+            if (fs.statSync(childDir).isDirectory()) {
+                // Выходной каталог не тащим в дерево: при rootFolder='.' distFolder был бы
+                // ребёнком корня → попадал в nav-меню (битая ссылка) и порождал docs/docs.
+                // Ранний return рекурсии срабатывал уже ПОСЛЕ push — отсекаем до него.
+                if (childDir === options.DIST_FOLDER) continue;
                 item.descendants.push(file);
                 //create corresponding dist folder
                 if (options.GENERATE_WEBSITE || options.GENERATE_MD || options.GENERATE_LOCAL_IMAGES)
@@ -88,7 +93,7 @@ export const generateTree = async (dir: string, options: BuildOptions): Promise<
                         path.join(options.DIST_FOLDER, dir.replace(options.ROOT_FOLDER, ''), file)
                     );
 
-                await build(path.join(dir, file), dir);
+                await build(childDir, dir);
             }
         }
 

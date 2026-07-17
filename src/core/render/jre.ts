@@ -9,11 +9,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import https from 'node:https';
 import crypto from 'node:crypto';
 import { createRequire } from 'node:module';
 import { spawnSync, type SpawnSyncReturns } from 'node:child_process';
-import type { IncomingMessage } from 'node:http';
+
+import { httpGetStream, httpGetJson } from '../../util/http.ts';
 
 // Результат резолва Java: путь к бинарю, источник (system/cache/download) и,
 // для системной java, распознанная мажорная версия.
@@ -146,9 +146,12 @@ const JRE_CACHE_SCHEMA = 1;
 const MARKER_NAME = '.c4builder-jre-ready.json';
 const markerPath = (root: string): string => path.join(root, MARKER_NAME);
 
-// (2) кеш: валиден только при маркере завершённости той же схемы И исполняемом bin/java.
-const cachedJava = (): JreResolution | null => {
-    const root = jreCacheDir();
+// Валиден ли распакованный JRE в каталоге root: маркер завершённости той же схемы +
+// НАЙДЕННЫЙ и ЗАПУСКАЕМЫЙ bin/java. Запускаемость проверяем так же, как detectSystemJava
+// (javaMajor): маркер мог остаться от оборванной мимо него распаковки или частичного
+// копирования кеша (битые lib/*), и тогда «валидный» по маркеру бинарь всё равно не
+// стартует. Возвращает путь к бинарю или null.
+const installedJavaAt = (root: string): string | null => {
     let marker: { schema?: number };
     try {
         marker = JSON.parse(fs.readFileSync(markerPath(root), 'utf-8'));
@@ -157,58 +160,31 @@ const cachedJava = (): JreResolution | null => {
     }
     if (marker.schema !== JRE_CACHE_SCHEMA) return null; // кеш старой раскладки
     const bin = findJavaUnder(root);
-    return bin ? { path: bin, source: 'cache' } : null;
+    if (!bin) return null;
+    return javaMajor(bin) !== null ? bin : null;
 };
 
-// --- HTTP с обработкой редиректов (assets-эндпоинт может 307-редиректить на github) ---
-// Лимит редиректов гасит петли (A→B→A), таймауты — зависшие сокеты: молча повисший
-// коннект/приём не должен подвешивать `jre install`/сборку навсегда. Значения можно
-// переопределить env-переменными (в т.ч. для тестов).
-const posInt = (v: string | undefined, dflt: number): number => {
-    const n = Number(v);
-    return Number.isFinite(n) && n > 0 ? n : dflt;
+// (2) кеш: валиден при маркере той же схемы И запускаемом bin/java. Битый/неполный
+// каталог сносим, чтобы resolveJava ушёл на перекачку, а не залипал на нём (downloadJre
+// пишет в свой staging, поэтому невалидный dir — это заведомо остаток, а не чужая
+// установка в процессе).
+const cachedJava = (): JreResolution | null => {
+    const root = jreCacheDir();
+    const bin = installedJavaAt(root);
+    if (bin) return { path: bin, source: 'cache' };
+    if (fs.existsSync(root)) {
+        try {
+            fs.rmSync(root, { recursive: true, force: true });
+        } catch {
+            /* не удалось снести — downloadJre всё равно перезапишет каталог */
+        }
+    }
+    return null;
 };
-const CONNECT_TIMEOUT_MS = posInt(process.env.C4BUILDER_JRE_CONNECT_TIMEOUT_MS, 30_000);
-const IDLE_TIMEOUT_MS = posInt(process.env.C4BUILDER_JRE_IDLE_TIMEOUT_MS, 60_000);
-const MAX_REDIRECTS = 5;
 
-const httpGet = (url: string, redirectsLeft = MAX_REDIRECTS): Promise<IncomingMessage> =>
-    new Promise((resolve, reject) => {
-        const req = https.get(
-            url,
-            { headers: { 'User-Agent': 'c4builder-jre-resolver' }, timeout: CONNECT_TIMEOUT_MS },
-            (res) => {
-                const statusCode = res.statusCode as number; // ответ всегда со статусом
-                const { headers } = res;
-                if (statusCode >= 300 && statusCode < 400 && headers.location) {
-                    res.resume();
-                    if (redirectsLeft <= 0) {
-                        return reject(new Error(`Слишком много редиректов (>${MAX_REDIRECTS}) для ${url}`));
-                    }
-                    const next = new URL(headers.location as string, url).toString();
-                    return resolve(httpGet(next, redirectsLeft - 1));
-                }
-                if (statusCode !== 200) {
-                    res.resume();
-                    return reject(new Error(`HTTP ${statusCode} для ${url}`));
-                }
-                // Коннект установлен, заголовки получены → с таймаута коннекта переключаемся
-                // на idle-таймаут приёма (архив ~50 МБ тянется дольше): молчащий посреди
-                // приёма сокет уронит таймаут, а не подвесит сборку.
-                req.setTimeout(IDLE_TIMEOUT_MS);
-                resolve(res);
-            }
-        );
-        req.on('timeout', () => req.destroy(new Error(`Таймаут сети (${url})`)));
-        req.on('error', reject);
-    });
-
-const httpGetJson = async (url: string): Promise<unknown> => {
-    const res = await httpGet(url);
-    const chunks: Buffer[] = [];
-    for await (const c of res) chunks.push(c);
-    return JSON.parse(Buffer.concat(chunks).toString('utf8'));
-};
+// HTTP-запросы (редиректы + таймауты) — в общем util/http. Здесь только User-Agent
+// резолвера: Adoptium assets-эндпоинт 307-редиректит на github, приём архива ~50 МБ.
+const JRE_UA = { 'User-Agent': 'c4builder-jre-resolver' };
 
 // Adoptium assets API отдаёт ссылку и sha256 одним запросом. ВАЖНО: link и checksum
 // приходят из ОДНОГО ответа API — sha256 защищает лишь от повреждения при передаче
@@ -222,7 +198,7 @@ const fetchAssetMeta = async (): Promise<{
     const url =
         `https://api.adoptium.net/v3/assets/latest/${TEMURIN_FEATURE}/hotspot` +
         `?image_type=jre&vendor=eclipse&os=${adoptiumOs()}&architecture=${adoptiumArch()}`;
-    const json = await httpGetJson(url);
+    const json = await httpGetJson(url, { headers: JRE_UA });
     const asset = Array.isArray(json) ? json.find((a) => a.binary?.package) : null;
     if (!asset) {
         throw new Error(
@@ -242,7 +218,7 @@ const fetchAssetMeta = async (): Promise<{
 };
 
 const downloadAndVerify = async (link: string, expectedSha: string, destFile: string): Promise<void> => {
-    const res = await httpGet(link);
+    const res = await httpGetStream(link, { headers: JRE_UA });
     const hash = crypto.createHash('sha256');
     await new Promise((resolve, reject) => {
         const out = fs.createWriteStream(destFile);
@@ -273,11 +249,30 @@ interface YauzlZipFile {
     openReadStream(entry: YauzlEntry, cb: (err: Error | null, stream: NodeJS.ReadableStream) => void): void;
 }
 
+// Защита от zip-slip: путь записи, разрешённый относительно destDir, обязан
+// оставаться ВНУТРИ него (не `../` за пределы). Экспортируется для юнит-теста.
+export const isPathInside = (destDir: string, entryName: string): boolean => {
+    const root = path.resolve(destDir);
+    const dest = path.resolve(root, entryName);
+    return dest === root || dest.startsWith(root + path.sep);
+};
+
 const extractZip = (archive: string, destDir: string): Promise<void> =>
     new Promise((resolve, reject) => {
         require('yauzl').open(archive, { lazyEntries: true }, (err: Error | null, zip: YauzlZipFile) => {
             if (err) return reject(err);
             zip.on('entry', (entry: YauzlEntry) => {
+                // zip-slip: злонамеренная запись `../../evil` вышла бы за destDir. tar-ветка
+                // защищена node-tar≥6 по умолчанию, zip (yauzl) — нет, проверяем сами.
+                if (!isPathInside(destDir, entry.fileName)) {
+                    return reject(
+                        new Error(`Небезопасный путь в архиве JRE (выход за каталог): ${entry.fileName}`)
+                    );
+                }
+                // Симлинки пропускаем: вне доверенного Adoptium-архива симлинк мог бы
+                // указывать за пределы каталога. Temurin Windows-zip симлинков не содержит.
+                const isSymlink = ((entry.externalFileAttributes >>> 16) & 0xffff & 0o170000) === 0o120000;
+                if (isSymlink) return zip.readEntry();
                 const dest = path.join(destDir, entry.fileName);
                 if (entry.fileName.endsWith('/')) {
                     fs.mkdirSync(dest, { recursive: true });
@@ -342,11 +337,25 @@ const downloadJre = async ({ log }: { log?: (msg: string) => void } = {}): Promi
                 sha256: meta.sha256
             })
         );
-        fs.rmSync(dir, { recursive: true, force: true }); // окно rm→rename минимально, rename атомарен
-        fs.renameSync(stageDir, dir);
+        // Установка в общий кеш без межпроцессной блокировки. Не делаем rm(dir)+rename
+        // (окно, в котором dir исчезает у параллельной сборки): если к этому моменту в dir
+        // уже валидный JRE — другой процесс успел, принимаем его и выбрасываем свой stage.
+        // Иначе пытаемся атомарный rename; провал rename (dir возник в гонке / остался
+        // старый невалидный каталог) разбираем: валиден теперь → чужой, невалиден → сносим
+        // и ставим свой.
+        if (!installedJavaAt(dir)) {
+            try {
+                fs.renameSync(stageDir, dir);
+            } catch {
+                if (!installedJavaAt(dir)) {
+                    fs.rmSync(dir, { recursive: true, force: true });
+                    fs.renameSync(stageDir, dir);
+                }
+            }
+        }
     } finally {
         fs.rmSync(tmpArchive, { force: true });
-        fs.rmSync(stageDir, { recursive: true, force: true }); // подчистить staging при ошибке
+        fs.rmSync(stageDir, { recursive: true, force: true }); // подчистить staging (no-op, если переименован)
     }
     const bin = findJavaUnder(dir);
     if (!bin) throw new Error('JRE распакован, но исполняемый bin/java не найден');

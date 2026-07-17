@@ -34,6 +34,7 @@ const build = async (options: BuildOptions, cacheConf: CacheConf): Promise<void>
     // Сбросить кеш base64 диаграмм прошлой сборки (актуально для watch-режима).
     clearDiagramCache();
 
+    let ok = false;
     try {
         //actual build
         console.log(chalk.green(`\nbuilding documentation in ./${options.DIST_FOLDER}`));
@@ -96,10 +97,19 @@ const build = async (options: BuildOptions, cacheConf: CacheConf): Promise<void>
         }
 
         console.log(chalk.green(`built in ${(Date.now() - start_date.getTime()) / 1000} seconds`));
+        ok = true;
     } finally {
-        // Снос бэкапа dist и освобождение webworker D2 обязаны выполниться даже при
-        // падении фазы: иначе утечёт worker (процесс не завершится) и останется dist_bk.
-        await fsextra.removeSync(bkFolderName);
+        // Бэкап dist сносим ТОЛЬКО при успехе: при падении фазы dist_bk — единственная
+        // полная копия прошлого удачного билда, её нельзя терять (иначе первый же
+        // сломавшийся рендер уничтожает рабочий вывод). Освобождение webworker D2
+        // обязательно в любом исходе — иначе процесс не завершится.
+        if (ok) {
+            await fsextra.removeSync(bkFolderName);
+        } else if (options.GENERATE_LOCAL_IMAGES && fsextra.existsSync(bkFolderName)) {
+            console.log(
+                chalk.yellow(`\nсборка прервана — бэкап предыдущего билда сохранён в ./${bkFolderName}`)
+            );
+        }
         await teardownD2();
     }
 };

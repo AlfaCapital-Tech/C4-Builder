@@ -100,10 +100,13 @@ const buildDiagramMarkdown = async (
           )
         : encodeURIPath(rawPath);
 
-    // В complete-документе ссылка «скачать/перейти» префиксуется папкой элемента. Склеиваем
-    // СЫРЫЕ сегменты и кодируем один раз (иначе % из первого encodeURI превратился бы в %25).
-    // Абсолютный URL онлайн-рендера отдаём как есть — без папки и без повторного encodeURI.
-    const linkHref =
+    // В complete-документе И картинка, И ссылка «скачать/перейти» префиксуются папкой
+    // элемента: complete.md лежит в корне dist, а картинки — во вложенных папках, поэтому
+    // относительный путь считается от корня. Склеиваем СЫРЫЕ сегменты и кодируем один раз
+    // (иначе % из первого encodeURI превратился бы в %25). Абсолютный URL онлайн-рендера
+    // отдаём как есть — без папки и без повторного encodeURI. В page-варианте md лежит
+    // рядом с картинкой, поэтому путь остаётся относительным к странице (diagramUrl).
+    const localHref =
         isComplete && !isRemoteUrl
             ? encodeURIPath(path.join(item.dir.replace(options.ROOT_FOLDER, ''), rawPath))
             : diagramUrl;
@@ -115,13 +118,13 @@ const buildDiagramMarkdown = async (
               )
             : await httpGet(diagramUrl);
         const diagramImage = `\n![${name}](data:${getMime(format)};base64,${imgContent})\n`;
-        const diagramLink = `${isComplete ? '\n' : ''}[Download ${name} diagram](${linkHref} ':ignore')`;
+        const diagramLink = `${isComplete ? '\n' : ''}[Download ${name} diagram](${localHref} ':ignore')`;
         return diagramImage + diagramLink;
     }
 
-    const diagramImage = `![diagram](${diagramUrl})`;
+    const diagramImage = `![diagram](${localHref})`;
     if (!options.INCLUDE_LINK_TO_DIAGRAM) return diagramImage;
-    return `[Go to ${name} diagram](${linkHref})`;
+    return `[Go to ${name} diagram](${localHref})`;
 };
 
 const compileDocument = async (
@@ -162,9 +165,17 @@ const compileDocument = async (
         diagrams.push(await getDiagram(item, diagram, options));
     }
 
-    let fullDoc = [];
+    let fullDoc: string[] = [];
     if (options.DIAGRAMS_ON_TOP) {
-        fullDoc = [...diagrams, ...texts];
+        // Пользовательский h1 обязан оставаться самым первым: при diagramsOnTop диаграммы
+        // иначе встают ВЫШЕ заголовка страницы. Отделяем ведущий h1 первого текста и держим
+        // его перед диаграммами (chrome вставляется под него caller'ом), остальное тело —
+        // после. Ведущего h1 нет (авто-заголовок) → прежний порядок diagrams → texts.
+        const [firstText = '', ...restTexts] = texts;
+        const h1 = firstText.match(/^(﻿?\s*#\s+[^\n]*)\n?([\s\S]*)$/);
+        fullDoc = h1
+            ? [h1[1], ...diagrams, h1[2], ...restTexts].filter((s) => s !== '')
+            : [...diagrams, ...texts];
     } else {
         fullDoc = [...texts, ...diagrams];
     }
@@ -324,17 +335,9 @@ export const generateWebMD = async (tree: TreeItem[], options: BuildOptions): Pr
 
     const getWebFileName = (originalFileName: string): string => options.WEB_FILE_NAME || originalFileName;
 
-    const isExcluded = (dir: string) => {
-        if (!Array.isArray(options.EXCLUDE_SIDEBAR_FOLDER_BY_PATH)) return false;
-
-        return options.EXCLUDE_SIDEBAR_FOLDER_BY_PATH.find((pathToExclude) => {
-            const isString = typeof pathToExclude === 'string';
-
-            if (isString) return dir.startsWith(pathToExclude);
-
-            return false;
-        });
-    };
+    // Чистоту string[] гарантирует zod-схема (не-строки отброшены препроцессом).
+    const isExcluded = (dir: string): boolean =>
+        !!options.EXCLUDE_SIDEBAR_FOLDER_BY_PATH?.some((pathToExclude) => dir.startsWith(pathToExclude));
 
     for (const item of tree) {
         //sidebar
@@ -369,7 +372,17 @@ export const generateWebMD = async (tree: TreeItem[], options: BuildOptions): Pr
     }
 
     if (options.DOCSIFY_TEMPLATE && options.DOCSIFY_TEMPLATE !== '') {
-        docsifyTemplate = require(path.join(process.cwd(), options.DOCSIFY_TEMPLATE));
+        // require ESM/TS-шаблона возвращает namespace { default: fn }, а не саму функцию —
+        // разворачиваем default, иначе дальше «docsifyTemplate is not a function».
+        const loaded = require(path.join(process.cwd(), options.DOCSIFY_TEMPLATE));
+        const fn = typeof loaded === 'function' ? loaded : loaded?.default;
+        if (typeof fn !== 'function') {
+            throw new Error(
+                `docsifyTemplate «${options.DOCSIFY_TEMPLATE}» должен экспортировать функцию ` +
+                    `(module.exports = fn или export default fn), получено: ${typeof fn}`
+            );
+        }
+        docsifyTemplate = fn;
     }
 
     // Имя корневого элемента дерева (без parent) для homepage docsify. Считается лениво

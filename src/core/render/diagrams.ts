@@ -2,14 +2,13 @@ import chalk from 'chalk';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import http from 'node:http';
-import https from 'node:https';
 import crypto from 'node:crypto';
 import fsextra from 'fs-extra';
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 
 import { writeFile, VENDORED_JAR } from '../../util/utils.ts';
+import { httpGetBuffer } from '../../util/http.ts';
 // D2-бэкенд: только статические хелперы (парсинг импортов) грузятся сразу; сам
 // движок @terrastruct/d2 тянется лениво внутри renderD2/teardownD2.
 import { renderD2, foldD2Imports } from './d2renderer.ts';
@@ -104,28 +103,10 @@ export const getMime = (format: string): string => {
     return `image/${format}`;
 };
 
-export const httpGet = async (url: string): Promise<string> => {
-    // return new pending promise
-    return new Promise((resolve, reject) => {
-        // select http or https module, depending on reqested url
-        const lib = url.startsWith('https') ? https : http;
-        const request = lib.get(url, (response) => {
-            const status = response.statusCode as number; // ответ всегда со статусом
-            // handle http errors
-            if (status < 200 || status > 299) {
-                reject(new Error(`Failed to load page ${url}, status code: ${status}`));
-            }
-            // temporary data holder
-            const body: Buffer[] = [];
-            // on every content chunk, push it to the data array
-            response.on('data', (chunk) => body.push(chunk));
-            // we are done, resolve promise with those joined chunks
-            response.on('end', () => resolve(Buffer.concat(body).toString('base64')));
-        });
-        // handle connection errors of the request
-        request.on('error', (err) => reject(err));
-    });
-};
+// Загрузка удалённо отрендеренной картинки (embed-ветка онлайн-рендера PlantUML) в
+// base64. Редиректы и таймауты берём из общего util/http: прежде здесь был голый GET
+// без обоих — 302 от PlantUML-сервера ронял embed-сборку, а зависший сокет вешал её.
+export const httpGet = async (url: string): Promise<string> => (await httpGetBuffer(url)).toString('base64');
 
 // Прямой вызов PlantUML: layout считает встроенный Java-движок Smetana
 // (`-Playout=smetana`), внешний graphviz/dot не нужен. Диаграмма подаётся в stdin
@@ -244,7 +225,11 @@ export const generateImages = async (
     // Чексуммы прошлого прогона — в Set: попадание проверяется O(1) на диаграмму
     // (было O(N) find → O(N²) на всё дерево).
     const oldChecksums = new Set((cacheConf.get('checksums') as string[] | undefined) || []);
-    const newChecksums: string[] = [];
+    // Каждой диаграмме — запись в порядке обхода дерева; ok выставляется задачей при
+    // УСПЕХЕ (рендер или восстановление из бэкапа). В кеш пишем только успешные: иначе
+    // упавший прогон терял бы чексуммы уже отрендеренных → их полный перерендер на
+    // следующем запуске (см. persist в finally ниже).
+    const checksumEntries: { cksum: string; ok: boolean }[] = [];
 
     let totalImages = 0;
     let processedImages = 0;
@@ -264,13 +249,18 @@ export const generateImages = async (
         );
     }
 
-    // JRE резолвится ЛЕНИВО и один раз за сборку: только если в дереве есть хотя бы одна
-    // PlantUML-диаграмма. Проект целиком на D2 java не трогает (скачивание не инициируется).
-    const needsJava = tree.some((item) => item.diagrams.some((d) => d.engine === 'plantuml'));
-    let javaBin: string | null = null;
-    if (needsJava) {
-        javaBin = (await resolveJava({ log: (m) => console.log(chalk.gray(m)) })).path;
-    }
+    // JRE резолвится ЛЕНИВО и один раз за сборку: только когда встретилась PlantUML-
+    // диаграмма, которую РЕАЛЬНО надо рендерить (кэш не сработал — restore-путь ниже
+    // делает continue до создания render-задачи). Проект целиком на D2 либо полностью
+    // восстановленный из бэкапа java не трогает — важно для офлайн-пересборки готового
+    // проекта на машине без установленной java (иначе резолв инициировал бы скачивание).
+    let javaPromise: Promise<string> | null = null;
+    const getJava = (): Promise<string> => {
+        if (!javaPromise) {
+            javaPromise = resolveJava({ log: (m) => console.log(chalk.gray(m)) }).then((r) => r.path);
+        }
+        return javaPromise;
+    };
 
     for (const item of tree) {
         totalImages += item.diagrams.length;
@@ -323,10 +313,11 @@ export const generateImages = async (
                 .update(body + includes + renderKey, 'utf-8')
                 .digest('hex');
 
-            // Чексуммы копим в порядке обхода дерева, СИНХРОННО и до запуска задач:
+            // Записи копим в порядке обхода дерева, СИНХРОННО и до запуска задач:
             // порядок массива не зависит от того, кто из воркеров финиширует раньше —
             // .c4builder.cache детерминирован (важно для сравнения кэша между сборками).
-            newChecksums.push(cksum);
+            const cksumEntry = { cksum, ok: false };
+            checksumEntries.push(cksumEntry);
 
             const outName = `${path.parse(diagram.dir).name}.${outFormat}`;
 
@@ -344,7 +335,12 @@ export const generateImages = async (
             if (oldChecksums.has(cksum) && fs.existsSync(bkFilePath)) {
                 // Восстановление из бэкапа — без рендера; JVM/worker не задействованы,
                 // поэтому кладём в общий пул (kind не важен).
-                otherTasks.push(withProgress(async () => fsextra.copyFileSync(bkFilePath, filePath)));
+                otherTasks.push(
+                    withProgress(async () => {
+                        fsextra.copyFileSync(bkFilePath, filePath);
+                        cksumEntry.ok = true;
+                    })
+                );
                 continue;
             }
 
@@ -364,8 +360,9 @@ export const generateImages = async (
                     if (entryPath !== null) {
                         rendered = await renderD2(entryPath, { layout: options.D2_LAYOUT });
                     } else {
-                        // needsJava гарантирует резолв для plantuml-ветки; guard — нарратив для типов.
-                        if (!javaBin) throw new Error('PlantUML: JRE не резолвнут для plantuml-диаграммы');
+                        // Резолв JRE отложен до первого реального PlantUML-рендера (эта
+                        // ветка исполняется лишь при промахе кэша). getJava мемоизирует.
+                        const javaBin = await getJava();
                         rendered = await renderDiagram(diagramContent, {
                             javaBin,
                             jarPath,
@@ -377,6 +374,7 @@ export const generateImages = async (
                     }
                     const image = needsRaster ? await rasterizeSvgToPng(rendered) : rendered;
                     await writeFile(filePath, image);
+                    cksumEntry.ok = true;
                 } catch (err: unknown) {
                     // Имя диаграммы в ошибку: renderDiagram/renderD2 сами его не знают.
                     throw new Error(`Диаграмма "${outName}": ${(err as Error).message || err}`);
@@ -392,10 +390,20 @@ export const generateImages = async (
     // параллельно друг другу. allSettled — чтобы падение одной очереди не оставляло
     // вторую как floating promise с висящими JVM: обе доосушаются, затем бросаем первую
     // ошибку (приоритет — PlantUML-пул, порядок между очередями не значим).
-    const results = await Promise.allSettled([runPool(otherTasks, renderConcurrency()), runPool(d2Tasks, 1)]);
-    const failed = results.find((r) => r.status === 'rejected');
-    if (failed && failed.status === 'rejected') throw failed.reason;
-
-    // store all puml checksums
-    cacheConf.set('checksums', newChecksums);
+    try {
+        const results = await Promise.allSettled([
+            runPool(otherTasks, renderConcurrency()),
+            runPool(d2Tasks, 1)
+        ]);
+        const failed = results.find((r) => r.status === 'rejected');
+        if (failed && failed.status === 'rejected') throw failed.reason;
+    } finally {
+        // Персистим чексуммы даже при частичном падении: успешно обработанные диаграммы
+        // не перерендерятся на следующем прогоне. Вместе с сохранением dist_bk при ошибке
+        // (build.ts) повторный прогон после сбоя чинит только упавшую диаграмму.
+        cacheConf.set(
+            'checksums',
+            checksumEntries.filter((e) => e.ok).map((e) => e.cksum)
+        );
+    }
 };

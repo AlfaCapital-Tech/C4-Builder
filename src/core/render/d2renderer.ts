@@ -48,8 +48,10 @@ const getD2 = (): Promise<D2Engine> => {
     return d2Promise;
 };
 
-// Явный teardown: webworker иначе держит процесс и CLI не завершается. Воркер
-// завершаем в finally, чтобы освободить его даже если init (inst.ready) упал.
+// Явный teardown: webworker иначе держит процесс и CLI не завершается. Зовётся из
+// finally build() — поэтому НЕ должен бросать: любой его throw затёр бы исходную
+// причину падения сборки. Все ошибки освобождения глушим (движок уже мёртв — то, что
+// надо освободить, и так освобождено). Идемпотентен: d2Promise=null в начале.
 const teardownD2 = async (): Promise<void> => {
     filesMemo = null; // граф импортов кешируется на одну сборку — сбрасываем на выходе
     if (!d2Promise) return;
@@ -63,8 +65,14 @@ const teardownD2 = async (): Promise<void> => {
     }
     try {
         await inst.ready; // worker создаётся асинхронно в init()
-    } finally {
+    } catch {
+        // init движка мог упасть — это уже отражено ошибкой рендера; глушим, иначе
+        // throw из finally build() подменил бы исходную причину падения сборки.
+    }
+    try {
         if (inst.worker) await inst.worker.terminate();
+    } catch {
+        // воркер уже недоступен/мёртв — освобождать нечего.
     }
 };
 
