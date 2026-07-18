@@ -9,6 +9,10 @@ template/.c4builder
 # временные выходы golden-тестов (эталон test/golden/ — в git)
 test/.tmp/
 
+# межпроцессный лок сборки (см. src/util/lock.ts) — транзиентный
+*.c4builder.lock
+.c4builder.lock
+
 #intellij
 .idea
 *.iml

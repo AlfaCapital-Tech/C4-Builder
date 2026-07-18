@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { configSchema, isValidPort } from '../dist/config/schema.js';
-import { parseConfig } from '../dist/config/options.js';
+import { configSchema, isValidPort, parseConfig } from './dist.mjs';
 
 // Регрессии конфига против 0.2.x (max-ревью PR #8): легаси-значения из рукописных
 // `.c4builder` не должны ни падать, ни превращаться в мусорные строки.

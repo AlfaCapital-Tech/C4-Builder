@@ -3,11 +3,12 @@ import path from 'node:path';
 import fsextra from 'fs-extra';
 
 import { makeDirectory, writeOnSameLine } from '../util/utils.ts';
-// teardownD2: освобождение webworker D2 в конце сборки.
-import { teardownD2 } from './render/d2renderer.ts';
+// clearD2FileCache: сброс кеша графа D2-импортов на границах сборки (сам webworker
+// D2 гасит CLI после одиночной сборки — в watch-режиме он переживает ребилды).
+import { clearD2FileCache } from './render/d2renderer.ts';
 import type { BuildOptions } from '../config/options.ts';
 // Фазы сборки: scan (дерево исходников) → render (диаграммы) → compose (markdown/сайт).
-import { generateTree } from './scan/tree.ts';
+import { generateTree, engineSupportsRemote, clearIncludeCache } from './scan/tree.ts';
 import { generateImages, type CacheConf } from './render/diagrams.ts';
 import { generateMD, generateWebMD, generateCompleteMD, clearDiagramCache } from './compose/markdown.ts';
 
@@ -31,8 +32,11 @@ const build = async (options: BuildOptions, cacheConf: CacheConf): Promise<void>
     }
     await makeDirectory(path.join(options.DIST_FOLDER));
 
-    // Сбросить кеш base64 диаграмм прошлой сборки (актуально для watch-режима).
+    // Сбросить пофайловые кеши прошлой сборки (актуально для watch-режима): base64
+    // диаграмм, граф D2-импортов, контент include-файлов PlantUML.
     clearDiagramCache();
+    clearD2FileCache();
+    clearIncludeCache();
 
     let ok = false;
     try {
@@ -41,17 +45,22 @@ const build = async (options: BuildOptions, cacheConf: CacheConf): Promise<void>
         const tree = await generateTree(options.ROOT_FOLDER, options);
         console.log(chalk.blue(`parsed ${tree.length} folders`));
 
-        // У D2 нет онлайн-сервера рендера (в отличие от PlantUML): без локальной
-        // генерации .d2 не во что превратить — ссылки на SVG вели бы в никуда.
-        // Падаем сразу с понятной ошибкой, а не молча битым выводом.
-        if (
-            !options.GENERATE_LOCAL_IMAGES &&
-            tree.some((item) => item.diagrams.some((d) => d.engine === 'd2'))
-        ) {
-            throw new Error(
-                'В проекте есть .d2-диаграммы, но generateLocalImages выключен. У D2 нет ' +
-                    'онлайн-сервера рендера — включите локальную генерацию изображений (generateLocalImages).'
+        // У движков без онлайн-рендера (D2, см. remoteRender в DIAGRAM_ENGINES) при
+        // выключенной локальной генерации диаграммы не во что превратить — ссылки на
+        // SVG вели бы в никуда. Падаем сразу с понятной ошибкой, а не молча битым выводом.
+        if (!options.GENERATE_LOCAL_IMAGES) {
+            const offline = new Set(
+                tree.flatMap((item) =>
+                    item.diagrams.filter((d) => !engineSupportsRemote(d.engine)).map((d) => d.engine)
+                )
             );
+            if (offline.size) {
+                throw new Error(
+                    `В проекте есть диаграммы без онлайн-сервера рендера (${[...offline].join(', ')}), ` +
+                        'но generateLocalImages выключен — включите локальную генерацию изображений ' +
+                        '(generateLocalImages).'
+                );
+            }
         }
 
         if (options.GENERATE_LOCAL_IMAGES) {
@@ -101,8 +110,7 @@ const build = async (options: BuildOptions, cacheConf: CacheConf): Promise<void>
     } finally {
         // Бэкап dist сносим ТОЛЬКО при успехе: при падении фазы dist_bk — единственная
         // полная копия прошлого удачного билда, её нельзя терять (иначе первый же
-        // сломавшийся рендер уничтожает рабочий вывод). Освобождение webworker D2
-        // обязательно в любом исходе — иначе процесс не завершится.
+        // сломавшийся рендер уничтожает рабочий вывод).
         if (ok) {
             await fsextra.removeSync(bkFolderName);
         } else if (options.GENERATE_LOCAL_IMAGES && fsextra.existsSync(bkFolderName)) {
@@ -110,7 +118,11 @@ const build = async (options: BuildOptions, cacheConf: CacheConf): Promise<void>
                 chalk.yellow(`\nсборка прервана — бэкап предыдущего билда сохранён в ./${bkFolderName}`)
             );
         }
-        await teardownD2();
+        // Пофайловые кеши нужны только внутри сборки — чистим и на выходе, чтобы
+        // watch-процесс не держал base64 всех диаграмм в памяти между ребилдами.
+        clearDiagramCache();
+        clearD2FileCache();
+        clearIncludeCache();
     }
 };
 export { build };

@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-import { isPathInside } from '../dist/core/render/jre.js';
+import { isPathInside } from './dist.mjs';
 
 // zip-slip: extractZip обязан отклонять записи, выходящие за пределы каталога распаковки.
 describe('isPathInside (защита extractZip от zip-slip)', () => {

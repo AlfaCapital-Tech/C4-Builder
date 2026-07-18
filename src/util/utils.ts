@@ -1,37 +1,20 @@
 import fs from 'node:fs';
 import zlib from 'node:zlib';
 
-// makeDirectory намеренно резолвится и при ошибке mkdir (легаси-поведение — не чинить).
-const makeDirectory = (path: string): Promise<void> =>
-    new Promise((resolve) => {
-        fs.mkdir(path, () => {
-            return resolve();
-        });
-    });
+// mkdir -p: недостающие родители создаются, существующий каталог — не ошибка.
+// Реальные сбои (EACCES/EROFS) пробрасываются — раньше глотались молча, и сборка
+// падала позже невнятной ошибкой записи в несуществующий каталог.
+const makeDirectory = async (path: string): Promise<void> => {
+    await fs.promises.mkdir(path, { recursive: true });
+};
 
-// type не передаётся ни одним вызовом → encoding отсутствует → data приходит Buffer'ом;
-// сохраняем union из оверлоада fs (потребители зовут .toString()/шаблоны).
-const readFile = (path: string, type?: BufferEncoding): Promise<string | Buffer> =>
-    new Promise((resolve, reject) => {
-        fs.readFile(path, type, (err, data) => {
-            if (err) return reject(err);
-
-            return resolve(data);
-        });
-    });
+// Кодировка не передаётся ни одним вызовом → всегда Buffer (потребители зовут .toString()).
+const readFile = (path: string): Promise<Buffer> => fs.promises.readFile(path);
 
 const writeFile = (path: string, data: string | NodeJS.ArrayBufferView): Promise<void> =>
-    new Promise((resolve, reject) => {
-        // res опционален: fs.writeFile отдаёт NoParamCallback, второй аргумент — всегда undefined.
-        fs.writeFile(path, data, (err: NodeJS.ErrnoException | null, res?: undefined) => {
-            if (err) return reject(err);
+    fs.promises.writeFile(path, data);
 
-            return resolve(res);
-        });
-    });
-
-// _fn игнорируется (легаси-заглушка — не чинить).
-const writeOnSameLine = async (message: string, _fn?: unknown): Promise<void> => {
+const writeOnSameLine = async (message: string): Promise<void> => {
     process.stdout.write(`${message}\r`);
 };
 

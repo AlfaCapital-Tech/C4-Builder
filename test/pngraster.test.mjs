@@ -1,9 +1,6 @@
-import { createRequire } from 'node:module';
 import { describe, it, expect } from 'vitest';
 
-// pngraster — нативный CJS-аддон (resvg); из ESM-теста грузим собранный модуль через createRequire.
-const require = createRequire(import.meta.url);
-const { rasterizeSvgToPng } = require('../dist/core/render/pngraster.js');
+import { rasterizeSvgToPng } from './dist.mjs';
 
 const svg = (inner) =>
     `<svg xmlns="http://www.w3.org/2000/svg" width="220" height="60">` +
@@ -19,21 +16,21 @@ const PNG_SIGNATURE = '89504e470d0a1a0a';
 // поверх SVG обоих движков (см. change resvg-png). Без байт-эталона под CI: проверяем
 // сигнатуру, повторяемость и что кириллица реально рисуется (иначе выход = пустой холст).
 describe('pngraster: SVG→PNG (resvg)', () => {
-    it('выдаёт валидный PNG', () => {
-        const png = rasterizeSvgToPng(Buffer.from(TEXT_SVG));
+    it('выдаёт валидный PNG', async () => {
+        const png = await rasterizeSvgToPng(Buffer.from(TEXT_SVG));
         expect(png.subarray(0, 8).toString('hex')).toBe(PNG_SIGNATURE);
         expect(png.length).toBeGreaterThan(100);
     });
 
-    it('детерминирован: два прогона одного SVG байт-в-байт идентичны', () => {
-        const a = rasterizeSvgToPng(Buffer.from(TEXT_SVG));
-        const b = rasterizeSvgToPng(Buffer.from(TEXT_SVG));
+    it('детерминирован: два прогона одного SVG байт-в-байт идентичны', async () => {
+        const a = await rasterizeSvgToPng(Buffer.from(TEXT_SVG));
+        const b = await rasterizeSvgToPng(Buffer.from(TEXT_SVG));
         expect(a.equals(b)).toBe(true);
     });
 
-    it('кириллица отрисована вендорным шрифтом (рендер отличается от пустого холста)', () => {
-        const withText = rasterizeSvgToPng(Buffer.from(TEXT_SVG));
-        const blank = rasterizeSvgToPng(Buffer.from(BLANK_SVG));
+    it('кириллица отрисована вендорным шрифтом (рендер отличается от пустого холста)', async () => {
+        const withText = await rasterizeSvgToPng(Buffer.from(TEXT_SVG));
+        const blank = await rasterizeSvgToPng(Buffer.from(BLANK_SVG));
         expect(withText.equals(blank)).toBe(false);
     });
 });

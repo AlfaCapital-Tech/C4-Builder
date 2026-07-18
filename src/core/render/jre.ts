@@ -411,6 +411,8 @@ const resolveJava = async ({
     }
 };
 
-// Публичный API модуля. jreCacheDir/adoptiumOs/adoptiumArch/parseMajor/MAJOR_MIN —
-// module-private (снаружи не используются; CI хардкодит путь кеша и суффикс ключа).
-export { resolveJava, detectSystemJava, cachedJava, TEMURIN_FEATURE };
+// Публичный API модуля. jreCacheDir и JRE_CACHE_SCHEMA нужны подкоманде `jre info` —
+// из неё CI берёт путь кеша и материал ключа (см. .github/workflows/ci.yml), не
+// хардкодя путь и не grep'ая константы из исходников. adoptiumOs/adoptiumArch/
+// parseMajor/MAJOR_MIN — module-private.
+export { resolveJava, detectSystemJava, cachedJava, TEMURIN_FEATURE, JRE_CACHE_SCHEMA, jreCacheDir };

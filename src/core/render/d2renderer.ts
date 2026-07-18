@@ -49,11 +49,13 @@ const getD2 = (): Promise<D2Engine> => {
 };
 
 // Явный teardown: webworker иначе держит процесс и CLI не завершается. Зовётся из
-// finally build() — поэтому НЕ должен бросать: любой его throw затёр бы исходную
-// причину падения сборки. Все ошибки освобождения глушим (движок уже мёртв — то, что
-// надо освободить, и так освобождено). Идемпотентен: d2Promise=null в начале.
+// CLI (dispatch) после ОДИНОЧНОЙ сборки — в watch-режиме воркер переживает ребилды
+// (его пересоздание на каждый ребилд стоило секунды), а при Ctrl+C умирает с процессом.
+// НЕ должен бросать: его throw затёр бы исходную причину падения сборки. Все ошибки
+// освобождения глушим (движок уже мёртв — то, что надо освободить, и так освобождено).
+// Идемпотентен: d2Promise=null в начале. Кеш графа импортов сбрасывает не он, а
+// clearD2FileCache() на границах build().
 const teardownD2 = async (): Promise<void> => {
-    filesMemo = null; // граф импортов кешируется на одну сборку — сбрасываем на выходе
     if (!d2Promise) return;
     const pending = d2Promise;
     d2Promise = null;
@@ -103,6 +105,8 @@ const collectFiles = (entryAbs: string, acc: Map<string, string> = new Map()): M
     if (acc.has(abs)) return acc;
     let content: string;
     try {
+        // Строго UTF-8: язык D2 определён поверх UTF-8, опция CHARSET конфига относится
+        // к PlantUML (уходит в -charset) и на .d2 сознательно не распространяется.
         content = fs.readFileSync(abs, 'utf-8');
     } catch {
         return acc;
@@ -122,10 +126,13 @@ const collectFiles = (entryAbs: string, acc: Map<string, string> = new Map()): M
 
 // Мемоизация графа на время одной сборки: foldD2Imports (чексумма) и
 // buildCompileRequest (рендер) иначе читают один и тот же граф с диска дважды.
-// Ключ — абсолютный путь входного файла. Сбрасывается в teardownD2() (конец сборки),
-// иначе watch-режим отдавал бы устаревшее содержимое. Возвращаемую Map потребители
-// НЕ мутируют (foldD2Imports исключает входной файл фильтром, не delete).
+// Ключ — абсолютный путь входного файла. Сбрасывается clearD2FileCache() на границах
+// build(), иначе watch-режим отдавал бы устаревшее содержимое. Возвращаемую Map
+// потребители НЕ мутируют (foldD2Imports исключает входной файл фильтром, не delete).
 let filesMemo: Map<string, Map<string, string>> | null = null;
+const clearD2FileCache = (): void => {
+    filesMemo = null;
+};
 const collectFilesCached = (entryAbs: string): Map<string, string> => {
     const abs = path.resolve(entryAbs);
     if (!filesMemo) filesMemo = new Map();
@@ -153,6 +160,11 @@ const commonAncestor = (files: string[]): string => {
 // Подготовить аргументы compile(): виртуальная fs (все файлы графа) + inputPath.
 const buildCompileRequest = (entryAbs: string): { fs: Record<string, string>; inputPath: string } => {
     const files = collectFilesCached(entryAbs);
+    // Пустой граф = не прочитался сам входной файл (удалён/недоступен — гонка в watch).
+    // Без guard'а commonAncestor([]) давал бы сырой TypeError (Math.min()=Infinity).
+    if (files.size === 0) {
+        throw new Error(`D2: не удалось прочитать ${entryAbs} (файл удалён или недоступен?)`);
+    }
     const root = commonAncestor([...files.keys()]);
     const toKey = (abs: string): string => path.relative(root, abs).split(path.sep).join('/');
     const fsMap: Record<string, string> = {};
@@ -187,16 +199,21 @@ const renderD2 = async (
 // Материал импортов для чексуммы кэша (без самого входного файла — его контент
 // хэшируется отдельно). Правка импортируемого .d2 меняет чексумму зависимой
 // диаграммы — аналог foldIncludes для PlantUML.
+// Путь в материале — относительный к cwd, posix-разделители: чексумма не зависит
+// от машины/чекаута/ОС (абсолютный путь делал кеш непереносимым).
 const foldD2Imports = (entryAbs: string): string => {
     const abs = path.resolve(entryAbs);
     const files = collectFilesCached(entryAbs);
+    const rel = (p: string): string => path.relative(process.cwd(), p).split(path.sep).join('/');
     // Мемоизированную Map не мутируем (её же использует buildCompileRequest) —
-    // входной файл исключаем фильтром, а не delete.
+    // входной файл исключаем фильтром, а не delete. Сортировка по относительному
+    // ключу — тому же, что уходит в материал.
     return [...files.entries()]
         .filter(([p]) => p !== abs)
+        .map(([p, content]) => [rel(p), content])
         .sort((a, b) => a[0].localeCompare(b[0]))
         .map(([p, content]) => ` ${p} ${content}`)
         .join('');
 };
 
-export { renderD2, foldD2Imports, teardownD2 };
+export { renderD2, foldD2Imports, teardownD2, clearD2FileCache };

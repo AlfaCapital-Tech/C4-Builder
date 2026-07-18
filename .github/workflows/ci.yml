@@ -55,7 +55,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node: ['22', '24']
+        # Golden-рендер (JRE + минуты рендера) — на одной ноге: его выход определяется
+        # JVM и вендорным шрифтом, а не версией node; вторая нога гоняет только
+        # быстрые юнит/e2e-тесты, подтверждая совместимость CLI с другим node.
+        include:
+          - node: '24'
+            golden: true
+          - node: '22'
+            golden: false
     steps:
       - uses: actions/checkout@v4
 
@@ -65,6 +72,7 @@ jobs:
           cache: npm
 
       - uses: actions/setup-java@v4
+        if: matrix.golden
         with:
           distribution: temurin
           java-version: '21'
@@ -75,13 +83,25 @@ jobs:
       # Ошибка tsc роняет job (красный статус PR наравне с линтом/тестами).
       - run: npm run build
 
-      # Мажор JRE и версия схемы кеша — из единственного источника истины (jre.ts),
-      # чтобы ключ не рассинхронился при бампе версии или смене раскладки кеша вручную.
-      - name: Определить мажор managed-JRE
+      # Параметры managed-JRE (мажор, схема кеша, путь кеша) — из самого CLI
+      # (`jre info`), а не grep по исходникам: единственный источник истины — jre.ts,
+      # путь уважает XDG_CACHE_HOME. Пустое значение валит шаг (гейт от молчаливого
+      # рассинхрона: раньше echo глотал код grep даже под bash -e).
+      - name: Определить параметры managed-JRE
+        if: matrix.golden
         id: jre
         run: |
-          echo "feature=$(grep -oP 'TEMURIN_FEATURE\s*=\s*\K\d+' src/core/render/jre.ts)" >> "$GITHUB_OUTPUT"
-          echo "schema=$(grep -oP 'JRE_CACHE_SCHEMA\s*=\s*\K\d+' src/core/render/jre.ts)" >> "$GITHUB_OUTPUT"
+          info="$(node dist/index.js jre info)"
+          echo "jre info: $info"
+          feature="$(echo "$info" | jq -r '.feature // empty')"
+          schema="$(echo "$info" | jq -r '.schema // empty')"
+          dir="$(echo "$info" | jq -r '.cacheDir // empty')"
+          if [ -z "$feature" ] || [ -z "$schema" ] || [ -z "$dir" ]; then
+            echo "::error::jre info вернул неполные данные"; exit 1
+          fi
+          echo "feature=$feature" >> "$GITHUB_OUTPUT"
+          echo "schema=$schema" >> "$GITHUB_OUTPUT"
+          echo "dir=$dir" >> "$GITHUB_OUTPUT"
 
       # Golden-рендер идёт на пиновом managed-JRE (Temurin, см. jre.ts TEMURIN_FEATURE),
       # а не на setup-java: тест подставляет его JAVA_HOME. Кешируем между прогонами.
@@ -90,10 +110,11 @@ jobs:
       # cachedJava() считает невалидным, и при hit уже не пересохранял бы его —
       # прогрев пропускался, а тест молча качал JRE на каждом прогоне.
       - name: Cache managed JRE
+        if: matrix.golden
         id: jre-cache
         uses: actions/cache@v4
         with:
-          path: ~/.cache/c4builder/jre
+          path: ${{ steps.jre.outputs.dir }}
           key: c4builder-jre-temurin${{ steps.jre.outputs.feature }}-s${{ steps.jre.outputs.schema }}-${{ runner.os }}-${{ runner.arch }}
 
       # Прогрев только при промахе кеша: на попадании переиспользуем восстановленный
@@ -101,20 +122,24 @@ jobs:
       # setup-java), чтобы кеш наполнился именно им; на попадании --force снёс бы
       # свежевосстановленный каталог и качал ~50 МБ заново каждый прогон.
       - name: Прогрев managed-JRE (только при промахе кеша)
-        if: steps.jre-cache.outputs.cache-hit != 'true'
+        if: matrix.golden && steps.jre-cache.outputs.cache-hit != 'true'
         run: node dist/index.js jre install --force
 
       - run: npm test
+        if: matrix.golden
+
+      - run: npm run test:unit
+        if: ${{ !matrix.golden }}
 
       # Нормализованный фактический выход сборки — из него регенерируется
       # эталон при расхождении окружений (см. test/README.md).
       # Пакуем в tar: upload-artifact дропает пустые файлы (напр. .nojekyll).
       - name: Pack actual output
-        if: failure()
+        if: failure() && matrix.golden
         run: tar -czf golden-actual.tar.gz -C test/.tmp actual
 
       - name: Upload actual output
-        if: failure()
+        if: failure() && matrix.golden
         uses: actions/upload-artifact@v4
         with:
           name: golden-actual-node${{ matrix.node }}

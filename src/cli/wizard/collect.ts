@@ -20,6 +20,11 @@ const validate =
     (answer: unknown): string | true =>
         schema.safeParse(answer).success || message;
 
+// Пункт default-списка чекбокса inquirer: ключ отмечен, если он включён в текущем
+// конфиге, а при незаданном значении — если включён по умолчанию.
+const checkedKey = (current: boolean | undefined, dflt: boolean, key: string): string | null =>
+    (current === undefined ? dflt : current) ? key : null;
+
 export default async (
     currentConfiguration: Partial<BuildOptions>,
     conf: { set(key: string, value: unknown): void },
@@ -100,27 +105,13 @@ export default async (
         program.config
     ) {
         const defaults = [
-            currentConfiguration.GENERATE_MD === undefined
-                ? defaultConfig.generateMD
-                    ? 'generateMD'
-                    : null
-                : currentConfiguration.GENERATE_MD
-                  ? 'generateMD'
-                  : null,
-            currentConfiguration.GENERATE_COMPLETE_MD_FILE === undefined
-                ? defaultConfig.generateCompleteMD
-                    ? 'generateCompleteMD'
-                    : null
-                : currentConfiguration.GENERATE_COMPLETE_MD_FILE
-                  ? 'generateCompleteMD'
-                  : null,
-            currentConfiguration.GENERATE_WEBSITE === undefined
-                ? defaultConfig.generateWEB
-                    ? 'generateWEB'
-                    : null
-                : currentConfiguration.GENERATE_WEBSITE
-                  ? 'generateWEB'
-                  : null
+            checkedKey(currentConfiguration.GENERATE_MD, defaultConfig.generateMD, 'generateMD'),
+            checkedKey(
+                currentConfiguration.GENERATE_COMPLETE_MD_FILE,
+                defaultConfig.generateCompleteMD,
+                'generateCompleteMD'
+            ),
+            checkedKey(currentConfiguration.GENERATE_WEBSITE, defaultConfig.generateWEB, 'generateWEB')
         ];
 
         responses = await inquirer.prompt({
@@ -144,11 +135,11 @@ export default async (
             ]
         });
 
-        conf.set('generateMD', !!responses.generate.find((x: string) => x === 'generateMD'));
-        conf.set('generateCompleteMD', !!responses.generate.find((x: string) => x === 'generateCompleteMD'));
-        conf.set('generateWEB', !!responses.generate.find((x: string) => x === 'generateWEB'));
+        conf.set('generateMD', responses.generate.includes('generateMD'));
+        conf.set('generateCompleteMD', responses.generate.includes('generateCompleteMD'));
+        conf.set('generateWEB', responses.generate.includes('generateWEB'));
 
-        if (responses.generate.find((x: string) => x === 'generateMD')) {
+        if (responses.generate.includes('generateMD')) {
             let mdOptions: PromptAnswers = await inquirer.prompt({
                 type: 'confirm',
                 name: 'includeNavigation',
@@ -172,7 +163,7 @@ export default async (
             conf.set('includeTableOfContents', mdOptions.includeTableOfContents);
         }
 
-        if (responses.generate.find((x: string) => x === 'generateWEB')) {
+        if (responses.generate.includes('generateWEB')) {
             let webOptions: PromptAnswers = await inquirer.prompt({
                 type: 'input',
                 name: 'webTheme',
@@ -238,48 +229,28 @@ export default async (
         program.config
     ) {
         const defaults = [
-            currentConfiguration.INCLUDE_BREADCRUMBS === undefined
-                ? defaultConfig.includeBreadcrumbs
-                    ? 'includeBreadcrumbs'
-                    : null
-                : currentConfiguration.INCLUDE_BREADCRUMBS
-                  ? 'includeBreadcrumbs'
-                  : null,
-            currentConfiguration.GENERATE_LOCAL_IMAGES === undefined
-                ? defaultConfig.generateLocalImages
-                    ? 'generateLocalImages'
-                    : null
-                : currentConfiguration.GENERATE_LOCAL_IMAGES
-                  ? 'generateLocalImages'
-                  : null,
-            currentConfiguration.INCLUDE_LINK_TO_DIAGRAM === undefined
-                ? defaultConfig.includeLinkToDiagram
-                    ? 'includeLinkToDiagram'
-                    : null
-                : currentConfiguration.INCLUDE_LINK_TO_DIAGRAM
-                  ? 'includeLinkToDiagram'
-                  : null,
-            currentConfiguration.DIAGRAMS_ON_TOP === undefined
-                ? defaultConfig.diagramsOnTop
-                    ? 'diagramsOnTop'
-                    : null
-                : currentConfiguration.DIAGRAMS_ON_TOP
-                  ? 'diagramsOnTop'
-                  : null,
-            currentConfiguration.EMBED_DIAGRAM === undefined
-                ? defaultConfig.embedDiagram
-                    ? 'embedDiagram'
-                    : null
-                : currentConfiguration.EMBED_DIAGRAM
-                  ? 'embedDiagram'
-                  : null,
-            currentConfiguration.EXCLUDE_OTHER_FILES === undefined
-                ? defaultConfig.excludeOtherFiles
-                    ? 'excludeOtherFiles'
-                    : null
-                : currentConfiguration.EXCLUDE_OTHER_FILES
-                  ? 'excludeOtherFiles'
-                  : null
+            checkedKey(
+                currentConfiguration.INCLUDE_BREADCRUMBS,
+                defaultConfig.includeBreadcrumbs,
+                'includeBreadcrumbs'
+            ),
+            checkedKey(
+                currentConfiguration.GENERATE_LOCAL_IMAGES,
+                defaultConfig.generateLocalImages,
+                'generateLocalImages'
+            ),
+            checkedKey(
+                currentConfiguration.INCLUDE_LINK_TO_DIAGRAM,
+                defaultConfig.includeLinkToDiagram,
+                'includeLinkToDiagram'
+            ),
+            checkedKey(currentConfiguration.DIAGRAMS_ON_TOP, defaultConfig.diagramsOnTop, 'diagramsOnTop'),
+            checkedKey(currentConfiguration.EMBED_DIAGRAM, defaultConfig.embedDiagram, 'embedDiagram'),
+            checkedKey(
+                currentConfiguration.EXCLUDE_OTHER_FILES,
+                defaultConfig.excludeOtherFiles,
+                'excludeOtherFiles'
+            )
         ];
         const choices = [
             {
@@ -315,19 +286,12 @@ export default async (
             default: defaults,
             choices: choices
         });
-        conf.set('includeBreadcrumbs', !!responses.generate.find((x: string) => x === 'includeBreadcrumbs'));
-        conf.set(
-            'includeLinkToDiagram',
-            !!responses.generate.find((x: string) => x === 'includeLinkToDiagram')
-        );
-        conf.set('diagramsOnTop', !!responses.generate.find((x: string) => x === 'diagramsOnTop'));
-        conf.set('embedDiagram', !!responses.generate.find((x: string) => x === 'embedDiagram'));
-        conf.set('excludeOtherFiles', !!responses.generate.find((x: string) => x === 'excludeOtherFiles'));
-
-        conf.set(
-            'generateLocalImages',
-            !!responses.generate.find((x: string) => x === 'generateLocalImages')
-        );
+        conf.set('includeBreadcrumbs', responses.generate.includes('includeBreadcrumbs'));
+        conf.set('includeLinkToDiagram', responses.generate.includes('includeLinkToDiagram'));
+        conf.set('diagramsOnTop', responses.generate.includes('diagramsOnTop'));
+        conf.set('embedDiagram', responses.generate.includes('embedDiagram'));
+        conf.set('excludeOtherFiles', responses.generate.includes('excludeOtherFiles'));
+        conf.set('generateLocalImages', responses.generate.includes('generateLocalImages'));
     }
 
     if (!currentConfiguration.PLANTUML_SERVER_URL || program.config) {

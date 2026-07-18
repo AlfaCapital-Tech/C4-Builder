@@ -1,14 +1,29 @@
 import chalk from 'chalk';
-import { resolveJava, detectSystemJava, TEMURIN_FEATURE } from '../../core/render/jre.ts';
+import {
+    resolveJava,
+    detectSystemJava,
+    TEMURIN_FEATURE,
+    JRE_CACHE_SCHEMA,
+    jreCacheDir
+} from '../../core/render/jre.ts';
 
-// Прогрев кеша: `c4builder jre install [--force]`. Резолвит/скачивает JRE заранее
+// `c4builder jre install [--force]` — прогрев кеша: резолвит/скачивает JRE заранее
 // (CI/офлайн) без полной сборки. При годной системной java по умолчанию сообщает,
 // что скачивание не требуется; `--force` форсирует загрузку Temurin в кеш.
+// `c4builder jre info` — машиночитаемые параметры managed-JRE (JSON): путь кеша и
+// материал ключа для внешних кешей (actions/cache в CI) из единственного источника
+// истины, вместо grep констант по исходникам и хардкода пути.
 export default async (args: string[] = [], { force = false }: { force?: boolean } = {}): Promise<void> => {
     const action = args[0];
+    if (action === 'info') {
+        console.log(
+            JSON.stringify({ feature: TEMURIN_FEATURE, schema: JRE_CACHE_SCHEMA, cacheDir: jreCacheDir() })
+        );
+        return;
+    }
     if (action !== 'install') {
         console.log(chalk.red(`неизвестная подкоманда: c4builder jre ${action || ''}`.trim()));
-        console.log(chalk.gray('доступно: c4builder jre install [--force]'));
+        console.log(chalk.gray('доступно: c4builder jre install [--force] | jre info'));
         process.exit(1);
     }
 

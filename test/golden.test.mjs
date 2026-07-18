@@ -27,13 +27,23 @@ let anyFailed = false;
 const runs = {};
 
 beforeAll(async () => {
-    await ensureManagedJre(); // пин JVM до первой сборки
-    for (const variant of VARIANTS) {
-        const dir = createFixture(variant);
-        runBuild(dir);
-        const tree = collectNormalizedTree(path.join(dir, 'docs'));
-        writeActualTree(tree, variant);
-        runs[variant] = { dir, tree };
+    try {
+        await ensureManagedJre(); // пин JVM до первой сборки
+        for (const variant of VARIANTS) {
+            // Каталог регистрируем СРАЗУ после создания: упади сборка посреди цикла,
+            // afterAll видел бы только успешные варианты, а фикстуры упавших копились
+            // бы в test/.tmp навсегда (даже после последующих зелёных прогонов).
+            const dir = createFixture(variant);
+            runs[variant] = { dir, tree: null };
+            runBuild(dir);
+            runs[variant].tree = collectNormalizedTree(path.join(dir, 'docs'));
+            writeActualTree(runs[variant].tree, variant);
+        }
+    } catch (e) {
+        // Падение хука не проходит через afterEach — флаг ставим сами, чтобы
+        // afterAll оставил фикстуры для отладки.
+        anyFailed = true;
+        throw e;
     }
 });
 

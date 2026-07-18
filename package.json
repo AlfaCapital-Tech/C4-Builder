@@ -36,6 +36,8 @@
     "check": "biome ci .",
     "pretest": "npm run build",
     "test": "vitest run",
+    "pretest:unit": "npm run build",
+    "test:unit": "vitest run --exclude \"**/golden.test.mjs\"",
     "test:golden": "npm run build && vitest run test/golden.test.mjs",
     "test:golden:update": "npm run build && UPDATE_GOLDEN=1 vitest run test/golden.test.mjs"
   },

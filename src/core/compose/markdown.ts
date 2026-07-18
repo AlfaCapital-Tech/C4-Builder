@@ -12,6 +12,7 @@ import {
     getFolderName,
     diagramOutputFormat,
     DIAGRAM_ENGINES,
+    engineSupportsRemote,
     type TreeItem,
     type Diagram
 } from '../scan/tree.ts';
@@ -55,9 +56,8 @@ const diagramExtAlternation = (): string =>
 
 // Ссылка на диаграмму в markdown: ![alt](path.puml|d2). Путь ленивый и не пересекает ')',
 // иначе две ссылки на одной строке склеились бы в один матч и не заменились. Свежий объект
-// на вызов — чтобы matchAll не тянул чужой lastIndex. Экспортируется для тестов согласованности
-// с реестром DIAGRAM_ENGINES.
-export const diagramRefRegex = (): RegExp =>
+// на вызов — чтобы matchAll не тянул чужой lastIndex.
+const diagramRefRegex = (): RegExp =>
     new RegExp(`!\\[.*?\\]\\(([^)]*?\\.(?:${diagramExtAlternation()}))\\)`, 'g');
 
 // Кеш base64 отрендеренных диаграмм на время ОДНОЙ сборки: один файл читают все три
@@ -69,8 +69,19 @@ export const clearDiagramCache = (): void => diagramBase64Cache.clear();
 const readDiagramBase64 = async (absPath: string): Promise<string> => {
     const cached = diagramBase64Cache.get(absPath);
     if (cached !== undefined) return cached;
-    const b64 = ((await readFile(absPath)) as Buffer).toString('base64');
+    const b64 = (await readFile(absPath)).toString('base64');
     diagramBase64Cache.set(absPath, b64);
+    return b64;
+};
+
+// Тот же кеш для embed-ветки онлайн-рендера (ключ — URL, с абсолютными путями не
+// пересекается): три генератора иначе тянули бы одну и ту же картинку с PlantUML-сервера
+// трижды за сборку.
+const readRemoteDiagramBase64 = async (url: string): Promise<string> => {
+    const cached = diagramBase64Cache.get(url);
+    if (cached !== undefined) return cached;
+    const b64 = await httpGet(url);
+    diagramBase64Cache.set(url, b64);
     return b64;
 };
 
@@ -89,9 +100,10 @@ const buildDiagramMarkdown = async (
     const format = diagramOutputFormat(diagram, options);
     // rawPath — сырой путь (для чтения файла и как основа ссылок), кодируем ровно один раз.
     const rawPath = path.join(path.dirname(diagram.dir), `${name}.${format}`);
-    // Онлайн-рендер PlantUML отдаёт абсолютный URL сервера: его нельзя ни префиксовать
-    // папкой, ни повторно кодировать (encodeURI сломал бы схему https:// и '+' в base64).
-    const isRemoteUrl = !options.GENERATE_LOCAL_IMAGES && diagram.engine === 'plantuml';
+    // Онлайн-рендер (движки с remoteRender в DIAGRAM_ENGINES) отдаёт абсолютный URL
+    // сервера: его нельзя ни префиксовать папкой, ни повторно кодировать (encodeURI
+    // сломал бы схему https:// и '+' в base64).
+    const isRemoteUrl = !options.GENERATE_LOCAL_IMAGES && engineSupportsRemote(diagram.engine);
     const diagramUrl = isRemoteUrl
         ? plantUmlServerUrl(
               options.PLANTUML_SERVER_URL,
@@ -116,7 +128,7 @@ const buildDiagramMarkdown = async (
             ? await readDiagramBase64(
                   path.join(options.DIST_FOLDER, item.dir.replace(options.ROOT_FOLDER, ''), rawPath)
               )
-            : await httpGet(diagramUrl);
+            : await readRemoteDiagramBase64(diagramUrl);
         const diagramImage = `\n![${name}](data:${getMime(format)};base64,${imgContent})\n`;
         const diagramLink = `${isComplete ? '\n' : ''}[Download ${name} diagram](${localHref} ':ignore')`;
         return diagramImage + diagramLink;
@@ -188,6 +200,29 @@ const compileDocument = async (
     return MD;
 };
 
+// Якорь заголовка в complete-документе (докcифай/GitHub-стиль: пробелы → дефисы).
+const mdAnchor = (name: string): string => `#${encodeURIPath(name).replace(/%20/g, '-')}`;
+
+// Относительная ссылка со страницы уровня fromLevel на README целевой папки
+// (rootRel — путь цели от ROOT_FOLDER). Один паттерн для TOC, навигации вверх и
+// меню подпапок — прежде дублировался трижды.
+const relativeMdLink = (fromLevel: number, rootRel: string, mdFileName: string): string =>
+    encodeURIPath(
+        path.join('./', fromLevel - 1 > 0 ? '../'.repeat(fromLevel - 1) : '', rootRel, `${mdFileName}.md`)
+    );
+
+// Тело страницы (титул + контент с диаграммами) — общий скелет generateMD и
+// generateWebMD. chrome (breadcrumbs/TOC/навигация) встаёт под заголовок: при
+// авто-титуле — сразу за ним, при пользовательском h1 — пост-вставкой после него.
+const compilePage = async (item: TreeItem, options: BuildOptions, chrome = ''): Promise<string> => {
+    const name = getFolderName(item.dir, options.ROOT_FOLDER, options.HOMEPAGE_NAME);
+    const ownH1 = hasOwnH1(item);
+    let MD = ownH1 ? '' : `# ${name}${chrome}`;
+    MD = await compileDocument(MD, item, options, (i, d, o) => buildDiagramMarkdown(i, d, o, 'page'));
+    if (ownH1) MD = injectAfterFirstH1(MD, chrome);
+    return MD.trimStart();
+};
+
 export const generateCompleteMD = async (tree: TreeItem[], options: BuildOptions): Promise<void> => {
     const filePromises: Promise<void>[] = [];
 
@@ -196,9 +231,7 @@ export const generateCompleteMD = async (tree: TreeItem[], options: BuildOptions
     //table of contents
     let tableOfContents = '';
     for (const item of tree)
-        tableOfContents += `${'  '.repeat(item.level - 1)}* [${item.name}](#${encodeURIPath(
-            item.name
-        ).replace(/%20/g, '-')})\n`;
+        tableOfContents += `${'  '.repeat(item.level - 1)}* [${item.name}](${mdAnchor(item.name)})\n`;
     MD += `\n\n${tableOfContents}\n---`;
 
     for (const item of tree) {
@@ -208,10 +241,7 @@ export const generateCompleteMD = async (tree: TreeItem[], options: BuildOptions
         MD += `\n\n## ${name}`;
         if (name !== options.HOMEPAGE_NAME) {
             if (options.INCLUDE_BREADCRUMBS) MD += `\n\n\`${item.dir.replace(options.ROOT_FOLDER, '')}\``;
-            MD += `\n\n[${options.HOMEPAGE_NAME}](#${encodeURIPath(options.PROJECT_NAME).replace(
-                /%20/g,
-                '-'
-            )})`;
+            MD += `\n\n[${options.HOMEPAGE_NAME}](${mdAnchor(options.PROJECT_NAME)})`;
         }
 
         //concatenate markdown files
@@ -238,13 +268,9 @@ export const generateMD = async (
     const filePromises: Promise<void>[] = [];
     for (const item of tree) {
         const name = getFolderName(item.dir, options.ROOT_FOLDER, options.HOMEPAGE_NAME);
-        const ownH1 = hasOwnH1(item);
-        //title
-        let MD = ownH1 ? '' : `# ${name}`;
 
-        // "Page chrome" — breadcrumb / TOC / навигация. Собираем отдельно, чтобы при
-        // наличии собственного h1 у пользователя поместить весь блок ПОД его заголовок,
-        // а не над ним (как было исторически — между авто-# name и контентом).
+        // "Page chrome" — breadcrumb / TOC / навигация. Собирается отдельно и встаёт
+        // под заголовок страницы (авто или пользовательский h1) внутри compilePage.
         let chrome = '';
         //bradcrumbs
         if (options.INCLUDE_BREADCRUMBS && name !== options.HOMEPAGE_NAME)
@@ -256,59 +282,38 @@ export const generateMD = async (
                 const label = `${item.dir === _item.dir ? '**' : ''}${_item.name}${
                     item.dir === _item.dir ? '**' : ''
                 }`;
-                tableOfContents += `${'  '.repeat(_item.level - 1)}* [${label}](${encodeURIPath(
-                    path.join(
-                        './',
-                        item.level - 1 > 0 ? '../'.repeat(item.level - 1) : '',
-                        _item.dir.replace(options.ROOT_FOLDER, ''),
-                        `${options.MD_FILE_NAME}.md`
-                    )
-                )})\n`; //slice 1 if root and down
+                tableOfContents += `${'  '.repeat(_item.level - 1)}* [${label}](${relativeMdLink(
+                    item.level,
+                    _item.dir.replace(options.ROOT_FOLDER, ''),
+                    options.MD_FILE_NAME
+                )})\n`;
             }
             chrome += `\n\n${tableOfContents}\n---`;
         }
         //parent menu
         if (item.parent && options.INCLUDE_NAVIGATION) {
             const parentName = getFolderName(item.parent, options.ROOT_FOLDER, options.HOMEPAGE_NAME);
-            chrome += `\n\n[${parentName} (up)](${encodeURIPath(
-                path.join(
-                    './',
-                    item.level - 1 > 0 ? '../'.repeat(item.level - 1) : '',
-                    item.parent.replace(options.ROOT_FOLDER, ''),
-                    `${options.MD_FILE_NAME}.md`
-                )
+            chrome += `\n\n[${parentName} (up)](${relativeMdLink(
+                item.level,
+                item.parent.replace(options.ROOT_FOLDER, ''),
+                options.MD_FILE_NAME
             )})`;
         }
 
-        //exclude files and folders prefixed with _
+        //descendants menu (files and folders prefixed with _ excluded at scan)
         let descendantsMenu = '';
         for (const file of item.descendants) {
-            descendantsMenu += `\n\n- [${file}](${encodeURIPath(
-                path.join(
-                    './',
-                    item.level - 1 > 0 ? '../'.repeat(item.level - 1) : '',
-                    item.dir.replace(options.ROOT_FOLDER, ''),
-                    file,
-                    `${options.MD_FILE_NAME}.md`
-                )
+            descendantsMenu += `\n\n- [${file}](${relativeMdLink(
+                item.level,
+                path.join(item.dir.replace(options.ROOT_FOLDER, ''), file),
+                options.MD_FILE_NAME
             )})`;
         }
-        //descendants menu
         if (descendantsMenu && options.INCLUDE_NAVIGATION) chrome += `${descendantsMenu}`;
         //separator
         if (options.INCLUDE_NAVIGATION) chrome += `\n\n---`;
 
-        // Если своего h1 нет — chrome идёт сразу после авто-заголовка, как раньше.
-        // Если есть — chrome будет вставлен после пользовательского h1 пост-обработкой.
-        if (!ownH1) MD += chrome;
-
-        //concatenate markdown files
-        MD = await compileDocument(MD, item, options, (item, diagram, options) =>
-            buildDiagramMarkdown(item, diagram, options, 'page')
-        );
-
-        // Если был свой h1 — вставляем chrome (breadcrumbs/TOC/nav) после него.
-        if (ownH1) MD = injectAfterFirstH1(MD, chrome);
+        const MD = await compilePage(item, options, chrome);
 
         //write to disk
         filePromises.push(
@@ -318,7 +323,7 @@ export const generateMD = async (
                     item.dir.replace(options.ROOT_FOLDER, ''),
                     `${options.MD_FILE_NAME}.md`
                 ),
-                MD.trimStart()
+                MD
             ).then(() => {
                 processedCount++;
                 if (onProgress) onProgress(processedCount, totalCount);
@@ -340,23 +345,15 @@ export const generateWebMD = async (tree: TreeItem[], options: BuildOptions): Pr
         !!options.EXCLUDE_SIDEBAR_FOLDER_BY_PATH?.some((pathToExclude) => dir.startsWith(pathToExclude));
 
     for (const item of tree) {
-        //sidebar
+        //sidebar — путь от ROOT_FOLDER (path.relative, а не отрезание первого сегмента:
+        // то ломалось на многосегментном rootFolder из рукописного конфига)
         if (!isExcluded(item.dir)) {
             docsifySideBar += `${'  '.repeat(item.level - 1)}* [${item.name}](${encodeURIPath(
-                path.join(...path.join(item.dir).split(path.sep).splice(1), getWebFileName(item.name))
+                path.join(path.relative(options.ROOT_FOLDER, item.dir), getWebFileName(item.name))
             )})\n`;
         }
-        const name = getFolderName(item.dir, options.ROOT_FOLDER, options.HOMEPAGE_NAME);
 
-        //title
-        let MD = hasOwnH1(item) ? '' : `# ${name}`;
-
-        //concatenate markdown files
-        MD = await compileDocument(MD, item, options, (item, diagram, options) =>
-            buildDiagramMarkdown(item, diagram, options, 'page')
-        );
-
-        MD = MD.trimStart();
+        const MD = await compilePage(item, options);
 
         //write to disk
         filePromises.push(

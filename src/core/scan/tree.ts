@@ -25,21 +25,26 @@ export interface TreeItem {
     descendants: string[];
 }
 
-// Единый реестр движков диаграмм: расширение (с точкой) → рендерер. ЕДИНСТВЕННЫЙ
-// источник истины о том, какие файлы считаются диаграммами. Из него строятся и фильтр
-// scan (ниже), и regex ссылок в compose/markdown.ts. Добавление движка = одна строка
-// здесь; обе фазы подхватят его без синхронной правки.
+// Единый реестр движков диаграмм: расширение (с точкой) → рендерер + способности.
+// ЕДИНСТВЕННЫЙ источник истины о том, какие файлы считаются диаграммами. Из него
+// строятся фильтр scan (ниже), regex ссылок в compose/markdown.ts и ветвление
+// «есть ли у движка онлайн-рендер» (build/compose). Добавление движка = одна строка
+// здесь; фазы подхватят его без синхронной правки.
 export const DIAGRAM_ENGINES = [
-    { ext: '.puml', engine: 'plantuml' },
-    { ext: '.d2', engine: 'd2' }
-] as const satisfies ReadonlyArray<{ ext: string; engine: string }>;
+    { ext: '.puml', engine: 'plantuml', remoteRender: true },
+    { ext: '.d2', engine: 'd2', remoteRender: false }
+] as const satisfies ReadonlyArray<{ ext: string; engine: string; remoteRender: boolean }>;
 
-export type DiagramExt = (typeof DIAGRAM_ENGINES)[number]['ext'];
 export type DiagramEngine = (typeof DIAGRAM_ENGINES)[number]['engine'];
 
 // Расширение (lowercase, с точкой) → движок. undefined ⇒ файл не диаграмма.
 export const engineForExt = (ext: string): DiagramEngine | undefined =>
     DIAGRAM_ENGINES.find((e) => e.ext === ext)?.engine;
+
+// Есть ли у движка онлайн-рендер (сервер, как у PlantUML). Для движков без него (D2)
+// сборка при выключенном generateLocalImages невозможна — вывод не из чего собрать.
+export const engineSupportsRemote = (engine: string): boolean =>
+    DIAGRAM_ENGINES.some((e) => e.engine === engine && e.remoteRender);
 
 export const getFolderName = (dir: string, root: string, homepage: string): string => {
     return dir === root ? homepage : path.parse(dir).base;
@@ -77,11 +82,23 @@ export const generateTree = async (dir: string, options: BuildOptions): Promise<
         }
 
         const IGNORED_FILES = ['CLAUDE.md'];
-        const files = fs.readdirSync(dir).filter((x) => x.charAt(0) !== '_' && !IGNORED_FILES.includes(x));
+        // withFileTypes: один readdir вместо statSync на каждый файл (и второго — в
+        // otherFiles-цикле ниже). Симлинкам — честный statSync (Dirent по ссылке не идёт),
+        // чтобы симлинк-на-каталог обходился как раньше.
+        const entries = fs
+            .readdirSync(dir, { withFileTypes: true })
+            .filter((e) => e.name.charAt(0) !== '_' && !IGNORED_FILES.includes(e.name));
+        const isDir = new Map(
+            entries.map((e): [string, boolean] => [
+                e.name,
+                e.isSymbolicLink() ? fs.statSync(path.join(dir, e.name)).isDirectory() : e.isDirectory()
+            ])
+        );
+        const files = entries.map((e) => e.name);
         for (const file of files) {
             //if folder
             const childDir = path.join(dir, file);
-            if (fs.statSync(childDir).isDirectory()) {
+            if (isDir.get(file)) {
                 // Выходной каталог не тащим в дерево: при rootFolder='.' distFolder был бы
                 // ребёнком корня → попадал в nav-меню (битая ссылка) и порождал docs/docs.
                 // Ранний return рекурсии срабатывал уже ПОСЛЕ push — отсекаем до него.
@@ -121,12 +138,13 @@ export const generateTree = async (dir: string, options: BuildOptions): Promise<
             ? []
             : files.filter((x) => {
                   const ext = path.extname(x).toLowerCase();
-                  // копируем всё, кроме .md и исходников диаграмм (их рендерим); _-файлы всегда.
-                  return x.charAt(0) === '_' || (ext !== '.md' && engineForExt(ext) === undefined);
+                  // копируем всё, кроме .md и исходников диаграмм (их рендерим);
+                  // _-файлы сюда не доходят — отфильтрованы на readdir выше.
+                  return ext !== '.md' && engineForExt(ext) === undefined;
               });
 
         for (const otherFile of otherFiles) {
-            if (fs.statSync(path.join(dir, otherFile)).isDirectory()) continue;
+            if (isDir.get(otherFile)) continue;
 
             if (options.GENERATE_MD || options.GENERATE_WEBSITE)
                 await fsextra.copy(
@@ -159,9 +177,18 @@ export const generateTree = async (dir: string, options: BuildOptions): Promise<
     return tree;
 };
 
+// Кеш чтения include-файлов на одну сборку: N диаграмм × M включений иначе перечитывают
+// одни и те же .iuml с диска (общие стили включаются каждой диаграммой). null = файл не
+// прочитался (маркер, чтобы не ретраить). Сбрасывается clearIncludeCache() на границах
+// build() — в watch-режиме иначе отдавались бы устаревшие данные.
+const includeReadCache = new Map<string, string | null>();
+export const clearIncludeCache = (): void => includeReadCache.clear();
+
 // Свернуть локальные !include (.iuml и пр.) диаграммы в материал для чексуммы — рекурсивно.
 // Иначе правка включённого .iuml не инвалидирует кэш и на сайт уезжает устаревший рендер.
 // URL (!include https://…) и stdlib (!include <…>) пропускаем: локально не меняются.
+// Путь в материале — относительный к cwd, posix-разделители: чексумма не зависит от
+// машины/чекаута/ОС (абсолютный путь делал кеш непереносимым).
 export const foldIncludes = (
     content: string,
     fileDir: string,
@@ -185,13 +212,17 @@ export const foldIncludes = (
         );
         if (!resolved || visited.has(resolved)) continue; // защита от циклов и повторов
         visited.add(resolved);
-        let inc = '';
-        try {
-            inc = fs.readFileSync(resolved, 'utf-8');
-        } catch {
-            continue;
+        let inc = includeReadCache.get(resolved);
+        if (inc === undefined) {
+            try {
+                inc = fs.readFileSync(resolved, 'utf-8');
+            } catch {
+                inc = null;
+            }
+            includeReadCache.set(resolved, inc);
         }
-        out += ` ${resolved} ${inc}`;
+        if (inc === null) continue;
+        out += ` ${path.relative(process.cwd(), resolved).split(path.sep).join('/')} ${inc}`;
         out += foldIncludes(inc, path.dirname(resolved), searchDir, visited); // вложенные include
     }
     return out;

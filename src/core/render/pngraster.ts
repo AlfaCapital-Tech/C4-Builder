@@ -14,13 +14,13 @@ const require = createRequire(import.meta.url);
 
 // Ленивая загрузка (как у D2): resvg тянется только при первой растеризации —
 // SVG-проекты и «только ditaa» его не грузят. Отсутствие пакета — понятная ошибка.
-type ResvgConstructor = typeof import('@resvg/resvg-js').Resvg;
+type ResvgModule = typeof import('@resvg/resvg-js');
 
-let ResvgCtor: ResvgConstructor | null = null;
-const getResvg = (): ResvgConstructor => {
-    if (ResvgCtor) return ResvgCtor;
+let resvgMod: ResvgModule | null = null;
+const getResvg = (): ResvgModule => {
+    if (resvgMod) return resvgMod;
     try {
-        ResvgCtor = require('@resvg/resvg-js').Resvg as ResvgConstructor;
+        resvgMod = require('@resvg/resvg-js') as ResvgModule;
     } catch (err) {
         const e = err as Error;
         throw new Error(
@@ -29,22 +29,25 @@ const getResvg = (): ResvgConstructor => {
                 `Исходная ошибка: ${e.message || e}`
         );
     }
-    return ResvgCtor;
+    return resvgMod;
 };
 
 // SVG (Buffer или строка) → PNG (Buffer), масштаб 1:1 к размеру SVG. Вход — валидный
 // SVG движка: PlantUML ссылается на шрифт по имени (грузим из vendor/fonts), D2 несёт
 // шрифт во вшитом @font-face, но loadSystemFonts:false фиксируем в обоих случаях.
-const rasterizeSvgToPng = (svg: string | Buffer): Buffer => {
-    const Resvg = getResvg();
-    const resvg = new Resvg(svg, {
+// renderAsync считает в napi-пуле тредов: JS-поток не блокируется, PlantUML-пул и
+// D2-очередь продолжают крутиться параллельно растеризации (прежний sync render()
+// останавливал весь event loop на каждую картинку).
+const rasterizeSvgToPng = async (svg: string | Buffer): Promise<Buffer> => {
+    const { renderAsync } = getResvg();
+    const rendered = await renderAsync(svg, {
         font: {
             fontDirs: [FONTS_DIR],
             defaultFontFamily: DEFAULT_FONT_NAME,
             loadSystemFonts: false
         }
     });
-    return resvg.render().asPng();
+    return rendered.asPng();
 };
 
 export { rasterizeSvgToPng };

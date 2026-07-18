@@ -24,48 +24,10 @@ const validateProjectName = (name?: string): string | null => {
     return null;
 };
 
-const generateTemplate = async (dir: string, projectName: string): Promise<void> => {
-    const build = async (dir: string, _parent?: string): Promise<void> => {
-        const files = fs.readdirSync(dir);
-        for (const file of files) {
-            if (fs.statSync(path.join(dir, file)).isDirectory()) {
-                await makeDirectory(
-                    path.join(process.cwd(), projectName, dir.replace(TEMPLATE_DIR, ''), file)
-                );
-                await build(path.join(dir, file), dir);
-            }
-        }
-
-        const mdFiles = files.filter((x) => path.extname(x).toLowerCase() === '.md');
-        for (const mdFile of mdFiles) {
-            await fsextra.copy(
-                path.join(dir, mdFile),
-                path.join(process.cwd(), projectName, dir.replace(TEMPLATE_DIR, ''), mdFile)
-            );
-        }
-        const pumlFiles = files.filter((x) => path.extname(x).toLowerCase() === '.puml');
-        for (const pumlFile of pumlFiles) {
-            const fileContents = await readFile(path.join(dir, pumlFile));
-            await writeFile(
-                path.join(process.cwd(), projectName, dir.replace(TEMPLATE_DIR, ''), pumlFile),
-                fileContents
-            );
-        }
-        const otherFiles = files.filter(
-            (x) => ['.md', '.puml'].indexOf(path.extname(x).toLowerCase()) === -1
-        );
-        for (const otherFile of otherFiles) {
-            if (fs.statSync(path.join(dir, otherFile)).isDirectory()) continue;
-
-            await fsextra.copy(
-                path.join(dir, otherFile),
-                path.join(process.cwd(), projectName, dir.replace(TEMPLATE_DIR, ''), otherFile)
-            );
-        }
-    };
-
-    await build(dir);
-};
+// Копия шаблона в новый проект как есть (включая dot-файлы) — раньше это была ручная
+// рекурсия на 40 строк, повторявшая fsextra.copy по типам файлов.
+const generateTemplate = (dir: string, projectName: string): Promise<void> =>
+    fsextra.copy(dir, path.join(process.cwd(), projectName));
 
 export default async (opts: { yes?: boolean; name?: string } = {}): Promise<void> => {
     const nonInteractive = !!opts.yes;

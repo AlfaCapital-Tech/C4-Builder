@@ -16,6 +16,11 @@ import watch from 'node-watch';
 import { EventEmitter } from 'node:events';
 
 import { clearConsole } from '../util/utils.ts';
+import { acquireBuildLock, BuildLockHeldError } from '../util/lock.ts';
+// teardownD2 живёт здесь, а не в finally build(): в watch-режиме D2-воркер должен
+// переживать ребилды (его пересоздание — секунды), гасим его только когда сборок
+// больше не будет (одиночный запуск).
+import { teardownD2 } from '../core/render/d2renderer.ts';
 import { packageJson as pkg } from '../util/paths.ts';
 import type { BuildOptions, C4ConfigFile, ConfigIssue } from '../config/options.ts';
 import { parseConfig } from '../config/options.ts';
@@ -155,9 +160,12 @@ export default async () => {
 
     let conf: ConfStore = { get: () => {} } as unknown as ConfStore;
     let cacheConf: ConfStore = { get: () => {}, set: () => {}, clear: () => {} } as unknown as ConfStore;
+    // Лок сборки — рядом с конфигом проекта (см. util/lock.ts). Заполняется вместе с conf.
+    let lockPath = '';
     if (!opts.new) {
         const projectKey = process.cwd().split(path.sep).splice(1).join('_');
         const configPath = path.join(process.cwd(), opts.configFile ?? '.c4builder');
+        lockPath = `${configPath}.lock`;
         conf = new Configstore(projectKey, {}, { configPath });
         cacheConf = new Configstore(`${projectKey}_cache`, {}, { configPath: `${configPath}.cache` });
 
@@ -261,16 +269,28 @@ export default async () => {
                 isBuilding = true;
                 let buildOk = true;
                 try {
-                    await build(options, cacheConf);
-                    while (attemptedWatchBuild) {
-                        attemptedWatchBuild = false;
+                    // Лок на всю серию ребилдов: параллельная ручная сборка в этом же
+                    // каталоге не потопчет dist_bk и не потеряет чексуммы кеша.
+                    const release = acquireBuildLock(lockPath);
+                    try {
                         await build(options, cacheConf);
+                        while (attemptedWatchBuild) {
+                            attemptedWatchBuild = false;
+                            await build(options, cacheConf);
+                        }
+                    } finally {
+                        release();
                     }
                 } catch (err) {
                     buildOk = false;
                     attemptedWatchBuild = false;
-                    const e = err as Error;
-                    console.log(chalk.red(`build failed: ${e?.stack ? e.stack : e}`));
+                    if (err instanceof BuildLockHeldError) {
+                        // Соседняя сборка ещё идёт — ребилд пропущен, watch жив.
+                        console.log(chalk.yellow(`ребилд пропущен: ${err.message}`));
+                    } else {
+                        const e = err as Error;
+                        console.log(chalk.red(`build failed: ${e?.stack ? e.stack : e}`));
+                    }
                 } finally {
                     isBuilding = false;
                 }
@@ -279,7 +299,22 @@ export default async () => {
         }
 
         isBuilding = true;
-        await build(options, cacheConf);
+        let release: () => void;
+        try {
+            release = acquireBuildLock(lockPath);
+        } catch (e) {
+            // Занято живой сборкой — падаем сразу с внятным сообщением, без стектрейса.
+            console.error(chalk.red((e as Error).message));
+            process.exit(1);
+        }
+        try {
+            await build(options, cacheConf);
+        } finally {
+            release();
+            // Одиночная сборка: D2-воркер больше не нужен, без teardown он держал бы
+            // процесс. В watch-режиме воркер живёт до конца процесса (Ctrl+C).
+            if (!opts.watch) await teardownD2();
+        }
         isBuilding = false;
 
         if (opts.site) return await cmdSite(options, opts, reloadEmitter);

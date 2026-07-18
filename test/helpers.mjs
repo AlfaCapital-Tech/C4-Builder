@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { cachedJava, resolveJava } from '../dist/core/render/jre.js';
+import { cachedJava, resolveJava } from './dist.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
