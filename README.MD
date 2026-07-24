@@ -42,6 +42,11 @@ With `diagramFormat: png`, diagrams are produced by rasterizing their SVG with
 native binary, no browser). This gives a single deterministic PNG for both PlantUML and
 D2, using the bundled font. ditaa diagrams stay native PlantUML PNG.
 
+**Fonts.** Diagrams use the bundled Nimbus Sans (Helvetica metrics, Cyrillic and Greek —
+see `vendor/fonts/README.md`), so diagram geometry is identical on any machine.
+`useSystemFonts: true` in `.c4builder` (or `--system-fonts` for one run) renders with the
+machine's fonts instead — machine-dependent by design.
+
 The easiest way to get started is with the _new project_ template.
 
 ![new](docs/images/new.gif)

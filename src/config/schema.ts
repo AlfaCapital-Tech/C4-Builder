@@ -61,6 +61,7 @@ export const configSchema = z.object({
     diagramFormat: str(defaultConfig.diagramFormat),
     d2Layout: str(defaultConfig.d2Layout),
     charset: str(defaultConfig.charset),
+    useSystemFonts: bool(defaultConfig.useSystemFonts),
 
     // Задаются явно (флаг/промпт) либо тонкой правкой файла — в defaultConfig не входят.
     projectName: optStr(),

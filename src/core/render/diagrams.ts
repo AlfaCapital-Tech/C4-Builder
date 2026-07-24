@@ -36,6 +36,7 @@ export interface RenderDiagramOptions {
     format: string;
     charset: string;
     isDitaa: boolean;
+    useSystemFonts: boolean;
 }
 
 // Колбэк прогресса рендера: сколько картинок обработано из общего числа.
@@ -98,6 +99,11 @@ const d2EngineVersion = (): string => {
     return d2VersionCache;
 };
 
+// В ключ кеша: смена режима не должна отдавать картинку, отрисованную другим шрифтом
+// (D2 тоже — его PNG растрирует общий resvg).
+export const fontCacheTag = (options: BuildOptions): string =>
+    options.USE_SYSTEM_FONTS ? 'system' : DEFAULT_FONT_NAME;
+
 export const getMime = (format: string): string => {
     if (format === 'svg') return `image/svg+xml`;
     return `image/${format}`;
@@ -123,27 +129,33 @@ export const httpGet = async (url: string): Promise<string> => (await httpGetBuf
 // расходятся между ОС. С пином шрифт берётся из vendor/fonts (JRE своих не несёт,
 // freetype у Temurin бандлед), и SVG получается одинаковым везде.
 // ditaa этим не лечится: его движок берёт AWT-шрифт мимо обеих опций.
-export const renderDiagram = (
-    content: string | Buffer,
-    { javaBin, jarPath, includePath, format, charset, isDitaa }: RenderDiagramOptions
-): Promise<Buffer> =>
-    new Promise((resolve, reject) => {
-        const argv = [
-            '-Djava.awt.headless=true',
-            `-Dplantuml.include.path=${includePath}`,
-            `-Dsun.java2d.fontpath=prepend:${FONTS_DIR}`,
-            '-jar',
-            jarPath,
-            ...(isDitaa ? [] : ['-Playout=smetana']),
-            `-SdefaultFontName=${DEFAULT_FONT_NAME}`,
-            `-SCircledCharacterFontName=${DEFAULT_FONT_NAME}`,
-            '-charset',
-            charset,
-            `-t${format}`,
-            '-pipe'
-        ];
+// useSystemFonts убирает все три шрифтовых аргумента — рендер как до пина (машинозависим).
+export const renderArgv = ({
+    jarPath,
+    includePath,
+    format,
+    charset,
+    isDitaa,
+    useSystemFonts
+}: Omit<RenderDiagramOptions, 'javaBin'>): string[] => [
+    '-Djava.awt.headless=true',
+    `-Dplantuml.include.path=${includePath}`,
+    ...(useSystemFonts ? [] : [`-Dsun.java2d.fontpath=prepend:${FONTS_DIR}`]),
+    '-jar',
+    jarPath,
+    ...(isDitaa ? [] : ['-Playout=smetana']),
+    ...(useSystemFonts
+        ? []
+        : [`-SdefaultFontName=${DEFAULT_FONT_NAME}`, `-SCircledCharacterFontName=${DEFAULT_FONT_NAME}`]),
+    '-charset',
+    charset,
+    `-t${format}`,
+    '-pipe'
+];
 
-        const child = spawn(javaBin, argv);
+export const renderDiagram = (content: string | Buffer, options: RenderDiagramOptions): Promise<Buffer> =>
+    new Promise((resolve, reject) => {
+        const child = spawn(options.javaBin, renderArgv(options));
         const stdout: Buffer[] = [];
         const stderr: Buffer[] = [];
 
@@ -305,9 +317,10 @@ export const generateImages = async (
             // игнорировались, кэш чистился только через --reset). Формат/движок/версия
             // движка тоже в ключе: их смена обязана приводить к перерендеру.
             const renderKey =
-                entryPath !== null
+                (entryPath !== null
                     ? `d2\0${d2EngineVersion()}\0layout=${options.D2_LAYOUT}\0fmt=${outFormat}`
-                    : `puml\0${VENDORED_JAR.version}\0charset=${options.CHARSET}\0fmt=${outFormat}\0ditaa=${diagram.isDitaa}\0font=${DEFAULT_FONT_NAME}`;
+                    : `puml\0${VENDORED_JAR.version}\0charset=${options.CHARSET}\0fmt=${outFormat}\0ditaa=${diagram.isDitaa}`) +
+                `\0font=${fontCacheTag(options)}`;
             const cksum = crypto
                 .createHash('sha256')
                 .update(body + includes + renderKey, 'utf-8')
@@ -369,10 +382,13 @@ export const generateImages = async (
                             includePath,
                             format: needsRaster ? 'svg' : outFormat,
                             charset: options.CHARSET,
-                            isDitaa
+                            isDitaa,
+                            useSystemFonts: options.USE_SYSTEM_FONTS
                         });
                     }
-                    const image = needsRaster ? await rasterizeSvgToPng(rendered) : rendered;
+                    const image = needsRaster
+                        ? await rasterizeSvgToPng(rendered, options.USE_SYSTEM_FONTS)
+                        : rendered;
                     await writeFile(filePath, image);
                     cksumEntry.ok = true;
                 } catch (err: unknown) {

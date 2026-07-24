@@ -29,6 +29,7 @@ export interface BuildOptions {
     SUPPORT_SEARCH: boolean;
     EXECUTE_SCRIPT: boolean;
     EXCLUDE_OTHER_FILES: boolean;
+    USE_SYSTEM_FONTS: boolean;
 
     ROOT_FOLDER: string;
     DIST_FOLDER: string;

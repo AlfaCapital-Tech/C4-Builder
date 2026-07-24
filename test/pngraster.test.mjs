@@ -6,7 +6,7 @@ const svg = (inner) =>
     `<svg xmlns="http://www.w3.org/2000/svg" width="220" height="60">` +
     `<rect width="220" height="60" fill="#ffffff"/>${inner}</svg>`;
 const TEXT_SVG = svg(
-    `<text x="10" y="38" font-family="Liberation Sans" font-size="22" fill="#000000">Клиент API</text>`
+    `<text x="10" y="38" font-family="Nimbus Sans" font-size="22" fill="#000000">Клиент API</text>`
 );
 const BLANK_SVG = svg('');
 

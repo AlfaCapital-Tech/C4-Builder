@@ -6,4 +6,4 @@ import { VENDOR_DIR } from '../../util/paths.ts';
 // (`fontDirs`, `defaultFontFamily`). Значения обязаны совпадать — иначе метрики
 // текста разъедутся и PNG-golden покраснеют. НЕ менять без пересбора эталонов.
 export const FONTS_DIR = path.join(VENDOR_DIR, 'fonts');
-export const DEFAULT_FONT_NAME = 'Liberation Sans';
+export const DEFAULT_FONT_NAME = 'Nimbus Sans';

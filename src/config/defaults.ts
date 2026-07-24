@@ -29,7 +29,8 @@ const defaultConfig = {
     plantumlServerUrl: 'https://www.plantuml.com/plantuml',
     diagramFormat: 'svg',
     d2Layout: 'dagre',
-    charset: 'UTF-8'
+    charset: 'UTF-8',
+    useSystemFonts: false
 };
 
 export { defaultConfig };

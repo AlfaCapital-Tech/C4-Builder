@@ -126,7 +126,8 @@ function getOptions(c: Partial<C4ConfigFile>): BuildOptions | Partial<BuildOptio
         WEB_FILE_NAME: c.webFileName,
         SUPPORT_SEARCH: c.supportSearch,
         EXECUTE_SCRIPT: c.executeScript,
-        EXCLUDE_OTHER_FILES: c.excludeOtherFiles
+        EXCLUDE_OTHER_FILES: c.excludeOtherFiles,
+        USE_SYSTEM_FONTS: c.useSystemFonts
     };
 }
 
@@ -145,6 +146,7 @@ export default async () => {
         .option('-w, --watch', 'watch for changes and rebuild')
         .option('-o, --open', 'open the generated site in the browser (with --site)')
         .option('--docs', 'a brief explanation for the available configuration options')
+        .option('--system-fonts', 'render with system fonts instead of the bundled one (not deterministic)')
         .option('-p, --port <n>', 'port used for serving the generated site', (v) => {
             // parseInt молча резал бы опечатку ('30OO' → 30) — валидируем строго.
             if (!isValidPort(v)) throw new InvalidArgumentError('ожидается TCP-порт: целое число 1..65535');
@@ -242,6 +244,7 @@ export default async () => {
         // уводил бы последующие запуски на строгий путь (exit 1 до визарда).
         conf.set('hasRun', true);
         const options = getOptions(built.value);
+        if (opts.systemFonts) options.USE_SYSTEM_FONTS = true; // флаг сильнее ключа конфига
         const reloadEmitter = new EventEmitter();
         reloadEmitter.setMaxListeners(0);
         if (opts.watch) {
