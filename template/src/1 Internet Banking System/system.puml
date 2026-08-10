@@ -1,5 +1,6 @@
 @startuml
-!include https://raw.githubusercontent.com/adrianvlupu/C4-PlantUML/{{plantumlVersion}}/C4_Container.puml
+!include <C4/C4_Container>
+!include ../styles.iuml
 
 LAYOUT_WITH_LEGEND()
 

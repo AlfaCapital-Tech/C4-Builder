@@ -21,6 +21,23 @@ npm i -g c4builder
 c4builder
 ```
 
+# Diagram includes
+
+All C4 diagrams in this template use PlantUML stdlib includes — C4-PlantUML is bundled inside the PlantUML jar, so no internet access is needed to build:
+
+```plantuml
+!include <C4/C4_Container>
+```
+
+Shared styling (theme, colors) lives in `src/styles.iuml` and is pulled into diagrams with a relative include after the C4 one:
+
+```plantuml
+!include <C4/C4_Container>
+!include ../styles.iuml
+```
+
+Put common skinparams and `UpdateElementStyle(...)` calls there to keep all diagrams consistent.
+
 > Note on using local images inside markdown files
 >
 > Images should be placed next to the markdown file using them.

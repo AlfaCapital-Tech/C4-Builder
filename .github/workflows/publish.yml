@@ -2,7 +2,7 @@ name: npm — публикация пакета
 
 on:
   push:
-    branches: [master]
+    tags: ['v*']
   workflow_dispatch:
 
 jobs:
@@ -24,12 +24,30 @@ jobs:
       - name: Установка зависимостей
         run: npm ci --ignore-scripts
 
-      - name: Публикация
+      # Гейт выполняется ВСЕГДА (push-тег и workflow_dispatch): без тега публикация
+      # невозможна. Ручной запуск с ветки падает с внятной ошибкой; с тегом —
+      # проверяется совпадение тега и версии package.json (spec release-publishing).
+      - name: Проверка синхронизации тега и версии
         run: |
-          CURRENT=$(npm view @alfacapital-tech/c4builder version 2>/dev/null || echo "0.0.0")
+          if [ "$GITHUB_REF_TYPE" != "tag" ]; then
+            echo "Публикация возможна только по git-тегу версии v* (push тега или workflow_dispatch с выбранным тегом). Текущий ref: $GITHUB_REF" >&2
+            exit 1
+          fi
           LOCAL=$(node -p 'require("./package.json").version')
-          if [ "$CURRENT" = "$LOCAL" ]; then
+          if [ "v$LOCAL" != "$GITHUB_REF_NAME" ]; then
+            echo "Тег $GITHUB_REF_NAME не совпадает с версией пакета v$LOCAL" >&2
+            exit 1
+          fi
+
+      # Подстраховка: шаг публикации не запускается вне тега даже в обход гейта.
+      - name: Публикация
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          LOCAL=$(node -p 'require("./package.json").version')
+          if npm view @alfacapital-tech/c4builder@"$LOCAL" version >/dev/null 2>&1; then
             echo "Версия $LOCAL уже опубликована, пропускаем"
+          elif echo "$LOCAL" | grep -q -- '-'; then
+            npm publish --tag rc --provenance --access public
           else
             npm publish --provenance --access public
           fi

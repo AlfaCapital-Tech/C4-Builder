@@ -1,12 +1,20 @@
 .git
 .github
 .vscode
+.claude
 docs
+dist
 node_modules
+test
+openspec
 .npmrc
 .npmignore
 .gitignore
-.prettierrc
+biome.json
 Dockerfile
 .dockerignore
 README.MD
+
+# локально сгенерированный вывод шаблона — в образ не тащим (в CI-чекауте их нет)
+template/docs
+template/.c4builder

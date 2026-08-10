@@ -1,0 +1,147 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Линт/формат — быстрая джоба вне node-матрицы, без Java: падает за секунды,
+  # держит планку стиля наравне с тестами (см. openspec spec ci-validation).
+  lint:
+    name: lint
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - run: npm ci --ignore-scripts
+
+      - run: npx biome ci .
+
+  # Аудит зависимостей — быстрая джоба вне node-матрицы: красный статус, если в
+  # рантайм-деревe появилась известная уязвимость уровня ≥ high (регресс не проходит
+  # молча). --omit=dev: гейт по поставляемым (рантайм) зависимостям, dev-инструменты
+  # (biome/vitest/tsc) не в счёт — их шум не относится к безопасности пакета.
+  audit:
+    name: audit
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - run: npm ci --ignore-scripts
+
+      - run: npm audit --audit-level=high --omit=dev
+
+  test:
+    name: test (node ${{ matrix.node }})
+    # runner пинован как страховка: layout считает Java-движок Smetana + вендорный
+    # шрифт, поэтому эталон определяется мажором JDK (Temurin 21), а не окружением
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        # Golden-рендер (JRE + минуты рендера) — на одной ноге: его выход определяется
+        # JVM и вендорным шрифтом, а не версией node; вторая нога гоняет только
+        # быстрые юнит/e2e-тесты, подтверждая совместимость CLI с другим node.
+        include:
+          - node: '24'
+            golden: true
+          - node: '22'
+            golden: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        if: matrix.golden
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - run: npm ci --ignore-scripts
+
+      # Тесты гоняют собранный CLI из dist/ — компилируем до прогрева JRE и golden.
+      # Ошибка tsc роняет job (красный статус PR наравне с линтом/тестами).
+      - run: npm run build
+
+      # Параметры managed-JRE (мажор, схема кеша, путь кеша) — из самого CLI
+      # (`jre info`), а не grep по исходникам: единственный источник истины — jre.ts,
+      # путь уважает XDG_CACHE_HOME. Пустое значение валит шаг (гейт от молчаливого
+      # рассинхрона: раньше echo глотал код grep даже под bash -e).
+      - name: Определить параметры managed-JRE
+        if: matrix.golden
+        id: jre
+        run: |
+          info="$(node dist/index.js jre info)"
+          echo "jre info: $info"
+          feature="$(echo "$info" | jq -r '.feature // empty')"
+          schema="$(echo "$info" | jq -r '.schema // empty')"
+          dir="$(echo "$info" | jq -r '.cacheDir // empty')"
+          if [ -z "$feature" ] || [ -z "$schema" ] || [ -z "$dir" ]; then
+            echo "::error::jre info вернул неполные данные"; exit 1
+          fi
+          echo "feature=$feature" >> "$GITHUB_OUTPUT"
+          echo "schema=$schema" >> "$GITHUB_OUTPUT"
+          echo "dir=$dir" >> "$GITHUB_OUTPUT"
+
+      # Golden-рендер идёт на пиновом managed-JRE (Temurin, см. jre.ts TEMURIN_FEATURE),
+      # а не на setup-java: тест подставляет его JAVA_HOME. Кешируем между прогонами.
+      # Ключ = мажор JRE + схема кеша + os/arch: при смене схемы старый каталог не
+      # «попадает» в ключ, иначе actions/cache восстанавливал бы кеш, который
+      # cachedJava() считает невалидным, и при hit уже не пересохранял бы его —
+      # прогрев пропускался, а тест молча качал JRE на каждом прогоне.
+      - name: Cache managed JRE
+        if: matrix.golden
+        id: jre-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.jre.outputs.dir }}
+          key: c4builder-jre-temurin${{ steps.jre.outputs.feature }}-s${{ steps.jre.outputs.schema }}-${{ runner.os }}-${{ runner.arch }}
+
+      # Прогрев только при промахе кеша: на попадании переиспользуем восстановленный
+      # каталог. При промахе --force качает managed-JRE (минуя системную java от
+      # setup-java), чтобы кеш наполнился именно им; на попадании --force снёс бы
+      # свежевосстановленный каталог и качал ~50 МБ заново каждый прогон.
+      - name: Прогрев managed-JRE (только при промахе кеша)
+        if: matrix.golden && steps.jre-cache.outputs.cache-hit != 'true'
+        run: node dist/index.js jre install --force
+
+      - run: npm test
+        if: matrix.golden
+
+      - run: npm run test:unit
+        if: ${{ !matrix.golden }}
+
+      # Нормализованный фактический выход сборки — из него регенерируется
+      # эталон при расхождении окружений (см. test/README.md).
+      # Пакуем в tar: upload-artifact дропает пустые файлы (напр. .nojekyll).
+      - name: Pack actual output
+        if: failure() && matrix.golden
+        run: tar -czf golden-actual.tar.gz -C test/.tmp actual
+
+      - name: Upload actual output
+        if: failure() && matrix.golden
+        uses: actions/upload-artifact@v4
+        with:
+          name: golden-actual-node${{ matrix.node }}
+          path: golden-actual.tar.gz
+          if-no-files-found: ignore

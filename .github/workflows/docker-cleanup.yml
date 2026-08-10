@@ -1,0 +1,25 @@
+name: Docker — уборка нетегированных образов в GHCR
+
+# Плавающие теги (pr-N, edge, rc, ветки) при каждом сдвиге оставляют прежний
+# манифест нетегированным — они копятся в GHCR бесконечно. Раз в неделю удаляем
+# только нетегированные версии пакета; всё тегированное (версии, sha-…) не трогаем.
+# Безопасно, потому что docker-publish собирает single-manifest образы
+# (provenance: false) — у тегированных образов нет нетегированных «детей».
+
+on:
+  schedule:
+    - cron: '17 5 * * 1'
+  workflow_dispatch:
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+
+    steps:
+      - uses: actions/delete-package-versions@v5
+        with:
+          package-name: c4builder
+          package-type: container
+          delete-only-untagged-versions: 'true'

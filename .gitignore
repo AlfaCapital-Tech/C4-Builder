@@ -1,8 +1,22 @@
 node_modules
+
+# сборка tsc (артефакт, в git не хранится — собирается из src/)
+dist/
+
 template/docs/
 template/.c4builder
+
+# временные выходы golden-тестов (эталон test/golden/ — в git)
+test/.tmp/
+
+# межпроцессный лок сборки (см. src/util/lock.ts) — транзиентный
+*.c4builder.lock
+.c4builder.lock
 
 #intellij
 .idea
 *.iml
 *.tgz
+
+# личные настройки Claude Code (общие commands/skills — в git)
+.claude/settings.local.json
