@@ -33,9 +33,11 @@ I strongly encourage people to check them out first but if you want to dive righ
 `npm install` (no tag) always installs the latest stable release. Release candidates are
 opt-in only — see [Installing a release candidate](#installing-a-release-candidate).
 
-**Requirements:** local diagram generation needs a Java runtime (JRE 17+) on `PATH`.
-Graphviz is **not** required — layout is computed by PlantUML's built-in Java engine
-(Smetana). The PlantUML jar and the diagram font are bundled with c4builder.
+**Requirements:** Node.js ≥ 20.19. Local diagram generation needs Java 17+: a system
+`java` (`JAVA_HOME`/`PATH`) is used when present, otherwise c4builder downloads a private
+JRE into its cache automatically (`c4builder jre install` pre-warms it, `jre info` shows
+what would be used). Graphviz is **not** required — layout is computed by PlantUML's
+built-in Java engine (Smetana). The PlantUML jar and the diagram font are bundled.
 
 With `diagramFormat: png`, diagrams are produced by rasterizing their SVG with
 [`@resvg/resvg-js`](https://github.com/thx/resvg-js) (a bundled dependency, prebuilt
@@ -62,23 +64,35 @@ A sample project is available at [C4Builder-Demo](https://github.com/adrianvlupu
 ## Available Commands
 
 ```bash
-PS C:\docprojects\Online Banking> c4builder --help
+$ c4builder --help
 Usage: index [options]
 
 Options:
-  -V, --version                     output the version number
-  new                               create a new project from template
-  config                            change configuration for the current directory
-  list                              display the current configuration
-  reset                             clear all configuration
-  site                              serve the generated site
-  -w, --watch                       watch for changes and rebuild
-  -o, --open                        open the generated site in the browser (with --site)
-  docs                              a brief explanation for the available configuration options
-  -p, --port <n>                    port used for serving the generated site
-  -c, --config-file <.c4builder>    set the configuration file relative path
-  -h, --help                        output usage information
+  -V, --version                   output the version number
+  --new                           create a new project from template
+  --name <name>                   project name for --new (skips the name prompt)
+  -y, --yes                       non-interactive --new: defaults, no prompts
+                                  (requires --name)
+  --force                         for `jre install`: force JRE download even if
+                                  system java is present
+  --config                        change configuration for the current directory
+  -c, --config-file <.c4builder>  set the configuration file relative path
+  --list                          display the current configuration
+  --reset                         clear all configuration
+  --site                          serve the generated site
+  -w, --watch                     watch for changes and rebuild
+  -o, --open                      open the generated site in the browser (with
+                                  --site)
+  --docs                          a brief explanation for the available
+                                  configuration options
+  --system-fonts                  render with system fonts instead of the
+                                  bundled one (not deterministic)
+  -p, --port <n>                  port used for serving the generated site
+  -h, --help                      display help for command
 ```
+
+There is also a `jre` subcommand: `c4builder jre install [--force]` pre-downloads the
+private JRE cache, `c4builder jre info` prints which Java would be used.
 
 By default, running `c4builder` will attempt to build the project.
 
@@ -217,7 +231,7 @@ The generated markdown file makes for an easy single page readme for the reposit
 
 ### Docsify site with a sidebar
 
-After choosing to generate a docsify site, it can be viewed locally by running `c4builder site` and accessing `http://localhost:3000`;
+After choosing to generate a docsify site, it can be viewed locally by running `c4builder --site` and accessing `http://localhost:3000`;
 
 The site is minimalistic including only a sidebar with the System/Container/Components hierarchy.
 
@@ -264,6 +278,28 @@ Pre-release builds (`0.x.y-rc.N`) are published under the npm dist-tag `rc` and 
 
 `npm install` without a tag keeps installing the latest stable version.
 
+## Docker
+
+The image ships everything needed for a build (Node, JRE, PlantUML jar, fonts, D2) —
+mount a project into `/pwd`:
+
+```bash
+docker run --rm -v "$PWD:/pwd" ghcr.io/alfacapital-tech/c4builder:latest c4builder
+```
+
+Tags (in sync with npm dist-tags):
+
+| tag | meaning |
+|---|---|
+| `X.Y.Z`, `sha-…` | immutable releases / commits |
+| `latest` | latest stable release |
+| `rc` | latest release candidate |
+| `edge` | last master commit |
+| `pr-N` | pull request builds |
+
+Use the image directly in CI (GitHub Actions, GitLab CI) as the job image — the
+`c4builder` binary is on `PATH`.
+
 ## Releasing
 
 Publishing is triggered by pushing a git tag `v<version>` — pushes/merges to `master` alone
@@ -291,7 +327,22 @@ Publishes to dist-tag `latest`.
 
 ## v0.3.0
 
-PDF output removed — use the docsify site or the single/collection markdown outputs instead (the `pdf`/`pdfCss` options no longer exist).
+Full TypeScript rewrite (ESM, Node.js ≥ 20.19) with the same CLI and `.c4builder` format.
+
+- PlantUML renders via a direct `java` call with the built-in Smetana layout — graphviz
+  is no longer needed; the jar is bundled (`vendor/`)
+- Java itself is optional: system java ≥ 17 is used when present, otherwise a private
+  JRE is downloaded automatically (`c4builder jre install` / `jre info`)
+- Second diagram backend: [D2](https://d2lang.com) (`.d2` files, optional
+  `@terrastruct/d2` dependency, imports supported)
+- `diagramFormat: png` rasterizes SVG with `@resvg/resvg-js` — deterministic PNG for
+  PlantUML and D2 alike
+- Bundled Nimbus Sans font for identical diagram geometry everywhere;
+  `useSystemFonts` / `--system-fonts` opts out
+- Config is validated (zod): typos and wrong types fail with a clear message
+- Docker image on GHCR with a tag scheme in sync with npm dist-tags (see [Docker](#docker))
+- PDF output removed — use the docsify site or the single/collection markdown outputs
+  instead (the `pdf`/`pdfCss` options no longer exist)
 
 ## v0.2.20
 
