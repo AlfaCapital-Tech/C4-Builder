@@ -15,7 +15,7 @@ npm run check        # biome ci (линт + формат)
 
 ## Структура
 
-- `src/cli/` — commander, диспетчер и команды (`--site`, `jre`, `--new`…)
+- `src/cli/` — commander, диспетчер и команды (`--site`, `jre`, `check`, `--new`…)
 - `src/config/` — `.c4builder`: schema (zod), defaults, options
 - `src/core/` — scan (дерево исходников) → compose (markdown) → render
   (plantuml.ts — прямой java+Smetana; d2renderer.ts — WASM; pngraster.ts — resvg)

@@ -94,6 +94,21 @@ Options:
 There is also a `jre` subcommand: `c4builder jre install [--force]` pre-downloads the
 private JRE cache, `c4builder jre info` prints which Java would be used.
 
+### Validating single diagrams
+
+`c4builder check <file...>` validates individual `.puml` / `.iuml` / `.d2` files with the
+same engines the build uses (bundled PlantUML jar + system/managed Java, bundled D2) —
+no project or `.c4builder` needed, nothing is written. Handy for pre-commit hooks and CI:
+exit code 0 when every file compiles, 1 otherwise; errors are printed as
+`✗ file: line N: <engine message>`.
+
+```bash
+c4builder check src/c4/context.puml lib/shared.iuml diagrams/flow.d2
+```
+
+`!include` paths resolve relative to the checked file's directory; a `.iuml` library is
+validated by including it into an empty diagram.
+
 By default, running `c4builder` will attempt to build the project.
 
 If no configuration was set it will ask for it and then do the actual build. Running just `c4builder` after a configuration will no longer show the wizard.
@@ -324,6 +339,12 @@ git push --follow-tags
 Publishes to dist-tag `latest`.
 
 # Change log
+
+## Unreleased
+
+- `c4builder check <file...>` — validate individual `.puml` / `.iuml` / `.d2` files with the
+  bundled engines, without a project build (#13)
+- D2 compile errors are printed as readable `file:line:col: message` lines instead of raw JSON
 
 ## v0.3.0
 
