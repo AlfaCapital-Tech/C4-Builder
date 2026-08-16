@@ -26,6 +26,7 @@
 - [x] 4.2 `plugins/openspec/render.ts`: сводка (счётчики, таблица по mtime desc), страница change'а (шапка с метаданными и прогрессом; разделы proposal → design → tasks → прочие → дельты; переписывание ссылок на артефакты в якоря; копирование картинок), страницы спек и промежуточных папок, сводка архива
 - [x] 4.3 `plugins/openspec/fences.ts`: извлечение ```plantuml/```d2 в `Diagram` (обёртка `@startuml/@enduml`), замена на `![…](name.ext)`
 - [x] 4.4 `plugins/openspec/index.ts`: схема опций `{ dir: 'openspec', mount: 'OpenSpec' }` `.strict()`, `watchPaths`, `afterScan` через `addPage`; регистрация в `plugins/index.ts`
+- [x] 4.6 Раскладка change'а гибридом: опция `artifacts` (порядок; первый — на странице change'а), подстраницы артефактов и `specs/**` дельт, шапка со ссылками, переписывание ссылок на страницы (`?id=`), картинки к своей странице; обновить README и тест 4.5
 - [x] 4.5 Тесты `test/plugin-openspec.test.mjs` на мини-фикстуре store (2 change'а с tasks/дельтами/plantuml, 1 архивный, двухуровневые спеки, кастомный артефакт `plan.md`): sidebar, сводка, прогресс, отрендеренная диаграмма, пустой store, отсутствующий `dir`
 
 ## 5. Плагин openapi

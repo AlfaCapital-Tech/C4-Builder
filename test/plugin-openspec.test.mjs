@@ -82,7 +82,7 @@ beforeAll(async () => {
 afterAll(() => fs.rmSync(dir, { recursive: true, force: true }));
 
 describe('плагин openspec', () => {
-    it('sidebar: раздел OpenSpec с подразделами Changes/Specs/Archive', () => {
+    it("sidebar: раздел OpenSpec, под change'ем — подстраницы артефактов и specs", () => {
         const lines = read('_sidebar.md').trimEnd().split('\n');
         expect(lines).toEqual([
             '* [Overview](Overview)',
@@ -90,6 +90,12 @@ describe('плагин openspec', () => {
             '  * [OpenSpec](OpenSpec/OpenSpec)',
             '    * [Changes](OpenSpec/Changes/Changes)',
             '      * [dig-1-alpha](OpenSpec/Changes/dig-1-alpha/dig-1-alpha)',
+            '        * [design](OpenSpec/Changes/dig-1-alpha/design/design)',
+            '        * [tasks](OpenSpec/Changes/dig-1-alpha/tasks/tasks)',
+            '        * [plan](OpenSpec/Changes/dig-1-alpha/plan/plan)',
+            '        * [specs](OpenSpec/Changes/dig-1-alpha/specs/specs)',
+            '          * [area](OpenSpec/Changes/dig-1-alpha/specs/area/area)',
+            '            * [cap-a](OpenSpec/Changes/dig-1-alpha/specs/area/cap-a/cap-a)',
             '      * [dig-2-beta](OpenSpec/Changes/dig-2-beta/dig-2-beta)',
             '    * [Specs](OpenSpec/Specs/Specs)',
             '      * [area](OpenSpec/Specs/area/area)',
@@ -97,7 +103,8 @@ describe('плагин openspec', () => {
             '        * [cap-b](OpenSpec/Specs/area/cap-b/cap-b)',
             '      * [solo](OpenSpec/Specs/solo/solo)',
             '    * [Archive](OpenSpec/Archive/Archive)',
-            '      * [2026-08-01-dig-0-old](OpenSpec/Archive/2026-08-01-dig-0-old/2026-08-01-dig-0-old)'
+            '      * [2026-08-01-dig-0-old](OpenSpec/Archive/2026-08-01-dig-0-old/2026-08-01-dig-0-old)',
+            '        * [tasks](OpenSpec/Archive/2026-08-01-dig-0-old/tasks/tasks)'
         ]);
     });
 
@@ -113,36 +120,38 @@ describe('плагин openspec', () => {
         expect(md).toMatch(/\| \[dig-2-beta\]\(OpenSpec\/Changes\/dig-2-beta\/dig-2-beta\) \| — \| — \|/);
     });
 
-    it('страница change: шапка, порядок разделов, сдвиг заголовков, чекбоксы, якоря, дельты', () => {
+    it('страница change: шапка, ссылки на подстраницы, proposal inline, ссылки на артефакты → страницы', () => {
         const md = read('OpenSpec/Changes/dig-1-alpha/dig-1-alpha.md');
         expect(md).toContain('# dig-1-alpha');
         expect(md).toContain('**Схема:** spec-driven · **Создан:** 2026-08-01 · **Задачи:** 1/3');
-        const order = [
-            '## proposal',
-            '## design',
-            '## tasks',
-            '## plan',
-            '## Дельты спек',
-            '### area / cap-a'
-        ].map((h) => md.indexOf(`\n${h}\n`));
-        expect(order.every((i) => i > 0)).toBe(true);
-        expect([...order].sort((a, b) => a - b)).toEqual(order);
-        expect(md).toContain('### Why'); // h2 артефакта под h2 раздела
-        expect(md).toContain('#### Requirement: A'); // дельта: +2
-        expect(md).toContain('- [x] 1.1 done');
-        expect(md).toContain('[design](#design)');
-        expect(md).toContain('[tasks](#done)');
-        expect(md).toContain('[delta](#area-cap-a)');
+        expect(md).toContain(
+            '[design](OpenSpec/Changes/dig-1-alpha/design/design) · [tasks](OpenSpec/Changes/dig-1-alpha/tasks/tasks) · [plan](OpenSpec/Changes/dig-1-alpha/plan/plan) · [specs](OpenSpec/Changes/dig-1-alpha/specs/specs)'
+        );
+        expect(md).toContain('## Why'); // proposal без обёртки, заголовки не сдвинуты
+        expect(md).toContain('See [design](OpenSpec/Changes/dig-1-alpha/design/design)');
+        expect(md).toContain('[tasks](OpenSpec/Changes/dig-1-alpha/tasks/tasks?id=done)');
+        expect(md).toContain('[delta](OpenSpec/Changes/dig-1-alpha/specs/area/cap-a/cap-a)');
         expect(md).toContain('![pic](img/pic.png)');
         expect(fs.existsSync(path.join(dir, 'docs/OpenSpec/Changes/dig-1-alpha/img/pic.png'))).toBe(true);
     });
 
-    it('```plantuml вырезан и отрендерен локально; ```js остался', () => {
-        const md = read('OpenSpec/Changes/dig-1-alpha/dig-1-alpha.md');
+    it('подстраницы: tasks с чекбоксами, plan, дельта спеки и её индекс', () => {
+        expect(read('OpenSpec/Changes/dig-1-alpha/tasks/tasks.md')).toContain('- [x] 1.1 done');
+        expect(read('OpenSpec/Changes/dig-1-alpha/plan/plan.md')).toContain('custom artifact');
+        expect(read('OpenSpec/Changes/dig-1-alpha/specs/area/cap-a/cap-a.md')).toContain(
+            '### Requirement: A'
+        );
+        expect(read('OpenSpec/Changes/dig-1-alpha/specs/specs.md')).toContain(
+            '- [area](OpenSpec/Changes/dig-1-alpha/specs/area/area)\n  - [cap-a](OpenSpec/Changes/dig-1-alpha/specs/area/cap-a/cap-a)'
+        );
+    });
+
+    it('```plantuml вырезан и отрендерен локально на подстранице design; ```js остался', () => {
+        const md = read('OpenSpec/Changes/dig-1-alpha/design/design.md');
         expect(md).not.toContain('```plantuml');
         expect(md).toContain('![diagram](design-1.svg)');
         expect(md).toContain('```js');
-        const svg = read('OpenSpec/Changes/dig-1-alpha/design-1.svg');
+        const svg = read('OpenSpec/Changes/dig-1-alpha/design/design-1.svg');
         expect(svg).toContain('<svg');
         expect(svg).toContain('Alice');
     });
@@ -158,9 +167,10 @@ describe('плагин openspec', () => {
         expect(read('OpenSpec/Archive/Archive.md')).toContain(
             '- [2026-08-01-dig-0-old](OpenSpec/Archive/2026-08-01-dig-0-old/2026-08-01-dig-0-old)'
         );
-        expect(read('OpenSpec/Archive/2026-08-01-dig-0-old/2026-08-01-dig-0-old.md')).toContain(
-            '**Задачи:** 2/2'
-        );
+        const md = read('OpenSpec/Archive/2026-08-01-dig-0-old/2026-08-01-dig-0-old.md');
+        expect(md).toContain('**Задачи:** 2/2');
+        expect(md).toContain('## Why'); // proposal inline
+        expect(read('OpenSpec/Archive/2026-08-01-dig-0-old/tasks/tasks.md')).toContain('- [x] a');
     });
 });
 
@@ -171,6 +181,25 @@ describe('плагин openspec: крайние случаи', () => {
         runBuild(d);
         expect(fs.readFileSync(path.join(d, 'docs/OpenSpec/OpenSpec.md'), 'utf8')).toContain(
             "**Активных change'ов:** [0]"
+        );
+        fs.rmSync(d, { recursive: true, force: true });
+    });
+    it('опция artifacts управляет порядком и inline-артефактом', () => {
+        const d = makeFixture('order', [['openspec', { artifacts: ['plan', 'tasks'] }]]);
+        runBuild(d);
+        const main = fs.readFileSync(
+            path.join(d, 'docs/OpenSpec/Changes/dig-1-alpha/dig-1-alpha.md'),
+            'utf8'
+        );
+        expect(main).toContain('custom artifact'); // plan — на странице change'а
+        expect(main).toContain(
+            '[tasks](OpenSpec/Changes/dig-1-alpha/tasks/tasks) · [design](OpenSpec/Changes/dig-1-alpha/design/design) · [proposal](OpenSpec/Changes/dig-1-alpha/proposal/proposal)'
+        );
+        // change без plan: страница = шапка + ссылки, proposal — подстраницей
+        const beta = fs.readFileSync(path.join(d, 'docs/OpenSpec/Changes/dig-2-beta/dig-2-beta.md'), 'utf8');
+        expect(beta).not.toContain('## Why');
+        expect(fs.existsSync(path.join(d, 'docs/OpenSpec/Changes/dig-2-beta/proposal/proposal.md'))).toBe(
+            true
         );
         fs.rmSync(d, { recursive: true, force: true });
     });

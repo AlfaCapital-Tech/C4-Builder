@@ -11,13 +11,17 @@ import {
     renderChange,
     renderChangesIndex,
     renderSpecIndex,
-    renderSummary
+    renderSummary,
+    specFolders
 } from './render.ts';
 
 const optionsSchema = z
     .object({
         dir: z.string().default('openspec'),
-        mount: z.string().min(1).default('OpenSpec')
+        mount: z.string().min(1).default('OpenSpec'),
+        // Порядок артефактов change'а; первый выводится на странице change'а, остальные —
+        // подстраницами; не перечисленные — после, по алфавиту.
+        artifacts: z.array(z.string()).default(['proposal', 'design', 'tasks'])
     })
     .strict();
 
@@ -35,15 +39,16 @@ export default definePlugin<Opts>({
         const store: Store = scanStore(storeDir);
         const { mount } = o;
         const { options } = ctx;
-        // Страница change'а + файлы, на которые ссылаются артефакты (картинки): каталог
+        // Страницы change'а + файлы, на которые ссылаются артефакты (картинки): каталог
         // страницы в dist уже создан addPage — копируем сразу.
         const addChange = (change: Change, segments: string[]): void => {
-            const page = renderChange(change, segments);
-            ctx.addPage({ path: segments, markdown: page.markdown, diagrams: page.diagrams });
-            for (const rel of page.files) {
-                const dest = path.join(options.DIST_FOLDER, ...segments, rel);
-                fs.mkdirSync(path.dirname(dest), { recursive: true });
-                fs.copyFileSync(path.join(change.dir, rel), dest);
+            for (const page of renderChange(change, segments, o.artifacts, options)) {
+                ctx.addPage({ path: page.path, markdown: page.markdown, diagrams: page.diagrams });
+                for (const rel of page.files) {
+                    const dest = path.join(options.DIST_FOLDER, ...page.path, rel);
+                    fs.mkdirSync(path.dirname(dest), { recursive: true });
+                    fs.copyFileSync(path.join(change.dir, rel), dest);
+                }
             }
         };
 
@@ -55,20 +60,15 @@ export default definePlugin<Opts>({
         });
         for (const change of store.changes) addChange(change, [mount, 'Changes', change.id]);
 
-        ctx.addPage({ path: [mount, 'Specs'], markdown: renderSpecIndex(store.specs, [], mount, options) });
-        // Промежуточные папки спек (двухуровневая раскладка) — подразделы со списком вложенных.
-        const folders = new Set<string>();
-        for (const spec of store.specs)
-            for (let i = 1; i < spec.path.length; i++) folders.add(spec.path.slice(0, i).join('/'));
-        for (const folder of [...folders].sort()) {
-            const prefix = folder.split('/');
+        // Specs: индекс, промежуточные папки (двухуровневая раскладка) со списком вложенных, страницы спек.
+        const specsBase = [mount, 'Specs'];
+        for (const prefix of [[], ...specFolders(store.specs)])
             ctx.addPage({
-                path: [mount, 'Specs', ...prefix],
-                markdown: renderSpecIndex(store.specs, prefix, mount, options)
+                path: [...specsBase, ...prefix],
+                markdown: renderSpecIndex(store.specs, prefix, specsBase, options)
             });
-        }
         for (const spec of store.specs)
-            ctx.addPage({ path: [mount, 'Specs', ...spec.path], markdown: spec.content });
+            ctx.addPage({ path: [...specsBase, ...spec.path], markdown: spec.content });
 
         ctx.addPage({
             path: [mount, 'Archive'],

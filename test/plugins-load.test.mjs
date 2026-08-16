@@ -40,7 +40,11 @@ describe('loadPlugins', () => {
         const [b] = await loadPlugins([['openspec', {}]], tmp, opts());
         expect(a.plugin.name).toBe('openspec');
         expect(a.opts).toEqual(b.opts);
-        expect(a.opts).toEqual({ dir: 'openspec', mount: 'OpenSpec' });
+        expect(a.opts).toEqual({
+            dir: 'openspec',
+            mount: 'OpenSpec',
+            artifacts: ['proposal', 'design', 'tasks']
+        });
     });
 
     it('неизвестный ключ у строгой схемы встроенного плагина — ошибка с именем плагина и ключом', async () => {

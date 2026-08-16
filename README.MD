@@ -312,16 +312,20 @@ never printed. Older c4builder versions ignore the `plugins` key, so a rollback 
 ### `openspec` — publish a local OpenSpec store
 
 Renders an [OpenSpec](https://github.com/Fission-AI/OpenSpec) store as a site section:
-a summary (counters, task progress), one page per active change (`proposal` → `design` →
-`tasks` → other `*.md` alphabetically → spec deltas), the specs tree and the archive.
-```` ```plantuml ```` / ```` ```d2 ```` fences inside artifacts are rendered by the **local**
-engines (nothing is sent to plantuml.com); relative links between artifacts of a change become
-in-page anchors, referenced images are copied next to the page. The store folder is watched in `-w`.
+a summary (counters, task progress), a page per active change, the specs tree and the archive.
+A change page shows the header (schema, dates, task progress, links to subpages) plus the first
+artifact of `artifacts` (by default `proposal` — the "why" is visible without a click); the
+remaining artifacts (`design`, `tasks`, then any other `*.md` alphabetically) are subpages, and
+spec deltas live under `specs/…` mirroring the folder layout. ```` ```plantuml ```` /
+```` ```d2 ```` fences inside artifacts are rendered by the **local** engines (nothing is sent
+to plantuml.com); relative links between artifacts of a change point to their pages, referenced
+images are copied next to the page. The store folder is watched in `-w`.
 
-| Option  | Default      | Meaning                                              |
-|---------|--------------|------------------------------------------------------|
-| `dir`   | `openspec`   | store folder (relative to the project directory)     |
-| `mount` | `OpenSpec`   | section name (and its path in the output folder)     |
+| Option      | Default                        | Meaning                                                        |
+|-------------|--------------------------------|----------------------------------------------------------------|
+| `dir`       | `openspec`                     | store folder (relative to the project directory)               |
+| `mount`     | `OpenSpec`                     | section name (and its path in the output folder)               |
+| `artifacts` | `["proposal","design","tasks"]`| artifact order; the first one is shown on the change page itself |
 
 ### `openapi` — swagger-ui pages for a set of OpenAPI specs
 
