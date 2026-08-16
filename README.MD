@@ -286,6 +286,124 @@ By default this is disabled. If enabled, the output will no longer include the a
 
 The current entity structure is inserted after the header
 
+## Plugins
+
+Plugins extend the build with content from outside `rootFolder` (virtual pages that go through
+the regular pipeline: sidebar, search, `generateMD`, complete markdown, local diagram render)
+and with site assets. They are listed in `.c4builder` under `plugins` — either `"name"` or
+`["name", { ...options }]`:
+
+```json
+{
+  "plugins": [
+    "openspec",
+    ["openapi", { "dir": "../contracts", "glob": "*/openapi.yaml" }]
+  ]
+}
+```
+
+A plugin identifier resolves in this order: a built-in name (`openspec`, `openapi`) → a local
+ESM module (`./plugins/my.mjs`, `../shared/plugin.mjs`, absolute path) → an npm package resolved
+from the project directory. Options are validated by the plugin's own zod schema **before** the
+build starts (built-in plugins are strict — an unknown option key is an error); `${ENV_VAR}`
+placeholders inside string options are replaced from the environment (unset → empty string) and
+never printed (archive URLs appear in messages without their query string, so a token passed as
+`?private_token=${TOKEN}` stays out of the logs). A malformed `plugins` entry always fails the
+build (it is the one key the wizard cannot repair). Older c4builder versions ignore the `plugins`
+key, so a rollback keeps building.
+
+### `openspec` — publish a local OpenSpec store
+
+Renders an [OpenSpec](https://github.com/Fission-AI/OpenSpec) store as a site section:
+a summary (counters, task progress), a page per active change, the specs tree and the archive.
+A change page shows the header (schema, dates, task progress, links to subpages) plus the first
+artifact of `artifacts` (by default `proposal` — the "why" is visible without a click); the
+remaining artifacts (`design`, `tasks`, then any other `*.md` alphabetically) are subpages, and
+spec deltas live under `specs/…` mirroring the folder layout (a folder that has its own
+`spec.md` and nested specs gets one page: the spec followed by the list of nested ones).
+```` ```plantuml ```` / ```` ```d2 ```` fences inside artifacts, deltas and store specs are
+rendered by the **local** engines (nothing is sent to plantuml.com); the image name is derived
+from the fence content, so inserting or reordering fences never reuses a neighbour's cached
+image. Relative links between artifacts of a change point to their pages, referenced files
+(images, notes) are copied next to the page (and to the output root for the complete markdown;
+`excludeOtherFiles` applies). The store folder is watched in `-w`.
+
+| Option      | Default                        | Meaning                                                        |
+|-------------|--------------------------------|----------------------------------------------------------------|
+| `dir`       | `openspec`                     | store folder (relative to the project directory)               |
+| `mount`     | `OpenSpec`                     | section name (and its path in the output folder)               |
+| `artifacts` | `["proposal","design","tasks"]`| artifact order; the first one is shown on the change page itself |
+
+### `openapi` — swagger-ui pages for a set of OpenAPI specs
+
+Finds specs by `glob` in a local folder (`dir`) **or** in a `tar.gz`/`zip` archive fetched over
+HTTP (`archive`, e.g. a GitLab/GitHub repository archive URL; `subdir` picks a folder inside it,
+`headers` adds request headers such as `{"PRIVATE-TOKEN": "${GITLAB_TOKEN}"}` — empty values are
+dropped, so the same config works with and without a token). One page per spec, named after the
+spec's parent folder (file name for specs in the source root), plus an index. All `yaml`/`yml`/
+`json` files of the source are copied into `<mount>/_specs/…` keeping their relative layout, so
+relative `$ref`s (including shared schema files that do not match `glob`) keep resolving; pages
+load swagger-ui from the bundled `vendor/` files — no CDN, no access to the source repository is
+needed by readers. The plugin forces `executeScript` (logged) and injects `swagger-ui.css` and
+`swagger-ui-bundle.js` into `index.html` after the template is rendered (skipped when the template
+already links the bundle), so custom `docsifyTemplate`s need no change. The output folder is never
+treated as a source (`dir: "."` is fine). Archives are downloaded once per process (watch mode
+reuses them).
+
+| Option    | Default                          | Meaning                                  |
+|-----------|----------------------------------|------------------------------------------|
+| `mount`   | `API`                            | section name                             |
+| `dir`     | —                                | local folder with specs (watched in `-w`)|
+| `archive` | —                                | HTTP(S) URL of a tar.gz/zip archive      |
+| `subdir`  | —                                | folder inside the archive / `dir`        |
+| `headers` | —                                | HTTP headers for the archive request     |
+| `glob`    | `**/openapi.{yaml,yml,json}`     | spec pattern (`**`, `*`, `?`, `{a,b}`)   |
+
+Example for a repository that keeps its `openspec/` store next to the C4 sources and consumes
+contracts from another repository:
+
+```json
+{
+  "plugins": [
+    "openspec",
+    ["openapi", {
+      "archive": "https://gitlab.example.com/api/v4/projects/123/repository/archive.tar.gz?sha=main",
+      "glob": "*/openapi.yaml",
+      "headers": { "PRIVATE-TOKEN": "${GITLAB_TOKEN}" }
+    }]
+  ]
+}
+```
+
+### Writing a plugin
+
+A plugin is an ESM module whose default export is a plain object (use `definePlugin` from
+`@alfacapital-tech/c4builder/dist/core/plugins/types.js` for typing):
+
+```js
+import { z } from 'zod';
+export default {
+  name: 'changelog',
+  options: z.object({ file: z.string().default('CHANGELOG.md') }).strict(), // optional
+  watchPaths: (opts) => [opts.file],                                          // optional
+  assets: { styles: ['/abs/path/x.css'], scripts: ['/abs/path/x.js'] },      // optional
+  requires: { executeScript: true },                                          // optional
+  async afterScan(ctx, opts) {
+    // ctx.tree, ctx.options — the build tree/options; ctx.source({ dir } | { archive, subdir, headers })
+    // resolves a folder; ctx.addPage adds a virtual page (missing parents become index pages).
+    ctx.addPage({
+      path: ['Changelog'],
+      markdown: '## Latest\n\n![flow](flow.puml)',
+      diagrams: [{ file: 'flow.puml', content: '@startuml\nA -> B\n@enduml' }]
+    });
+  },
+  async afterBuild(ctx, opts) { /* ctx.distFolder, ctx.options — copy extra files, run checks */ }
+};
+```
+
+Hooks run in the order of the `plugins` list; an exception aborts the build with the plugin's
+name (the previous `dist` backup is kept as usual).
+
 # Future plans
 
 I would like to bind the **build** phase to the C4 model. It could parse the diagrams and know what Person/System/Component/Container is related to what and help with additional validation. Maybe even export to [structurizr](https://structurizr.com/) or vice versa.
@@ -355,10 +473,19 @@ Publishes to dist-tag `latest`.
 
 ## Unreleased
 
+- Plugin system: `plugins` key in `.c4builder`, `afterScan`/`afterBuild` hooks, virtual pages,
+  plugin assets injected into `index.html`, `dir`/`archive` source resolver (see «Plugins»)
+- Built-in plugins: `openspec` (local OpenSpec store → site section, local diagram render) and
+  `openapi` (offline swagger-ui pages for a set of OpenAPI specs; `vendor/swagger-ui/swagger-ui.css` 5.32.1)
 - `c4builder check <file...>` — validate individual `.puml` / `.iuml` / `.d2` files with the
   bundled engines, without a project build (#13)
 - D2 compile errors are printed as readable `file:line:col: message` lines instead of raw JSON
 - Regression test for two adjacent `![..](x.puml)` embeds (#12 — the bug itself was fixed in 0.3.0)
+- Diagram cache key now includes the output path: diagrams that swap contents (or fence blocks
+  that shift position) are re-rendered instead of silently reusing a neighbour's cached image.
+  The first build after upgrading re-renders everything once.
+- Watch mode ignores the output folder, its backup and `.c4builder*`, and de-duplicates nested
+  watch roots (a plugin `dir` covering the project no longer loops the rebuild)
 
 ## v0.3.0
 

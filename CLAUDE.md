@@ -19,6 +19,9 @@ npm run check        # biome ci (линт + формат)
 - `src/config/` — `.c4builder`: schema (zod), defaults, options
 - `src/core/` — scan (дерево исходников) → compose (markdown) → render
   (plantuml.ts — прямой java+Smetana; d2renderer.ts — WASM; pngraster.ts — resvg)
+- `src/core/plugins/` — система плагинов: контракт (`types.ts`), загрузчик (`load.ts`),
+  виртуальные страницы (`tree.ts`), хуки, ассеты, резолвер источников (`source.ts`)
+- `src/plugins/` — встроенные плагины (`openspec`, `openapi`); реестр — `index.ts`
 - `vendor/` — PlantUML jar, шрифты Nimbus Sans, docsify — вендорено, руками не трогать
 - `template/` — шаблон `--new`; `test/golden.test.mjs` — эталонные снапшоты
 

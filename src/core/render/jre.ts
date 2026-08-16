@@ -10,10 +10,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
-import { createRequire } from 'node:module';
 import { spawnSync, type SpawnSyncReturns } from 'node:child_process';
 
 import { httpGetStream, httpGetJson } from '../../util/http.ts';
+// Распаковка (zip-slip-guard общий) вынесена в util/archive — её же использует
+// резолвер источников плагинов. isPathInside ре-экспортируется для тестов.
+import { extractZip, extractTarGz, isPathInside } from '../../util/archive.ts';
+export { isPathInside };
 
 // Результат резолва Java: путь к бинарю, источник (system/cache/download) и,
 // для системной java, распознанная мажорная версия.
@@ -22,10 +25,6 @@ interface JreResolution {
     source: string;
     major?: number;
 }
-
-// yauzl/tar грузятся лениво (только при распаковке скачанного JRE) — сохраняем это
-// синхронным require через createRequire, а не тянем их на импорте модуля.
-const require = createRequire(import.meta.url);
 
 const MAJOR_MIN = 17; // минимальная годная мажорная версия системной java
 const TEMURIN_FEATURE = 21; // скачиваем ровно Temurin 21 JRE
@@ -235,76 +234,8 @@ const downloadAndVerify = async (link: string, expectedSha: string, destFile: st
     }
 };
 
-// Минимальный контракт yauzl (внешняя опц. зависимость без @types): только то,
-// что реально использует extractZip — без привязки к полному API либы.
-interface YauzlEntry {
-    fileName: string;
-    externalFileAttributes: number;
-}
-interface YauzlZipFile {
-    on(event: 'entry', listener: (entry: YauzlEntry) => void): void;
-    on(event: 'end', listener: () => void): void;
-    on(event: 'error', listener: (err: Error) => void): void;
-    readEntry(): void;
-    openReadStream(entry: YauzlEntry, cb: (err: Error | null, stream: NodeJS.ReadableStream) => void): void;
-}
-
-// Защита от zip-slip: путь записи, разрешённый относительно destDir, обязан
-// оставаться ВНУТРИ него (не `../` за пределы). Экспортируется для юнит-теста.
-export const isPathInside = (destDir: string, entryName: string): boolean => {
-    const root = path.resolve(destDir);
-    const dest = path.resolve(root, entryName);
-    return dest === root || dest.startsWith(root + path.sep);
-};
-
-const extractZip = (archive: string, destDir: string): Promise<void> =>
-    new Promise((resolve, reject) => {
-        require('yauzl').open(archive, { lazyEntries: true }, (err: Error | null, zip: YauzlZipFile) => {
-            if (err) return reject(err);
-            zip.on('entry', (entry: YauzlEntry) => {
-                // zip-slip: злонамеренная запись `../../evil` вышла бы за destDir. tar-ветка
-                // защищена node-tar≥6 по умолчанию, zip (yauzl) — нет, проверяем сами.
-                if (!isPathInside(destDir, entry.fileName)) {
-                    return reject(
-                        new Error(`Небезопасный путь в архиве JRE (выход за каталог): ${entry.fileName}`)
-                    );
-                }
-                // Симлинки пропускаем: вне доверенного Adoptium-архива симлинк мог бы
-                // указывать за пределы каталога. Temurin Windows-zip симлинков не содержит.
-                const isSymlink = ((entry.externalFileAttributes >>> 16) & 0xffff & 0o170000) === 0o120000;
-                if (isSymlink) return zip.readEntry();
-                const dest = path.join(destDir, entry.fileName);
-                if (entry.fileName.endsWith('/')) {
-                    fs.mkdirSync(dest, { recursive: true });
-                    return zip.readEntry();
-                }
-                fs.mkdirSync(path.dirname(dest), { recursive: true });
-                zip.openReadStream(entry, (e: Error | null, rs: NodeJS.ReadableStream) => {
-                    if (e) return reject(e);
-                    const ws = fs.createWriteStream(dest);
-                    ws.on('error', reject);
-                    ws.on('finish', () => {
-                        const mode = (entry.externalFileAttributes >>> 16) & 0o777;
-                        if (mode) {
-                            try {
-                                fs.chmodSync(dest, mode);
-                            } catch {
-                                /* права не критичны на windows */
-                            }
-                        }
-                        zip.readEntry();
-                    });
-                    rs.pipe(ws);
-                });
-            });
-            zip.on('end', resolve);
-            zip.on('error', reject);
-            zip.readEntry();
-        });
-    });
-
 const extractArchive = (archive: string, destDir: string, isZip: boolean): Promise<void> =>
-    isZip ? extractZip(archive, destDir) : require('tar').x({ file: archive, cwd: destDir });
+    isZip ? extractZip(archive, destDir) : extractTarGz(archive, destDir);
 
 // (3) скачивание: assets API → sha256 (до распаковки) → распаковка в staging →
 // атомарная замена кеша. Распаковываем НЕ в финальный каталог, а в свой staging

@@ -13,6 +13,8 @@ import cmdList from './commands/list.ts';
 import cmdSite from './commands/site.ts';
 import cmdCollect from './wizard/collect.ts';
 import { build } from '../core/build.ts';
+import { loadPlugins, pluginWatchPaths } from '../core/plugins/load.ts';
+import fs from 'node:fs';
 import watch from 'node-watch';
 import { EventEmitter } from 'node:events';
 
@@ -24,7 +26,7 @@ import { acquireBuildLock, BuildLockHeldError } from '../util/lock.ts';
 import { teardownD2 } from '../core/render/d2renderer.ts';
 import { packageJson as pkg } from '../util/paths.ts';
 import type { BuildOptions, C4ConfigFile, ConfigIssue } from '../config/options.ts';
-import { parseConfig } from '../config/options.ts';
+import { outputDirs, parseConfig } from '../config/options.ts';
 import { isValidPort } from '../config/schema.ts';
 
 // Configstore-подобное хранилище конфига/кэша. Реальный инстанс — Configstore;
@@ -128,7 +130,8 @@ function getOptions(c: Partial<C4ConfigFile>): BuildOptions | Partial<BuildOptio
         SUPPORT_SEARCH: c.supportSearch,
         EXECUTE_SCRIPT: c.executeScript,
         EXCLUDE_OTHER_FILES: c.excludeOtherFiles,
-        USE_SYSTEM_FONTS: c.useSystemFonts
+        USE_SYSTEM_FONTS: c.useSystemFonts,
+        PLUGINS: c.plugins
     };
 }
 
@@ -167,9 +170,9 @@ export default async () => {
     let cacheConf: ConfStore = { get: () => {}, set: () => {}, clear: () => {} } as unknown as ConfStore;
     // Лок сборки — рядом с конфигом проекта (см. util/lock.ts). Заполняется вместе с conf.
     let lockPath = '';
+    const configPath = path.join(process.cwd(), opts.configFile ?? '.c4builder');
     if (!opts.new) {
         const projectKey = process.cwd().split(path.sep).splice(1).join('_');
-        const configPath = path.join(process.cwd(), opts.configFile ?? '.c4builder');
         lockPath = `${configPath}.lock`;
         conf = new Configstore(projectKey, {}, { configPath });
         cacheConf = new Configstore(`${projectKey}_cache`, {}, { configPath: `${configPath}.cache` });
@@ -220,9 +223,11 @@ export default async () => {
     // Повторная сборка установленного проекта (есть HAS_RUN, не --config) — строгий путь:
     // битый конфиг обязан упасть с внятной ошибкой сразу, а не быть тихо «починен» визардом.
     // Первый запуск (!HAS_RUN) и --config остаются щадящими — это штатный путь восстановления.
+    // `plugins` визард не спрашивает — salvage молча переписал бы его в `[]` и сборка
+    // прошла бы без раздела плагина; битый `plugins` роняет всегда.
     const strictBuild = !opts.config && !!currentConfig.HAS_RUN;
     if (configIssues.length) {
-        if (strictBuild) failOnConfigIssues(configIssues);
+        if (strictBuild || configIssues.some((i) => i.key === 'plugins')) failOnConfigIssues(configIssues);
         warnConfigIssues(configIssues);
         // Битые ключи чиним физически (salvage-значение = дефолт схемы, либо удаление):
         // визард переспрашивает не всё (вложенные блоки гейтятся generate*-флагами), а
@@ -248,13 +253,33 @@ export default async () => {
         conf.set('hasRun', true);
         const options = getOptions(built.value);
         if (opts.systemFonts) options.USE_SYSTEM_FONTS = true; // флаг сильнее ключа конфига
+        // Плагины грузятся и валидируются до первой сборки: битые опции — exit 1 сразу.
+        const plugins = await loadPlugins(options.PLUGINS, process.cwd(), options).catch((e: Error) => {
+            console.error(chalk.red(`Ошибка загрузки плагинов: ${e.message}`));
+            return process.exit(1);
+        });
         const reloadEmitter = new EventEmitter();
         reloadEmitter.setMaxListeners(0);
         if (opts.watch) {
             // node-watch: CJS-рантайм при ESM-.d.ts (export default) — дефолт-импорт
             // типизируется как namespace. Каст к реальной сигнатуре, рантайм не меняется.
             const watchDir = watch as unknown as typeof import('node-watch').default;
-            watchDir(options.ROOT_FOLDER, { recursive: true }, async (_evt, name) => {
+            const inside = (p: string, dir: string): boolean => p === dir || p.startsWith(dir + path.sep);
+            // Пути наблюдения — абсолютные и без вложенных друг в друга: node-watch дедуплицирует
+            // события по имени, а один файл под двумя корнями приходил бы дважды.
+            const candidates = [
+                path.resolve(options.ROOT_FOLDER),
+                ...pluginWatchPaths(plugins, process.cwd(), fs.existsSync)
+            ];
+            const watchPaths = candidates.filter(
+                (p, i) => !candidates.some((q, j) => j !== i && inside(p, q) && (p !== q || j < i))
+            );
+            // Собственные записи сборки (dist, dist_bk, .c4builder*) не должны триггерить
+            // ребилд — при dir плагина, накрывающем cwd, это бесконечная петля.
+            const output = outputDirs(options);
+            const filter = (name: string, skip: symbol): boolean | symbol =>
+                output.some((d) => inside(name, d)) || name.startsWith(configPath) ? skip : true;
+            watchDir(watchPaths, { recursive: true, filter }, async (_evt, name) => {
                 // clearConsole();
                 // intro();
                 console.log(chalk.gray(`\n${name} changed. Rebuilding...`));
@@ -279,10 +304,10 @@ export default async () => {
                     // каталоге не потопчет dist_bk и не потеряет чексуммы кеша.
                     const release = acquireBuildLock(lockPath);
                     try {
-                        await build(options, cacheConf);
+                        await build(options, cacheConf, plugins);
                         while (attemptedWatchBuild) {
                             attemptedWatchBuild = false;
-                            await build(options, cacheConf);
+                            await build(options, cacheConf, plugins);
                         }
                     } finally {
                         release();
@@ -314,7 +339,7 @@ export default async () => {
             process.exit(1);
         }
         try {
-            await build(options, cacheConf);
+            await build(options, cacheConf, plugins);
         } finally {
             release();
             // Одиночная сборка: D2-воркер больше не нужен, без teardown он держал бы

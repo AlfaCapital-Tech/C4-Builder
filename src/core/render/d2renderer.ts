@@ -100,14 +100,20 @@ const resolveImport = (ref: string, fromDir: string): string | null => {
 // корректный юникод. Хвостовые `.key`-сегменты частичного импорта отрезает resolveImport.
 const IMPORT_RE = /(?<!\w)@(?:"([^"\n]+)"|([^\s"#;}\n][^#;}\n]*?)\s*(?=[#;}\n]|$))/gu;
 
-const collectFiles = (entryAbs: string, acc: Map<string, string> = new Map()): Map<string, string> => {
+// seed — контент входного файла из дерева сборки: у виртуальных страниц плагинов
+// файла на диске нет, а импорты (`@…`) по-прежнему резолвятся от его каталога.
+const collectFiles = (
+    entryAbs: string,
+    acc: Map<string, string> = new Map(),
+    seed?: string
+): Map<string, string> => {
     const abs = path.resolve(entryAbs);
     if (acc.has(abs)) return acc;
     let content: string;
     try {
         // Строго UTF-8: язык D2 определён поверх UTF-8, опция CHARSET конфига относится
         // к PlantUML (уходит в -charset) и на .d2 сознательно не распространяется.
-        content = fs.readFileSync(abs, 'utf-8');
+        content = seed ?? fs.readFileSync(abs, 'utf-8');
     } catch {
         return acc;
     }
@@ -133,12 +139,12 @@ let filesMemo: Map<string, Map<string, string>> | null = null;
 const clearD2FileCache = (): void => {
     filesMemo = null;
 };
-const collectFilesCached = (entryAbs: string): Map<string, string> => {
+const collectFilesCached = (entryAbs: string, seed?: string): Map<string, string> => {
     const abs = path.resolve(entryAbs);
     if (!filesMemo) filesMemo = new Map();
     const hit = filesMemo.get(abs);
     if (hit) return hit;
-    const built = collectFiles(abs);
+    const built = collectFiles(abs, new Map(), seed);
     filesMemo.set(abs, built);
     return built;
 };
@@ -158,8 +164,11 @@ const commonAncestor = (files: string[]): string => {
 };
 
 // Подготовить аргументы compile(): виртуальная fs (все файлы графа) + inputPath.
-const buildCompileRequest = (entryAbs: string): { fs: Record<string, string>; inputPath: string } => {
-    const files = collectFilesCached(entryAbs);
+const buildCompileRequest = (
+    entryAbs: string,
+    seed?: string
+): { fs: Record<string, string>; inputPath: string } => {
+    const files = collectFilesCached(entryAbs, seed);
     // Пустой граф = не прочитался сам входной файл (удалён/недоступен — гонка в watch).
     // Без guard'а commonAncestor([]) давал бы сырой TypeError (Math.min()=Infinity).
     if (files.size === 0) {
@@ -186,10 +195,10 @@ const d2ErrorText = (message: string): string => {
 
 const renderD2 = async (
     entryAbs: string,
-    { layout = 'dagre' }: { layout?: string } = {}
+    { layout = 'dagre', seed }: { layout?: string; seed?: string } = {}
 ): Promise<Buffer> => {
     const d2 = await getD2();
-    const { fs: fsMap, inputPath } = buildCompileRequest(entryAbs);
+    const { fs: fsMap, inputPath } = buildCompileRequest(entryAbs, seed);
     let result: D2Compiled;
     try {
         result = await d2.compile({ fs: fsMap, inputPath, options: { layout } });
@@ -212,9 +221,9 @@ const renderD2 = async (
 // диаграммы — аналог foldIncludes для PlantUML.
 // Путь в материале — относительный к cwd, posix-разделители: чексумма не зависит
 // от машины/чекаута/ОС (абсолютный путь делал кеш непереносимым).
-const foldD2Imports = (entryAbs: string): string => {
+const foldD2Imports = (entryAbs: string, seed?: string): string => {
     const abs = path.resolve(entryAbs);
-    const files = collectFilesCached(entryAbs);
+    const files = collectFilesCached(entryAbs, seed);
     const rel = (p: string): string => path.relative(process.cwd(), p).split(path.sep).join('/');
     // Мемоизированную Map не мутируем (её же использует buildCompileRequest) —
     // входной файл исключаем фильтром, а не delete. Сортировка по относительному

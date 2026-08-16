@@ -37,6 +37,10 @@ ${chalk.cyan('Replace diagrams with a link')}
 Replaces the diagram images with links.
 ${chalk.cyan('Include breadcrumbs')}
 Shows the original folder hierarchy after each title.
+${chalk.cyan('Plugins')} (${chalk.gray('.c4builder → "plugins", no wizard prompt')})
+List of build plugins: "name" or ["name", { options }]. Built-in: openspec (local OpenSpec store →
+site section), openapi (swagger-ui pages for OpenAPI specs from a folder or an HTTP archive).
+See README «Plugins».
 ${chalk.cyan('Place diagrams before text')}
 Choose to place diagrams before or after the text.
 ${chalk.cyan('Exclude other files')}
