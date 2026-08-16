@@ -348,7 +348,9 @@ needed by readers. The plugin forces `executeScript` (logged) and injects `swagg
 `swagger-ui-bundle.js` into `index.html` after the template is rendered (skipped when the template
 already links the bundle), so custom `docsifyTemplate`s need no change. The output folder is never
 treated as a source (`dir: "."` is fine). Archives are downloaded once per process (watch mode
-reuses them).
+reuses them). Behind a TLS-intercepting proxy the download fails with `self-signed certificate in
+certificate chain` — point `NODE_EXTRA_CA_CERTS` at the CA bundle (Node reads neither the system
+store nor `SSL_CERT_FILE`).
 
 | Option    | Default                          | Meaning                                  |
 |-----------|----------------------------------|------------------------------------------|
