@@ -1,7 +1,7 @@
 ## Why
 
-Арх-репы (arch, arch-biba2boba) держат рядом с C4/ADR живой OpenSpec-store (18 активных
-change'ов, растущий архив) и потребляют 15 OpenAPI-контрактов из `ai-api/internal`, но на
+Арх-репы (arch и соседний арх-репо) держат рядом с C4/ADR живой OpenSpec-store (18 активных
+change'ов, растущий архив) и потребляют 15 OpenAPI-контрактов из репозитория контрактов, но на
 docsify-сайте ничего из этого не видно: читатель ходит по сырым папкам GitLab, а design.md с
 ```plantuml через docsify-plantuml утекал бы в www.plantuml.com прямо из браузера. Готовые
 вьюверы OpenSpec (spek, openspec-viewer, openspecui) — отдельные SPA/серверы, с docsify и

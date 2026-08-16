@@ -17,6 +17,17 @@ const isZipBuffer = (b: Buffer): boolean =>
     b.length > 3 && b[0] === 0x50 && b[1] === 0x4b && b[2] === 3 && b[3] === 4;
 const isGzipBuffer = (b: Buffer): boolean => b.length > 1 && b[0] === 0x1f && b[1] === 0x8b;
 
+// URL для сообщений: без query и userinfo — токен, переданный в URL
+// (`?private_token=${TOKEN}`), не должен попадать в логи сборки/CI.
+export const redactUrl = (url: string): string => {
+    try {
+        const u = new URL(url);
+        return `${u.origin}${u.pathname}`;
+    } catch {
+        return url;
+    }
+};
+
 const downloadArchive = async (url: string, headers: Record<string, string>): Promise<string> => {
     const dir = path.join(
         os.tmpdir(),
@@ -30,7 +41,7 @@ const downloadArchive = async (url: string, headers: Record<string, string>): Pr
     try {
         body = await httpGetBuffer(url, { headers });
     } catch (e) {
-        throw new Error(`архив недоступен: ${(e as Error).message}`);
+        throw new Error(`архив недоступен: ${(e as Error).message.replaceAll(url, redactUrl(url))}`);
     }
     fs.rmSync(stage, { recursive: true, force: true });
     fs.mkdirSync(stage, { recursive: true });
@@ -38,7 +49,7 @@ const downloadArchive = async (url: string, headers: Record<string, string>): Pr
     try {
         if (isZipBuffer(body)) await extractZip(archive, stage);
         else if (isGzipBuffer(body)) await extractTarGz(archive, stage);
-        else throw new Error(`неизвестный формат архива ${url} (ожидается zip или tar.gz)`);
+        else throw new Error(`неизвестный формат архива ${redactUrl(url)} (ожидается zip или tar.gz)`);
         fs.rmSync(dir, { recursive: true, force: true });
         fs.renameSync(stage, dir);
     } finally {
@@ -51,13 +62,13 @@ const downloadArchive = async (url: string, headers: Record<string, string>): Pr
 };
 
 /**
- * Резолв источника плагина в локальный каталог: `dir` — проверка существования;
- * `archive` — скачивание (с непустыми `headers`), распаковка в tmp-кэш, снятие
- * единственного корневого каталога, затем `subdir`. Ошибки называют путь/URL.
+ * Резолв источника плагина в локальный каталог: `dir` (+ `subdir`) — проверка
+ * существования; `archive` — скачивание (с непустыми `headers`), распаковка в tmp-кэш,
+ * снятие единственного корневого каталога, затем `subdir`. Ошибки называют путь/URL.
  */
 export const resolveSource = async (spec: SourceSpec, cwd: string = process.cwd()): Promise<string> => {
     if (spec.dir !== undefined) {
-        const abs = path.resolve(cwd, spec.dir);
+        const abs = path.resolve(cwd, spec.dir, spec.subdir ?? '');
         if (!fs.existsSync(abs) || !fs.statSync(abs).isDirectory())
             throw new Error(`источник dir не найден: ${abs}`);
         return abs;
@@ -74,6 +85,8 @@ export const resolveSource = async (spec: SourceSpec, cwd: string = process.cwd(
     const root = await rootPromise;
     const result = spec.subdir ? path.join(root, spec.subdir) : root;
     if (!fs.existsSync(result) || !fs.statSync(result).isDirectory())
-        throw new Error(`в архиве ${url} нет каталога ${spec.subdir ?? '.'} (распаковано в ${root})`);
+        throw new Error(
+            `в архиве ${redactUrl(url)} нет каталога ${spec.subdir ?? '.'} (распаковано в ${root})`
+        );
     return result;
 };

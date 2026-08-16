@@ -5,6 +5,8 @@
 // Форма файла `.c4builder` (camelCase) — единый тип задаёт zod-схема (config/schema),
 // её же валидацией опирается загрузка опций сборки. Ре-экспорт: потребители типа
 // (defaults, dispatch) продолжают импортировать его отсюда.
+import path from 'node:path';
+
 import { configSchema } from './schema.ts';
 import type { C4ConfigFile, PluginEntry } from './schema.ts';
 export type { C4ConfigFile, PluginEntry };
@@ -57,6 +59,13 @@ export interface BuildOptions {
 }
 
 /** Один невалидный ключ `.c4builder`: имя ключа верхнего уровня, его сырое значение и причина. */
+/** Суффикс бэкапа выходного каталога на время сборки (`docs` → `docs_bk`). */
+export const DIST_BACKUP_FOLDER_SUFFIX = '_bk';
+
+/** Выходные каталоги сборки (абсолютные): dist и его бэкап — их нельзя ни сканировать, ни наблюдать. */
+export const outputDirs = (options: BuildOptions): string[] =>
+    [options.DIST_FOLDER, options.DIST_FOLDER + DIST_BACKUP_FOLDER_SUFFIX].map((d) => path.resolve(d));
+
 export interface ConfigIssue {
     key: string;
     value: unknown;

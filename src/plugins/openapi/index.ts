@@ -1,11 +1,13 @@
 // Встроенный плагин openapi: набор OpenAPI-спек (локальная папка или архив репозитория
 // контрактов) → раздел сайта со страницей swagger-ui на спеку. Полностью офлайн:
-// бандл swagger-ui вендорен (подключается веткой executeScript шаблона), CSS — ассетом
-// плагина, спеки копируются в dist статикой с сохранением относительных путей ($ref).
+// бандл swagger-ui и CSS — вендорные ассеты плагина, спеки копируются в dist статикой
+// с сохранением относительных путей ($ref).
 import fs from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
 
+import { outputDirs } from '../../config/options.ts';
+import { redactUrl } from '../../core/plugins/source.ts';
 import { definePlugin } from '../../core/plugins/types.ts';
 import { globFiles } from '../../util/glob.ts';
 import { VENDOR_DIR } from '../../util/paths.ts';
@@ -14,7 +16,7 @@ import { encodeURIPath } from '../../util/utils.ts';
 const optionsSchema = z
     .object({
         mount: z.string().min(1).default('API'),
-        dir: z.string().optional(),
+        dir: z.string().min(1).optional(),
         archive: z.string().optional(),
         subdir: z.string().optional(),
         headers: z.record(z.string(), z.string()).optional(),
@@ -37,20 +39,28 @@ export default definePlugin<Opts>({
     name: 'openapi',
     options: optionsSchema,
     requires: { executeScript: true },
-    assets: { styles: [path.join(VENDOR_DIR, 'swagger-ui', 'swagger-ui.css')] },
-    watchPaths: (o) => (o.dir ? [o.dir] : []),
+    // Бандл объявлен ассетом, а не взят из шаблона docsify: пользовательский docsifyTemplate
+    // может его не подключать; при дефолтном шаблоне injectPluginAssets дубль не добавит.
+    assets: {
+        styles: [path.join(VENDOR_DIR, 'swagger-ui', 'swagger-ui.css')],
+        scripts: [path.join(VENDOR_DIR, 'docsify', 'swagger-ui-bundle.js')]
+    },
+    watchPaths: (o) => (o.dir ? [path.join(o.dir, o.subdir ?? '')] : []),
 
     async afterScan(ctx, o) {
         const { mount } = o;
+        const source = o.dir ?? redactUrl(o.archive ?? '');
         const root = await ctx.source({
             dir: o.dir,
             archive: o.archive,
             subdir: o.subdir,
             headers: o.headers
         });
-        const files = globFiles(root, o.glob);
-        if (!files.length)
-            throw new Error(`по шаблону "${o.glob}" в ${o.dir ?? o.archive} не найдено ни одной спеки`);
+        // Источник может быть предком выходного каталога (dir: '.') — свои же копии
+        // спек прошлой сборки в dist/dist_bk не считаются источником.
+        const skip = outputDirs(ctx.options);
+        const files = globFiles(root, o.glob, skip);
+        if (!files.length) throw new Error(`по шаблону "${o.glob}" в ${source} не найдено ни одной спеки`);
         const names = new Map<string, string>();
         for (const rel of files) {
             const name = pageName(rel);
@@ -58,8 +68,9 @@ export default definePlugin<Opts>({
             if (dup) throw new Error(`две спеки дают одно имя страницы "${name}": ${dup} и ${rel}`);
             names.set(name, rel);
         }
-        // Спеки — статикой в dist с сохранением относительных путей ($ref между ними).
-        for (const rel of files) {
+        // Статикой в dist — все yaml/json источника, а не только совпавшие с glob: $ref
+        // может вести в общие схемы (components), не являющиеся спеками.
+        for (const rel of globFiles(root, '**/*.{yaml,yml,json}', skip)) {
             const dest = path.join(ctx.options.DIST_FOLDER, mount, '_specs', rel);
             fs.mkdirSync(path.dirname(dest), { recursive: true });
             fs.copyFileSync(path.join(root, rel), dest);

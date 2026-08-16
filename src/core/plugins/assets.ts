@@ -30,6 +30,14 @@ export const injectHtml = (
  * `dist/index.html`. Зовётся после generateWebMD (index.html уже записан).
  */
 export const injectPluginAssets = async (plugins: LoadedPlugin[], options: BuildOptions): Promise<void> => {
+    const indexPath = path.join(options.DIST_FOLDER, 'index.html');
+    const html = fs.readFileSync(indexPath, 'utf8');
+    // Файл с тем же именем уже подключён шаблоном (дефолтный шаблон сам грузит
+    // vendor/swagger-ui-bundle.js) — второй раз не копируем и не подключаем.
+    const linked = (file: string): boolean =>
+        new RegExp(
+            `(?:src|href)=["'][^"']*\\b${path.basename(file).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}["']`
+        ).test(html);
     const styles: string[] = [];
     const scripts: string[] = [];
     for (const { plugin } of plugins) {
@@ -38,6 +46,7 @@ export const injectPluginAssets = async (plugins: LoadedPlugin[], options: Build
         const destDir = path.join(options.DIST_FOLDER, 'vendor', 'plugins', plugin.name);
         const copy = (files: string[] | undefined, out: string[]): void => {
             for (const file of files ?? []) {
+                if (linked(file)) continue;
                 fs.mkdirSync(destDir, { recursive: true });
                 fs.copyFileSync(file, path.join(destDir, path.basename(file)));
                 out.push(encodeURIPath(path.posix.join(rel, path.basename(file))));
@@ -47,6 +56,5 @@ export const injectPluginAssets = async (plugins: LoadedPlugin[], options: Build
         copy(plugin.assets.scripts, scripts);
     }
     if (!styles.length && !scripts.length) return;
-    const indexPath = path.join(options.DIST_FOLDER, 'index.html');
-    fs.writeFileSync(indexPath, injectHtml(fs.readFileSync(indexPath, 'utf8'), { styles, scripts }));
+    fs.writeFileSync(indexPath, injectHtml(html, { styles, scripts }));
 };

@@ -321,9 +321,15 @@ export const generateImages = async (
                     ? `d2\0${d2EngineVersion()}\0layout=${options.D2_LAYOUT}\0fmt=${outFormat}`
                     : `puml\0${VENDORED_JAR.version}\0charset=${options.CHARSET}\0fmt=${outFormat}\0ditaa=${diagram.isDitaa}`) +
                 `\0font=${fontCacheTag(options)}`;
+            const outName = `${path.parse(diagram.dir).name}.${outFormat}`;
+            const relOut = path.join(item.dir.replace(options.ROOT_FOLDER, ''), outName);
+            // Путь выхода — тоже в чексумме: восстановление из бэкапа идёт по паре
+            // «чексумма встречалась» + «бэкап с этим именем есть», иначе диаграммы,
+            // обменявшиеся содержимым (или сдвинувшиеся имена fence-блоков плагинов),
+            // молча получали бы чужую старую картинку.
             const cksum = crypto
                 .createHash('sha256')
-                .update(body + includes + renderKey, 'utf-8')
+                .update(`${body}${includes}${renderKey}\0out=${relOut.split(path.sep).join('/')}`, 'utf-8')
                 .digest('hex');
 
             // Записи копим в порядке обхода дерева, СИНХРОННО и до запуска задач:
@@ -332,17 +338,11 @@ export const generateImages = async (
             const cksumEntry = { cksum, ok: false };
             checksumEntries.push(cksumEntry);
 
-            const outName = `${path.parse(diagram.dir).name}.${outFormat}`;
-
             // path to backup image file
-            const bkFilePath = path.join(bkFolderName, item.dir.replace(options.ROOT_FOLDER, ''), outName);
+            const bkFilePath = path.join(bkFolderName, relOut);
 
             // path to image in dist folder
-            const filePath = path.join(
-                options.DIST_FOLDER,
-                item.dir.replace(options.ROOT_FOLDER, ''),
-                outName
-            );
+            const filePath = path.join(options.DIST_FOLDER, relOut);
 
             // if checksum exists (diagram untouched) and file/image exists - copy image back from backup folder
             if (oldChecksums.has(cksum) && fs.existsSync(bkFilePath)) {

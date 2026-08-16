@@ -95,6 +95,22 @@ describe('loadPlugins', () => {
         );
     });
 
+    it('ESM-only npm-пакет (exports только import) — резолвится от cwd', async () => {
+        const pkg = path.join(tmp, 'node_modules', 'c4b-plugin-esm');
+        fs.mkdirSync(pkg, { recursive: true });
+        fs.writeFileSync(
+            path.join(pkg, 'package.json'),
+            JSON.stringify({
+                name: 'c4b-plugin-esm',
+                type: 'module',
+                exports: { '.': { types: './i.d.ts', import: './i.js' } }
+            })
+        );
+        fs.writeFileSync(path.join(pkg, 'i.js'), "export default { name: 'esm' };");
+        const [{ plugin }] = await loadPlugins(['c4b-plugin-esm'], tmp, opts());
+        expect(plugin.name).toBe('esm');
+    });
+
     it('модуль без объекта плагина — ошибка', async () => {
         const id = writePlugin('bad', 'export default 42;');
         await expect(loadPlugins([id], tmp, opts())).rejects.toThrow(/полем name/);

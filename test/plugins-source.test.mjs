@@ -87,9 +87,11 @@ describe('resolveSource', () => {
     });
     afterAll(() => server?.close());
 
-    it('dir: существующая папка → абсолютный путь; отсутствующая — ошибка с путём', async () => {
+    it('dir: существующая папка → абсолютный путь; subdir учитывается; отсутствующая — ошибка с путём', async () => {
         expect(await resolveSource({ dir: 'repo-abc123' }, tmp)).toBe(src);
+        expect(await resolveSource({ dir: 'repo-abc123', subdir: 'spec' }, tmp)).toBe(path.join(src, 'spec'));
         await expect(resolveSource({ dir: 'nope' }, tmp)).rejects.toThrow(path.join(tmp, 'nope'));
+        await expect(resolveSource({ dir: 'repo-abc123', subdir: 'nope' }, tmp)).rejects.toThrow(/nope/);
     });
 
     it('archive tar.gz: скачивание, снятие корневого каталога, subdir; повтор — из кэша', async () => {
@@ -113,10 +115,19 @@ describe('resolveSource', () => {
         expect(fs.existsSync(path.join(dir, 'openapi.yaml'))).toBe(true);
     });
 
-    it('404 — ошибка с URL и кодом', async () => {
+    it('404 — ошибка с URL и кодом; query (токен) в сообщении не печатается', async () => {
         await expect(resolveSource({ archive: `${base}/missing.tar.gz` })).rejects.toThrow(
             /missing\.tar\.gz.*404/
         );
+        const err = await resolveSource({ archive: `${base}/missing.tar.gz?private_token=SECRET` }).catch(
+            (e) => e
+        );
+        expect(err.message).toMatch(/missing\.tar\.gz.*404/);
+        expect(err.message).not.toContain('SECRET');
+        // не архив (200 с текстом) — тоже без query
+        const bad = await resolveSource({ archive: `${base}/evil.txt?private_token=SECRET` }).catch((e) => e);
+        expect(bad.message).toMatch(/неизвестный формат архива/);
+        expect(bad.message).not.toContain('SECRET');
     });
 
     it('subdir отсутствует в архиве — ошибка', async () => {

@@ -26,7 +26,7 @@ import { acquireBuildLock, BuildLockHeldError } from '../util/lock.ts';
 import { teardownD2 } from '../core/render/d2renderer.ts';
 import { packageJson as pkg } from '../util/paths.ts';
 import type { BuildOptions, C4ConfigFile, ConfigIssue } from '../config/options.ts';
-import { parseConfig } from '../config/options.ts';
+import { outputDirs, parseConfig } from '../config/options.ts';
 import { isValidPort } from '../config/schema.ts';
 
 // Configstore-подобное хранилище конфига/кэша. Реальный инстанс — Configstore;
@@ -170,9 +170,9 @@ export default async () => {
     let cacheConf: ConfStore = { get: () => {}, set: () => {}, clear: () => {} } as unknown as ConfStore;
     // Лок сборки — рядом с конфигом проекта (см. util/lock.ts). Заполняется вместе с conf.
     let lockPath = '';
+    const configPath = path.join(process.cwd(), opts.configFile ?? '.c4builder');
     if (!opts.new) {
         const projectKey = process.cwd().split(path.sep).splice(1).join('_');
-        const configPath = path.join(process.cwd(), opts.configFile ?? '.c4builder');
         lockPath = `${configPath}.lock`;
         conf = new Configstore(projectKey, {}, { configPath });
         cacheConf = new Configstore(`${projectKey}_cache`, {}, { configPath: `${configPath}.cache` });
@@ -223,9 +223,11 @@ export default async () => {
     // Повторная сборка установленного проекта (есть HAS_RUN, не --config) — строгий путь:
     // битый конфиг обязан упасть с внятной ошибкой сразу, а не быть тихо «починен» визардом.
     // Первый запуск (!HAS_RUN) и --config остаются щадящими — это штатный путь восстановления.
+    // `plugins` визард не спрашивает — salvage молча переписал бы его в `[]` и сборка
+    // прошла бы без раздела плагина; битый `plugins` роняет всегда.
     const strictBuild = !opts.config && !!currentConfig.HAS_RUN;
     if (configIssues.length) {
-        if (strictBuild) failOnConfigIssues(configIssues);
+        if (strictBuild || configIssues.some((i) => i.key === 'plugins')) failOnConfigIssues(configIssues);
         warnConfigIssues(configIssues);
         // Битые ключи чиним физически (salvage-значение = дефолт схемы, либо удаление):
         // визард переспрашивает не всё (вложенные блоки гейтятся generate*-флагами), а
@@ -262,11 +264,22 @@ export default async () => {
             // node-watch: CJS-рантайм при ESM-.d.ts (export default) — дефолт-импорт
             // типизируется как namespace. Каст к реальной сигнатуре, рантайм не меняется.
             const watchDir = watch as unknown as typeof import('node-watch').default;
-            const watchPaths = [
-                options.ROOT_FOLDER,
+            const inside = (p: string, dir: string): boolean => p === dir || p.startsWith(dir + path.sep);
+            // Пути наблюдения — абсолютные и без вложенных друг в друга: node-watch дедуплицирует
+            // события по имени, а один файл под двумя корнями приходил бы дважды.
+            const candidates = [
+                path.resolve(options.ROOT_FOLDER),
                 ...pluginWatchPaths(plugins, process.cwd(), fs.existsSync)
             ];
-            watchDir(watchPaths, { recursive: true }, async (_evt, name) => {
+            const watchPaths = candidates.filter(
+                (p, i) => !candidates.some((q, j) => j !== i && inside(p, q) && (p !== q || j < i))
+            );
+            // Собственные записи сборки (dist, dist_bk, .c4builder*) не должны триггерить
+            // ребилд — при dir плагина, накрывающем cwd, это бесконечная петля.
+            const output = outputDirs(options);
+            const filter = (name: string, skip: symbol): boolean | symbol =>
+                output.some((d) => inside(name, d)) || name.startsWith(configPath) ? skip : true;
+            watchDir(watchPaths, { recursive: true, filter }, async (_evt, name) => {
                 // clearConsole();
                 // intro();
                 console.log(chalk.gray(`\n${name} changed. Rebuilding...`));

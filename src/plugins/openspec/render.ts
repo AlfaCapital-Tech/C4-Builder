@@ -89,13 +89,112 @@ export const specFolders = (specs: Spec[]): string[][] => {
     return [...folders].sort().map((f) => f.split('/'));
 };
 
+/** Файл, на который ссылается страница: `from` — posix-путь от корня источника, `to` — от каталога страницы. */
+export interface PageFile {
+    from: string;
+    to: string;
+}
+
 export interface RenderedPage {
     path: string[];
     markdown: string;
     diagrams: PageDiagram[];
-    /** Файлы change'а (относительные posix-пути), на которые ссылается страница — копируются к ней. */
-    files: string[];
+    files: PageFile[];
 }
+
+// Ссылки markdown: `[text](href "title")` и `![alt](src)`. Текст ссылки может содержать
+// вложенную картинку (`[![alt](img)](href)`) — альтернатива с ней стоит первой, чтобы
+// не оборваться на её `)`.
+const LINK_RE = /(!?)\[((?:!\[[^\]\n]*\]\([^)\n]*\)|[^\]\n])*)\]\(([^)\s]+)(\s+[^)]*)?\)/g;
+
+// docsify-title `':ignore'` (ссылка не в роутер) поверх пользовательского title: docsify
+// вырезает `:ignore` из title и оставляет остаток как обычный title.
+const ignoreTitle = (title: string): string => {
+    const t = title.trim().replace(/^(["'])(.*)\1$/s, '$2');
+    return ` ':ignore${t ? ` ${t}` : ''}'`;
+};
+
+/**
+ * Markdown одного исходного файла → страница сайта: fenced-диаграммы вырезаются, ссылки
+ * на другие страницы источника (`target`, `#x` → `?id=x`) — на их адреса, прочие
+ * относительные ссылки на существующие файлы источника регистрируются для копирования к
+ * странице (картинки docsify грузит относительно страницы, обычные ссылки — от корня сайта).
+ * `fromDir` — posix-каталог файла относительно `srcRoot` (ссылки в нём резолвятся от файла).
+ */
+export const renderMarkdown = (
+    pagePath: string[],
+    base: string,
+    content: string,
+    {
+        srcRoot,
+        fromDir = '',
+        target = () => undefined,
+        options
+    }: {
+        srcRoot: string;
+        fromDir?: string;
+        target?: (rel: string) => string[] | undefined;
+        options: BuildOptions;
+    }
+): RenderedPage => {
+    const { markdown, diagrams } = createFenceExtractor().extract(content, base);
+    const files: PageFile[] = [];
+    const rewrite = (t: string): string =>
+        t.replace(LINK_RE, (whole, bang: string, text: string, href: string, title = '') => {
+            const inner = text.includes('![') ? rewrite(text) : text;
+            if (/^[a-z][a-z0-9+.-]*:|^[#/]/i.test(href)) return `${bang}[${inner}](${href}${title})`; // абсолютные, якоря, от корня
+            const [rawPath, hash] = href.split('#');
+            let decoded: string;
+            try {
+                decoded = decodeURI(rawPath);
+            } catch {
+                return whole; // битый %-escape — не ссылка на файл, оставляем как есть
+            }
+            const rel = path.posix.normalize(path.posix.join(fromDir, decoded));
+            if (rel.startsWith('../')) return whole;
+            const page = target(rel);
+            if (page)
+                return `${bang}[${inner}](${pageLink(page, options)}${hash ? `?id=${hash}` : ''}${title})`;
+            const abs = path.join(srcRoot, rel);
+            if (!fs.existsSync(abs) || fs.statSync(abs).isDirectory()) return whole;
+            files.push({ from: rel, to: decoded });
+            return bang
+                ? `![${inner}](${href}${title})`
+                : `[${inner}](${encodeURIPath(path.posix.join(...pagePath, decoded))}${ignoreTitle(title)})`;
+        });
+    return { path: pagePath, markdown: mapOutsideFences(markdown, rewrite).trim(), diagrams, files };
+};
+
+/**
+ * Страницы дерева спек под `base`: корень, промежуточные папки, спеки. Папка с собственной
+ * spec.md — одна страница (спека + список вложенных), иначе addPage упал бы на коллизии.
+ * `render` — рендер содержимого спеки в страницу с нужным источником.
+ */
+export const renderSpecTree = (
+    specs: Spec[],
+    base: string[],
+    options: BuildOptions,
+    render: (pagePath: string[], spec: Spec) => RenderedPage
+): RenderedPage[] => {
+    const byKey = new Map(specs.map((s) => [s.path.join('/'), s]));
+    const keys = new Set(['', ...specFolders(specs).map((f) => f.join('/')), ...byKey.keys()]);
+    return [...keys].sort().map((key) => {
+        const prefix = key ? key.split('/') : [];
+        const pagePath = [...base, ...prefix];
+        const spec = byKey.get(key);
+        const page = spec
+            ? render(pagePath, spec)
+            : { path: pagePath, markdown: '', diagrams: [], files: [] };
+        const nested = specs.some(
+            (s) => s.path.length > prefix.length && prefix.every((p, i) => s.path[i] === p)
+        );
+        if (nested || !spec)
+            page.markdown = [page.markdown, renderSpecIndex(specs, prefix, base, options)]
+                .filter(Boolean)
+                .join('\n\n');
+        return page;
+    });
+};
 
 /** Артефакты в порядке опции `artifacts`; не перечисленные — после, по алфавиту. */
 const orderArtifacts = (artifacts: Artifact[], order: string[]): Artifact[] =>
@@ -109,9 +208,8 @@ const orderArtifacts = (artifacts: Artifact[], order: string[]): Artifact[] =>
 /**
  * Страницы change'а: главная (шапка с метаданными, прогрессом и ссылками на подстраницы +
  * первый артефакт из `order`, если он есть), подстраницы остальных артефактов и подраздел
- * `specs` дельт (страница на capability, структура папок). Fenced-диаграммы вырезаются,
- * ссылки на артефакты/дельты того же change'а — на их страницы (`#x` → `?id=x`), прочие
- * относительные ссылки на существующие файлы — копируются к странице, где встречены.
+ * `specs` дельт (страница на capability, структура папок). Артефакт с именем `specs`
+ * делит страницу с индексом дельт.
  */
 export const renderChange = (
     change: Change,
@@ -129,7 +227,7 @@ export const renderChange = (
         content: d.content
     }));
     const specsBase = [...segments, 'specs'];
-    // Страница сайта для относительной ссылки на артефакт/дельту change'а.
+    // Страница сайта для относительной (от корня change'а) ссылки на артефакт/дельту.
     const target = (rel: string): string[] | undefined => {
         const md = rel.match(/^([^/]+)\.md$/i);
         if (md && change.artifacts.some((a) => a.name === md[1]))
@@ -137,40 +235,17 @@ export const renderChange = (
         const delta = deltas.find((d) => `specs/${d.path.join('/')}/spec.md` === rel);
         return delta && [...specsBase, ...delta.path];
     };
-
-    const render = (pagePath: string[], base: string, content: string): RenderedPage => {
-        const { markdown, diagrams } = createFenceExtractor().extract(content, base);
-        const files = new Set<string>();
-        const rewritten = mapOutsideFences(markdown, (t) =>
-            t.replace(
-                /(!?)\[([^\]\n]*)\]\(([^)\s]+)(\s+[^)]*)?\)/g,
-                (whole, bang: string, text: string, href: string, title = '') => {
-                    if (/^[a-z][a-z0-9+.-]*:|^[#/]/i.test(href)) return whole; // абсолютные, якоря, от корня
-                    const [rawPath, hash] = href.split('#');
-                    const rel = path.posix.normalize(decodeURI(rawPath));
-                    if (rel.startsWith('../')) return whole;
-                    const page = target(rel);
-                    if (page)
-                        return `${bang}[${text}](${pageLink(page, options)}${hash ? `?id=${hash}` : ''}${title})`;
-                    const abs = path.join(change.dir, rel);
-                    if (!fs.existsSync(abs) || fs.statSync(abs).isDirectory()) return whole;
-                    files.add(rel);
-                    // Картинки docsify грузит относительно страницы; обычные ссылки — от корня сайта.
-                    return bang
-                        ? whole
-                        : `[${text}](${encodeURIPath(path.posix.join(...pagePath, rel))} ':ignore'${title})`;
-                }
-            )
-        );
-        return { path: pagePath, markdown: rewritten.trim(), diagrams, files: [...files] };
-    };
+    const render = (pagePath: string[], base: string, content: string, fromDir = ''): RenderedPage =>
+        renderMarkdown(pagePath, base, content, { srcRoot: change.dir, fromDir, target, options });
 
     const subpages = ordered
         .filter((a) => a !== inline)
         .map((a) => render([...segments, a.name], a.name, a.content));
     const links = [
         ...subpages.map((p) => `[${p.path[p.path.length - 1]}](${pageLink(p.path, options)})`),
-        ...(deltas.length ? [`[specs](${pageLink(specsBase, options)})`] : [])
+        ...(deltas.length && !subpages.some((p) => p.path[p.path.length - 1] === 'specs')
+            ? [`[specs](${pageLink(specsBase, options)})`]
+            : [])
     ];
     const head = [
         change.schema && `**Schema:** ${change.schema}`,
@@ -191,15 +266,18 @@ export const renderChange = (
         ...subpages
     ];
     if (deltas.length) {
-        const index = (prefix: string[]): RenderedPage => ({
-            path: [...specsBase, ...prefix],
-            markdown: renderSpecIndex(deltas, prefix, specsBase, options),
-            diagrams: [],
-            files: []
-        });
-        pages.push(index([]), ...specFolders(deltas).map(index));
-        for (const [i, d] of deltas.entries())
-            pages.push(render([...specsBase, ...d.path], `spec-${i + 1}`, d.content));
+        const tree = renderSpecTree(deltas, specsBase, options, (pagePath, spec) =>
+            render(pagePath, `spec-${spec.path.join('-')}`, spec.content, `specs/${spec.path.join('/')}`)
+        );
+        // Артефакт specs.md и корень дельт — один путь: сливаем в страницу артефакта.
+        const artifact = pages.find(
+            (p) => p.path.length === segments.length + 1 && p.path.at(-1) === 'specs'
+        );
+        for (const p of tree) {
+            if (artifact && p.path.length === specsBase.length) {
+                artifact.markdown = [artifact.markdown, p.markdown].filter(Boolean).join('\n\n');
+            } else pages.push(p);
+        }
     }
     return pages;
 };
