@@ -8,6 +8,7 @@ import Configstore from 'configstore';
 import cmdHelp from './commands/help.ts';
 import cmdNewProject from './commands/new.ts';
 import cmdJre from './commands/jre.ts';
+import cmdCheck from './commands/check.ts';
 import cmdList from './commands/list.ts';
 import cmdSite from './commands/site.ts';
 import cmdCollect from './wizard/collect.ts';
@@ -152,13 +153,15 @@ export default async () => {
             if (!isValidPort(v)) throw new InvalidArgumentError('ожидается TCP-порт: целое число 1..65535');
             return Number(v);
         })
-        .allowExcessArguments() // позиционные аргументы подкоманды `jre <action>`
+        .allowExcessArguments() // позиционные аргументы подкоманд `jre <action>` и `check <file...>`
         .parse(process.argv);
 
     const opts = program.opts();
 
     // Прогрев JRE — до загрузки конфига проекта и intro: команда самостоятельна.
     if (program.args[0] === 'jre') return cmdJre(program.args.slice(1), { force: opts.force });
+    // Проверка отдельных диаграмм — тоже без конфига проекта.
+    if (program.args[0] === 'check') return cmdCheck(program.args.slice(1));
 
     let conf: ConfStore = { get: () => {} } as unknown as ConfStore;
     let cacheConf: ConfStore = { get: () => {}, set: () => {}, clear: () => {} } as unknown as ConfStore;

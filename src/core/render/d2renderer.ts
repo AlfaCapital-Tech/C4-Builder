@@ -173,6 +173,17 @@ const buildCompileRequest = (entryAbs: string): { fs: Record<string, string>; in
 };
 
 // Рендер .d2 → SVG (Buffer). Ошибки компиляции пробрасываются с путём файла.
+// Ошибка компиляции движок отдаёт JSON-массивом [{range, errmsg}] — вытаскиваем
+// человекочитаемые errmsg (`file:line:col: текст`); иной формат отдаём как есть.
+const d2ErrorText = (message: string): string => {
+    try {
+        const parsed: unknown = JSON.parse(message);
+        if (Array.isArray(parsed) && parsed.every((x) => typeof x?.errmsg === 'string'))
+            return parsed.map((x: { errmsg: string }) => x.errmsg).join('\n');
+    } catch {}
+    return message;
+};
+
 const renderD2 = async (
     entryAbs: string,
     { layout = 'dagre' }: { layout?: string } = {}
@@ -184,7 +195,7 @@ const renderD2 = async (
         result = await d2.compile({ fs: fsMap, inputPath, options: { layout } });
     } catch (err) {
         const e = err as Error;
-        throw new Error(`Ошибка компиляции D2 (${entryAbs}):\n${e.message || e}`);
+        throw new Error(`Ошибка компиляции D2 (${entryAbs}):\n${d2ErrorText(e.message || String(e))}`);
     }
     let svg: string;
     try {
