@@ -10,7 +10,9 @@ import { TMP_ROOT, ensureManagedJre, runBuild } from './helpers.mjs';
 // локальный рендер PlantUML на stdlib, порядок DFS, ассеты и afterBuild.
 // База — полный конфиг golden-фикстуры (визард спрашивает недостающие ключи).
 const CONFIG = {
-    ...JSON.parse(fs.readFileSync(path.join(import.meta.dirname, 'fixtures', 'default.c4builder.json'), 'utf8')),
+    ...JSON.parse(
+        fs.readFileSync(path.join(import.meta.dirname, 'fixtures', 'default.c4builder.json'), 'utf8')
+    ),
     projectName: 'demo',
     includeNavigation: false,
     includeTableOfContents: false,
@@ -108,7 +110,10 @@ describe('виртуальные страницы в сборке', () => {
 
 describe('ошибки плагинов прерывают сборку', () => {
     it('исключение в хуке — имя плагина в сообщении, exit ≠ 0', () => {
-        const d = makeFixture('throw', `export default { name: 'boom', afterScan() { throw new Error('kaput'); } };`);
+        const d = makeFixture(
+            'throw',
+            `export default { name: 'boom', afterScan() { throw new Error('kaput'); } };`
+        );
         expect(() => runBuild(d)).toThrow(/Плагин boom \(afterScan\): kaput/);
         fs.rmSync(d, { recursive: true, force: true });
     });
@@ -123,8 +128,22 @@ describe('ошибки плагинов прерывают сборку', () => 
 });
 
 describe('addPage (юнит)', () => {
-    const opts = { ROOT_FOLDER: 'src', DIST_FOLDER: 'x', GENERATE_WEBSITE: false, GENERATE_MD: false, GENERATE_LOCAL_IMAGES: false };
-    const mk = (dir, parent) => ({ dir, name: path.basename(dir), level: dir.split('/').length, parent, mdFiles: [], diagrams: [], descendants: [] });
+    const opts = {
+        ROOT_FOLDER: 'src',
+        DIST_FOLDER: 'x',
+        GENERATE_WEBSITE: false,
+        GENERATE_MD: false,
+        GENERATE_LOCAL_IMAGES: false
+    };
+    const mk = (dir, parent) => ({
+        dir,
+        name: path.basename(dir),
+        level: dir.split('/').length,
+        parent,
+        mdFiles: [],
+        diagrams: [],
+        descendants: []
+    });
     it('вставка в конец поддерева, level/parent/descendants как у scan', () => {
         const tree = [mk('src'), mk('src/A', 'src'), mk('src/A/B', 'src/A'), mk('src/Z', 'src')];
         tree[0].descendants = ['A', 'Z'];
@@ -144,9 +163,9 @@ describe('addPage (юнит)', () => {
         const tree = [mk('src')];
         const item = addPage(tree, opts, { path: ['P'], diagrams: [{ file: 'a.d2', content: 'x -> y' }] });
         expect(item.diagrams[0]).toMatchObject({ dir: 'a.d2', engine: 'd2', ext: '.d2' });
-        expect(() => addPage(tree, opts, { path: ['Q'], diagrams: [{ file: 'a.txt', content: '' }] })).toThrow(
-            /неизвестное расширение/
-        );
+        expect(() =>
+            addPage(tree, opts, { path: ['Q'], diagrams: [{ file: 'a.txt', content: '' }] })
+        ).toThrow(/неизвестное расширение/);
         expect(() => addPage(tree, opts, { path: ['a/b'] })).toThrow(/некорректный путь/);
     });
 });

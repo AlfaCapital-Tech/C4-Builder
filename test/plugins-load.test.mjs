@@ -1,3 +1,4 @@
+// biome-ignore-all lint/suspicious/noTemplateCurlyInString: тесты подстановки ${ENV} в опциях
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -58,7 +59,16 @@ describe('loadPlugins', () => {
         const id = writePlugin('noschema', 'export default { name: "noschema" };');
         process.env.C4B_TEST_TOKEN = 'secret-1';
         const [p] = await loadPlugins(
-            [[id, { token: '${C4B_TEST_TOKEN}', missing: '${C4B_NOPE}', nested: { a: ['${C4B_TEST_TOKEN}'] } }]],
+            [
+                [
+                    id,
+                    {
+                        token: '${C4B_TEST_TOKEN}',
+                        missing: '${C4B_NOPE}',
+                        nested: { a: ['${C4B_TEST_TOKEN}'] }
+                    }
+                ]
+            ],
             tmp,
             opts()
         );
@@ -73,7 +83,9 @@ describe('loadPlugins', () => {
     });
 
     it('несуществующий модуль — ошибка с идентификатором', async () => {
-        await expect(loadPlugins(['./nope.mjs'], tmp, opts())).rejects.toThrow(/plugins\[0\] "\.\/nope\.mjs"/);
+        await expect(loadPlugins(['./nope.mjs'], tmp, opts())).rejects.toThrow(
+            /plugins\[0\] "\.\/nope\.mjs"/
+        );
         await expect(loadPlugins(['no-such-npm-plugin-xyz'], tmp, opts())).rejects.toThrow(
             /"no-such-npm-plugin-xyz".*встроенных/
         );

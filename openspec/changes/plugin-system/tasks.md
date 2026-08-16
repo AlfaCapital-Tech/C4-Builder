@@ -22,18 +22,18 @@
 
 ## 4. Плагин openspec
 
-- [ ] 4.1 `plugins/openspec/scan.ts`: сканер store — активные change'ы (артефакты, `.openspec.yaml` построчно, дельты `specs/**/spec.md`, прогресс чекбоксов, max mtime), архив, спеки (одно-/двухуровневые)
-- [ ] 4.2 `plugins/openspec/render.ts`: сводка (счётчики, таблица по mtime desc), страница change'а (шапка с метаданными и прогрессом; разделы proposal → design → tasks → прочие → дельты; переписывание ссылок на артефакты в якоря; копирование картинок), страницы спек и промежуточных папок, сводка архива
-- [ ] 4.3 `plugins/openspec/fences.ts`: извлечение ```plantuml/```d2 в `Diagram` (обёртка `@startuml/@enduml`), замена на `![…](name.ext)`
-- [ ] 4.4 `plugins/openspec/index.ts`: схема опций `{ dir: 'openspec', mount: 'OpenSpec' }` `.strict()`, `watchPaths`, `afterScan` через `addPage`; регистрация в `plugins/index.ts`
-- [ ] 4.5 Тесты `test/plugin-openspec.test.mjs` на мини-фикстуре store (2 change'а с tasks/дельтами/plantuml, 1 архивный, двухуровневые спеки, кастомный артефакт `plan.md`): sidebar, сводка, прогресс, отрендеренная диаграмма, пустой store, отсутствующий `dir`
+- [x] 4.1 `plugins/openspec/scan.ts`: сканер store — активные change'ы (артефакты, `.openspec.yaml` построчно, дельты `specs/**/spec.md`, прогресс чекбоксов, max mtime), архив, спеки (одно-/двухуровневые)
+- [x] 4.2 `plugins/openspec/render.ts`: сводка (счётчики, таблица по mtime desc), страница change'а (шапка с метаданными и прогрессом; разделы proposal → design → tasks → прочие → дельты; переписывание ссылок на артефакты в якоря; копирование картинок), страницы спек и промежуточных папок, сводка архива
+- [x] 4.3 `plugins/openspec/fences.ts`: извлечение ```plantuml/```d2 в `Diagram` (обёртка `@startuml/@enduml`), замена на `![…](name.ext)`
+- [x] 4.4 `plugins/openspec/index.ts`: схема опций `{ dir: 'openspec', mount: 'OpenSpec' }` `.strict()`, `watchPaths`, `afterScan` через `addPage`; регистрация в `plugins/index.ts`
+- [x] 4.5 Тесты `test/plugin-openspec.test.mjs` на мини-фикстуре store (2 change'а с tasks/дельтами/plantuml, 1 архивный, двухуровневые спеки, кастомный артефакт `plan.md`): sidebar, сводка, прогресс, отрендеренная диаграмма, пустой store, отсутствующий `dir`
 
 ## 5. Плагин openapi
 
-- [ ] 5.1 `util/glob.ts`: glob → RegExp (`**`, `*`, `{a,b}`) + рекурсивный обход; тест
-- [ ] 5.2 `vendor/docsify/swagger-ui.css` той же версии, что `swagger-ui-bundle.js` (версия зафиксирована в README «Vendored»); проверить whitelist `files`
-- [ ] 5.3 `plugins/openapi/index.ts`: схема `{ mount: 'API', dir?, archive?, subdir?, headers?, glob }` `.strict()` + refine «ровно один источник»; `requires.executeScript`; `assets.styles`; `afterScan`: источник → glob → копия спек в `dist/<mount>/_specs/<relpath>` (через `afterBuild`) → страницы swagger-ui + сводка; ошибки: пустое совпадение, коллизии имён; `watchPaths` при `dir`
-- [ ] 5.4 Тесты `test/plugin-openapi.test.mjs`: локальная папка с 3 спеками и относительным `$ref`, страница без CDN-ссылок, `executeScript` принудительно, пустой glob — ошибка, `dir`+`archive` — ошибка
+- [x] 5.1 `util/glob.ts`: glob → RegExp (`**`, `*`, `{a,b}`) + рекурсивный обход; тест
+- [x] 5.2 `vendor/docsify/swagger-ui.css` той же версии, что `swagger-ui-bundle.js` (версия зафиксирована в README «Vendored»); проверить whitelist `files`
+- [x] 5.3 `plugins/openapi/index.ts`: схема `{ mount: 'API', dir?, archive?, subdir?, headers?, glob }` `.strict()` + refine «ровно один источник»; `requires.executeScript`; `assets.styles`; `afterScan`: источник → glob → копия спек в `dist/<mount>/_specs/<relpath>` (через `afterBuild`) → страницы swagger-ui + сводка; ошибки: пустое совпадение, коллизии имён; `watchPaths` при `dir`
+- [x] 5.4 Тесты `test/plugin-openapi.test.mjs`: локальная папка с 3 спеками и относительным `$ref`, страница без CDN-ссылок, `executeScript` принудительно, пустой glob — ошибка, `dir`+`archive` — ошибка
 
 ## 6. Документация и завершение
 

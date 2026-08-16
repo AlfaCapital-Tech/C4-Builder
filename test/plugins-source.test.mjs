@@ -95,7 +95,11 @@ describe('resolveSource', () => {
     it('archive tar.gz: скачивание, снятие корневого каталога, subdir; повтор — из кэша', async () => {
         clearSourceCache();
         const url = `${base}/repo.tar.gz`;
-        const dir = await resolveSource({ archive: url, subdir: 'spec', headers: { 'PRIVATE-TOKEN': 'tok', Empty: '' } });
+        const dir = await resolveSource({
+            archive: url,
+            subdir: 'spec',
+            headers: { 'PRIVATE-TOKEN': 'tok', Empty: '' }
+        });
         expect(fs.readFileSync(path.join(dir, 'openapi.yaml'), 'utf8')).toBe('openapi: 3.0.0');
         expect(dir.startsWith(os.tmpdir())).toBe(true);
         expect(hits.at(-1)).toEqual({ url: '/repo.tar.gz', auth: 'tok' });
@@ -113,19 +117,27 @@ describe('resolveSource', () => {
 
     it('404 — ошибка с URL и кодом', async () => {
         clearSourceCache();
-        await expect(resolveSource({ archive: `${base}/missing.tar.gz` })).rejects.toThrow(/missing\.tar\.gz.*404/);
+        await expect(resolveSource({ archive: `${base}/missing.tar.gz` })).rejects.toThrow(
+            /missing\.tar\.gz.*404/
+        );
     });
 
     it('subdir отсутствует в архиве — ошибка', async () => {
         clearSourceCache();
-        await expect(resolveSource({ archive: `${base}/repo.tar.gz`, subdir: 'nope' })).rejects.toThrow(/нет каталога nope/);
+        await expect(resolveSource({ archive: `${base}/repo.tar.gz`, subdir: 'nope' })).rejects.toThrow(
+            /нет каталога nope/
+        );
     });
 
     it('zip-slip отвергается', async () => {
         clearSourceCache();
         const out = path.join(tmp, 'slip-out');
         fs.mkdirSync(out);
-        await expect(extractZip(path.join(tmp, 'evil.zip'), out)).rejects.toThrow(/Небезопасный путь|invalid relative path/);
-        await expect(resolveSource({ archive: `${base}/evil.zip` })).rejects.toThrow(/Небезопасный путь|invalid relative path/);
+        await expect(extractZip(path.join(tmp, 'evil.zip'), out)).rejects.toThrow(
+            /Небезопасный путь|invalid relative path/
+        );
+        await expect(resolveSource({ archive: `${base}/evil.zip` })).rejects.toThrow(
+            /Небезопасный путь|invalid relative path/
+        );
     });
 });
