@@ -27,9 +27,6 @@ const optionsSchema = z
 
 type Opts = z.output<typeof optionsSchema>;
 
-// Спеки, найденные в afterScan текущей сборки, для копирования в afterBuild (ключ — mount).
-const pendingSpecs = new Map<string, { root: string; files: string[] }>();
-
 // Имя страницы: родительская папка спеки; в корне источника — имя файла без расширения.
 const pageName = (rel: string): string => {
     const dir = path.posix.dirname(rel);
@@ -61,7 +58,12 @@ export default definePlugin<Opts>({
             if (dup) throw new Error(`две спеки дают одно имя страницы "${name}": ${dup} и ${rel}`);
             names.set(name, rel);
         }
-        pendingSpecs.set(mount, { root, files });
+        // Спеки — статикой в dist с сохранением относительных путей ($ref между ними).
+        for (const rel of files) {
+            const dest = path.join(ctx.options.DIST_FOLDER, mount, '_specs', rel);
+            fs.mkdirSync(path.dirname(dest), { recursive: true });
+            fs.copyFileSync(path.join(root, rel), dest);
+        }
 
         const sorted = [...names.entries()].sort(([a], [b]) => a.localeCompare(b));
         const link = (name: string): string =>
@@ -80,20 +82,10 @@ export default definePlugin<Opts>({
                 markdown: [
                     `<div id="${domId}"></div>`,
                     '<script>',
-                    `SwaggerUIBundle({ url: '${specUrl}', dom_id: '#${domId}', deepLinking: false });`,
+                    `SwaggerUIBundle({ url: '${specUrl}', dom_id: '#${domId}' });`,
                     '</script>'
                 ].join('\n')
             });
-        }
-    },
-
-    afterBuild(ctx, o) {
-        const pending = pendingSpecs.get(o.mount);
-        if (!pending) return;
-        for (const rel of pending.files) {
-            const dest = path.join(ctx.distFolder, o.mount, '_specs', rel);
-            fs.mkdirSync(path.dirname(dest), { recursive: true });
-            fs.copyFileSync(path.join(pending.root, rel), dest);
         }
     }
 });

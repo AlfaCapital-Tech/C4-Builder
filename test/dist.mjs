@@ -10,7 +10,7 @@ export { acquireBuildLock, BuildLockHeldError } from '../dist/util/lock.js';
 export { loadPlugins, expandEnv, pluginWatchPaths } from '../dist/core/plugins/load.js';
 export { addPage, isVirtual } from '../dist/core/plugins/tree.js';
 export { injectHtml, injectPluginAssets } from '../dist/core/plugins/assets.js';
-export { resolveSource, clearSourceCache } from '../dist/core/plugins/source.js';
+export { resolveSource } from '../dist/core/plugins/source.js';
 export { extractZip, extractTarGz } from '../dist/util/archive.js';
 export { globToRegExp, globFiles } from '../dist/util/glob.js';
 export { BUILTIN_PLUGINS } from '../dist/plugins/index.js';

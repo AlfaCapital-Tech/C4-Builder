@@ -5,7 +5,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { clearSourceCache, extractZip, globFiles, globToRegExp, injectHtml, resolveSource } from './dist.mjs';
+import { extractZip, globFiles, globToRegExp, injectHtml, resolveSource } from './dist.mjs';
 
 // Ассеты (инъекция в HTML), резолвер источников (dir/archive по HTTP), glob.
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'c4b-source-'));
@@ -93,7 +93,6 @@ describe('resolveSource', () => {
     });
 
     it('archive tar.gz: скачивание, снятие корневого каталога, subdir; повтор — из кэша', async () => {
-        clearSourceCache();
         const url = `${base}/repo.tar.gz`;
         const dir = await resolveSource({
             archive: url,
@@ -110,27 +109,23 @@ describe('resolveSource', () => {
     });
 
     it('archive zip', async () => {
-        clearSourceCache();
         const dir = await resolveSource({ archive: `${base}/repo.zip`, subdir: 'spec' });
         expect(fs.existsSync(path.join(dir, 'openapi.yaml'))).toBe(true);
     });
 
     it('404 — ошибка с URL и кодом', async () => {
-        clearSourceCache();
         await expect(resolveSource({ archive: `${base}/missing.tar.gz` })).rejects.toThrow(
             /missing\.tar\.gz.*404/
         );
     });
 
     it('subdir отсутствует в архиве — ошибка', async () => {
-        clearSourceCache();
         await expect(resolveSource({ archive: `${base}/repo.tar.gz`, subdir: 'nope' })).rejects.toThrow(
             /нет каталога nope/
         );
     });
 
     it('zip-slip отвергается', async () => {
-        clearSourceCache();
         const out = path.join(tmp, 'slip-out');
         fs.mkdirSync(out);
         await expect(extractZip(path.join(tmp, 'evil.zip'), out)).rejects.toThrow(

@@ -18,7 +18,6 @@ export interface Delta {
 export interface Change {
     id: string;
     dir: string;
-    archived: boolean;
     artifacts: Artifact[];
     deltas: Delta[];
     schema?: string;
@@ -82,7 +81,7 @@ const readMeta = (file: string): { schema?: string; created?: string } => {
     return meta;
 };
 
-const scanChange = (dir: string, archived: boolean): Change => {
+const scanChange = (dir: string): Change => {
     const files = fs.readdirSync(dir, { withFileTypes: true });
     let mtime = 0;
     const touch = (file: string): void => {
@@ -108,7 +107,6 @@ const scanChange = (dir: string, archived: boolean): Change => {
     return {
         id: path.basename(dir),
         dir,
-        archived,
         artifacts,
         deltas,
         ...readMeta(metaFile),
@@ -125,11 +123,11 @@ export const scanStore = (storeDir: string): Store => {
     return {
         changes: listDirs(changesDir)
             .filter((n) => n !== 'archive')
-            .map((n) => scanChange(path.join(changesDir, n), false)),
+            .map((n) => scanChange(path.join(changesDir, n))),
         // Архив — от новых к старым: имя начинается с даты архивации.
         archive: listDirs(archiveDir)
             .reverse()
-            .map((n) => scanChange(path.join(archiveDir, n), true)),
+            .map((n) => scanChange(path.join(archiveDir, n))),
         specs: findSpecFiles(specsDir).map((rel) => ({
             path: rel.split('/').slice(0, -1),
             content: fs.readFileSync(path.join(specsDir, rel), 'utf8')

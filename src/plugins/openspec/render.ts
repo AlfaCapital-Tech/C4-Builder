@@ -42,13 +42,14 @@ const deltaTitle = (relPath: string): string =>
         .split('/')
         .join(' / ');
 
-const changesTable = (changes: Change[], section: string, mount: string, options: BuildOptions): string => {
+/** Таблица change'ов (сводка и индекс Changes): по дате изменения от новых к старым. */
+export const renderChangesIndex = (changes: Change[], mount: string, options: BuildOptions): string => {
     if (!changes.length) return "_Нет change'ов._";
     const rows = [...changes]
         .sort((a, b) => b.mtime - a.mtime)
         .map(
             (c) =>
-                `| [${c.id}](${pageLink([mount, section, c.id], options)}) | ${c.schema ?? '—'} | ${fmtProgress(c)} | ${fmtDate(c.mtime)} |`
+                `| [${c.id}](${pageLink([mount, 'Changes', c.id], options)}) | ${c.schema ?? '—'} | ${fmtProgress(c)} | ${fmtDate(c.mtime)} |`
         );
     return ['| Change | Схема | Задачи | Изменён |', '|---|---|---|---|', ...rows].join('\n');
 };
@@ -67,12 +68,9 @@ export const renderSummary = (store: Store, mount: string, options: BuildOptions
         '',
         "## Активные change'ы",
         '',
-        changesTable(store.changes, 'Changes', mount, options)
+        renderChangesIndex(store.changes, mount, options)
     ].join('\n');
 };
-
-export const renderChangesIndex = (changes: Change[], mount: string, options: BuildOptions): string =>
-    changesTable(changes, 'Changes', mount, options);
 
 export const renderArchiveIndex = (archive: Change[], mount: string, options: BuildOptions): string =>
     archive.length

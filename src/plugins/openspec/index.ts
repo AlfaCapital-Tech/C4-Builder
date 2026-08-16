@@ -5,7 +5,7 @@ import path from 'node:path';
 import { z } from 'zod';
 
 import { definePlugin } from '../../core/plugins/types.ts';
-import { scanStore, type Store } from './scan.ts';
+import { type Change, scanStore, type Store } from './scan.ts';
 import {
     renderArchiveIndex,
     renderChange,
@@ -23,11 +23,6 @@ const optionsSchema = z
 
 type Opts = z.output<typeof optionsSchema>;
 
-// Файлы change'ов, на которые ссылаются артефакты (картинки и пр.): копируются в
-// afterBuild рядом со страницей. Заполняется в afterScan текущей сборки; ключ — mount,
-// чтобы два экземпляра плагина (разные store) не мешали друг другу.
-const pendingCopies = new Map<string, Array<{ from: string; to: string[] }>>();
-
 export default definePlugin<Opts>({
     name: 'openspec',
     options: optionsSchema,
@@ -40,8 +35,17 @@ export default definePlugin<Opts>({
         const store: Store = scanStore(storeDir);
         const { mount } = o;
         const { options } = ctx;
-        const copies: Array<{ from: string; to: string[] }> = [];
-        pendingCopies.set(mount, copies);
+        // Страница change'а + файлы, на которые ссылаются артефакты (картинки): каталог
+        // страницы в dist уже создан addPage — копируем сразу.
+        const addChange = (change: Change, segments: string[]): void => {
+            const page = renderChange(change, segments);
+            ctx.addPage({ path: segments, markdown: page.markdown, diagrams: page.diagrams });
+            for (const rel of page.files) {
+                const dest = path.join(options.DIST_FOLDER, ...segments, rel);
+                fs.mkdirSync(path.dirname(dest), { recursive: true });
+                fs.copyFileSync(path.join(change.dir, rel), dest);
+            }
+        };
 
         ctx.addPage({ path: [mount], markdown: renderSummary(store, mount, options) });
 
@@ -49,13 +53,7 @@ export default definePlugin<Opts>({
             path: [mount, 'Changes'],
             markdown: renderChangesIndex(store.changes, mount, options)
         });
-        for (const change of store.changes) {
-            const segments = [mount, 'Changes', change.id];
-            const page = renderChange(change, segments);
-            ctx.addPage({ path: segments, markdown: page.markdown, diagrams: page.diagrams });
-            for (const rel of page.files)
-                copies.push({ from: path.join(change.dir, rel), to: [...segments, rel] });
-        }
+        for (const change of store.changes) addChange(change, [mount, 'Changes', change.id]);
 
         ctx.addPage({ path: [mount, 'Specs'], markdown: renderSpecIndex(store.specs, [], mount, options) });
         // Промежуточные папки спек (двухуровневая раскладка) — подразделы со списком вложенных.
@@ -76,20 +74,6 @@ export default definePlugin<Opts>({
             path: [mount, 'Archive'],
             markdown: renderArchiveIndex(store.archive, mount, options)
         });
-        for (const change of store.archive) {
-            const segments = [mount, 'Archive', change.id];
-            const page = renderChange(change, segments);
-            ctx.addPage({ path: segments, markdown: page.markdown, diagrams: page.diagrams });
-            for (const rel of page.files)
-                copies.push({ from: path.join(change.dir, rel), to: [...segments, rel] });
-        }
-    },
-
-    afterBuild(ctx, o) {
-        for (const { from, to } of pendingCopies.get(o.mount) ?? []) {
-            const dest = path.join(ctx.distFolder, ...to);
-            fs.mkdirSync(path.dirname(dest), { recursive: true });
-            fs.copyFileSync(from, dest);
-        }
+        for (const change of store.archive) addChange(change, [mount, 'Archive', change.id]);
     }
 });

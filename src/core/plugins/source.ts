@@ -10,7 +10,6 @@ import type { SourceSpec } from './types.ts';
 // Кэш скачанных архивов на процесс: в watch-режиме повторные сборки не качают заново.
 // Ключ — URL; каталог на диске — по sha1(URL) в tmp, чистить не нужно.
 const archiveCache = new Map<string, Promise<string>>();
-export const clearSourceCache = (): void => archiveCache.clear();
 
 // Формат по магическим байтам, а не по расширению: URL archive-API часто без него
 // (`…/archive?format=zip`). zip — `PK\x03\x04`, gzip — `\x1f\x8b`.
