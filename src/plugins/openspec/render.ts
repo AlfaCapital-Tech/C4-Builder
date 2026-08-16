@@ -22,14 +22,14 @@ const fmtProgress = (c: Change): string =>
 
 /** Таблица change'ов (сводка и индекс Changes): по дате изменения от новых к старым. */
 export const renderChangesIndex = (changes: Change[], mount: string, options: BuildOptions): string => {
-    if (!changes.length) return "_Нет change'ов._";
+    if (!changes.length) return '_No changes._';
     const rows = [...changes]
         .sort((a, b) => b.mtime - a.mtime)
         .map(
             (c) =>
                 `| [${c.id}](${pageLink([mount, 'Changes', c.id], options)}) | ${c.schema ?? '—'} | ${fmtProgress(c)} | ${fmtDate(c.mtime)} |`
         );
-    return ['| Change | Схема | Задачи | Изменён |', '|---|---|---|---|', ...rows].join('\n');
+    return ['| Change | Schema | Tasks | Updated |', '|---|---|---|---|', ...rows].join('\n');
 };
 
 /** Сводка store (страница mount): счётчики, суммарный прогресс, таблица активных change'ов. */
@@ -39,12 +39,12 @@ export const renderSummary = (store: Store, mount: string, options: BuildOptions
     const total = withProgress.reduce((s, c) => s + (c.progress?.total ?? 0), 0);
     const link = (section: string): string => pageLink([mount, section], options);
     return [
-        `**Активных change'ов:** [${store.changes.length}](${link('Changes')}) · ` +
-            `**Спек:** [${store.specs.length}](${link('Specs')}) · ` +
-            `**В архиве:** [${store.archive.length}](${link('Archive')}) · ` +
-            `**Задачи:** ${total ? progressBar(done, total) : '—'}`,
+        `**Active changes:** [${store.changes.length}](${link('Changes')}) · ` +
+            `**Specs:** [${store.specs.length}](${link('Specs')}) · ` +
+            `**Archived:** [${store.archive.length}](${link('Archive')}) · ` +
+            `**Tasks:** ${total ? progressBar(done, total) : '—'}`,
         '',
-        "## Активные change'ы",
+        '## Active changes',
         '',
         renderChangesIndex(store.changes, mount, options)
     ].join('\n');
@@ -53,7 +53,7 @@ export const renderSummary = (store: Store, mount: string, options: BuildOptions
 export const renderArchiveIndex = (archive: Change[], mount: string, options: BuildOptions): string =>
     archive.length
         ? archive.map((c) => `- [${c.id}](${pageLink([mount, 'Archive', c.id], options)})`).join('\n')
-        : '_Архив пуст._';
+        : '_Archive is empty._';
 
 /** Индекс папки спек (Specs, промежуточные папки, дельты change'а): вложенный список под prefix. */
 export const renderSpecIndex = (
@@ -65,7 +65,7 @@ export const renderSpecIndex = (
     const under = specs.filter(
         (s) => prefix.every((p, i) => s.path[i] === p) && s.path.length > prefix.length
     );
-    if (!under.length) return '_Нет спек._';
+    if (!under.length) return '_No specs._';
     // Папки — тоже строки списка (со ссылкой на свою страницу-индекс), чтобы вложенность читалась.
     const seen = new Set<string>();
     const lines: string[] = [];
@@ -173,10 +173,10 @@ export const renderChange = (
         ...(deltas.length ? [`[specs](${pageLink(specsBase, options)})`] : [])
     ];
     const head = [
-        change.schema && `**Схема:** ${change.schema}`,
-        change.created && `**Создан:** ${change.created}`,
-        `**Задачи:** ${fmtProgress(change)}`,
-        `**Изменён:** ${fmtDate(change.mtime)}`
+        change.schema && `**Schema:** ${change.schema}`,
+        change.created && `**Created:** ${change.created}`,
+        `**Tasks:** ${fmtProgress(change)}`,
+        `**Updated:** ${fmtDate(change.mtime)}`
     ]
         .filter(Boolean)
         .join(' · ');
