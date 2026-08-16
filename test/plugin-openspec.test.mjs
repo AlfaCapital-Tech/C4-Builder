@@ -12,7 +12,7 @@ const CONFIG = {
     ),
     projectName: 'demo',
     generateMD: false,
-    generateCompleteMD: false,
+    generateCompleteMD: true,
     includeNavigation: false,
     includeTableOfContents: false,
     includeBreadcrumbs: false
@@ -30,13 +30,26 @@ const makeStore = (dir, store = 'openspec') => {
     write(
         s,
         'changes/dig-1-alpha/proposal.md',
-        '## Why\n\nSee [design](design.md) and [tasks](./tasks.md#done) and [delta](specs/area/cap-a/spec.md).\n\n![pic](img/pic.png)\n'
+        [
+            '## Why',
+            '',
+            'See [design](design.md) and [tasks](./tasks.md#done) and [delta](specs/area/cap-a/spec.md).',
+            '',
+            '![pic](img/pic.png)',
+            '',
+            // картинка-ссылка, title, битый %-escape, файл рядом
+            '[![pic](img/pic.png)](design.md) [notes](notes/a.md "Notes") [pct](notes/100%.md)',
+            ''
+        ].join('\n')
     );
+    write(s, 'changes/dig-1-alpha/notes/a.md', 'note');
     write(
         s,
         'changes/dig-1-alpha/design.md',
         '## Context\n\nDiagram:\n\n```plantuml\n!include <C4/C4_Context>\nPerson(u, "Alice")\nSystem(s, "Sys")\nRel(u, s, "uses")\n```\n\nAfter.\n\n```js\nconst x = 1; // не диаграмма\n```\n'
     );
+    // артефакт specs.md рядом с дельтами — делит страницу с индексом дельт
+    write(s, 'changes/dig-1-alpha/specs.md', '## Specs notes\n\nabout deltas\n');
     write(
         s,
         'changes/dig-1-alpha/tasks.md',
@@ -54,8 +67,9 @@ const makeStore = (dir, store = 'openspec') => {
     // архив
     write(s, 'changes/archive/2026-08-01-dig-0-old/proposal.md', '## Why\n\nold\n');
     write(s, 'changes/archive/2026-08-01-dig-0-old/tasks.md', '- [x] a\n- [x] b\n');
-    // спеки: одно- и двухуровневые
+    // спеки: одно- и двухуровневые; папка area с собственной spec.md (d2-диаграмма) и вложенными
     write(s, 'specs/solo/spec.md', '## Purpose\n\nsolo spec\n');
+    write(s, 'specs/area/spec.md', '## Purpose\n\narea spec\n\n```d2\nx -> y\n```\n');
     write(s, 'specs/area/cap-a/spec.md', '## Purpose\n\ncap-a spec\n');
     write(s, 'specs/area/cap-b/spec.md', '## Purpose\n\ncap-b spec\n');
     return s;
@@ -111,7 +125,7 @@ describe('плагин openspec', () => {
     it('сводка: счётчики, прогресс, таблица со ссылками', () => {
         const md = read('OpenSpec/OpenSpec.md');
         expect(md).toContain('**Active changes:** [2](OpenSpec/Changes/Changes)');
-        expect(md).toContain('**Specs:** [3](OpenSpec/Specs/Specs)');
+        expect(md).toContain('**Specs:** [4](OpenSpec/Specs/Specs)');
         expect(md).toContain('**Archived:** [1](OpenSpec/Archive/Archive)');
         expect(md).toContain('**Tasks:** <progress value="1" max="3"></progress> 1/3 (33%)');
         expect(md).toMatch(
@@ -129,12 +143,24 @@ describe('плагин openspec', () => {
         expect(md).toContain(
             '[design](OpenSpec/Changes/dig-1-alpha/design/design) · [tasks](OpenSpec/Changes/dig-1-alpha/tasks/tasks) · [plan](OpenSpec/Changes/dig-1-alpha/plan/plan) · [specs](OpenSpec/Changes/dig-1-alpha/specs/specs)'
         );
+        expect(md).not.toContain('specs/specs) · [specs]'); // артефакт specs — одна ссылка
         expect(md).toContain('## Why'); // proposal без обёртки, заголовки не сдвинуты
         expect(md).toContain('See [design](OpenSpec/Changes/dig-1-alpha/design/design)');
         expect(md).toContain('[tasks](OpenSpec/Changes/dig-1-alpha/tasks/tasks?id=done)');
         expect(md).toContain('[delta](OpenSpec/Changes/dig-1-alpha/specs/area/cap-a/cap-a)');
         expect(md).toContain('![pic](img/pic.png)');
         expect(fs.existsSync(path.join(dir, 'docs/OpenSpec/Changes/dig-1-alpha/img/pic.png'))).toBe(true);
+        // картинка-ссылка: внешняя ссылка → страница, картинка не тронута
+        expect(md).toContain('[![pic](img/pic.png)](OpenSpec/Changes/dig-1-alpha/design/design)');
+        // title сохраняется вместе с ':ignore'; битый %-escape оставлен как есть
+        expect(md).toContain("[notes](OpenSpec/Changes/dig-1-alpha/notes/a.md ':ignore Notes')");
+        expect(md).toContain('[pct](notes/100%.md)');
+        expect(fs.existsSync(path.join(dir, 'docs/OpenSpec/Changes/dig-1-alpha/notes/a.md'))).toBe(true);
+    });
+
+    it('complete markdown: файлы виртуальных страниц скопированы и в корень dist', () => {
+        expect(fs.existsSync(path.join(dir, 'docs/img/pic.png'))).toBe(true);
+        expect(read('demo.md')).toContain('![pic](img/pic.png)');
     });
 
     it('подстраницы: tasks с чекбоксами, plan, дельта спеки и её индекс', () => {
@@ -143,25 +169,34 @@ describe('плагин openspec', () => {
         expect(read('OpenSpec/Changes/dig-1-alpha/specs/area/cap-a/cap-a.md')).toContain(
             '### Requirement: A'
         );
-        expect(read('OpenSpec/Changes/dig-1-alpha/specs/specs.md')).toContain(
+        const specs = read('OpenSpec/Changes/dig-1-alpha/specs/specs.md');
+        expect(specs).toContain(
             '- [area](OpenSpec/Changes/dig-1-alpha/specs/area/area)\n  - [cap-a](OpenSpec/Changes/dig-1-alpha/specs/area/cap-a/cap-a)'
         );
+        expect(specs).toContain('about deltas'); // артефакт specs.md на той же странице
     });
 
     it('```plantuml вырезан и отрендерен локально на подстранице design; ```js остался', () => {
         const md = read('OpenSpec/Changes/dig-1-alpha/design/design.md');
         expect(md).not.toContain('```plantuml');
-        expect(md).toContain('![diagram](design-1.svg)');
+        // имя — по хешу содержимого, не по позиции
+        const m = md.match(/!\[diagram\]\((design-[0-9a-f]{8})\.svg\)/);
+        expect(m).not.toBeNull();
         expect(md).toContain('```js');
-        const svg = read('OpenSpec/Changes/dig-1-alpha/design/design-1.svg');
+        const svg = read(`OpenSpec/Changes/dig-1-alpha/design/${m[1]}.svg`);
         expect(svg).toContain('<svg');
         expect(svg).toContain('Alice');
     });
 
-    it('спеки: страницы и промежуточная папка со списком', () => {
+    it('спеки: страницы, папка со своей spec.md + список вложенных, d2 отрендерен локально', () => {
         expect(read('OpenSpec/Specs/area/cap-a/cap-a.md')).toContain('cap-a spec');
         const area = read('OpenSpec/Specs/area/area.md');
+        expect(area).toContain('area spec');
         expect(area).toContain('- [cap-a](OpenSpec/Specs/area/cap-a/cap-a)');
+        expect(area).not.toContain('```d2');
+        const m = area.match(/!\[diagram\]\((spec-area-[0-9a-f]{8})\.svg\)/);
+        expect(m).not.toBeNull();
+        expect(read(`OpenSpec/Specs/area/${m[1]}.svg`)).toContain('<svg');
         expect(read('OpenSpec/Specs/Specs.md')).toContain('  - [cap-b](OpenSpec/Specs/area/cap-b/cap-b)');
     });
 
@@ -203,6 +238,18 @@ describe('плагин openspec: крайние случаи', () => {
         expect(fs.existsSync(path.join(d, 'docs/OpenSpec/Changes/dig-2-beta/proposal/proposal.md'))).toBe(
             true
         );
+        fs.rmSync(d, { recursive: true, force: true });
+    });
+    it('битый plugins при первом запуске (щадящий путь) — exit 1, конфиг не переписан', () => {
+        const d = makeFixture('badplugins', [['openspec', 'openspec']]);
+        fs.writeFileSync(
+            path.join(d, '.c4builder'),
+            JSON.stringify({ ...CONFIG, hasRun: false, plugins: [['openspec', 'openspec']] })
+        );
+        expect(() => runBuild(d)).toThrow(/plugins/);
+        expect(JSON.parse(fs.readFileSync(path.join(d, '.c4builder'), 'utf8')).plugins).toEqual([
+            ['openspec', 'openspec']
+        ]);
         fs.rmSync(d, { recursive: true, force: true });
     });
     it('отсутствующий dir — ошибка с путём; mount переименовывает раздел', () => {

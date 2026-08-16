@@ -41,4 +41,4 @@
 - [x] 6.1 README: раздел «Plugins» — ключ `plugins`, встроенные `openspec`/`openapi` с опциями и примером для repo с `openspec/` и репо контрактов, контракт стороннего плагина (`definePlugin`, хуки, источники), совместимость со старыми версиями
 - [x] 6.2 CLAUDE.md репо: строка про `src/plugins/` и `src/core/plugins/`
 - [x] 6.3 `npm run check`, `npm run test:unit`, `npm run test:golden` — эталоны без изменений
-- [ ] 6.4 Прогон на arch локально (`c4builder --site` с `plugins` в `.c4builder`), проверка sidebar/поиска/диаграмм design.md и раздела API; затем rc-релиз и MR в arch/arch-biba2boba с правкой `.c4builder`
+- [ ] 6.4 Прогон на arch локально (`c4builder --site` с `plugins` в `.c4builder`), проверка sidebar/поиска/диаграмм design.md и раздела API; затем rc-релиз и MR в арх-репо с правкой `.c4builder`

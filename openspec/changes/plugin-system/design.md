@@ -13,7 +13,7 @@
   `item.dir`; stdlib-инклюды (`<C4/...>`) уходят в JAR как есть — виртуальный `dir` им не
   мешает.
 - Watch (`dispatch.ts`) слушает только `ROOT_FOLDER`; `docsifyTemplate` — пользовательская
-  функция, возвращающая **весь** HTML (arch и arch-biba2boba держат свои копии).
+  функция, возвращающая **весь** HTML (оба арх-репо держат свои копии).
 - В deps уже есть `zod` 4, `tar` 7, `yauzl` (с zip-slip-guard в `render/jre.ts`),
   `util/http.ts` (httpGet), `vendor/docsify/swagger-ui-bundle.js`. Нет: glob-библиотеки,
   yaml-парсера. Engines `>=20.19` — `fs.glob`/`path.matchesGlob` недоступны.
@@ -115,7 +115,7 @@ Debounce/защита от параллельной сборки — сущес�
 отбрасываются): так один конфиг покрывает `PRIVATE-TOKEN: ${GITLAB_TOKEN}` локально и
 `JOB-TOKEN: ${CI_JOB_TOKEN}` в CI, а публичные/internal-репо не требуют ничего. Почему не
 `git clone`: нужен git-бинарь и ssh/https-креды в образе; archive API GitLab отдаёт tar.gz с
-фильтром `path=` одним HTTP-запросом (проверено на `ai-api/internal` — без токена).
+фильтром `path=` одним HTTP-запросом (проверено на репозитории контрактов — без токена).
 
 ### D7. Glob и yaml — свои мини-реализации, без зависимостей
 
@@ -175,8 +175,8 @@ change'а (`schema:`, `created:` в `.openspec.yaml`) — построчный r
 ## Migration Plan
 
 1. Релиз `rc` c4builder → образ `:rc` (арх-репы на нём).
-2. В arch/arch-biba2boba: `plugins` в `.c4builder` (openspec — `dir: openspec`; openapi —
-   `archive` на `ai-api/internal`, `glob: */openapi.yaml`). Заодно убрать легаси-ключи
+2. В арх-репо: `plugins` в `.c4builder` (openspec — `dir: openspec`; openapi —
+   `archive` на репозиторий контрактов, `glob: */openapi.yaml`). Заодно убрать легаси-ключи
    `plantumlVersion`/`generatePDF*`.
 3. Проверка через MR-preview Pages; после — обычный релиз `v*`.
 4. Откат: вернуть образ на `:latest` — ключ `plugins` игнорируется, сайт собирается без

@@ -34,15 +34,22 @@ export const globToRegExp = (glob: string): RegExp => {
     return new RegExp(`^${re}$`);
 };
 
-/** Файлы под root, чьи относительные posix-пути совпадают с glob (сортировано). */
-export const globFiles = (root: string, glob: string): string[] => {
+/**
+ * Файлы под root, чьи относительные posix-пути совпадают с glob (сортировано).
+ * `.git`/`node_modules` и абсолютные каталоги `skipDirs` не обходятся.
+ */
+export const globFiles = (root: string, glob: string, skipDirs: string[] = []): string[] => {
     const re = globToRegExp(glob);
+    const skip = new Set(skipDirs.map((d) => path.resolve(d)));
     const out: string[] = [];
     const walk = (rel: string): void => {
         for (const e of fs.readdirSync(path.join(root, rel), { withFileTypes: true })) {
             const r = rel ? `${rel}/${e.name}` : e.name;
-            if (e.isDirectory()) walk(r);
-            else if (re.test(r)) out.push(r);
+            if (e.isDirectory()) {
+                if (e.name === '.git' || e.name === 'node_modules' || skip.has(path.resolve(root, r)))
+                    continue;
+                walk(r);
+            } else if (re.test(r)) out.push(r);
         }
     };
     walk('');

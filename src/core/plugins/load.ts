@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
@@ -21,6 +22,29 @@ export const expandEnv = (value: unknown): unknown => {
 
 const isPathId = (id: string): boolean => id.startsWith('./') || id.startsWith('../') || path.isAbsolute(id);
 
+// Главный ESM-вход пакета по его package.json: `exports` (вложенные условия
+// import/default, subpath ".", массивы-фолбэки), иначе `module`/`main`. Покрывает
+// типовые формы; экзотические условия — за пределами (`ponytail`).
+const resolveEsmMain = (id: string, searchPaths: string[]): string | undefined => {
+    const dir = searchPaths
+        .map((p) => path.join(p, id))
+        .find((d) => fs.existsSync(path.join(d, 'package.json')));
+    if (!dir) return undefined;
+    const pkg = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8')) as Record<
+        string,
+        unknown
+    >;
+    const pick = (e: unknown): string | undefined => {
+        if (typeof e === 'string') return e;
+        if (Array.isArray(e)) return e.map(pick).find(Boolean);
+        if (!e || typeof e !== 'object') return undefined;
+        const o = e as Record<string, unknown>;
+        return '.' in o ? pick(o['.']) : pick(o.import ?? o.default ?? o.node);
+    };
+    const main = pick(pkg.exports) ?? (pkg.module as string | undefined) ?? (pkg.main as string | undefined);
+    return main ? path.join(dir, main) : undefined;
+};
+
 // Идентификатор → модуль плагина: встроенный по имени → путь от cwd → npm-пакет,
 // резолвится от cwd проекта (а не от установки c4builder — глобальный бинарь иначе
 // не видел бы локальные node_modules).
@@ -31,14 +55,19 @@ const importPlugin = async (id: string, cwd: string): Promise<Plugin> => {
         mod = await import(pathToFileURL(path.resolve(cwd, id)).href);
     } else {
         const require = createRequire(path.join(cwd, 'package.json'));
-        let resolved: string;
+        let resolved: string | undefined;
         try {
             resolved = require.resolve(id);
         } catch (e) {
-            throw new Error(
-                `не найден ни среди встроенных (${Object.keys(BUILTIN_PLUGINS).join(', ')}), ` +
-                    `ни как npm-пакет от ${cwd}: ${(e as Error).message}`
-            );
+            // ESM-only пакет (`exports` лишь с условием import) CJS-резолвер не берёт —
+            // находим пакет в цепочке node_modules от cwd и читаем его exports сами.
+            if ((e as NodeJS.ErrnoException).code === 'ERR_PACKAGE_PATH_NOT_EXPORTED')
+                resolved = resolveEsmMain(id, require.resolve.paths(id) ?? []);
+            if (!resolved)
+                throw new Error(
+                    `не найден ни среди встроенных (${Object.keys(BUILTIN_PLUGINS).join(', ')}), ` +
+                        `ни как npm-пакет от ${cwd}: ${(e as Error).message}`
+                );
         }
         mod = await import(pathToFileURL(resolved).href);
     }

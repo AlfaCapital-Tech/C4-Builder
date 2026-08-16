@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { loadPlugins } from './dist.mjs';
+import { BUILTIN_PLUGINS, injectPluginAssets, loadPlugins } from './dist.mjs';
 import { TMP_ROOT, ensureManagedJre, runBuild } from './helpers.mjs';
 
 // Встроенный плагин openapi: локальная папка с 3 спеками и относительным $ref →
@@ -37,6 +37,7 @@ const makeFixture = (name, plugins) => {
         "openapi: 3.0.0\npaths:\n  /x:\n    get:\n      responses:\n        '500':\n          $ref: '../common/openapi.yaml#/components/schemas/Error'\n"
     );
     write(dir, 'contracts/selling-agent/openapi.yaml', 'openapi: 3.0.0\n');
+    write(dir, 'contracts/shared/schemas.yaml', 'components: {}\n'); // не спека, но цель $ref
     write(dir, 'contracts/README.md', 'not a spec');
     fs.writeFileSync(path.join(dir, '.c4builder'), JSON.stringify({ ...CONFIG, plugins }));
     return dir;
@@ -69,15 +70,40 @@ describe('плагин openapi', () => {
         expect(page).not.toMatch(/https?:\/\//);
         expect(read('API/_specs/finch/openapi.yaml')).toContain('../common/openapi.yaml');
         expect(fs.existsSync(path.join(dir, 'docs/API/_specs/common/openapi.yaml'))).toBe(true);
+        // все yaml/json источника — статикой (цели $ref вне glob), md — нет
+        expect(fs.existsSync(path.join(dir, 'docs/API/_specs/shared/schemas.yaml'))).toBe(true);
         expect(fs.existsSync(path.join(dir, 'docs/API/_specs/README.md'))).toBe(false);
+        expect(read('_sidebar.md')).not.toContain('shared');
     });
 
-    it('executeScript принудительно, swagger-ui.css подключён ассетом', () => {
+    it('executeScript принудительно, swagger-ui.css подключён ассетом, бандл — один раз', () => {
         const html = read('index.html');
+        expect(html.match(/swagger-ui-bundle\.js/g)).toHaveLength(1);
         expect(html).toContain('<script src="vendor/swagger-ui-bundle.js"></script>');
         expect(html).toContain('<link rel="stylesheet" href="vendor/plugins/openapi/swagger-ui.css">');
         expect(fs.existsSync(path.join(dir, 'docs/vendor/plugins/openapi/swagger-ui.css'))).toBe(true);
+        expect(fs.existsSync(path.join(dir, 'docs/vendor/plugins/openapi/swagger-ui-bundle.js'))).toBe(false);
         expect(html).not.toContain('unpkg.com');
+    });
+
+    it('кастомный шаблон без swagger-строки — бандл подключается ассетом плагина', async () => {
+        const dist = fs.mkdtempSync(path.join(TMP_ROOT, 'plugin-openapi-assets-'));
+        fs.writeFileSync(path.join(dist, 'index.html'), '<html><head></head><body></body></html>');
+        const plugin = await BUILTIN_PLUGINS.openapi();
+        await injectPluginAssets([{ plugin, opts: {} }], { DIST_FOLDER: dist });
+        expect(fs.readFileSync(path.join(dist, 'index.html'), 'utf8')).toContain(
+            '<script src="vendor/plugins/openapi/swagger-ui-bundle.js"></script>'
+        );
+        expect(fs.existsSync(path.join(dist, 'vendor/plugins/openapi/swagger-ui-bundle.js'))).toBe(true);
+        fs.rmSync(dist, { recursive: true, force: true });
+    });
+
+    it("dir '.' (источник — предок dist): повторная сборка не видит свои копии спек", () => {
+        const d = makeFixture('self', [['openapi', { dir: '.', glob: 'contracts/*/openapi.yaml' }]]);
+        runBuild(d);
+        runBuild(d);
+        expect(fs.existsSync(path.join(d, 'docs/API/finch/finch.md'))).toBe(true);
+        fs.rmSync(d, { recursive: true, force: true });
     });
 });
 

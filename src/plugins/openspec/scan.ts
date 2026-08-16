@@ -29,7 +29,7 @@ export interface Change {
 }
 
 export interface Spec {
-    /** Сегменты пути от specs/: ['sales-copilot', 'copilot-calls-tab']. */
+    /** Сегменты пути от specs/: ['payments', 'refunds']. */
     path: string[];
     content: string;
 }

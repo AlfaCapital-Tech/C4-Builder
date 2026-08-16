@@ -89,8 +89,8 @@ MUST стоять изображение. Онлайн-сервисы ренде
 имя папки capability.
 
 #### Scenario: Двухуровневые спеки
-- **WHEN** store содержит `specs/sales-copilot/copilot-calls-tab/spec.md`
-- **THEN** в sidebar есть `Specs → sales-copilot → copilot-calls-tab`, страница показывает содержимое `spec.md`
+- **WHEN** store содержит `specs/payments/refunds/spec.md`
+- **THEN** в sidebar есть `Specs → payments → refunds`, страница показывает содержимое `spec.md`
 
 ### Requirement: Подраздел архива
 

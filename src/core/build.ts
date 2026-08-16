@@ -6,7 +6,7 @@ import { makeDirectory, writeOnSameLine } from '../util/utils.ts';
 // clearD2FileCache: сброс кеша графа D2-импортов на границах сборки (сам webworker
 // D2 гасит CLI после одиночной сборки — в watch-режиме он переживает ребилды).
 import { clearD2FileCache } from './render/d2renderer.ts';
-import type { BuildOptions } from '../config/options.ts';
+import { type BuildOptions, DIST_BACKUP_FOLDER_SUFFIX } from '../config/options.ts';
 // Фазы сборки: scan (дерево исходников) → render (диаграммы) → compose (markdown/сайт).
 import { generateTree, engineSupportsRemote, clearIncludeCache } from './scan/tree.ts';
 import { generateImages, type CacheConf } from './render/diagrams.ts';
@@ -19,7 +19,6 @@ import type { LoadedPlugin } from './plugins/types.ts';
 
 // Оркестратор владеет lifecycle выходного каталога: dist бэкапится в dist_bk, откуда
 // generateImages восстанавливает неизменённые по чексумме картинки; в конце бэкап сносится.
-const DIST_BACKUP_FOLDER_SUFFIX = '_bk';
 
 const build = async (
     options: BuildOptions,
