@@ -14,7 +14,11 @@ export const pageLink = (segments: string[], options: BuildOptions): string =>
     encodeURIPath(path.posix.join(...segments, options.WEB_FILE_NAME || segments[segments.length - 1]));
 
 const fmtDate = (ms: number): string => new Date(ms).toISOString().slice(0, 10);
-const fmtProgress = (c: Change): string => (c.progress ? `${c.progress.done}/${c.progress.total}` : '—');
+// Прогресс задач: нативный <progress> (docsify рендерит HTML в markdown) + числа и процент.
+const progressBar = (done: number, total: number): string =>
+    `<progress value="${done}" max="${total}"></progress> ${done}/${total} (${Math.round((done / total) * 100)}%)`;
+const fmtProgress = (c: Change): string =>
+    c.progress ? progressBar(c.progress.done, c.progress.total) : '—';
 
 /** Таблица change'ов (сводка и индекс Changes): по дате изменения от новых к старым. */
 export const renderChangesIndex = (changes: Change[], mount: string, options: BuildOptions): string => {
@@ -38,7 +42,7 @@ export const renderSummary = (store: Store, mount: string, options: BuildOptions
         `**Активных change'ов:** [${store.changes.length}](${link('Changes')}) · ` +
             `**Спек:** [${store.specs.length}](${link('Specs')}) · ` +
             `**В архиве:** [${store.archive.length}](${link('Archive')}) · ` +
-            `**Задачи:** ${total ? `${done}/${total}` : '—'}`,
+            `**Задачи:** ${total ? progressBar(done, total) : '—'}`,
         '',
         "## Активные change'ы",
         '',

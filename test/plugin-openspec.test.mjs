@@ -113,9 +113,9 @@ describe('плагин openspec', () => {
         expect(md).toContain("**Активных change'ов:** [2](OpenSpec/Changes/Changes)");
         expect(md).toContain('**Спек:** [3](OpenSpec/Specs/Specs)');
         expect(md).toContain('**В архиве:** [1](OpenSpec/Archive/Archive)');
-        expect(md).toContain('**Задачи:** 1/3');
+        expect(md).toContain('**Задачи:** <progress value="1" max="3"></progress> 1/3 (33%)');
         expect(md).toMatch(
-            /\| \[dig-1-alpha\]\(OpenSpec\/Changes\/dig-1-alpha\/dig-1-alpha\) \| spec-driven \| 1\/3 \| \d{4}-\d{2}-\d{2} \|/
+            /\| \[dig-1-alpha\]\(OpenSpec\/Changes\/dig-1-alpha\/dig-1-alpha\) \| spec-driven \| <progress value="1" max="3"><\/progress> 1\/3 \(33%\) \| \d{4}-\d{2}-\d{2} \|/
         );
         expect(md).toMatch(/\| \[dig-2-beta\]\(OpenSpec\/Changes\/dig-2-beta\/dig-2-beta\) \| — \| — \|/);
     });
@@ -123,7 +123,9 @@ describe('плагин openspec', () => {
     it('страница change: шапка, ссылки на подстраницы, proposal inline, ссылки на артефакты → страницы', () => {
         const md = read('OpenSpec/Changes/dig-1-alpha/dig-1-alpha.md');
         expect(md).toContain('# dig-1-alpha');
-        expect(md).toContain('**Схема:** spec-driven · **Создан:** 2026-08-01 · **Задачи:** 1/3');
+        expect(md).toContain(
+            '**Схема:** spec-driven · **Создан:** 2026-08-01 · **Задачи:** <progress value="1" max="3"></progress> 1/3 (33%)'
+        );
         expect(md).toContain(
             '[design](OpenSpec/Changes/dig-1-alpha/design/design) · [tasks](OpenSpec/Changes/dig-1-alpha/tasks/tasks) · [plan](OpenSpec/Changes/dig-1-alpha/plan/plan) · [specs](OpenSpec/Changes/dig-1-alpha/specs/specs)'
         );
@@ -168,7 +170,7 @@ describe('плагин openspec', () => {
             '- [2026-08-01-dig-0-old](OpenSpec/Archive/2026-08-01-dig-0-old/2026-08-01-dig-0-old)'
         );
         const md = read('OpenSpec/Archive/2026-08-01-dig-0-old/2026-08-01-dig-0-old.md');
-        expect(md).toContain('**Задачи:** 2/2');
+        expect(md).toContain('**Задачи:** <progress value="2" max="2"></progress> 2/2 (100%)');
         expect(md).toContain('## Why'); // proposal inline
         expect(read('OpenSpec/Archive/2026-08-01-dig-0-old/tasks/tasks.md')).toContain('- [x] a');
     });
