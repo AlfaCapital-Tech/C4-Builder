@@ -109,6 +109,14 @@ c4builder check src/c4/context.puml lib/shared.iuml diagrams/flow.d2
 `!include` paths resolve relative to the checked file's directory; a `.iuml` library is
 validated by including it into an empty diagram.
 
+A minimal pre-commit hook (`.git/hooks/pre-commit`) that validates staged diagrams:
+
+```bash
+#!/bin/sh
+files=$(git diff --cached --name-only --diff-filter=ACM -- '*.puml' '*.iuml' '*.d2')
+[ -z "$files" ] || exec c4builder check $files
+```
+
 By default, running `c4builder` will attempt to build the project.
 
 If no configuration was set it will ask for it and then do the actual build. Running just `c4builder` after a configuration will no longer show the wizard.
@@ -320,19 +328,24 @@ Use the image directly in CI (GitHub Actions, GitLab CI) as the job image — th
 Publishing is triggered by pushing a git tag `v<version>` — pushes/merges to `master` alone
 do not publish.
 
-**Release candidate** (from `refactor/phoenix`, no merge to `master` needed):
+Every user-facing PR adds a line to the `## Unreleased` section of the change log below;
+the release commit renames it to `## vX.Y.Z`.
+
+**Release candidate** (from `master`, as many as needed — consumers pinned to `rc`
+pick each one up automatically):
 
 ```
-npm version 0.3.0-rc.1 -m "rc: %s"
+npm version X.Y.Z-rc.1 -m "rc: %s"      # first candidate
+npm version prerelease -m "rc: %s"      # next ones: rc.2, rc.3, …
 git push --follow-tags
 ```
 
-Publishes to dist-tag `rc`.
+Publishes to npm dist-tag `rc` and docker tag `rc`; `latest` is untouched.
 
-**Final release:**
+**Final release** (rename `## Unreleased` → `## vX.Y.Z` first):
 
 ```
-npm version 0.3.0 -m "release: %s"
+npm version X.Y.Z -m "release: %s"
 git push --follow-tags
 ```
 
@@ -345,6 +358,7 @@ Publishes to dist-tag `latest`.
 - `c4builder check <file...>` — validate individual `.puml` / `.iuml` / `.d2` files with the
   bundled engines, without a project build (#13)
 - D2 compile errors are printed as readable `file:line:col: message` lines instead of raw JSON
+- Regression test for two adjacent `![..](x.puml)` embeds (#12 — the bug itself was fixed in 0.3.0)
 
 ## v0.3.0
 
