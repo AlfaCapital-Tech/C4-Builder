@@ -80,8 +80,15 @@ export const renderArchiveIndex = (archive: Change[], mount: string, options: Bu
         : '_Архив пуст._';
 
 /** Индекс папки спек (Specs и промежуточные папки): вложенный список папок и спек под ней. */
-export const renderSpecIndex = (specs: Spec[], prefix: string[], mount: string, options: BuildOptions): string => {
-    const under = specs.filter((s) => prefix.every((p, i) => s.path[i] === p) && s.path.length > prefix.length);
+export const renderSpecIndex = (
+    specs: Spec[],
+    prefix: string[],
+    mount: string,
+    options: BuildOptions
+): string => {
+    const under = specs.filter(
+        (s) => prefix.every((p, i) => s.path[i] === p) && s.path.length > prefix.length
+    );
     if (!under.length) return '_Нет спек._';
     // Папки — тоже строки списка (со ссылкой на свою страницу-индекс), чтобы вложенность читалась.
     const seen = new Set<string>();

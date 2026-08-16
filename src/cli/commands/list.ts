@@ -120,6 +120,13 @@ Exclude other files: ${
             ? chalk.green(currentConfiguration.EXCLUDE_OTHER_FILES)
             : chalk.red('not set')
     }
+Plugins: ${
+        currentConfiguration.PLUGINS?.length
+            ? chalk.green(
+                  currentConfiguration.PLUGINS.map((p) => (typeof p === 'string' ? p : p[0])).join(', ')
+              )
+            : chalk.gray('none')
+    }
 `);
     // Битые ключи показаны выше как «not set» (щадящий разбор их выбросил); помечаем их
     // сырым значением и причиной, чтобы было видно, что и почему требует правки/визарда.

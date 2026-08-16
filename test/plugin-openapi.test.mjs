@@ -8,7 +8,9 @@ import { TMP_ROOT, ensureManagedJre, runBuild } from './helpers.mjs';
 // Встроенный плагин openapi: локальная папка с 3 спеками и относительным $ref →
 // раздел API со страницами swagger-ui без CDN, спеки скопированы с сохранением путей.
 const CONFIG = {
-    ...JSON.parse(fs.readFileSync(path.join(import.meta.dirname, 'fixtures', 'default.c4builder.json'), 'utf8')),
+    ...JSON.parse(
+        fs.readFileSync(path.join(import.meta.dirname, 'fixtures', 'default.c4builder.json'), 'utf8')
+    ),
     projectName: 'demo',
     generateMD: false,
     generateCompleteMD: false,
@@ -24,7 +26,11 @@ const makeFixture = (name, plugins) => {
     fs.mkdirSync(TMP_ROOT, { recursive: true });
     const dir = fs.mkdtempSync(path.join(TMP_ROOT, `plugin-openapi-${name}-`));
     write(dir, 'src/README.md', 'root');
-    write(dir, 'contracts/common/openapi.yaml', 'openapi: 3.0.0\ncomponents:\n  schemas:\n    Error:\n      type: object\n');
+    write(
+        dir,
+        'contracts/common/openapi.yaml',
+        'openapi: 3.0.0\ncomponents:\n  schemas:\n    Error:\n      type: object\n'
+    );
     write(
         dir,
         'contracts/finch/openapi.yaml',
@@ -57,7 +63,9 @@ describe('плагин openapi', () => {
     it('страница спеки: swagger-ui без CDN, спека статикой по относительному пути', () => {
         const page = read('API/finch/finch.md');
         expect(page).toContain('<div id="swagger-finch"></div>');
-        expect(page).toContain("SwaggerUIBundle({ url: 'API/_specs/finch/openapi.yaml', dom_id: '#swagger-finch'");
+        expect(page).toContain(
+            "SwaggerUIBundle({ url: 'API/_specs/finch/openapi.yaml', dom_id: '#swagger-finch'"
+        );
         expect(page).not.toMatch(/https?:\/\//);
         expect(read('API/_specs/finch/openapi.yaml')).toContain('../common/openapi.yaml');
         expect(fs.existsSync(path.join(dir, 'docs/API/_specs/common/openapi.yaml'))).toBe(true);
@@ -77,14 +85,18 @@ describe('плагин openapi: ошибки', () => {
     const opts = () => ({ EXECUTE_SCRIPT: false });
     it('dir и archive одновременно либо ни одного — ошибка схемы', async () => {
         await expect(loadPlugins([['openapi', {}]], dir, opts())).rejects.toThrow(/ровно один источник/);
-        await expect(loadPlugins([['openapi', { dir: 'a', archive: 'http://x/y.zip' }]], dir, opts())).rejects.toThrow(
-            /ровно один источник/
+        await expect(
+            loadPlugins([['openapi', { dir: 'a', archive: 'http://x/y.zip' }]], dir, opts())
+        ).rejects.toThrow(/ровно один источник/);
+        await expect(loadPlugins([['openapi', { dir: 'a', globs: 'x' }]], dir, opts())).rejects.toThrow(
+            /globs/
         );
-        await expect(loadPlugins([['openapi', { dir: 'a', globs: 'x' }]], dir, opts())).rejects.toThrow(/globs/);
     });
     it('пустой glob — ошибка сборки с источником и шаблоном', () => {
         const d = makeFixture('empty', [['openapi', { dir: 'contracts', glob: '*.nothing' }]]);
-        expect(() => runBuild(d)).toThrow(/Плагин openapi \(afterScan\): по шаблону "\*\.nothing" в contracts/);
+        expect(() => runBuild(d)).toThrow(
+            /Плагин openapi \(afterScan\): по шаблону "\*\.nothing" в contracts/
+        );
         fs.rmSync(d, { recursive: true, force: true });
     });
     it('коллизия имён страниц — ошибка', () => {

@@ -7,7 +7,9 @@ import { TMP_ROOT, ensureManagedJre, runBuild } from './helpers.mjs';
 // Встроенный плагин openspec на мини-фикстуре store: 2 активных change'а (tasks, дельты,
 // plantuml, кастомный артефакт, картинка), 1 архивный, одно- и двухуровневые спеки.
 const CONFIG = {
-    ...JSON.parse(fs.readFileSync(path.join(import.meta.dirname, 'fixtures', 'default.c4builder.json'), 'utf8')),
+    ...JSON.parse(
+        fs.readFileSync(path.join(import.meta.dirname, 'fixtures', 'default.c4builder.json'), 'utf8')
+    ),
     projectName: 'demo',
     generateMD: false,
     generateCompleteMD: false,
@@ -25,15 +27,27 @@ const makeStore = (dir, store = 'openspec') => {
     const s = path.join(dir, store);
     // change 1: полный, с диаграммой, картинкой, ссылками, tasks 1/3
     write(s, 'changes/dig-1-alpha/.openspec.yaml', 'schema: spec-driven\ncreated: 2026-08-01\n');
-    write(s, 'changes/dig-1-alpha/proposal.md', '## Why\n\nSee [design](design.md) and [tasks](./tasks.md#done) and [delta](specs/area/cap-a/spec.md).\n\n![pic](img/pic.png)\n');
+    write(
+        s,
+        'changes/dig-1-alpha/proposal.md',
+        '## Why\n\nSee [design](design.md) and [tasks](./tasks.md#done) and [delta](specs/area/cap-a/spec.md).\n\n![pic](img/pic.png)\n'
+    );
     write(
         s,
         'changes/dig-1-alpha/design.md',
         '## Context\n\nDiagram:\n\n```plantuml\n!include <C4/C4_Context>\nPerson(u, "Alice")\nSystem(s, "Sys")\nRel(u, s, "uses")\n```\n\nAfter.\n\n```js\nconst x = 1; // не диаграмма\n```\n'
     );
-    write(s, 'changes/dig-1-alpha/tasks.md', '## 1. Work\n\n- [x] 1.1 done\n- [ ] 1.2 todo\n- [ ] 1.3 todo\n');
+    write(
+        s,
+        'changes/dig-1-alpha/tasks.md',
+        '## 1. Work\n\n- [x] 1.1 done\n- [ ] 1.2 todo\n- [ ] 1.3 todo\n'
+    );
     write(s, 'changes/dig-1-alpha/plan.md', '## Plan\n\ncustom artifact\n');
-    write(s, 'changes/dig-1-alpha/specs/area/cap-a/spec.md', '## ADDED Requirements\n\n### Requirement: A\n\nA text\n');
+    write(
+        s,
+        'changes/dig-1-alpha/specs/area/cap-a/spec.md',
+        '## ADDED Requirements\n\n### Requirement: A\n\nA text\n'
+    );
     write(s, 'changes/dig-1-alpha/img/pic.png', 'PNG');
     // change 2: без tasks, без метаданных
     write(s, 'changes/dig-2-beta/proposal.md', '## Why\n\nbeta\n');
@@ -93,7 +107,9 @@ describe('плагин openspec', () => {
         expect(md).toContain('**Спек:** [3](OpenSpec/Specs/Specs)');
         expect(md).toContain('**В архиве:** [1](OpenSpec/Archive/Archive)');
         expect(md).toContain('**Задачи:** 1/3');
-        expect(md).toMatch(/\| \[dig-1-alpha\]\(OpenSpec\/Changes\/dig-1-alpha\/dig-1-alpha\) \| spec-driven \| 1\/3 \| \d{4}-\d{2}-\d{2} \|/);
+        expect(md).toMatch(
+            /\| \[dig-1-alpha\]\(OpenSpec\/Changes\/dig-1-alpha\/dig-1-alpha\) \| spec-driven \| 1\/3 \| \d{4}-\d{2}-\d{2} \|/
+        );
         expect(md).toMatch(/\| \[dig-2-beta\]\(OpenSpec\/Changes\/dig-2-beta\/dig-2-beta\) \| — \| — \|/);
     });
 
@@ -101,9 +117,14 @@ describe('плагин openspec', () => {
         const md = read('OpenSpec/Changes/dig-1-alpha/dig-1-alpha.md');
         expect(md).toContain('# dig-1-alpha');
         expect(md).toContain('**Схема:** spec-driven · **Создан:** 2026-08-01 · **Задачи:** 1/3');
-        const order = ['## proposal', '## design', '## tasks', '## plan', '## Дельты спек', '### area / cap-a'].map(
-            (h) => md.indexOf(`\n${h}\n`)
-        );
+        const order = [
+            '## proposal',
+            '## design',
+            '## tasks',
+            '## plan',
+            '## Дельты спек',
+            '### area / cap-a'
+        ].map((h) => md.indexOf(`\n${h}\n`));
         expect(order.every((i) => i > 0)).toBe(true);
         expect([...order].sort((a, b) => a - b)).toEqual(order);
         expect(md).toContain('### Why'); // h2 артефакта под h2 раздела
@@ -137,7 +158,9 @@ describe('плагин openspec', () => {
         expect(read('OpenSpec/Archive/Archive.md')).toContain(
             '- [2026-08-01-dig-0-old](OpenSpec/Archive/2026-08-01-dig-0-old/2026-08-01-dig-0-old)'
         );
-        expect(read('OpenSpec/Archive/2026-08-01-dig-0-old/2026-08-01-dig-0-old.md')).toContain('**Задачи:** 2/2');
+        expect(read('OpenSpec/Archive/2026-08-01-dig-0-old/2026-08-01-dig-0-old.md')).toContain(
+            '**Задачи:** 2/2'
+        );
     });
 });
 

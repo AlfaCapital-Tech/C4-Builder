@@ -286,6 +286,114 @@ By default this is disabled. If enabled, the output will no longer include the a
 
 The current entity structure is inserted after the header
 
+## Plugins
+
+Plugins extend the build with content from outside `rootFolder` (virtual pages that go through
+the regular pipeline: sidebar, search, `generateMD`, complete markdown, local diagram render)
+and with site assets. They are listed in `.c4builder` under `plugins` — either `"name"` or
+`["name", { ...options }]`:
+
+```json
+{
+  "plugins": [
+    "openspec",
+    ["openapi", { "dir": "../ai-api/internal", "glob": "*/openapi.yaml" }]
+  ]
+}
+```
+
+A plugin identifier resolves in this order: a built-in name (`openspec`, `openapi`) → a local
+ESM module (`./plugins/my.mjs`, `../shared/plugin.mjs`, absolute path) → an npm package resolved
+from the project directory. Options are validated by the plugin's own zod schema **before** the
+build starts (built-in plugins are strict — an unknown option key is an error); `${ENV_VAR}`
+placeholders inside string options are replaced from the environment (unset → empty string) and
+never printed. Older c4builder versions ignore the `plugins` key, so a rollback keeps building.
+
+### `openspec` — publish a local OpenSpec store
+
+Renders an [OpenSpec](https://github.com/Fission-AI/OpenSpec) store as a site section:
+a summary (counters, task progress), one page per active change (`proposal` → `design` →
+`tasks` → other `*.md` alphabetically → spec deltas), the specs tree and the archive.
+```` ```plantuml ```` / ```` ```d2 ```` fences inside artifacts are rendered by the **local**
+engines (nothing is sent to plantuml.com); relative links between artifacts of a change become
+in-page anchors, referenced images are copied next to the page. The store folder is watched in `-w`.
+
+| Option  | Default      | Meaning                                              |
+|---------|--------------|------------------------------------------------------|
+| `dir`   | `openspec`   | store folder (relative to the project directory)     |
+| `mount` | `OpenSpec`   | section name (and its path in the output folder)     |
+
+### `openapi` — swagger-ui pages for a set of OpenAPI specs
+
+Finds specs by `glob` in a local folder (`dir`) **or** in a `tar.gz`/`zip` archive fetched over
+HTTP (`archive`, e.g. a GitLab/GitHub repository archive URL; `subdir` picks a folder inside it,
+`headers` adds request headers such as `{"PRIVATE-TOKEN": "${GITLAB_TOKEN}"}` — empty values are
+dropped, so the same config works with and without a token). One page per spec, named after the
+spec's parent folder (file name for specs in the source root), plus an index. Specs are copied
+into `<mount>/_specs/…` keeping their relative layout, so relative `$ref`s keep resolving; pages
+load swagger-ui from the bundled `vendor/` files — no CDN, no access to the source repository is
+needed by readers. The plugin forces `executeScript` (logged) and injects `swagger-ui.css` into
+`index.html` after the template is rendered, so custom `docsifyTemplate`s need no change.
+Archives are downloaded once per process (watch mode reuses them).
+
+| Option    | Default                          | Meaning                                  |
+|-----------|----------------------------------|------------------------------------------|
+| `mount`   | `API`                            | section name                             |
+| `dir`     | —                                | local folder with specs (watched in `-w`)|
+| `archive` | —                                | HTTP(S) URL of a tar.gz/zip archive      |
+| `subdir`  | —                                | folder inside the archive                |
+| `headers` | —                                | HTTP headers for the archive request     |
+| `glob`    | `**/openapi.{yaml,yml,json}`     | spec pattern (`**`, `*`, `?`, `{a,b}`)   |
+
+Example for a repository that keeps its `openspec/` store next to the C4 sources and consumes
+contracts from another repository:
+
+```json
+{
+  "plugins": [
+    "openspec",
+    ["openapi", {
+      "archive": "https://gitlab.example.com/api/v4/projects/123/repository/archive.tar.gz?sha=main",
+      "glob": "*/openapi.yaml",
+      "headers": { "PRIVATE-TOKEN": "${GITLAB_TOKEN}" }
+    }]
+  ]
+}
+```
+
+### Writing a plugin
+
+A plugin is an ESM module whose default export is a plain object (use `definePlugin` from
+`@alfacapital-tech/c4builder/dist/core/plugins/types.js` for typing):
+
+```js
+import { z } from 'zod';
+export default {
+  name: 'changelog',
+  options: z.object({ file: z.string().default('CHANGELOG.md') }).strict(), // optional
+  watchPaths: (opts) => [opts.file],                                          // optional
+  assets: { styles: ['/abs/path/x.css'], scripts: ['/abs/path/x.js'] },      // optional
+  requires: { executeScript: true },                                          // optional
+  async afterScan(ctx, opts) {
+    // ctx.tree, ctx.options — the build tree/options; ctx.source({ dir } | { archive, subdir, headers })
+    // resolves a folder; ctx.addPage adds a virtual page (missing parents become index pages).
+    ctx.addPage({
+      path: ['Changelog'],
+      markdown: '## Latest
+
+![flow](flow.puml)',
+      diagrams: [{ file: 'flow.puml', content: '@startuml
+A -> B
+@enduml' }]
+    });
+  },
+  async afterBuild(ctx, opts) { /* ctx.distFolder, ctx.options — copy extra files, run checks */ }
+};
+```
+
+Hooks run in the order of the `plugins` list; an exception aborts the build with the plugin's
+name (the previous `dist` backup is kept as usual).
+
 # Future plans
 
 I would like to bind the **build** phase to the C4 model. It could parse the diagrams and know what Person/System/Component/Container is related to what and help with additional validation. Maybe even export to [structurizr](https://structurizr.com/) or vice versa.
@@ -355,6 +463,10 @@ Publishes to dist-tag `latest`.
 
 ## Unreleased
 
+- Plugin system: `plugins` key in `.c4builder`, `afterScan`/`afterBuild` hooks, virtual pages,
+  plugin assets injected into `index.html`, `dir`/`archive` source resolver (see «Plugins»)
+- Built-in plugins: `openspec` (local OpenSpec store → site section, local diagram render) and
+  `openapi` (offline swagger-ui pages for a set of OpenAPI specs; `vendor/swagger-ui/swagger-ui.css` 5.32.1)
 - `c4builder check <file...>` — validate individual `.puml` / `.iuml` / `.d2` files with the
   bundled engines, without a project build (#13)
 - D2 compile errors are printed as readable `file:line:col: message` lines instead of raw JSON
