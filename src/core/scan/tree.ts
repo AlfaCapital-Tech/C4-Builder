@@ -13,6 +13,10 @@ export interface Diagram {
     engine: string; // 'plantuml' | 'd2'
     content: string | Buffer;
     isDitaa: boolean;
+    /** Виртуальные страницы: исходный файл (у файловых диаграмм это сам `dir`). */
+    source?: string;
+    /** Виртуальные страницы: ошибка рендера не валит сборку (см. render/diagrams). */
+    soft?: boolean;
 }
 
 export interface TreeItem {

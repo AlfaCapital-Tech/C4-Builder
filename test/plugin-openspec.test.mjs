@@ -240,6 +240,21 @@ describe('плагин openspec: крайние случаи', () => {
         );
         fs.rmSync(d, { recursive: true, force: true });
     });
+    it('битый ```plantuml в артефакте — предупреждение с файлом и картинка-заглушка, сборка жива', () => {
+        const d = makeFixture('badfence', ['openspec']);
+        write(
+            path.join(d, 'openspec'),
+            'changes/dig-2-beta/design.md',
+            '# D\n\n```plantuml\n[a[b] --> [c]\n```\n'
+        );
+        const out = runBuild(d);
+        expect(out).toMatch(/openspec[/\\]changes[/\\]dig-2-beta[/\\]design\.md/);
+        const beta = path.join(d, 'docs/OpenSpec/Changes/dig-2-beta');
+        const svg = fs.readdirSync(beta, { recursive: true }).find((f) => String(f).endsWith('.svg'));
+        expect(svg).toBeTruthy();
+        expect(fs.readFileSync(path.join(beta, String(svg)), 'utf8')).toContain('не отрендерена');
+        fs.rmSync(d, { recursive: true, force: true });
+    });
     it('битый plugins при первом запуске (щадящий путь) — exit 1, конфиг не переписан', () => {
         const d = makeFixture('badplugins', [['openspec', 'openspec']]);
         fs.writeFileSync(

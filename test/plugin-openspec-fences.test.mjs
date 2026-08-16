@@ -33,6 +33,16 @@ describe('createFenceExtractor', () => {
         expect(createFenceExtractor().extract(one + one, 'x').diagrams).toHaveLength(1);
     });
 
+    it('диаграмма несёт источник и метку soft (ошибка блока не валит сборку)', () => {
+        const { diagrams } = createFenceExtractor().extract(
+            '```plantuml\nA -> B\n```\n',
+            'design',
+            'openspec/changes/c1/design.md'
+        );
+        expect(diagrams[0].source).toBe('openspec/changes/c1/design.md');
+        expect(diagrams[0].soft).toBe(true);
+    });
+
     it('mapOutsideFences не трогает текст внутри блоков', () => {
         const md = 'a\n```js\na\n```\na';
         expect(mapOutsideFences(md, (t) => t.replace(/a/g, 'b'))).toBe('b\n```js\na\n```\nb');

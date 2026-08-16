@@ -227,6 +227,26 @@ export const renderDiagram = (content: string | Buffer, options: RenderDiagramOp
 // bkFolderName — каталог бэкапа dist, откуда восстанавливаются неизменённые картинки
 // по чексумме. Его lifecycle (создание/удаление) держит оркестратор build(); сюда
 // путь приходит явным параметром, а не пересчитывается из общей константы.
+// Картинка-заглушка вместо упавшей «мягкой» диаграммы: ошибка видна на странице,
+// сайт остаётся собранным (так же вёл себя онлайн-рендер docsify-plantuml).
+const errorPlaceholderSvg = (name: string, reason: string): string => {
+    const esc = (s: string): string =>
+        s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c] as string);
+    const lines = [`${name}: диаграмма не отрендерена`, ...reason.split('\n')]
+        .flatMap((l) => l.match(/.{1,88}/g) ?? [''])
+        .slice(0, 8);
+    const w = 720;
+    const h = 34 + lines.length * 20;
+    const text = lines
+        .map((l, i) => `<text x="16" y="${34 + i * 20}" font-size="14">${esc(l)}</text>`)
+        .join('');
+    return (
+        `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" ` +
+        `font-family="${DEFAULT_FONT_NAME}" fill="#8b0000">` +
+        `<rect x="1" y="1" width="${w - 2}" height="${h - 2}" fill="#fff5f5" stroke="#8b0000"/>${text}</svg>`
+    );
+};
+
 export const generateImages = async (
     tree: TreeItem[],
     options: BuildOptions,
@@ -364,6 +384,10 @@ export const generateImages = async (
             const diagramContent = diagram.content;
             const includePath = item.dir;
             const isDitaa = diagram.isDitaa;
+            // Имя картинки диаграммы виртуальной страницы производно от контента —
+            // без исходного файла в сообщении его не найти.
+            const source = diagram.source;
+            const soft = diagram.soft === true;
 
             const task = withProgress(async () => {
                 // render diagram to image: D2 через WASM, PlantUML — прямым вызовом java.
@@ -393,7 +417,17 @@ export const generateImages = async (
                     cksumEntry.ok = true;
                 } catch (err: unknown) {
                     // Имя диаграммы в ошибку: renderDiagram/renderD2 сами его не знают.
-                    throw new Error(`Диаграмма "${outName}": ${(err as Error).message || err}`);
+                    const reason = `${(err as Error).message || err}`;
+                    const msg = `Диаграмма "${outName}"${source ? ` (${source})` : ''}: ${reason}`;
+                    if (!soft) throw new Error(msg);
+                    // Диаграммы из markdown-блоков плагинов писались под онлайн-рендер,
+                    // где битый блок давал картинку с ошибкой, а не падение сборки.
+                    console.log(chalk.yellow(`⚠ ${msg}`));
+                    const svg = Buffer.from(errorPlaceholderSvg(outName, reason), 'utf-8');
+                    await writeFile(
+                        filePath,
+                        outFormat === 'png' ? await rasterizeSvgToPng(svg, options.USE_SYSTEM_FONTS) : svg
+                    );
                 }
             });
 

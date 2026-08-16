@@ -165,6 +165,9 @@ export default async () => {
     if (program.args[0] === 'jre') return cmdJre(program.args.slice(1), { force: opts.force });
     // Проверка отдельных диаграмм — тоже без конфига проекта.
     if (program.args[0] === 'check') return cmdCheck(program.args.slice(1));
+    // `c4builder site` — подсказка после сборки печатает именно эту форму; без
+    // этой строки allowExcessArguments молча глотал бы её и просто пересобирал.
+    if (program.args[0] === 'site') opts.site = true;
 
     let conf: ConfStore = { get: () => {} } as unknown as ConfStore;
     let cacheConf: ConfStore = { get: () => {}, set: () => {}, clear: () => {} } as unknown as ConfStore;

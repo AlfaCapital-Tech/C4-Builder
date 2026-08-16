@@ -114,6 +114,10 @@ const ignoreTitle = (title: string): string => {
     return ` ':ignore${t ? ` ${t}` : ''}'`;
 };
 
+/** Путь файла для сообщений — от cwd, чтобы его можно было открыть как есть. */
+export const relSource = (root: string, rel: string): string =>
+    path.relative(process.cwd(), path.join(root, rel)).split(path.sep).join('/');
+
 /**
  * Markdown одного исходного файла → страница сайта: fenced-диаграммы вырезаются, ссылки
  * на другие страницы источника (`target`, `#x` → `?id=x`) — на их адреса, прочие
@@ -129,15 +133,18 @@ export const renderMarkdown = (
         srcRoot,
         fromDir = '',
         target = () => undefined,
+        source,
         options
     }: {
         srcRoot: string;
         fromDir?: string;
         target?: (rel: string) => string[] | undefined;
+        /** Исходный файл артефакта/спеки — попадёт в сообщение об ошибке диаграммы. */
+        source?: string;
         options: BuildOptions;
     }
 ): RenderedPage => {
-    const { markdown, diagrams } = createFenceExtractor().extract(content, base);
+    const { markdown, diagrams } = createFenceExtractor().extract(content, base, source);
     const files: PageFile[] = [];
     const rewrite = (t: string): string =>
         t.replace(LINK_RE, (whole, bang: string, text: string, href: string, title = '') => {
@@ -235,8 +242,20 @@ export const renderChange = (
         const delta = deltas.find((d) => `specs/${d.path.join('/')}/spec.md` === rel);
         return delta && [...specsBase, ...delta.path];
     };
-    const render = (pagePath: string[], base: string, content: string, fromDir = ''): RenderedPage =>
-        renderMarkdown(pagePath, base, content, { srcRoot: change.dir, fromDir, target, options });
+    const render = (
+        pagePath: string[],
+        base: string,
+        content: string,
+        fromDir = '',
+        file = `${base}.md`
+    ): RenderedPage =>
+        renderMarkdown(pagePath, base, content, {
+            srcRoot: change.dir,
+            fromDir,
+            target,
+            source: relSource(change.dir, path.posix.join(fromDir, file)),
+            options
+        });
 
     const subpages = ordered
         .filter((a) => a !== inline)
@@ -267,7 +286,13 @@ export const renderChange = (
     ];
     if (deltas.length) {
         const tree = renderSpecTree(deltas, specsBase, options, (pagePath, spec) =>
-            render(pagePath, `spec-${spec.path.join('-')}`, spec.content, `specs/${spec.path.join('/')}`)
+            render(
+                pagePath,
+                `spec-${spec.path.join('-')}`,
+                spec.content,
+                `specs/${spec.path.join('/')}`,
+                'spec.md'
+            )
         );
         // Артефакт specs.md и корень дельт — один путь: сливаем в страницу артефакта.
         const artifact = pages.find(

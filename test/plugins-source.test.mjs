@@ -5,7 +5,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { extractZip, globFiles, globToRegExp, injectHtml, resolveSource } from './dist.mjs';
+import { extractZip, globFiles, globToRegExp, injectHtml, resolveSource, tlsHint } from './dist.mjs';
 
 // Ассеты (инъекция в HTML), резолвер источников (dir/archive по HTTP), glob.
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'c4b-source-'));
@@ -31,6 +31,14 @@ describe('injectHtml', () => {
     });
 });
 
+describe('tlsHint', () => {
+    it('подсказывает NODE_EXTRA_CA_CERTS только на ошибках сертификата', () => {
+        expect(tlsHint('self-signed certificate in certificate chain')).toContain('NODE_EXTRA_CA_CERTS');
+        expect(tlsHint('unable to get local issuer certificate')).toContain('NODE_EXTRA_CA_CERTS');
+        expect(tlsHint('код ответа: 404')).toBe('');
+    });
+});
+
 describe('glob', () => {
     it('glob → RegExp: **, *, {a,b}, экранирование', () => {
         const re = globToRegExp('**/openapi.{yaml,yml,json}');
@@ -42,6 +50,14 @@ describe('glob', () => {
         expect(one.test('finch/openapi.yaml')).toBe(true);
         expect(one.test('a/b/openapi.yaml')).toBe(false);
         expect(one.test('openapi.yaml')).toBe(false);
+    });
+    it('метасимволы внутри {a,b} работают как glob, а не буквально', () => {
+        const re = globToRegExp('specs/{*.yaml,*.yml}');
+        expect(re.test('specs/openapi.yaml')).toBe(true);
+        expect(re.test('specs/openapi.yml')).toBe(true);
+        expect(re.test('specs/openapi.json')).toBe(false);
+        expect(re.test('specs/a/openapi.yaml')).toBe(false); // `*` не переходит через `/`
+        expect(globToRegExp('{**/api,api}/openapi.yaml').test('a/b/api/openapi.yaml')).toBe(true);
     });
     it('globFiles обходит дерево, сортирует', () => {
         const root = path.join(tmp, 'glob');

@@ -86,7 +86,9 @@ export const addPage = (tree: TreeItem[], options: BuildOptions, page: PageSpec)
             ext,
             engine,
             content: d.content,
-            isDitaa: engine === 'plantuml' && /@startditaa/i.test(d.content)
+            isDitaa: engine === 'plantuml' && /@startditaa/i.test(d.content),
+            source: d.source,
+            soft: d.soft
         });
     }
     return item;

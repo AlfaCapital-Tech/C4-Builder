@@ -28,6 +28,13 @@ export const redactUrl = (url: string): string => {
     }
 };
 
+// За корпоративным TLS-перехватом Node не доверяет подменённой цепочке: свой набор
+// корней он берёт не из системы и не из SSL_CERT_FILE — только NODE_EXTRA_CA_CERTS.
+export const tlsHint = (reason: string): string =>
+    /certificate|self.signed|unable to (?:verify|get local issuer)/i.test(reason)
+        ? ' — TLS-перехват? укажите путь к CA-бандлу в NODE_EXTRA_CA_CERTS'
+        : '';
+
 const downloadArchive = async (url: string, headers: Record<string, string>): Promise<string> => {
     const dir = path.join(
         os.tmpdir(),
@@ -41,7 +48,8 @@ const downloadArchive = async (url: string, headers: Record<string, string>): Pr
     try {
         body = await httpGetBuffer(url, { headers });
     } catch (e) {
-        throw new Error(`архив недоступен: ${(e as Error).message.replaceAll(url, redactUrl(url))}`);
+        const reason = (e as Error).message.replaceAll(url, redactUrl(url));
+        throw new Error(`архив недоступен: ${reason}${tlsHint(reason)}`);
     }
     fs.rmSync(stage, { recursive: true, force: true });
     fs.mkdirSync(stage, { recursive: true });
