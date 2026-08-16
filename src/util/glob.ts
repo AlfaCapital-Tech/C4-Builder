@@ -4,7 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-export const globToRegExp = (glob: string): RegExp => {
+const convert = (glob: string): string => {
     let re = '';
     for (let i = 0; i < glob.length; i++) {
         const c = glob[i];
@@ -22,17 +22,21 @@ export const globToRegExp = (glob: string): RegExp => {
             const end = glob.indexOf('}', i);
             if (end === -1) re += '\\{';
             else {
+                // Альтернативы — тем же конвертером: `{*.yaml,*.yml}` должен работать
+                // как glob, а не как буквальная звёздочка.
                 re += `(?:${glob
                     .slice(i + 1, end)
                     .split(',')
-                    .map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+                    .map(convert)
                     .join('|')})`;
                 i = end;
             }
         } else re += c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     }
-    return new RegExp(`^${re}$`);
+    return re;
 };
+
+export const globToRegExp = (glob: string): RegExp => new RegExp(`^${convert(glob)}$`);
 
 /**
  * Файлы под root, чьи относительные posix-пути совпадают с glob (сортировано).

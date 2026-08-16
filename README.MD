@@ -92,7 +92,8 @@ Options:
 ```
 
 There is also a `jre` subcommand: `c4builder jre install [--force]` pre-downloads the
-private JRE cache, `c4builder jre info` prints which Java would be used.
+private JRE cache, `c4builder jre info` prints which Java would be used. `c4builder site`
+is accepted as a positional subcommand too, equivalent to `--site`.
 
 ### Validating single diagrams
 
@@ -324,7 +325,9 @@ spec deltas live under `specs/…` mirroring the folder layout (a folder that ha
 ```` ```plantuml ```` / ```` ```d2 ```` fences inside artifacts, deltas and store specs are
 rendered by the **local** engines (nothing is sent to plantuml.com); the image name is derived
 from the fence content, so inserting or reordering fences never reuses a neighbour's cached
-image. Relative links between artifacts of a change point to their pages, referenced files
+image. A block that fails to render does not fail the build (these blocks used to be rendered by
+the browser, which showed an error image): the page gets a placeholder image and the build prints
+a warning naming the artifact file. Relative links between artifacts of a change point to their pages, referenced files
 (images, notes) are copied next to the page (and to the output root for the complete markdown;
 `excludeOtherFiles` applies). The store folder is watched in `-w`.
 
@@ -348,7 +351,9 @@ needed by readers. The plugin forces `executeScript` (logged) and injects `swagg
 `swagger-ui-bundle.js` into `index.html` after the template is rendered (skipped when the template
 already links the bundle), so custom `docsifyTemplate`s need no change. The output folder is never
 treated as a source (`dir: "."` is fine). Archives are downloaded once per process (watch mode
-reuses them).
+reuses them). Behind a TLS-intercepting proxy the download fails with `self-signed certificate in
+certificate chain` — point `NODE_EXTRA_CA_CERTS` at the CA bundle (Node reads neither the system
+store nor `SSL_CERT_FILE`); the error message says so as well.
 
 | Option    | Default                          | Meaning                                  |
 |-----------|----------------------------------|------------------------------------------|
@@ -486,6 +491,13 @@ Publishes to dist-tag `latest`.
   The first build after upgrading re-renders everything once.
 - Watch mode ignores the output folder, its backup and `.c4builder*`, and de-duplicates nested
   watch roots (a plugin `dir` covering the project no longer loops the rebuild)
+- A broken ```` ```plantuml ````/```` ```d2 ```` block inside an OpenSpec artifact no longer fails
+  the build: the page gets a placeholder image and the warning names the source file
+- Diagram errors name the file the diagram came from (fence names are content hashes)
+- `{a,b}` glob alternatives accept `*`/`?` inside them (`{*.yaml,*.yml}`)
+- Archive download failures caused by a TLS-intercepting proxy suggest `NODE_EXTRA_CA_CERTS`
+- `c4builder site` works as a positional subcommand, the same as `--site` (it is the form the
+  post-build hint prints)
 
 ## v0.3.0
 

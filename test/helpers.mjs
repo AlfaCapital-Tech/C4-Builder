@@ -94,6 +94,7 @@ export const runBuild = (dir) => {
             `сборка c4builder упала (exit=${res.status}${res.signal ? `, signal=${res.signal}` : ''})\nstdout:\n${res.stdout}\nstderr:\n${res.stderr}`
         );
     }
+    return `${res.stdout}${res.stderr}`;
 };
 
 // Шрифтозависимые выходы: ditaa рисует текст собственным AWT-движком, который берёт шрифт

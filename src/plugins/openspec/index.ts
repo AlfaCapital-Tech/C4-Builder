@@ -11,6 +11,7 @@ import {
     renderArchiveIndex,
     renderChange,
     renderChangesIndex,
+    relSource,
     renderMarkdown,
     renderSpecTree,
     renderSummary
@@ -79,6 +80,7 @@ export default definePlugin<Opts>({
                 renderMarkdown(pagePath, `spec-${spec.path.join('-')}`, spec.content, {
                     srcRoot: specsDir,
                     fromDir: spec.path.join('/'),
+                    source: relSource(specsDir, `${spec.path.join('/')}/spec.md`),
                     options
                 })
             ),

@@ -32,7 +32,7 @@ export const mapOutsideFences = (md: string, fn: (text: string) => string): stri
 export const createFenceExtractor = () => {
     const seen = new Set<string>();
     return {
-        extract(md: string, base: string): { markdown: string; diagrams: PageDiagram[] } {
+        extract(md: string, base: string, source?: string): { markdown: string; diagrams: PageDiagram[] } {
             const diagrams: PageDiagram[] = [];
             const markdown = md.replace(
                 FENCE_RE,
@@ -53,7 +53,10 @@ export const createFenceExtractor = () => {
                     const file = `${base}-${hash}${ext}`;
                     if (!seen.has(file)) {
                         seen.add(file);
-                        diagrams.push({ file, content });
+                        // soft: блок в артефакте — не файл проекта; синтаксическая
+                        // ошибка в нём не должна ронять весь сайт (раньше такие блоки
+                        // рендерил браузер и показывал картинку с ошибкой).
+                        diagrams.push({ file, content, source, soft: true });
                     }
                     return `${indent}![${file}](${file})`;
                 }

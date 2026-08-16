@@ -21,6 +21,10 @@ export interface SourceSpec {
 export interface PageDiagram {
     file: string;
     content: string;
+    /** Путь исходного файла для сообщений: имя картинки о нём ничего не говорит. */
+    source?: string;
+    /** Ошибка рендера — предупреждение и картинка-заглушка вместо падения сборки. */
+    soft?: boolean;
 }
 
 /** Виртуальная страница: путь сегментами от корня сайта, markdown и диаграммы. */
