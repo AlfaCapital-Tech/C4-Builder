@@ -1,24 +1,24 @@
 ## 1. Конфиг и контракт плагина
 
-- [ ] 1.1 `config/schema.ts`: ключ `plugins` — массив `string | [string, Record<string, unknown>]`, дефолт `[]`; ошибка формы с путём ключа; `BuildOptions`/`getOptions` пробрасывают сырой список
-- [ ] 1.2 `core/plugins/types.ts`: `definePlugin`, типы `Plugin`, `ScanCtx`, `BuildCtx`, `PageSpec` (сегменты пути, markdown, диаграммы), `SourceSpec` (`dir` | `archive`+`subdir`+`headers`)
-- [ ] 1.3 `core/plugins/load.ts`: резолв идентификатора (встроенный → путь от cwd → npm через `createRequire`), `import()`, подстановка `${ENV}` в опциях, `safeParse` схемы с сообщением `plugins[i] <name>: <path> — <issue>`, применение `requires.executeScript` с логом
-- [ ] 1.4 Тесты `test/plugins-load.test.mjs`: строка = пара, ошибка формы, неизвестный ключ у строгой схемы, плагин без схемы, подстановка окружения, несуществующий модуль
+- [x] 1.1 `config/schema.ts`: ключ `plugins` — массив `string | [string, Record<string, unknown>]`, дефолт `[]`; ошибка формы с путём ключа; `BuildOptions`/`getOptions` пробрасывают сырой список
+- [x] 1.2 `core/plugins/types.ts`: `definePlugin`, типы `Plugin`, `ScanCtx`, `BuildCtx`, `PageSpec` (сегменты пути, markdown, диаграммы), `SourceSpec` (`dir` | `archive`+`subdir`+`headers`)
+- [x] 1.3 `core/plugins/load.ts`: резолв идентификатора (встроенный → путь от cwd → npm через `createRequire`), `import()`, подстановка `${ENV}` в опциях, `safeParse` схемы с сообщением `plugins[i] <name>: <path> — <issue>`, применение `requires.executeScript` с логом
+- [x] 1.4 Тесты `test/plugins-load.test.mjs`: строка = пара, ошибка формы, неизвестный ключ у строгой схемы, плагин без схемы, подстановка окружения, несуществующий модуль
 
 ## 2. Виртуальные страницы и хуки в сборке
 
-- [ ] 2.1 `core/plugins/tree.ts`: `addPage()` — вычисление `dir`/`level`/`parent`, обновление `descendants`, вставка в конец поддерева родителя (DFS), автосоздание промежуточных узлов-оглавлений, ошибка при коллизии с реальной папкой
-- [ ] 2.2 `core/build.ts`: третий аргумент `plugins`; вызов `afterScan` после `generateTree` (по порядку, ошибка с именем плагина), `afterBuild` после выходов; `dispatch.ts` грузит плагины до `build()` и передаёт их
-- [ ] 2.3 Проверить `render/diagrams.ts` на виртуальном `item.dir` (инклюды, пути вывода, checksum-восстановление из бэкапа) — без `fs`-доступа к несуществующему каталогу
-- [ ] 2.4 Тесты `test/plugins-tree.test.mjs`: виртуальный раздел в `_sidebar.md` и страницах сайта, в `generateMD`/complete, диаграмма виртуальной страницы рендерится (PlantUML на stdlib), порядок DFS, ошибка хука прерывает сборку
+- [x] 2.1 `core/plugins/tree.ts`: `addPage()` — вычисление `dir`/`level`/`parent`, обновление `descendants`, вставка в конец поддерева родителя (DFS), автосоздание промежуточных узлов-оглавлений, ошибка при коллизии с реальной папкой
+- [x] 2.2 `core/build.ts`: третий аргумент `plugins`; вызов `afterScan` после `generateTree` (по порядку, ошибка с именем плагина), `afterBuild` после выходов; `dispatch.ts` грузит плагины до `build()` и передаёт их
+- [x] 2.3 Проверить `render/diagrams.ts` на виртуальном `item.dir` (инклюды, пути вывода, checksum-восстановление из бэкапа) — без `fs`-доступа к несуществующему каталогу
+- [x] 2.4 Тесты `test/plugins-tree.test.mjs`: виртуальный раздел в `_sidebar.md` и страницах сайта, в `generateMD`/complete, диаграмма виртуальной страницы рендерится (PlantUML на stdlib), порядок DFS, ошибка хука прерывает сборку
 
 ## 3. Ассеты, watch, источники
 
-- [ ] 3.1 `core/plugins/assets.ts`: копирование `assets` в `dist/vendor/plugins/<name>/`, пост-инъекция `<link>`/`<script>` в `index.html` (перед `</head>`/`</body>`, фолбэк — конец файла); вызов после `generateWebMD`
-- [ ] 3.2 `dispatch.ts`: `watchPaths` плагинов добавляются в `node-watch` (массив путей), несуществующие — предупреждение
-- [ ] 3.3 `util/archive.ts`: вынести `extractZip` из `render/jre.ts` (zip-slip-guard общий), добавить `extractTarGz`; `jre.ts` использует новый модуль
-- [ ] 3.4 `core/plugins/source.ts`: `resolveSource` — `dir` (существование), `archive` (httpGet с `headers` без пустых значений → `os.tmpdir()/c4builder-src-<sha1>/` через `.tmp`+rename → снятие единственного корневого каталога → `subdir`), кэш `Map` на процесс, ошибки с URL/кодом
-- [ ] 3.5 Тесты: инъекция в шаблон с/без `</head>`, `resolveSource` на локальном tar.gz/zip-фикстуре и http-сервере из теста (успех, 404, zip-slip)
+- [x] 3.1 `core/plugins/assets.ts`: копирование `assets` в `dist/vendor/plugins/<name>/`, пост-инъекция `<link>`/`<script>` в `index.html` (перед `</head>`/`</body>`, фолбэк — конец файла); вызов после `generateWebMD`
+- [x] 3.2 `dispatch.ts`: `watchPaths` плагинов добавляются в `node-watch` (массив путей), несуществующие — предупреждение
+- [x] 3.3 `util/archive.ts`: вынести `extractZip` из `render/jre.ts` (zip-slip-guard общий), добавить `extractTarGz`; `jre.ts` использует новый модуль
+- [x] 3.4 `core/plugins/source.ts`: `resolveSource` — `dir` (существование), `archive` (httpGet с `headers` без пустых значений → `os.tmpdir()/c4builder-src-<sha1>/` через `.tmp`+rename → снятие единственного корневого каталога → `subdir`), кэш `Map` на процесс, ошибки с URL/кодом
+- [x] 3.5 Тесты: инъекция в шаблон с/без `</head>`, `resolveSource` на локальном tar.gz/zip-фикстуре и http-сервере из теста (успех, 404, zip-slip)
 
 ## 4. Плагин openspec
 

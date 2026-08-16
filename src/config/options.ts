@@ -6,8 +6,8 @@
 // её же валидацией опирается загрузка опций сборки. Ре-экспорт: потребители типа
 // (defaults, dispatch) продолжают импортировать его отсюда.
 import { configSchema } from './schema.ts';
-import type { C4ConfigFile } from './schema.ts';
-export type { C4ConfigFile };
+import type { C4ConfigFile, PluginEntry } from './schema.ts';
+export type { C4ConfigFile, PluginEntry };
 
 /**
  * Опции сборки (SCREAMING_CASE), собираемые `getOptions()` из `.c4builder`.
@@ -44,6 +44,9 @@ export interface BuildOptions {
     DIAGRAM_FORMAT: string;
     D2_LAYOUT: string;
     MD_FILE_NAME: string;
+    // Сырой список плагинов из конфига; загружаются и валидируются в cli/dispatch
+    // (core/plugins/load) и передаются в build() отдельным аргументом.
+    PLUGINS: PluginEntry[];
 
     // Опциональные/легаси — бывают undefined, потребители защищают их проверками.
     WEB_FILE_NAME?: string;

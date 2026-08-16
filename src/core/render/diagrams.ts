@@ -308,7 +308,7 @@ export const generateImages = async (
             const entryPath = diagram.engine === 'd2' ? path.join(item.dir, diagram.dir) : null;
             const includes =
                 entryPath !== null
-                    ? foldD2Imports(entryPath)
+                    ? foldD2Imports(entryPath, body)
                     : foldIncludes(body, item.dir, item.dir, new Set());
             const outFormat = diagramOutputFormat(diagram, options);
             // renderKey: параметры, влияющие на БАЙТЫ вывода помимо контента и графа
@@ -371,7 +371,7 @@ export const generateImages = async (
                 let rendered: Buffer;
                 try {
                     if (entryPath !== null) {
-                        rendered = await renderD2(entryPath, { layout: options.D2_LAYOUT });
+                        rendered = await renderD2(entryPath, { layout: options.D2_LAYOUT, seed: body });
                     } else {
                         // Резолв JRE отложен до первого реального PlantUML-рендера (эта
                         // ветка исполняется лишь при промахе кэша). getJava мемоизирует.

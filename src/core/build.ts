@@ -11,12 +11,21 @@ import type { BuildOptions } from '../config/options.ts';
 import { generateTree, engineSupportsRemote, clearIncludeCache } from './scan/tree.ts';
 import { generateImages, type CacheConf } from './render/diagrams.ts';
 import { generateMD, generateWebMD, generateCompleteMD, clearDiagramCache } from './compose/markdown.ts';
+// Плагины: хуки afterScan (виртуальные страницы) / afterBuild и ассеты сайта.
+// Загружены заранее в cli/dispatch и приходят третьим аргументом (как cacheConf).
+import { runAfterScan, runAfterBuild } from './plugins/hooks.ts';
+import { injectPluginAssets } from './plugins/assets.ts';
+import type { LoadedPlugin } from './plugins/types.ts';
 
 // Оркестратор владеет lifecycle выходного каталога: dist бэкапится в dist_bk, откуда
 // generateImages восстанавливает неизменённые по чексумме картинки; в конце бэкап сносится.
 const DIST_BACKUP_FOLDER_SUFFIX = '_bk';
 
-const build = async (options: BuildOptions, cacheConf: CacheConf): Promise<void> => {
+const build = async (
+    options: BuildOptions,
+    cacheConf: CacheConf,
+    plugins: LoadedPlugin[] = []
+): Promise<void> => {
     const start_date = new Date();
     const bkFolderName = options.DIST_FOLDER + DIST_BACKUP_FOLDER_SUFFIX;
 
@@ -44,6 +53,9 @@ const build = async (options: BuildOptions, cacheConf: CacheConf): Promise<void>
         console.log(chalk.green(`\nbuilding documentation in ./${options.DIST_FOLDER}`));
         const tree = await generateTree(options.ROOT_FOLDER, options);
         console.log(chalk.blue(`parsed ${tree.length} folders`));
+        // Виртуальные страницы плагинов встают в дерево до рендера — дальше они
+        // неотличимы от реальных папок (диаграммы, sidebar, поиск, complete).
+        await runAfterScan(tree, options, plugins);
 
         // У движков без онлайн-рендера (D2, см. remoteRender в DIAGRAM_ENGINES) при
         // выключенной локальной генерации диаграммы не во что превратить — ссылки на
@@ -86,6 +98,7 @@ const build = async (options: BuildOptions, cacheConf: CacheConf): Promise<void>
         if (options.GENERATE_WEBSITE) {
             console.log(chalk.blue('generating docsify site'));
             await generateWebMD(tree, options);
+            await injectPluginAssets(plugins, options);
         }
         if (options.GENERATE_COMPLETE_MD_FILE) {
             console.log(chalk.blue('generating complete markdown file'));
@@ -104,6 +117,8 @@ const build = async (options: BuildOptions, cacheConf: CacheConf): Promise<void>
                 )
             );
         }
+
+        await runAfterBuild(options, plugins);
 
         console.log(chalk.green(`built in ${(Date.now() - start_date.getTime()) / 1000} seconds`));
         ok = true;

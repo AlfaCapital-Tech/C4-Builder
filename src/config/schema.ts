@@ -76,6 +76,19 @@ export const configSchema = z.object({
     ),
     hasRun: optBool(),
 
+    // Плагины сборки: `"имя"` либо `["имя", {опции}]`. Опции здесь не валидируются —
+    // это делает схема самого плагина при загрузке (core/plugins/load); верхний уровень
+    // проверяет лишь форму записи, чтобы ошибка называла `plugins` и позицию.
+    plugins: nullish(
+        z
+            .array(
+                z.union([z.string(), z.tuple([z.string(), z.record(z.string(), z.unknown())])], {
+                    error: 'ожидается "имя" либо ["имя", {опции}]'
+                })
+            )
+            .default([])
+    ),
+
     // Легаси-ключи старых `.c4builder` — читаются лишь для однократного предупреждения.
     plantumlVersion: optStr(),
     generatePDF: optBool(),
@@ -89,3 +102,6 @@ export const configSchema = z.object({
  * дефолтов и легаси-ключи — опциональны.
  */
 export type C4ConfigFile = z.infer<typeof configSchema>;
+
+/** Одна запись `plugins` в `.c4builder`: идентификатор либо пара [идентификатор, опции]. */
+export type PluginEntry = C4ConfigFile['plugins'][number];
