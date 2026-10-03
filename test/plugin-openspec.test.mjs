@@ -68,7 +68,8 @@ const makeStore = (dir, store = 'openspec') => {
     write(s, 'changes/archive/2026-08-01-dig-0-old/proposal.md', '## Why\n\nold\n');
     write(s, 'changes/archive/2026-08-01-dig-0-old/tasks.md', '- [x] a\n- [x] b\n');
     // спеки: одно- и двухуровневые; папка area с собственной spec.md (d2-диаграмма) и вложенными
-    write(s, 'specs/solo/spec.md', '## Purpose\n\nsolo spec\n');
+    // ```puml: плагин извлекает и его (в отличие от страниц проекта, где это «показать исходник»)
+    write(s, 'specs/solo/spec.md', '## Purpose\n\nsolo spec\n\n```puml\nAlice -> Bob\n```\n');
     write(s, 'specs/area/spec.md', '## Purpose\n\narea spec\n\n```d2\nx -> y\n```\n');
     write(s, 'specs/area/cap-a/spec.md', '## Purpose\n\ncap-a spec\n');
     write(s, 'specs/area/cap-b/spec.md', '## Purpose\n\ncap-b spec\n');
@@ -198,6 +199,9 @@ describe('плагин openspec', () => {
         expect(m).not.toBeNull();
         expect(read(`OpenSpec/Specs/area/${m[1]}.svg`)).toContain('<svg');
         expect(read('OpenSpec/Specs/Specs.md')).toContain('  - [cap-b](OpenSpec/Specs/area/cap-b/cap-b)');
+        const solo = read('OpenSpec/Specs/solo/solo.md');
+        expect(solo).not.toContain('```puml');
+        expect(solo).toMatch(/!\[diagram\]\(spec-solo-[0-9a-f]{8}\.svg\)/);
     });
 
     it('архив: сводка со ссылкой и страница', () => {

@@ -43,6 +43,18 @@ describe('createFenceExtractor', () => {
         expect(diagrams[0].soft).toBe(true);
     });
 
+    it('языки plantuml/puml/d2 (регистр не важен) извлекаются, прочие остаются кодом', () => {
+        const md =
+            '```PlantUML title\nA -> B\n```\n\n```puml\n@startuml\nC -> D\n@enduml\n```\n\n```text\nE\n```\n';
+        const { markdown, diagrams } = createFenceExtractor().extract(md, 'p');
+        expect(diagrams.map((d) => d.content)).toEqual([
+            '@startuml\nA -> B\n@enduml',
+            '@startuml\nC -> D\n@enduml'
+        ]);
+        expect(markdown).toMatch(/^!\[p-[0-9a-f]{8}\.puml\]\(p-[0-9a-f]{8}\.puml\)\n\n!\[p-/);
+        expect(markdown).toContain('```text\nE\n```');
+    });
+
     it('mapOutsideFences не трогает текст внутри блоков', () => {
         const md = 'a\n```js\na\n```\na';
         expect(mapOutsideFences(md, (t) => t.replace(/a/g, 'b'))).toBe('b\n```js\na\n```\nb');
