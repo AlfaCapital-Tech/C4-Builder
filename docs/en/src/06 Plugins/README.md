@@ -39,9 +39,10 @@ folder.
   artifact from `artifacts` — `proposal` by default, so the "why" is visible without an extra
   click. The remaining artifacts (`design`, `tasks`, then other `*.md` alphabetically) are
   subpages; spec deltas live under `specs/…` with the same folder layout.
-- ```` ```plantuml ```` and ```` ```d2 ```` blocks inside artifacts are rendered by the **local**
-  engines; nothing is sent to plantuml.com. The image name is derived from the block content, so
-  inserting or reordering blocks never picks up a neighbour's cached image.
+- ```` ```plantuml ````, ```` ```puml ```` and ```` ```d2 ```` blocks inside artifacts are
+  rendered by the **local** engines; nothing is sent to plantuml.com. The image name is derived
+  from the block content, so inserting or reordering blocks never picks up a neighbour's cached
+  image.
 - A block that fails to render does not fail the build: the page gets a placeholder and the
   build prints a warning naming the artifact file.
 - Relative links between artifacts point to their pages; files referenced by artifacts (images,
@@ -64,8 +65,8 @@ plus an index.
 - All `yaml`/`yml`/`json` files of the source are copied into `<mount>/_specs/…` keeping their
   layout, so relative `$ref`s (including shared schema files that do not match `glob`) keep
   resolving.
-- Pages load swagger-ui from the bundled files: no CDN, and readers need no access to the source
-  repository.
+- Pages load swagger-ui from the bundled files: no CDN, no external spec validator (the
+  `validator.swagger.io` badge is off), and readers need no access to the source repository.
 - The plugin turns `executeScript` on (and logs it) and adds `swagger-ui.css` and
   `swagger-ui-bundle.js` to `index.html`, so a custom `docsifyTemplate` needs no change.
 - The archive is downloaded once per process and reused in `-w` mode.
