@@ -20,7 +20,7 @@
 
 - [x] 4.1 `npm run test:golden:update`: осознанно переснять `index.html` и `vendor/vue.css` во всех вариантах (`default`, `links-top`, `embed-png`). Проверка: `git diff --stat test/golden` — меняются только эти файлы и их строки в `manifest.json`; страницы `.md`, `.svg`, `llms*.txt` без изменений (SVG-шум fontconfig на Arch не коммитить).
 - [x] 4.2 `test/offline-site.test.mjs` по design §6: скан `test/golden/default/tree` (`index.html`, `**/*.css`, `**/*.md`), исключение — значение `repo` в `$docsify`, в `.md` — только адреса в изображениях; сообщение называет файл и адрес. Проверка: тест зелёный; временная вставка `<script src="https://cdn.example/x.js">` во встроенный шаблон + `test:golden:update` даёт красный тест с `index.html` и адресом (откатить).
-- [ ] 4.3 Полный прогон: `npm run build`, `npm test`, `npm run check`, `openspec validate offline-site-assets --strict` — всё зелёное.
+- [x] 4.3 Полный прогон: `npm run build`, `npm test`, `npm run check`, `openspec validate offline-site-assets --strict` — всё зелёное.
 
 ## 5. Актуализация
 
