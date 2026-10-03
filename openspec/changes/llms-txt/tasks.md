@@ -2,10 +2,10 @@
 
 ## 1. Конфиг: ключ generateLLMS
 
-- [ ] 1.1 `defaultConfig.generateLLMS = true` (`config/defaults.ts`); в `config/schema.ts` ключ `generateLLMS: bool(false)` с комментарием «отсутствующий ключ = выкл: легаси-конфиги не меняют вывод» (см. design); `GENERATE_LLMS` в `BuildOptions` и маппинг в `getOptions` (`cli/dispatch.ts`). Проверка: тест в `test/config.test.mjs` — `configSchema.parse({})` даёт `generateLLMS: false`, `{generateLLMS: true}` → `true`, строка вместо булева → ошибка; `npm run test:unit` зелёный
-- [ ] 1.2 Wizard (`cli/wizard/collect.ts`): четвёртый пункт «llms.txt for AI agents (needs website)» в checkbox `Compilation format` с дефолтом `checkedKey(GENERATE_LLMS, defaultConfig.generateLLMS, 'generateLLMS')` и `conf.set('generateLLMS', …)`; в условие показа вопроса `GENERATE_LLMS` НЕ добавлять. Проверка: в temp-проекте с полным конфигом без `generateLLMS` запуск `node dist/index.js` не показывает wizard (тест по образцу `compose-h1.test.mjs`, spawn CLI с `generateLocalImages: false`)
-- [ ] 1.3 `--list` (`cli/commands/list.ts`) показывает `generateLLMS`, `--docs` (`cli/commands/help.ts`) описывает ключ одной строкой. Проверка: `node dist/index.js --list` и `--docs` в temp-проекте выводят ключ
-- [ ] 1.4 `new --yes` пишет `generateLLMS: true` (идёт из `defaultConfig` без правок `new.ts`). Проверка: `node dist/index.js --new --yes --name demo` в temp-каталоге → в `demo/.c4builder` есть `"generateLLMS": true`
+- [x] 1.1 `defaultConfig.generateLLMS = true` (`config/defaults.ts`); в `config/schema.ts` ключ `generateLLMS: bool(false)` с комментарием «отсутствующий ключ = выкл: легаси-конфиги не меняют вывод» (см. design); `GENERATE_LLMS` в `BuildOptions` и маппинг в `getOptions` (`cli/dispatch.ts`). Проверка: тест в `test/config.test.mjs` — `configSchema.parse({})` даёт `generateLLMS: false`, `{generateLLMS: true}` → `true`, строка вместо булева → ошибка; `npm run test:unit` зелёный
+- [x] 1.2 Wizard (`cli/wizard/collect.ts`): четвёртый пункт «llms.txt for AI agents (needs website)» в checkbox `Compilation format` с дефолтом `checkedKey(GENERATE_LLMS, defaultConfig.generateLLMS, 'generateLLMS')` и `conf.set('generateLLMS', …)`; в условие показа вопроса `GENERATE_LLMS` НЕ добавлять. Проверка: в temp-проекте с полным конфигом без `generateLLMS` запуск `node dist/index.js` не показывает wizard (тест по образцу `compose-h1.test.mjs`, spawn CLI с `generateLocalImages: false`)
+- [x] 1.3 `--list` (`cli/commands/list.ts`) показывает `generateLLMS`, `--docs` (`cli/commands/help.ts`) описывает ключ одной строкой. Проверка: `node dist/index.js --list` и `--docs` в temp-проекте выводят ключ
+- [x] 1.4 `new --yes` пишет `generateLLMS: true` (идёт из `defaultConfig` без правок `new.ts`). Проверка: `node dist/index.js --new --yes --name demo` в temp-каталоге → в `demo/.c4builder` есть `"generateLLMS": true`
 
 ## 2. Единый резолвер зависимостей диаграмм
 
