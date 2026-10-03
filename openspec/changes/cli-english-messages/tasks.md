@@ -27,4 +27,4 @@
 
 ## 6. Интеграция
 
-- [ ] 6.1 `npm run build`, `npm test` (golden — эталоны без изменений), `npm run check`, `openspec validate cli-english-messages --strict` — всё зелёное
+- [x] 6.1 `npm run build`, `npm test` (golden — эталоны без изменений), `npm run check`, `openspec validate cli-english-messages --strict` — всё зелёное

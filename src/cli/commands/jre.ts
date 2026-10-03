@@ -32,14 +32,13 @@ export default async (args: string[] = [], { force = false }: { force?: boolean 
             const sys = detectSystemJava();
             if (sys) {
                 console.log(chalk.green(`system java is suitable (v${sys.major}): ${sys.path}`));
-                console.log(
-                    chalk.gray('no download needed — to force it: c4builder jre install --force')
-                );
+                console.log(chalk.gray('no download needed — to force it: c4builder jre install --force'));
                 return;
             }
         }
         const resolved = await resolveJava({ force, log: (m) => console.log(chalk.gray(m)) });
-        const from = resolved.source === 'download' ? `Temurin ${TEMURIN_FEATURE}, downloaded` : resolved.source;
+        const from =
+            resolved.source === 'download' ? `Temurin ${TEMURIN_FEATURE}, downloaded` : resolved.source;
         console.log(chalk.green(`JRE ready (${from}): ${resolved.path}`));
     } catch (e) {
         console.log(chalk.red((e as Error).message));
