@@ -267,6 +267,27 @@ By going to the github repository settings and enabling GitHub pages the site be
 
 ![github](docs/images/githubpages.gif)
 
+### llms.txt for AI agents
+
+With `"generateLLMS": true` the site gets two more files in its root, following
+[llmstxt.org](https://llmstxt.org/):
+
+- `llms.txt` — the entry point: project name, a short description and a flat list of pages
+  `- [System / Container](System/Container/Container.md)` in sidebar order (folders from
+  `excludeSidebarFolderByPath` are left out, plugin pages such as `openspec` are included).
+  Links are relative to the site root.
+- `llms-full.txt` — the full text of all pages, in the same order as the single markdown file.
+  Every diagram is inserted as its **source** in a ```` ```plantuml ```` / ```` ```d2 ```` block
+  instead of an image, regardless of `diagramFormat`, `embedDiagram` and `includeLinkToDiagram`.
+  Local `!include` files and D2 imports (nested ones too) are listed once in the
+  `## Included files` appendix at the end; `!include <C4/...>` (stdlib) and URL includes stay
+  as lines in the diagram source.
+
+The files need the website (`generateWEB`): without it the build prints a warning and skips
+them. New projects (`c4builder --new`, the wizard option «llms.txt for AI agents») have it on;
+an existing `.c4builder` without the key builds exactly as before — enable it with
+`c4builder --config` or by adding `"generateLLMS": true`.
+
 ### Generate diagrams locally
 
 By default this option is disabled. The output will contain image files generated using the plantuml server.
@@ -475,6 +496,13 @@ git push --follow-tags
 Publishes to dist-tag `latest`.
 
 # Change log
+
+## Unreleased
+
+- `llms.txt` / `llms-full.txt` for AI agents (`generateLLMS`, needs the website): a page index in
+  sidebar order and the full text with diagram sources instead of images, local includes listed
+  once in an appendix. On for new projects; an existing `.c4builder` without the key builds as
+  before (see «llms.txt for AI agents»)
 
 ## v0.4.0
 

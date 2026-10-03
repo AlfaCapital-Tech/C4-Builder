@@ -2,7 +2,7 @@ import chalk from 'chalk';
 import path from 'node:path';
 import fsextra from 'fs-extra';
 
-import { makeDirectory, writeOnSameLine } from '../util/utils.ts';
+import { makeDirectory, writeFile, writeOnSameLine } from '../util/utils.ts';
 // clearD2FileCache: сброс кеша графа D2-импортов на границах сборки (сам webworker
 // D2 гасит CLI после одиночной сборки — в watch-режиме он переживает ребилды).
 import { clearD2FileCache } from './render/d2renderer.ts';
@@ -10,7 +10,14 @@ import { type BuildOptions, DIST_BACKUP_FOLDER_SUFFIX } from '../config/options.
 // Фазы сборки: scan (дерево исходников) → render (диаграммы) → compose (markdown/сайт).
 import { generateTree, engineSupportsRemote, clearIncludeCache } from './scan/tree.ts';
 import { generateImages, type CacheConf } from './render/diagrams.ts';
-import { generateMD, generateWebMD, generateCompleteMD, clearDiagramCache } from './compose/markdown.ts';
+import {
+    generateMD,
+    generateWebMD,
+    generateCompleteMD,
+    generateLlmsTxt,
+    generateLlmsFull,
+    clearDiagramCache
+} from './compose/markdown.ts';
 // Плагины: хуки afterScan (виртуальные страницы) / afterBuild и ассеты сайта.
 // Загружены заранее в cli/dispatch и приходят третьим аргументом (как cacheConf).
 import { runAfterScan, runAfterBuild } from './plugins/hooks.ts';
@@ -98,6 +105,17 @@ const build = async (
             console.log(chalk.blue('generating docsify site'));
             await generateWebMD(tree, options);
             await injectPluginAssets(plugins, options);
+        }
+        // llms.txt ссылается на .md страниц сайта — без website ссылаться не на что.
+        if (options.GENERATE_LLMS && options.GENERATE_WEBSITE) {
+            console.log(chalk.blue('generating llms.txt'));
+            await writeFile(path.join(options.DIST_FOLDER, 'llms.txt'), generateLlmsTxt(tree, options));
+            await writeFile(
+                path.join(options.DIST_FOLDER, 'llms-full.txt'),
+                await generateLlmsFull(tree, options)
+            );
+        } else if (options.GENERATE_LLMS) {
+            console.log(chalk.yellow('generateLLMS требует generateWEB — llms.txt не создан'));
         }
         if (options.GENERATE_COMPLETE_MD_FILE) {
             console.log(chalk.blue('generating complete markdown file'));
