@@ -40,9 +40,69 @@ agent's last step or a CI step.
 - **Sources stay inside.** Architecture often contains things that do not belong on someone
   else's server; local rendering rules that out.
 
+## Agent skills
+
+c4builder ships [Agent Skills](https://agentskills.io) for Claude Code, Codex, Cursor and the other
+agents supported by the [`skills`](https://github.com/vercel-labs/skills) CLI. The skills live in
+the `skills/` folder of the repository (they are not part of the npm package) and describe the
+latest stable release, so their commands use the flags: `--new`, `--config`.
+
+```bash
+npx skills add AlfaCapital-Tech/C4-Builder/skills                    # both skills into the current project
+npx skills add AlfaCapital-Tech/C4-Builder/skills --skill c4builder  # just one
+```
+
+`-g` installs the skills for the user instead of the project. The `/skills` path in the command
+matters: without it the CLI also picks up the internal development skills of c4builder itself
+from `.claude/skills/`.
+
+| Skill | Use it for |
+|---|---|
+| `c4builder` | working on a project: layout of `src/` and `.c4builder`, the edit → `c4builder check` → build loop, C4-PlantUML conventions (stdlib includes, shared `.iuml`, offline rendering), D2, the `openspec` and `openapi` plugins, `llms.txt` |
+| `c4builder-setup` | install and update (npm channels `latest` and `rc`, the Docker image), Java or the downloaded JRE, a smoke build of the template project |
+
+## AGENTS.md in a new project
+
+Since version 0.5.0, `c4builder --new` puts an `AGENTS.md` into the project: build and check
+commands, the workflow, the project layout, diagram conventions and the skills install command.
+Codex, Cursor and Claude Code read it. The file sits next to `src/`, not inside it, and does not
+end up in the documentation.
+
+## llms.txt: architecture an agent can read
+
+With `"generateLLMS": true` (since version 0.5.0, needs `generateWEB`) the site root gets two more
+files following [llmstxt.org](https://llmstxt.org/):
+
+- **`llms.txt`** — the entry point: the project name, a short description and a flat list of pages
+  in sidebar order, like `- [System / Container](System/Container/Container.md)`. Folders from
+  `excludeSidebarFolderByPath` are left out, plugin pages (such as `openspec`) are included. Links
+  are relative to the site root.
+- **`llms-full.txt`** — the full text of all pages in one file, in the same order as the single
+  markdown file. Every diagram is inserted as its **source** in a `plantuml` or `d2` block instead
+  of an image, regardless of `diagramFormat`, `embedDiagram` and `includeLinkToDiagram`. Local
+  `!include` files and D2 imports (nested ones too) are listed once in the `## Included files`
+  appendix at the end; stdlib includes `!include <C4/...>` and URL includes stay as lines in the
+  diagram source.
+
+The source is more useful than a picture: C4-PlantUML text (`Person`, `System`, `Rel`) is a
+ready-made model, while an SVG link gives an agent nothing. To answer "what does service X depend
+on", an agent can read `llms-full.txt` instead of crawling pages.
+
+Without the site the build prints a warning and skips the files. New projects have the key on; an
+existing `.c4builder` without the key builds as before — enable it with `c4builder --config` or by
+adding `"generateLLMS": true` to the config.
+
+Files of this site:
+
+| | Russian version | English version |
+|---|---|---|
+| Index | [ru/llms.txt](https://alfacapital-tech.github.io/C4-Builder/ru/llms.txt) | [en/llms.txt](https://alfacapital-tech.github.io/C4-Builder/en/llms.txt) |
+| Full text | [ru/llms-full.txt](https://alfacapital-tech.github.io/C4-Builder/ru/llms-full.txt) | [en/llms-full.txt](https://alfacapital-tech.github.io/C4-Builder/en/llms-full.txt) |
+
 ## Hints for agent instructions
 
-What to put into `AGENTS.md` or `CLAUDE.md` of a project with a C4 model:
+A project created before 0.5.0 has no `AGENTS.md`. What to put into `AGENTS.md` or `CLAUDE.md` of
+such a project:
 
 - after editing a diagram — `c4builder check <file>`, fix until exit code 0;
 - include C4 through the stdlib (`!include <C4/C4_Container>`), shared styles with

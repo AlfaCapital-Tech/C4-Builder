@@ -21,6 +21,12 @@ and the plugins sit in `vendor/` next to `index.html`, diagrams are ready-made S
 This site is an example of such an output: see [Docker & CI](07%20Docker%20and%20CI/07%20Docker%20and%20CI.md)
 for how it is built.
 
+## llms.txt for agents
+
+`generateLLMS: true` (since 0.5.0, needs the site) puts `llms.txt` — an index of links to the pages'
+`.md` files — and `llms-full.txt` — the full text with diagrams inserted as source — into the site
+root. Details are on the [Agents](08%20Agents/08%20Agents.md) page.
+
 ## Markdown per folder
 
 `generateMD: true` (default). Each output folder gets a `README.md` with all the text and

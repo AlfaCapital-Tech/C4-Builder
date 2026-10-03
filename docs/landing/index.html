@@ -81,12 +81,35 @@ built in 1.9 seconds</code></pre>
     </section>
 
     <section class="wrap">
+        <h2>Для агентов</h2>
+        <div class="split">
+            <div>
+                <h3>Скиллы</h3>
+                <p>Как устроен проект, цикл правка → <code>check</code> → сборка, конвенции C4-PlantUML,
+                    установка и диагностика — в двух скиллах для Claude Code, Codex, Cursor и других
+                    агентов. В новом проекте агента встречает <code>AGENTS.md</code>.</p>
+                <pre><code>npx skills add AlfaCapital-Tech/C4-Builder/skills</code></pre>
+            </div>
+            <div>
+                <h3>llms.txt</h3>
+                <p>Сайт отдаёт оглавление для агентов и весь текст одним файлом, где диаграммы
+                    вставлены исходниками PlantUML: модель читается напрямую, без картинок.</p>
+                <ul class="links">
+                    <li><a href="ru/llms.txt">llms.txt</a><span>Оглавление со ссылками на страницы</span></li>
+                    <li><a href="ru/llms-full.txt">llms-full.txt</a><span>Полный текст с исходниками диаграмм</span></li>
+                </ul>
+            </div>
+        </div>
+        <p class="note">Подробнее — на странице <a href="ru/#/08%20Агенты/08%20Агенты">«Агенты»</a>.</p>
+    </section>
+
+    <section class="wrap">
         <h2>Быстрый старт</h2>
         <div class="split install">
             <div>
                 <h3>npm</h3>
                 <pre><code>npm i -g @alfacapital-tech/c4builder
-c4builder new --name demo -y
+c4builder --new --name demo -y
 cd demo
 c4builder --site -w</code></pre>
                 <p class="note">Node.js 20.19+. Java 17+ по желанию: если её нет, c4builder скачает

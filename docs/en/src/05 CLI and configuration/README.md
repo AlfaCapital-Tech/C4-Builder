@@ -5,9 +5,9 @@
 | Command | What it does |
 |---|---|
 | `c4builder` | builds the project in the current folder; without a config it runs the wizard first |
-| `c4builder new` | creates a project from the template in a new folder (same as `--new`) |
-| `c4builder new --name demo -y` | the same without questions: a full config with default values |
-| `c4builder config` | setup wizard with the current values (same as `--config`) |
+| `c4builder --new` | creates a project from the template in a new folder; since 0.5.0 also `c4builder new` |
+| `c4builder --new --name demo -y` | the same without questions: a full config with default values |
+| `c4builder --config` | setup wizard with the current values; since 0.5.0 also `c4builder config` |
 | `c4builder site` | builds and serves the site locally (same as `--site`) |
 | `c4builder --site -w` | the same, rebuilding on every save and reloading the browser |
 | `c4builder check <files...>` | checks `.puml`, `.iuml`, `.d2` diagrams without a build, exit code 0 or 1 |
@@ -16,6 +16,10 @@
 | `c4builder --list` | print the current config |
 | `c4builder --reset` | clear the project config |
 | `c4builder --docs` | short reference of config keys and the address of this documentation |
+
+Positional commands are `check`, `jre`, `site`, and since 0.5.0 also `new` and `config`. Since
+0.5.0 any other positional argument is an `unknown command` error with exit code 1: a typo
+(`c4builder nwe`) no longer starts a build.
 
 Flags:
 
@@ -35,7 +39,7 @@ wizard and sets `hasRun: true`; after that, `c4builder` builds without questions
 a full config right away, so there is no wizard at all.
 
 Keys are validated against a schema. A value of the wrong type stops the build with an error
-naming the key, and `c4builder config` lets you fix it. Unknown keys are silently dropped — this
+naming the key, and `c4builder --config` lets you fix it. Unknown keys are silently dropped — this
 way an older c4builder does not fail on a config written by a newer one. Keys of features removed
 in older versions produce a warning listing them, and the build continues.
 
@@ -50,6 +54,7 @@ in older versions produce a warning listing them, and the build continues.
 | `generateWEB` | `true` | docsify site |
 | `generateMD` | `true` | markdown per folder |
 | `generateCompleteMD` | `false` | single `<projectName>.md` file |
+| `generateLLMS` | `true` in new projects, off when absent | `llms.txt` and `llms-full.txt` for agents, needs `generateWEB` (since 0.5.0) |
 | `includeTableOfContents` | `true` | page tree at the top of each markdown file |
 | `includeNavigation` | `false` | links to the parent and child pages in markdown |
 | `includeBreadcrumbs` | `true` | page path under the title |

@@ -37,14 +37,14 @@ Requires Node.js ≥ 20.19. Java 17+ is optional.
 ```bash
 npm i -g @alfacapital-tech/c4builder
 
-c4builder new --name demo -y     # project from the template, full config, no prompts
+c4builder --new --name demo -y   # project from the template, full config, no prompts
 cd demo
 c4builder                        # build into docs/
 c4builder --site -w              # live preview at http://localhost:3000
 ```
 
-`c4builder new` and `c4builder config` are the same as the `--new` and `--config` flags.
-Without `-y`, `new` asks for the project name and the first build runs the setup wizard.
+Since 0.5.0, `c4builder new` and `c4builder config` work too (0.4.0 has only the flags).
+Without `-y`, c4builder asks for the project name and the first build runs the setup wizard.
 
 The agent loop — edit a diagram, check it, look at the result:
 
@@ -52,6 +52,9 @@ The agent loop — edit a diagram, check it, look at the result:
 c4builder check src/context.puml   # exit code 0 or 1, "✗ file: строка N: message" on error
 c4builder --site -w                # rebuilds and reloads the browser on every save
 ```
+
+For agents: `npx skills add AlfaCapital-Tech/C4-Builder/skills` installs the skills, and
+`"generateLLMS": true` adds `llms.txt` / `llms-full.txt` (diagram sources included) to the site.
 
 Or with Docker (Node, JRE, PlantUML, fonts and D2 included):
 

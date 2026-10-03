@@ -25,20 +25,22 @@ If you would rather not install Node and Java, use the
 ## First project
 
 ```bash
-c4builder new --name demo -y   # project from the template with a full config, no questions
+c4builder --new --name demo -y # project from the template with a full config, no questions
 cd demo
 c4builder                      # build into docs/
 c4builder site                 # site at http://localhost:3000
 ```
 
-Without `-y`, `new` asks for the project name, and the first build walks you through the setup
-wizard. The `--new` flag is the same as `new`.
+Without `-y`, c4builder asks for the project name, and the first build walks you through the
+setup wizard. Since version 0.5.0 the shorter `c4builder new --name demo -y` works too; 0.4.0 has
+no positional form, only the `--new` flag.
 
 The new project contains the "Internet Banking System" demo from the C4 model: context,
 containers, deployment, a dynamic diagram, sequence, class and ditaa diagrams, a page in Cyrillic
 and a D2 example. All C4 diagrams include the library through the stdlib
 (`!include <C4/C4_Container>`): C4-PlantUML is built into the jar, so the build needs no
-internet.
+internet. Next to `src/` there is `AGENTS.md` — instructions for AI agents on building and checking
+the diagrams (since 0.5.0; it does not end up in the documentation).
 
 ## Live preview
 
@@ -52,7 +54,8 @@ changes the port.
 
 ## Changing the settings
 
-`c4builder config` (or `--config`) runs the wizard again with the current values as defaults;
+`c4builder --config` (since 0.5.0 also `c4builder config`) runs the wizard again with the
+current values as defaults;
 `c4builder --list` prints the config. `.c4builder` is plain JSON and can be edited by hand: every
 key is described on the [CLI & configuration](05%20CLI%20and%20configuration/05%20CLI%20and%20configuration.md)
 page.

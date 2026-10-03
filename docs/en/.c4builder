@@ -6,6 +6,7 @@
 	"generateMD": false,
 	"generateCompleteMD": false,
 	"generateWEB": true,
+	"generateLLMS": true,
 	"includeNavigation": false,
 	"includeTableOfContents": false,
 	"webTheme": "vendor/vue.css",
