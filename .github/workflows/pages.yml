@@ -58,9 +58,11 @@ jobs:
         with:
           path: _site
 
+  # Публикация — только когда Pages включены в репо (переменная PAGES_ENABLED=true):
+  # создание Pages в организации ограничено админами, без этого deploy краснил бы master.
   deploy:
     needs: build
-    if: github.ref == 'refs/heads/master' && github.event_name != 'pull_request'
+    if: github.ref == 'refs/heads/master' && github.event_name != 'pull_request' && vars.PAGES_ENABLED == 'true'
     runs-on: ubuntu-24.04
     permissions:
       pages: write
