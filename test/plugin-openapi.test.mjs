@@ -99,10 +99,15 @@ describe('плагин openapi', () => {
     });
 
     it("dir '.' (источник — предок dist): повторная сборка не видит свои копии спек", () => {
-        const d = makeFixture('self', [['openapi', { dir: '.', glob: 'contracts/*/openapi.yaml' }]]);
+        const d = makeFixture('self', [['openapi', { dir: '.', glob: '**/openapi.yaml' }]]);
+        // Тёзка выходного каталога глубже в источнике — не выходной каталог.
+        write(d, 'contracts/docs/openapi.yaml', 'openapi: 3.0.0\n');
         runBuild(d);
+        // Без отсева docs_bk вторая сборка нашла бы копию finch — коллизия имён страниц.
         runBuild(d);
         expect(fs.existsSync(path.join(d, 'docs/API/finch/finch.md'))).toBe(true);
+        expect(fs.existsSync(path.join(d, 'docs/API/docs/docs.md'))).toBe(true);
+        expect(fs.existsSync(path.join(d, 'docs/API/_specs/docs_bk'))).toBe(false);
         fs.rmSync(d, { recursive: true, force: true });
     });
 });

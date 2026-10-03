@@ -7,9 +7,9 @@
 
 ## 2. `fs.globSync` вместо `src/util/glob.ts`
 
-- [ ] 2.1 `src/plugins/openapi/index.ts`: оба вызова `globFiles` заменить на `fs.globSync(pattern, { cwd: root, exclude })` по design §2–3 (функция `exclude` — `.git`, `node_modules`, абсолютные `outputDirs`; пути → posix, `.sort()`). Проверка: `npm run build`; существующие тесты плагина `openapi` зелёные
-- [ ] 2.2 Удалить `src/util/glob.ts`, экспорт из `test/dist.mjs` и юнит-тесты `globFiles`/`globToRegExp` в `test/plugins-source.test.mjs`; при отсутствии в тестах плагина `openapi` кейса «выходной каталог внутри источника (`dir: '.'`) не считается источником» — добавить его. Проверка: `grep -rn "util/glob\|globFiles\|globToRegExp" src test` пусто; `npm run test:unit` зелёный; новый кейс падает, если убрать `outputDirs` из `exclude`
-- [ ] 2.3 Строка в `CHANGELOG.md`: спеки `openapi` в каталогах, начинающихся с точки, больше не находятся (design, риски). Проверка: ревью глазами
+- [x] 2.1 `src/plugins/openapi/index.ts`: оба вызова `globFiles` заменить на `fs.globSync(pattern, { cwd: root, exclude })` по design §2–3 (функция `exclude` — `.git`, `node_modules`, абсолютные `outputDirs`; пути → posix, `.sort()`). Проверка: `npm run build`; существующие тесты плагина `openapi` зелёные
+- [x] 2.2 Удалить `src/util/glob.ts`, экспорт из `test/dist.mjs` и юнит-тесты `globFiles`/`globToRegExp` в `test/plugins-source.test.mjs`; при отсутствии в тестах плагина `openapi` кейса «выходной каталог внутри источника (`dir: '.'`) не считается источником» — добавить его. Проверка: `grep -rn "util/glob\|globFiles\|globToRegExp" src test` пусто; `npm run test:unit` зелёный; новый кейс падает, если убрать `outputDirs` из `exclude`
+- [x] 2.3 Строка в `CHANGELOG.md`: спеки `openapi` в каталогах, начинающихся с точки, больше не находятся (design, риски). Проверка: ревью глазами
 
 ## 3. Актуализация
 
