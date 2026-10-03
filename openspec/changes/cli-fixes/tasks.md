@@ -2,8 +2,8 @@
 
 ## 1. `check`: `.iuml` с C4 и английский вывод
 
-- [ ] 1.1 Тест сначала (`test/check.test.mjs`): фикстура `c4-styles.iuml` (`skinparam` + `UpdateElementStyle("person", $bgColor="#000")`) → `✓`, код 0; ожидание `строка 3` → `line 3`; `неизвестное расширение` → `unsupported extension`; без аргументов — stdout содержит `usage: c4builder check`. Проверка: `npm run build && npx vitest run test/check.test.mjs` — новые ожидания красные на текущем коде.
-- [ ] 1.2 `src/cli/commands/check.ts` по design §1–2: для `.iuml` при ошибке движка повтор с обёрткой `!include <C4/C4_Dynamic>` + `!include <C4/C4_Deployment>` перед файлом, ошибка — от повтора; сообщения `line N`, `usage: …`, `unsupported extension (…)`; комментарий про повтор — почему (контекст C4 задаёт потребитель). Проверка: `npx vitest run test/check.test.mjs` зелёный, включая существующий кейс `bad.iuml` → `Error in function definition`; `node dist/index.js check template/src/styles.iuml` → `✓`, код 0.
+- [x] 1.1 Тест сначала (`test/check.test.mjs`): фикстура `c4-styles.iuml` (`skinparam` + `UpdateElementStyle("person", $bgColor="#000")`) → `✓`, код 0; ожидание `строка 3` → `line 3`; `неизвестное расширение` → `unsupported extension`; без аргументов — stdout содержит `usage: c4builder check`. Проверка: `npm run build && npx vitest run test/check.test.mjs` — новые ожидания красные на текущем коде.
+- [x] 1.2 `src/cli/commands/check.ts` по design §1–2: для `.iuml` при ошибке движка повтор с обёрткой `!include <C4/C4_Dynamic>` + `!include <C4/C4_Deployment>` перед файлом, ошибка — от повтора; сообщения `line N`, `usage: …`, `unsupported extension (…)`; комментарий про повтор — почему (контекст C4 задаёт потребитель). Проверка: `npx vitest run test/check.test.mjs` зелёный, включая существующий кейс `bad.iuml` → `Error in function definition`; `node dist/index.js check template/src/styles.iuml` → `✓`, код 0.
 
 ## 2. Справочные команды без побочных эффектов
 

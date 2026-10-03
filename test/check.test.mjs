@@ -22,6 +22,8 @@ beforeAll(() => {
     write('bad.puml', '@startuml\nAlice -> Bob : hi\nfoo bar baz\n@enduml\n');
     write('lib.iuml', '!procedure $x()\nAlice -> Bob\n!endprocedure\n');
     write('bad.iuml', '!procedure $x(\nAlice -> Bob\n');
+    // Стили на макросах C4 без своего @startuml — контекст C4 задаёт подключающая диаграмма.
+    write('c4-styles.iuml', 'skinparam shadowing false\nUpdateElementStyle("person", $bgColor="#000")\n');
     write('uses-lib.puml', '@startuml\n!include lib.iuml\n$x()\n@enduml\n');
     write('ok.d2', 'a -> b\n');
     write('bad.d2', 'a -> \n');
@@ -43,8 +45,14 @@ describe('c4builder check', () => {
     it('битый .puml → код 1, файл и строка ошибки движка', () => {
         const res = check('ok.puml', 'bad.puml');
         expect(res.status).toBe(1);
-        expect(res.stderr).toMatch(/✗ bad\.puml: строка 3: Syntax Error/);
+        expect(res.stderr).toMatch(/✗ bad\.puml: line 3: Syntax Error/);
         expect(res.stdout).toMatch(/✓ ok\.puml/); // остальные файлы всё равно проверены
+    });
+
+    it('.iuml с макросами C4 → проверяется в контексте C4-stdlib, код 0', () => {
+        const res = check('c4-styles.iuml');
+        expect(res.status, res.stderr).toBe(0);
+        expect(res.stdout).toMatch(/✓ c4-styles\.iuml/);
     });
 
     it('битый .iuml → ошибка без строки (позиция относится к обёртке)', () => {
@@ -62,8 +70,10 @@ describe('c4builder check', () => {
     it('неизвестное расширение / отсутствующий файл / без аргументов → код 1', () => {
         const res = check('what.txt', 'missing.puml');
         expect(res.status).toBe(1);
-        expect(res.stderr).toMatch(/✗ what\.txt: неизвестное расширение/);
+        expect(res.stderr).toMatch(/✗ what\.txt: unsupported extension \(expected \.puml, \.iuml or \.d2\)/);
         expect(res.stderr).toMatch(/✗ missing\.puml: ENOENT/);
-        expect(check().status).toBe(1);
+        const usage = check();
+        expect(usage.status).toBe(1);
+        expect(usage.stdout).toMatch(/usage: c4builder check/);
     });
 });
