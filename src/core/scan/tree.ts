@@ -4,6 +4,7 @@ import fsextra from 'fs-extra';
 
 import { makeDirectory, readFile } from '../../util/utils.ts';
 import type { BuildOptions } from '../../config/options.ts';
+import { createFenceExtractor } from './fences.ts';
 
 // Границы фазы scan: дерево исходников и его элементы-диаграммы. Тип дерева —
 // публичный контракт, на который опираются render/compose и будущие юнит-тесты.
@@ -118,10 +119,29 @@ export const generateTree = async (dir: string, options: BuildOptions): Promise<
             }
         }
 
+        // Блоки ```plantuml в страницах рендерим при сборке: иначе текст диаграммы доезжал
+        // до браузера и клиентский docsify-plantuml (в т.ч. в пользовательских шаблонах)
+        // отправлял его на plantuml.com. puml/d2 остаются кодом — так показывают исходник.
+        const fences = createFenceExtractor(['plantuml']);
         const mdFiles = files.filter((x) => path.extname(x).toLowerCase() === '.md');
         for (const mdFile of mdFiles) {
-            const fileContents = await readFile(path.join(dir, mdFile));
-            item.mdFiles.push(fileContents);
+            const mdPath = path.join(dir, mdFile);
+            const { markdown, diagrams } = fences.extract(
+                (await readFile(mdPath)).toString(),
+                path.parse(mdFile).name,
+                path.relative(process.cwd(), mdPath).split(path.sep).join('/')
+            );
+            item.mdFiles.push(markdown);
+            for (const d of diagrams)
+                item.diagrams.push({
+                    dir: d.file,
+                    ext: '.puml',
+                    engine: 'plantuml',
+                    content: d.content,
+                    isDitaa: /@startditaa/i.test(d.content),
+                    source: d.source,
+                    soft: d.soft
+                });
         }
         // Диаграммы: расширение → движок берём из DIAGRAM_ENGINES. Поле dir — имя файла
         // (историческое), engine выбирает рендерер, isDitaa — только для PlantUML.
