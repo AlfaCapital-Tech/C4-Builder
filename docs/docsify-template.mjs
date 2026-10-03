@@ -14,7 +14,9 @@ const theme = () =>
 
 export default (options) => {
     const lang = path.basename(process.cwd());
-    const config = { ...options, nameLink: '../', noEmoji: true, themeColor: '#c2410c' };
+    // Название в sidebar ведёт на лендинг своего языка (в _site: ../ — RU, ../en.html — EN).
+    const nameLink = lang === 'en' ? '../en.html' : '../';
+    const config = { ...options, nameLink, noEmoji: true, themeColor: '#1168bd' };
     return `<!DOCTYPE html>
 <html lang="${lang}">
 <head>

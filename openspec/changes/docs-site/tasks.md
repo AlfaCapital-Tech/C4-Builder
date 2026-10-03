@@ -19,7 +19,7 @@
 
 ## 4. Лендинг
 
-- [ ] 4.1 Создать `docs/landing/index.html` (RU), `docs/landing/en.html` (EN), `docs/landing/landing.css` по design D3: позиционирование, агентский цикл, quickstart (npm, docker), «отличия от upstream», ссылки на `ru/`, `en/` и вторую языковую версию лендинга, credits upstream и MIT; без JS и внешних ресурсов; токены цветов в `:root` и тёмная тема через `prefers-color-scheme`. Проверка: `grep -nE '<(script|link)[^>]+(src|href)="https?://' docs/landing/*` пусто; страница без горизонтального скролла на ширине 360px (devtools); ссылки `ru/`, `en/`, `en.html`/`index.html` работают в собранном `_site/` (задача 5.1).
+- [x] 4.1 Создать `docs/landing/index.html` (RU), `docs/landing/en.html` (EN), `docs/landing/landing.css` по design D3: позиционирование, агентский цикл, quickstart (npm, docker), «отличия от upstream», ссылки на `ru/`, `en/` и вторую языковую версию лендинга, credits upstream и MIT; без JS и внешних ресурсов; токены цветов в `:root` и тёмная тема через `prefers-color-scheme`. Проверка: `grep -nE '<(script|link)[^>]+(src|href)="https?://' docs/landing/*` пусто; страница без горизонтального скролла на ширине 360px (devtools); ссылки `ru/`, `en/`, `en.html`/`index.html` работают в собранном `_site/` (задача 5.1).
 
 ## 5. Публикация
 

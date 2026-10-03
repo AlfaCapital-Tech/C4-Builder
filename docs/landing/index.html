@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>C4-Builder — архитектура как код для людей и агентов</title>
+    <meta name="description" content="C4-Builder собирает markdown и диаграммы PlantUML/D2 в сайт документации. Локальный детерминированный рендер, проверка диаграмм для агентов, плагины OpenSpec и OpenAPI.">
+    <link rel="alternate" hreflang="en" href="en.html">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='2' fill='%231168bd'/%3E%3C/svg%3E">
+    <link rel="stylesheet" href="landing.css">
+</head>
+<body>
+<header class="wrap top">
+    <a class="mark" href="./">C4-Builder</a>
+    <nav aria-label="Основная навигация">
+        <a href="ru/">Документация</a>
+        <a href="en.html" hreflang="en" lang="en">English</a>
+        <a href="https://github.com/AlfaCapital-Tech/C4-Builder">GitHub</a>
+    </nav>
+</header>
+
+<main>
+    <div class="wrap diagram" role="group" aria-label="C4-диаграмма контекста C4-Builder">
+        <div class="box person">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="7" r="5"/><path d="M2 23c0-6 4.5-10 10-10s10 4 10 10z"/></svg>
+            <div>
+                <span class="name">Разработчик или AI-агент</span>
+                <span class="kind">[Person]</span>
+                <p>Пишет markdown и диаграммы PlantUML или D2 и хранит их в git рядом с кодом.</p>
+            </div>
+        </div>
+
+        <div class="rel"><b>Правит модель и проверяет каждую правку</b><code>[c4builder check]</code></div>
+
+        <div class="box system">
+            <span class="name">C4-Builder</span>
+            <span class="kind">[CLI, поддерживаемый форк]</span>
+            <h1>Архитектура как код, которую агент пишет, проверяет и читает</h1>
+            <p class="lead">Собирает папку markdown и диаграмм в сайт документации. Рендер локальный
+                и детерминированный, проверка диаграммы занимает секунды, плагины публикуют спеки
+                OpenSpec и контракты OpenAPI рядом с C4-моделью.</p>
+            <pre><code>npm i -g @alfacapital-tech/c4builder</code></pre>
+        </div>
+
+        <div class="rel"><b>Собирает</b><code>[c4builder --site -w]</code></div>
+
+        <div class="outputs">
+            <a class="box" href="ru/">
+                <span class="name">Документация</span>
+                <span class="kind">[сайт на docsify]</span>
+                <p>Этот сайт собран c4builder из папки <code>docs/</code> репозитория.</p>
+            </a>
+            <a class="box" href="ru/#/Журнал%20решений/Журнал%20решений">
+                <span class="name">Журнал решений</span>
+                <span class="kind">[плагин openspec]</span>
+                <p>Спеки и change'и проекта: почему c4builder устроен именно так.</p>
+            </a>
+        </div>
+    </div>
+
+    <section class="wrap">
+        <h2>Агент проверяет себя сам</h2>
+        <div class="split">
+            <ol class="steps">
+                <li><strong>Правка.</strong> Агент меняет <code>.puml</code> или <code>.md</code> в
+                    <code>src/</code>: добавляет контейнер, связь, страницу.</li>
+                <li><strong>Проверка.</strong> <code>c4builder check</code> рендерит диаграмму тем же
+                    движком, что и сборка, и возвращает код выхода и номер строки с ошибкой. Без сети
+                    и без человека.</li>
+                <li><strong>Сборка.</strong> <code>c4builder --site -w</code> пересобирает сайт на
+                    каждое сохранение, и человек видит результат в браузере.</li>
+            </ol>
+            <pre class="term" aria-label="Пример сессии в терминале"><code><span class="p">$ </span>c4builder check src/context.puml
+<span class="err">✗ src/context.puml: строка 12: Fatal parsing error</span>
+<span class="p">$ </span>c4builder check src/context.puml
+<span class="ok">✓ src/context.puml</span>
+<span class="p">$ </span>c4builder
+built in 1.9 seconds</code></pre>
+        </div>
+        <p class="note">Подробнее — на странице <a href="ru/#/08%20Агенты/08%20Агенты">«Агенты»</a>.</p>
+    </section>
+
+    <section class="wrap">
+        <h2>Быстрый старт</h2>
+        <div class="split install">
+            <div>
+                <h3>npm</h3>
+                <pre><code>npm i -g @alfacapital-tech/c4builder
+c4builder new --name demo -y
+cd demo
+c4builder --site -w</code></pre>
+                <p class="note">Node.js 20.19+. Java 17+ по желанию: если её нет, c4builder скачает
+                    JRE сам. Graphviz не нужен.</p>
+            </div>
+            <div>
+                <h3>Docker</h3>
+                <pre><code>docker run --rm -v "$PWD:/pwd" \
+  ghcr.io/alfacapital-tech/c4builder:latest \
+  c4builder</code></pre>
+                <p class="note">В образе Node, JRE, PlantUML, шрифты и D2. Его же можно взять
+                    образом job'а в CI.</p>
+            </div>
+        </div>
+    </section>
+
+    <section class="wrap">
+        <h2>Чем форк отличается от upstream</h2>
+        <p class="intro">Оригинальный C4-Builder не развивается с 2024 года. В Альфа-Капитале на
+            нём собирается архитектурный репозиторий на сотню с лишним диаграмм, поэтому мы
+            продолжаем проект и развиваем его под работу с агентами.</p>
+        <dl class="diff">
+            <dt>Офлайн и детерминированно</dt>
+            <dd>PlantUML-jar, шрифт и движки — в пакете, раскладку считает Smetana. Одинаковые SVG
+                на ноутбуке, в CI и в Docker; сеть при сборке не нужна.</dd>
+            <dt>Проверка отдельных диаграмм</dt>
+            <dd><code>c4builder check</code> с кодом выхода и номером строки — для агентов,
+                pre-commit-хуков и CI.</dd>
+            <dt>Плагины</dt>
+            <dd><code>openspec</code> публикует спеки и change'и на сайте, <code>openapi</code> —
+                офлайн-страницы swagger-ui для контрактов сервисов.</dd>
+            <dt>D2 и PNG</dt>
+            <dd>Второй движок диаграмм и растеризация через resvg тем же шрифтом.</dd>
+            <dt>Поддержка</dt>
+            <dd>TypeScript, golden-тесты рендера, CI на каждый pull request, релизы в npm и GHCR.</dd>
+        </dl>
+    </section>
+
+    <section class="wrap">
+        <h2>Документация</h2>
+        <ul class="links">
+            <li><a href="ru/">Документация на русском</a><span>Установка, проект, диаграммы, CLI, плагины</span></li>
+            <li><a href="en/" hreflang="en" lang="en">English documentation</a><span>Полный перевод</span></li>
+            <li><a href="https://github.com/AlfaCapital-Tech/C4-Builder">Исходники на GitHub</a><span>Issues и pull request'ы</span></li>
+            <li><a href="https://github.com/AlfaCapital-Tech/C4-Builder/blob/master/CHANGELOG.md">CHANGELOG</a><span>Что изменилось в каждой версии</span></li>
+        </ul>
+    </section>
+</main>
+
+<footer class="wrap">
+    <p>C4-Builder создал <a href="https://github.com/adrianvlupu/C4-Builder">Adrian Victor Lupu</a>.
+        Форк поддерживает <a href="https://alfacapital.tech">Alfa Capital Technologies</a>.</p>
+    <p>Лицензия MIT.</p>
+</footer>
+</body>
+</html>

@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>C4-Builder — architecture as code for people and agents</title>
+    <meta name="description" content="C4-Builder builds markdown and PlantUML/D2 diagrams into a documentation site. Local deterministic rendering, diagram checks for agents, OpenSpec and OpenAPI plugins.">
+    <link rel="alternate" hreflang="ru" href="./">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='2' fill='%231168bd'/%3E%3C/svg%3E">
+    <link rel="stylesheet" href="landing.css">
+</head>
+<body>
+<header class="wrap top">
+    <a class="mark" href="en.html">C4-Builder</a>
+    <nav aria-label="Main navigation">
+        <a href="en/">Documentation</a>
+        <a href="./" hreflang="ru" lang="ru">По-русски</a>
+        <a href="https://github.com/AlfaCapital-Tech/C4-Builder">GitHub</a>
+    </nav>
+</header>
+
+<main>
+    <div class="wrap diagram" role="group" aria-label="C4 context diagram of C4-Builder">
+        <div class="box person">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="7" r="5"/><path d="M2 23c0-6 4.5-10 10-10s10 4 10 10z"/></svg>
+            <div>
+                <span class="name">Developer or AI agent</span>
+                <span class="kind">[Person]</span>
+                <p>Writes markdown and PlantUML or D2 diagrams and keeps them in git next to the code.</p>
+            </div>
+        </div>
+
+        <div class="rel"><b>Edits the model and checks every edit</b><code>[c4builder check]</code></div>
+
+        <div class="box system">
+            <span class="name">C4-Builder</span>
+            <span class="kind">[CLI, maintained fork]</span>
+            <h1>Architecture as code that an agent writes, checks and reads</h1>
+            <p class="lead">Builds a folder of markdown and diagrams into a documentation site.
+                Rendering is local and deterministic, checking a diagram takes seconds, and plugins
+                publish OpenSpec specs and OpenAPI contracts next to the C4 model.</p>
+            <pre><code>npm i -g @alfacapital-tech/c4builder</code></pre>
+        </div>
+
+        <div class="rel"><b>Builds</b><code>[c4builder --site -w]</code></div>
+
+        <div class="outputs">
+            <a class="box" href="en/">
+                <span class="name">Documentation</span>
+                <span class="kind">[docsify site]</span>
+                <p>This site is built by c4builder from the repository's <code>docs/</code> folder.</p>
+            </a>
+            <a class="box" href="en/#/Design%20log/Design%20log">
+                <span class="name">Design log</span>
+                <span class="kind">[openspec plugin]</span>
+                <p>The project's specs and changes: why c4builder works the way it does. In Russian.</p>
+            </a>
+        </div>
+    </div>
+
+    <section class="wrap">
+        <h2>The agent checks its own work</h2>
+        <div class="split">
+            <ol class="steps">
+                <li><strong>Edit.</strong> The agent changes a <code>.puml</code> or <code>.md</code> in
+                    <code>src/</code>: adds a container, a relationship, a page.</li>
+                <li><strong>Check.</strong> <code>c4builder check</code> renders the diagram with the
+                    same engine as the build and returns an exit code and the line of the error. No
+                    network, no human.</li>
+                <li><strong>Build.</strong> <code>c4builder --site -w</code> rebuilds the site on every
+                    save, and the human sees the result in the browser.</li>
+            </ol>
+            <pre class="term" aria-label="Example terminal session"><code><span class="p">$ </span>c4builder check src/context.puml
+<span class="err">✗ src/context.puml: строка 12: Fatal parsing error</span>
+<span class="p">$ </span>c4builder check src/context.puml
+<span class="ok">✓ src/context.puml</span>
+<span class="p">$ </span>c4builder
+built in 1.9 seconds</code></pre>
+        </div>
+        <p class="note">More on the <a href="en/#/08%20Agents/08%20Agents">Agents</a> page. CLI messages are
+            partly in Russian for now: <code>строка</code> means "line".</p>
+    </section>
+
+    <section class="wrap">
+        <h2>Getting started</h2>
+        <div class="split install">
+            <div>
+                <h3>npm</h3>
+                <pre><code>npm i -g @alfacapital-tech/c4builder
+c4builder new --name demo -y
+cd demo
+c4builder --site -w</code></pre>
+                <p class="note">Node.js 20.19+. Java 17+ is optional: without it, c4builder downloads
+                    a JRE itself. No Graphviz needed.</p>
+            </div>
+            <div>
+                <h3>Docker</h3>
+                <pre><code>docker run --rm -v "$PWD:/pwd" \
+  ghcr.io/alfacapital-tech/c4builder:latest \
+  c4builder</code></pre>
+                <p class="note">The image has Node, a JRE, PlantUML, fonts and D2. It also works as a
+                    CI job image.</p>
+            </div>
+        </div>
+    </section>
+
+    <section class="wrap">
+        <h2>How this fork differs from upstream</h2>
+        <p class="intro">The original C4-Builder has not been developed since 2024. At Alfa-Capital it
+            builds an architecture repository of more than a hundred diagrams, so we continue the
+            project and adapt it to working with agents.</p>
+        <dl class="diff">
+            <dt>Offline and deterministic</dt>
+            <dd>The PlantUML jar, the font and the engines ship with the package; layout is computed by
+                Smetana. Identical SVG on a laptop, in CI and in Docker; the build needs no network.</dd>
+            <dt>Checking individual diagrams</dt>
+            <dd><code>c4builder check</code> with an exit code and a line number — for agents,
+                pre-commit hooks and CI.</dd>
+            <dt>Plugins</dt>
+            <dd><code>openspec</code> publishes specs and changes on the site, <code>openapi</code> —
+                offline swagger-ui pages for service contracts.</dd>
+            <dt>D2 and PNG</dt>
+            <dd>A second diagram engine and rasterization via resvg with the same font.</dd>
+            <dt>Maintenance</dt>
+            <dd>TypeScript, golden rendering tests, CI on every pull request, releases to npm and GHCR.</dd>
+        </dl>
+    </section>
+
+    <section class="wrap">
+        <h2>Documentation</h2>
+        <ul class="links">
+            <li><a href="en/">English documentation</a><span>Installation, project, diagrams, CLI, plugins</span></li>
+            <li><a href="ru/" hreflang="ru" lang="ru">Документация на русском</a><span>The primary version</span></li>
+            <li><a href="https://github.com/AlfaCapital-Tech/C4-Builder">Source on GitHub</a><span>Issues and pull requests</span></li>
+            <li><a href="https://github.com/AlfaCapital-Tech/C4-Builder/blob/master/CHANGELOG.md">CHANGELOG</a><span>What changed in each version</span></li>
+        </ul>
+    </section>
+</main>
+
+<footer class="wrap">
+    <p>C4-Builder was created by <a href="https://github.com/adrianvlupu/C4-Builder">Adrian Victor Lupu</a>.
+        The fork is maintained by <a href="https://alfacapital.tech">Alfa Capital Technologies</a>.</p>
+    <p>MIT license.</p>
+</footer>
+</body>
+</html>
