@@ -84,7 +84,7 @@ describe('блоки ```plantuml в страницах', () => {
 
     it('битый блок: сборка жива, заглушка, предупреждение с путём .md', () => {
         expect(out).toMatch(/src[/\\]B[/\\]README\.md/);
-        expect(image('B/B.md')).toContain('не отрендерена');
+        expect(image('B/B.md')).toContain('diagram not rendered');
     });
 
     it('пользовательский шаблон: родные emoji в опциях, docsify-plantuml.min.js в выходе', () => {
