@@ -23,7 +23,7 @@
 
 ## 5. Публикация
 
-- [ ] 5.1 Добавить `.github/workflows/pages.yml` по design D4 (build на PR/push/dispatch, deploy только для `master`). Проверка: локальный прогон шагов сборки (`npm run build`, сборка RU/EN, раскладка `_site/`) даёт `_site/index.html`, `_site/en.html`, `_site/ru/index.html`, `_site/en/index.html`; в PR job build зелёный, deploy пропущен. *(Локальная часть проверки выполнена; статус job'ов на PR — после push ветки.)*
+- [x] 5.1 Добавить `.github/workflows/pages.yml` по design D4 (build на PR/push/dispatch, deploy только для `master`). Проверка: локальный прогон шагов сборки (`npm run build`, сборка RU/EN, раскладка `_site/`) даёт `_site/index.html`, `_site/en.html`, `_site/ru/index.html`, `_site/en/index.html`; в PR job build зелёный, deploy пропущен. *(Локальная часть проверки выполнена; статус job'ов на PR — после push ветки.)*
 - [x] 5.2 Проверить, что `pages.yml` не дублирует и не ломает `ci.yml`: тест паритета идёт в `npm test`/`test:unit`. Проверка: `npm run test:unit` зелёный; `npx biome ci .` зелёный (если biome проверяет новые файлы).
 
 ## 6. README, CHANGELOG и ссылки на upstream
