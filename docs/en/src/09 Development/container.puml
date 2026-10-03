@@ -1,0 +1,34 @@
+@startuml
+!include <C4/C4_Container>
+!include ../styles.iuml
+
+LAYOUT_TOP_DOWN()
+
+Person(user, "Developer or agent", "Runs the CLI in a project folder")
+
+System_Boundary(c4b, "C4-Builder") {
+    Container(cli, "CLI", "TypeScript, commander", "src/cli: argument parsing, setup wizard, commands new, config, check, jre, site")
+    Container(config, "Config", "TypeScript, zod", "src/config: .c4builder schema, defaults, build options")
+    Container(scan, "scan", "TypeScript", "src/core/scan: walks src/, builds the tree of pages and diagrams")
+    Container(plugins, "Plugins", "TypeScript", "src/core/plugins + src/plugins: hooks, virtual pages; built-in openspec and openapi")
+    Container(render, "render", "TypeScript", "src/core/render: PlantUML via java, D2 via WASM, PNG via resvg, checksum cache")
+    Container(compose, "compose", "TypeScript", "src/core/compose: markdown pages, sidebar, docsify index.html")
+    ContainerDb(vendor, "vendor/", "Files", "PlantUML jar, Nimbus Sans fonts, docsify, swagger-ui")
+}
+
+System_Ext(java, "Java 17+", "System java or a JRE downloaded by c4builder (Temurin)")
+System_Ext(out, "Build output", "dist: site, markdown, SVG/PNG")
+
+Rel(user, cli, "Runs")
+Rel(cli, config, "Reads .c4builder")
+Rel(cli, scan, "Starts the build")
+Rel(scan, plugins, "afterScan: plugin pages")
+Rel(scan, render, "Tree")
+Rel(render, compose, "Rendered diagrams")
+Rel(render, java, "Runs PlantUML", "java -jar")
+Rel(render, vendor, "jar, font")
+Rel(compose, out, "Writes")
+Rel(compose, vendor, "docsify")
+
+SHOW_LEGEND()
+@enduml

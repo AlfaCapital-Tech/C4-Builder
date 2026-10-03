@@ -79,4 +79,5 @@
 
 `docsifyTemplate` указывает на ESM- или CommonJS-модуль, который экспортирует функцию.
 Она получает объект настроек docsify (имя, sidebar, тема, поиск) и возвращает HTML для
-`index.html`. Отправная точка — встроенный шаблон в `src/core/compose/docsify.template.ts`.
+`index.html`. Отправная точка — встроенный шаблон в `src/core/compose/docsify.template.ts`;
+у этого сайта свой — `docs/docsify-template.mjs`.

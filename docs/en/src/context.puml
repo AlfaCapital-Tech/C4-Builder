@@ -1,0 +1,27 @@
+@startuml
+!include <C4/C4_Context>
+!include styles.iuml
+
+LAYOUT_TOP_DOWN()
+
+Person(dev, "Developer", "Writes markdown and diagrams, reviews architecture in pull requests")
+Person(agent, "AI agent", "Claude Code, Codex, Cursor: edits the model and verifies it with c4builder check")
+
+System(c4b, "C4-Builder", "CLI: builds a folder of markdown + PlantUML/D2 into documentation, checks individual diagrams")
+
+System_Ext(engines, "Diagram engines", "PlantUML (bundled jar + Java, Smetana), D2 (WASM)")
+System_Ext(openspec, "OpenSpec store", "Project specs and changes: proposal, design, tasks")
+System_Ext(openapi, "OpenAPI contracts", "Service specs: a folder or a repository archive")
+System_Ext(site, "Docsify site", "Static, no CDN: GitHub Pages, GitLab Pages, any web server")
+System_Ext(md, "Markdown", "A README per folder or a single file for the repository")
+
+Rel(dev, c4b, "Builds and previews", "c4builder --site -w")
+Rel(agent, c4b, "Checks edits", "c4builder check")
+Rel(c4b, engines, "Renders diagrams", "locally, offline")
+Rel(c4b, openspec, "Publishes a section", "openspec plugin")
+Rel(c4b, openapi, "Publishes swagger-ui", "openapi plugin")
+Rel(c4b, site, "Builds")
+Rel(c4b, md, "Builds")
+
+SHOW_LEGEND()
+@enduml
