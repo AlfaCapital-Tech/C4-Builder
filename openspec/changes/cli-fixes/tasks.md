@@ -20,4 +20,4 @@
 - [x] 4.2 `skills/c4builder/SKILL.md` (шаг check: формат `✗ <file>: line <N>: <message>`, убрать пояснение про `строка` и совет не проверять `.iuml` отдельно) и `template/AGENTS.md` (формат ошибки, `.iuml` можно проверять напрямую). Проверка: `grep -rn 'строка' skills template/AGENTS.md` пусто; `npx vitest run test/skills.test.mjs` зелёный.
 - [x] 4.3 `README.MD` строка 52: `"✗ file: line N: message"`. Проверка: `grep -n 'строка' README.MD` пусто.
 - [x] 4.4 `CHANGELOG.md`, `## Unreleased`: `check` печатает `line N` и английские сообщения (смена формата вывода); `.iuml` с макросами C4 проходит `check`; `--docs` не создаёт файлов, `--list`/`--reset` вне проекта — ошибка без создания `.c4builder`. Проверка: ревью глазами.
-- [ ] 4.5 Полный прогон: `npm run build`, `npm test`, `npm run check`, `openspec validate cli-fixes --strict` — всё зелёное.
+- [x] 4.5 Полный прогон: `npm run build`, `npm test`, `npm run check`, `openspec validate cli-fixes --strict` — всё зелёное.
