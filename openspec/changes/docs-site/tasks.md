@@ -2,9 +2,9 @@
 
 ## 1. Каркас: удаление старого docs/, проекты RU/EN, проверка паритета
 
-- [ ] 1.1 Удалить старый `docs/` целиком (`_coverpage.md`, `index.html`, `README.MD`, `images/`, `vendor/`). Проверка: `git ls-files docs/` пуст до добавления новых файлов.
-- [ ] 1.2 Создать `docs/ru/.c4builder` и `docs/en/.c4builder` по design D1/D2 (полный headless-конфиг, `distFolder: dist`, плагин `openspec` с `dir: ../../openspec` и mount «Журнал решений» / «Design log»), минимальный `src/README.md` в каждом. В `.gitignore` добавить `docs/*/dist*/`, `docs/*/.c4builder.cache`. Проверка: `npm run build && (cd docs/ru && node ../../dist/index.js)` и то же для `docs/en` завершаются с кодом 0 без вопросов, в `dist/` есть `index.html` и раздел журнала решений; `git status` не показывает dist/cache.
-- [ ] 1.3 Добавить `test/docs-parity.test.mjs` по design D5 (нормализация папок по числовому префиксу, имена `.md`/`.puml`/`.d2` как есть, папка без префикса — ошибка, сообщение со списком путей без пары). Проверка: `npx vitest run test/docs-parity.test.mjs` зелёный; временно добавленная папка `docs/ru/src/99 Тест` роняет тест с этим путём в сообщении (затем удалить).
+- [x] 1.1 Удалить старый `docs/` целиком (`_coverpage.md`, `index.html`, `README.MD`, `images/`, `vendor/`). Проверка: `git ls-files docs/` пуст до добавления новых файлов.
+- [x] 1.2 Создать `docs/ru/.c4builder` и `docs/en/.c4builder` по design D1/D2 (полный headless-конфиг, `distFolder: dist`, плагин `openspec` с `dir: ../../openspec` и mount «Журнал решений» / «Design log»), минимальный `src/README.md` в каждом. В `.gitignore` добавить `docs/*/dist*/`, `docs/*/.c4builder.cache`. Проверка: `npm run build && (cd docs/ru && node ../../dist/index.js)` и то же для `docs/en` завершаются с кодом 0 без вопросов, в `dist/` есть `index.html` и раздел журнала решений; `git status` не показывает dist/cache.
+- [x] 1.3 Добавить `test/docs-parity.test.mjs` по design D5 (нормализация папок по числовому префиксу, имена `.md`/`.puml`/`.d2` как есть, папка без префикса — ошибка, сообщение со списком путей без пары). Проверка: `npx vitest run test/docs-parity.test.mjs` зелёный; временно добавленная папка `docs/ru/src/99 Тест` роняет тест с этим путём в сообщении (затем удалить).
 
 ## 2. Контент RU
 

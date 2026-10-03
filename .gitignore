@@ -6,6 +6,11 @@ dist/
 template/docs/
 template/.c4builder
 
+# сайт документации: выходы сборки и кэш (исходники — docs/<lang>/src, конфиг — в git)
+docs/*/dist*/
+docs/*/.c4builder.cache
+_site/
+
 # временные выходы golden-тестов (эталон test/golden/ — в git)
 test/.tmp/
 
