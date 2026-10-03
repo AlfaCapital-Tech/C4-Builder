@@ -14,7 +14,7 @@
 
 ## 3. openapi без валидатора
 
-- [ ] 3.1 `plugins/openapi/index.ts`: `SwaggerUIBundle({ url, dom_id, validatorUrl: null })`. Проверка: `test/plugin-openapi.test.mjs` — ожидание строки инициализации с `validatorUrl: null`; тест зелёный.
+- [x] 3.1 `plugins/openapi/index.ts`: `SwaggerUIBundle({ url, dom_id, validatorUrl: null })`. Проверка: `test/plugin-openapi.test.mjs` — ожидание строки инициализации с `validatorUrl: null`; тест зелёный.
 
 ## 4. Автопроверка и golden
 

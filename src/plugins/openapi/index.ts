@@ -86,6 +86,7 @@ export default definePlugin<Opts>({
         for (const [name, rel] of sorted) {
             // Спека грузится swagger-ui по ссылке от корня сайта (SPA: base = index.html);
             // относительные $ref внутри спек резолвятся от её URL — структура сохранена.
+            // validatorUrl: null — иначе swagger-ui шлёт адрес спеки на validator.swagger.io.
             const specUrl = encodeURIPath(path.posix.join(mount, '_specs', rel));
             const domId = `swagger-${name.replace(/[^A-Za-z0-9_-]/g, '_')}`;
             ctx.addPage({
@@ -93,7 +94,7 @@ export default definePlugin<Opts>({
                 markdown: [
                     `<div id="${domId}"></div>`,
                     '<script>',
-                    `SwaggerUIBundle({ url: '${specUrl}', dom_id: '#${domId}' });`,
+                    `SwaggerUIBundle({ url: '${specUrl}', dom_id: '#${domId}', validatorUrl: null });`,
                     '</script>'
                 ].join('\n')
             });

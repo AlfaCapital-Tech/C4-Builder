@@ -65,7 +65,7 @@ describe('плагин openapi', () => {
         const page = read('API/finch/finch.md');
         expect(page).toContain('<div id="swagger-finch"></div>');
         expect(page).toContain(
-            "SwaggerUIBundle({ url: 'API/_specs/finch/openapi.yaml', dom_id: '#swagger-finch'"
+            "SwaggerUIBundle({ url: 'API/_specs/finch/openapi.yaml', dom_id: '#swagger-finch', validatorUrl: null });"
         );
         expect(page).not.toMatch(/https?:\/\//);
         expect(read('API/_specs/finch/openapi.yaml')).toContain('../common/openapi.yaml');
