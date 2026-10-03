@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Только семантическая часть BPMN: координат (bpmndi) нет, раскладку делает c4builder. -->
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  id="Definitions_AccountOpening"
+                  targetNamespace="https://example.com/bpmn/account-opening">
+  <bpmn:collaboration id="Collaboration_AccountOpening">
+    <bpmn:participant id="Pool_Bank" name="Bank" processRef="Process_AccountOpening" />
+    <bpmn:participant id="Pool_CreditBureau" name="Credit bureau" />
+    <bpmn:messageFlow id="Message_HistoryRequest" name="History request"
+                      sourceRef="Task_RequestHistory" targetRef="Pool_CreditBureau" />
+    <bpmn:messageFlow id="Message_CreditReport" name="Credit report"
+                      sourceRef="Pool_CreditBureau" targetRef="Task_ReceiveReport" />
+  </bpmn:collaboration>
+
+  <bpmn:process id="Process_AccountOpening" name="Account opening" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_Bank">
+      <bpmn:lane id="Lane_Client" name="Customer">
+        <bpmn:flowNodeRef>Start_AccountNeeded</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_SubmitApplication</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End_AccountOpened</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End_Rejected</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_FrontOffice" name="Front office">
+        <bpmn:flowNodeRef>Task_CheckDocuments</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_RequestHistory</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_ReceiveReport</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_BackOffice" name="Back office">
+        <bpmn:flowNodeRef>Task_Assess</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Timer_AssessOverdue</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_Escalate</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End_Escalated</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_Decision</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_OpenAccount</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_PrepareRejection</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+
+    <bpmn:startEvent id="Start_AccountNeeded" name="Account needed" />
+    <bpmn:userTask id="Task_SubmitApplication" name="Submit application" />
+    <bpmn:userTask id="Task_CheckDocuments" name="Check documents" />
+    <bpmn:sendTask id="Task_RequestHistory" name="Request credit history" />
+    <bpmn:receiveTask id="Task_ReceiveReport" name="Receive credit report" />
+    <bpmn:userTask id="Task_Assess" name="Assess application" />
+    <bpmn:boundaryEvent id="Timer_AssessOverdue" name="3 business days" attachedToRef="Task_Assess">
+      <bpmn:timerEventDefinition id="TimerDef_AssessOverdue" />
+    </bpmn:boundaryEvent>
+    <bpmn:task id="Task_Escalate" name="Escalate to manager" />
+    <bpmn:endEvent id="End_Escalated" name="Application with manager" />
+    <bpmn:exclusiveGateway id="Gateway_Decision" name="Approve?" />
+    <bpmn:serviceTask id="Task_OpenAccount" name="Open account" />
+    <bpmn:task id="Task_PrepareRejection" name="Prepare rejection" />
+    <bpmn:endEvent id="End_AccountOpened" name="Account opened" />
+    <bpmn:endEvent id="End_Rejected" name="Rejection received" />
+
+    <bpmn:sequenceFlow id="Flow_Start" sourceRef="Start_AccountNeeded" targetRef="Task_SubmitApplication" />
+    <bpmn:sequenceFlow id="Flow_Submitted" sourceRef="Task_SubmitApplication" targetRef="Task_CheckDocuments" />
+    <bpmn:sequenceFlow id="Flow_Checked" sourceRef="Task_CheckDocuments" targetRef="Task_RequestHistory" />
+    <bpmn:sequenceFlow id="Flow_Requested" sourceRef="Task_RequestHistory" targetRef="Task_ReceiveReport" />
+    <bpmn:sequenceFlow id="Flow_Received" sourceRef="Task_ReceiveReport" targetRef="Task_Assess" />
+    <bpmn:sequenceFlow id="Flow_Assessed" sourceRef="Task_Assess" targetRef="Gateway_Decision" />
+    <bpmn:sequenceFlow id="Flow_Approved" name="Yes" sourceRef="Gateway_Decision" targetRef="Task_OpenAccount" />
+    <bpmn:sequenceFlow id="Flow_Declined" name="No" sourceRef="Gateway_Decision" targetRef="Task_PrepareRejection" />
+    <bpmn:sequenceFlow id="Flow_Opened" sourceRef="Task_OpenAccount" targetRef="End_AccountOpened" />
+    <bpmn:sequenceFlow id="Flow_Rejected" sourceRef="Task_PrepareRejection" targetRef="End_Rejected" />
+    <bpmn:sequenceFlow id="Flow_Overdue" sourceRef="Timer_AssessOverdue" targetRef="Task_Escalate" />
+    <bpmn:sequenceFlow id="Flow_Escalated" sourceRef="Task_Escalate" targetRef="End_Escalated" />
+  </bpmn:process>
+</bpmn:definitions>

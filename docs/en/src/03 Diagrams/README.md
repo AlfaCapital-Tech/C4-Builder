@@ -98,6 +98,12 @@ taken from `sourceRef`/`targetRef`.
 </bpmn:definitions>
 ```
 
+**Example** — the account opening process from the `c4builder new` template: two pools, lanes,
+messages to the credit bureau, a timer escalation. The file holds semantics only; this build did
+the layout and rendering:
+
+![Account opening](account-opening.bpmn)
+
 **Layout** is done by [bpmn-auto-layout](https://github.com/bpmn-io/bpmn-auto-layout): pools and
 lanes as horizontal bands labelled on the left, flow from left to right, every node inside the
 band of its lane. Sub-processes are drawn collapsed — put their details into a separate `.bpmn`.
