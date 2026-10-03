@@ -127,6 +127,23 @@ If no configuration was set it will ask for it and then do the actual build. Run
 
 To change the configuration after building for the first time just run `c4builder config`. The default will be the configuration set previously so you can just edit the options you are interested in.
 
+## Agent skills
+
+c4builder ships [Agent Skills](https://agentskills.io) for coding agents (Claude Code, Codex,
+Cursor and the other agents supported by the [`skills`](https://github.com/vercel-labs/skills)
+CLI). They live in the `skills/` folder of this repository (not in the npm package) and
+describe the latest stable release. Install the whole set into the current project:
+
+```bash
+npx skills add AlfaCapital-Tech/C4-Builder/skills
+```
+
+`--skill <name>` installs a single skill, `-g` installs for the user instead of the project.
+
+| Skill | Use it for |
+|---|---|
+| `c4builder-setup` | install / update (npm channels `latest` and `rc`, Docker image), Java or the managed JRE, a smoke build of the template project |
+
 ## The project
 
 The project consists of two main folders. The **source** folder and the **destination** folder.
@@ -484,6 +501,9 @@ Publishes to dist-tag `latest`.
 - `c4builder new` and `c4builder config` work as positional subcommands (the form the README
   and the CLI hints use) — they used to silently start a build; an unknown positional command
   now fails with `unknown command` and exit code 1 instead of building
+- Agent skills for coding agents in `skills/`, installed with
+  `npx skills add AlfaCapital-Tech/C4-Builder/skills`: `c4builder-setup` (install, update,
+  diagnose) — see «Agent skills»
 
 ## v0.4.0
 

@@ -12,6 +12,10 @@
   (github.com/vercel-labs/skills) сканирует корень, `skills/` и агентские пути
   (`.claude/skills/` и др.) на глубину до трёх уровней, `--skill <name>` ставит один скилл,
   кладёт в `.claude/skills/` (проект) или `~/.claude/skills/` (`-g`) и аналоги для 75+ агентов.
+  Корень репозитория уже несёт dev-скиллы OpenSpec в `.claude/skills/` (генерирует
+  `openspec update`) — `npx skills add <owner>/<repo>` предложил бы и их, поэтому команда
+  установки указывает подкаталог: `npx skills add AlfaCapital-Tech/C4-Builder/skills`
+  (shorthand `<owner>/<repo>/<subpath>`, поиск только внутри `skills/`; проверено `--list`).
 - **Remotion** (`packages/skills/skills/*`): общий скилл `remotion-best-practices` —
   маршрутизатор («задача X → загрузи скилл Y»), остальные — узкие. Для двух скиллов
   маршрутизатор избыточен — берём только идею «общий скилл + узкий».

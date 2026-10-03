@@ -7,7 +7,7 @@
 ## ADDED Requirements
 
 ### Requirement: Скиллы поставляются из репозитория в формате Agent Skills
-Репозиторий SHALL содержать скиллы в каталоге `skills/<name>/SKILL.md` в формате Agent Skills, устанавливаемые командой `npx skills add AlfaCapital-Tech/C4-Builder` (весь набор) или с `--skill <name>` (один скилл). Каталог `skills/` MUST NOT попадать в публикуемый npm-пакет.
+Репозиторий SHALL содержать скиллы в каталоге `skills/<name>/SKILL.md` в формате Agent Skills, устанавливаемые командой `npx skills add AlfaCapital-Tech/C4-Builder/skills` (весь набор) или с `--skill <name>` (один скилл). Каталог `skills/` MUST NOT попадать в публикуемый npm-пакет.
 
 #### Scenario: Скиллы находятся в стандартном месте
 - **WHEN** просматривается дерево репозитория
