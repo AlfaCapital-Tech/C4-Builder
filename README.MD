@@ -32,7 +32,7 @@ than a hundred diagrams, so we continue it as a maintained fork, adapted to work
 
 ## Quick start
 
-Requires Node.js ≥ 20.19. Java 17+ is optional.
+Requires Node.js ≥ 22.17. Java 17+ is optional.
 
 ```bash
 npm i -g @alfacapital-tech/c4builder

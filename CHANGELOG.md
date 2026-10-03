@@ -5,6 +5,9 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
 
 ## Unreleased
 
+- **BREAKING:** Node.js 22.17 or newer is required (`engines.node: ">=22.17"`); Node.js 20 is
+  past its end of life. On older Node.js npm warns with `EBADENGINE` (or refuses with
+  `engine-strict`); the Docker image is not affected
 - Documentation site in Russian and English with a landing page, built by c4builder itself and
   published to GitHub Pages: https://alfacapital-tech.github.io/C4-Builder/. The reference moved
   there from the README; the change log moved to `CHANGELOG.md`.

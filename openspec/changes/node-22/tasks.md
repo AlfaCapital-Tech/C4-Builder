@@ -2,7 +2,7 @@
 
 ## 1. Граница Node
 
-- [ ] 1.1 `package.json` `engines.node` → `">=22.17"`, `npm install --package-lock-only` обновляет корневой `engines` в `package-lock.json`. Проверка: `node -p "require('./package.json').engines.node"` печатает `>=22.17`; `npm ci && npm run build && npm run test:unit` зелёные
+- [x] 1.1 `package.json` `engines.node` → `">=22.17"`, `npm install --package-lock-only` обновляет корневой `engines` в `package-lock.json`. Проверка: `node -p "require('./package.json').engines.node"` печатает `>=22.17`; `npm ci && npm run build && npm run test:unit` зелёные
 - [ ] 1.2 Тексты в репозитории: README.MD (требования к Node, если упоминаются после переписывания в `docs-site`), `CLAUDE.md` (строка стека), комментарий в `Dockerfile` (EOL Node 20 — оставить как обоснование мажора, без противоречия новой границе); строка в `CHANGELOG.md` (`## Unreleased`) с пометкой **BREAKING**. Проверка: `grep -rn "20\.19" --exclude-dir=node_modules --exclude-dir=.claude --exclude-dir=archive .` не находит упоминаний вне `openspec/specs/dev-toolchain` (обновится при архиве) и исторических записей changelog о прошлых версиях (их не переписываем)
 
 ## 2. `fs.globSync` вместо `src/util/glob.ts`
