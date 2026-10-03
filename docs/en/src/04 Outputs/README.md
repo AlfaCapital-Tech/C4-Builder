@@ -9,6 +9,11 @@ the first build, and in `.c4builder` they are `generateMD`, `generateCompleteMD`
 `generateWEB: true` (default). The output gets an `index.html`, a sidebar with the page hierarchy
 and one `.md` per page. The site is static and does not go to the internet: docsify, the theme
 and the plugins sit in `vendor/` next to `index.html`, diagrams are ready-made SVG or PNG files.
+Theme fonts are system fonts (no Google Fonts), emoji such as `:smile:` are shown as characters
+rather than images from GitHub, and ```` ```plantuml ```` blocks are rendered at build time, not
+in the browser via plantuml.com. External addresses appear only by explicit choice:
+`generateLocalImages: false` (diagram images link to `plantumlServerUrl`), a custom `webTheme`
+or `docsifyTemplate` that uses them, external images in page text.
 
 - To view it locally, run `c4builder site` (or `--site -w` to rebuild on changes), by default at
   `http://localhost:3000`. Double-clicking `index.html` will not work: docsify loads pages with

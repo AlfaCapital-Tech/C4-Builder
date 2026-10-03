@@ -64,6 +64,10 @@ install hint. D2 has no online renderer, so `generateLocalImages` must stay `tru
   `![title](name.d2)` in a markdown file of the same folder places it inline instead.
 - Image file = diagram base name + `.svg` (or `.png` with `diagramFormat: png`), next to
   the page in the output.
+- A ```` ```plantuml ```` block in a page `.md` is rendered at build time like a `.puml`
+  file and replaced by its image in every output (`@startuml` optional, `!include` relative
+  to the page folder, a broken block becomes a placeholder plus a warning). To show diagram
+  source as code, fence it as `puml` or `text` — those, like `d2` blocks, stay code.
 - `embedDiagram: true` inlines images as base64; `includeLinkToDiagram: true` replaces
   images with links.
 - Unchanged diagrams are reused from the previous build (checksums in `.c4builder.cache`).

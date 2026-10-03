@@ -34,6 +34,15 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
   it is re-checked with the C4 stdlib included
 - `c4builder --docs` no longer creates `.c4builder` and `.c4builder.cache` in the current
   folder; `--list` and `--reset` outside a project fail with exit code 1 instead of creating them
+- The generated site makes no external requests: the copied `vendor/vue.css` drops its Google
+  Fonts `@import` (system fonts), emoji are native characters (`nativeEmoji: true`, also passed
+  to custom `docsifyTemplate`s) instead of GitHub images, the built-in template no longer loads
+  `docsify-plantuml` (the file is still copied for custom templates), and `openapi` swagger-ui
+  pages no longer call `validator.swagger.io`
+- **BREAKING (output):** ```` ```plantuml ```` blocks in page `.md` files are rendered at build
+  time and become images in every output (site, markdown, complete markdown); their source no
+  longer reaches the browser or plantuml.com. To show diagram source as code, fence it as
+  `puml` or `text`
 
 ## v0.4.0
 

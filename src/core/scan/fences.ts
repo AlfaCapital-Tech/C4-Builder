@@ -1,10 +1,10 @@
-// Fenced-блоки ```plantuml / ```d2 в артефактах → диаграммы страницы (рендер общим
-// локальным движком) + ссылка `![…](name.ext)` на их месте: compose подставит картинку
-// inline, а клиентский docsify-plantuml (онлайн-рендер в браузере) не сработает —
-// fence в выводе уже отсутствует.
+// Fenced-блоки диаграмм в markdown (страницы проекта, артефакты плагинов) → диаграммы
+// страницы (рендер общим локальным движком) + ссылка `![…](name.ext)` на их месте:
+// compose подставит картинку inline, а клиентский docsify-plantuml (онлайн-рендер в
+// браузере) не сработает — fence в выводе уже отсутствует.
 import crypto from 'node:crypto';
 
-import type { PageDiagram } from '../../core/plugins/types.ts';
+import type { PageDiagram } from '../plugins/types.ts';
 
 // Fenced-блок по CommonMark: открывающая ``` или ~~~ (≥3) с любым отступом (fence в
 // списке), инфо-строка, тело (может быть пустым), закрывающая того же вида не короче
@@ -25,11 +25,12 @@ export const mapOutsideFences = (md: string, fn: (text: string) => string): stri
 };
 
 /**
- * Экстрактор диаграмм одной страницы. Имя файла — `<base>-<sha1 контента>`: не зависит
- * от позиции fence, поэтому вставка/удаление соседнего блока не сдвигает имена и не
- * подсовывает картинку соседа из кэша; одинаковые блоки дают одну диаграмму.
+ * Экстрактор диаграмм одной страницы; извлекаются только блоки языков `langs` (из
+ * plantuml/puml/d2), остальные остаются кодом. Имя файла — `<base>-<sha1 контента>`: не
+ * зависит от позиции fence, поэтому вставка/удаление соседнего блока не сдвигает имена и
+ * не подсовывает картинку соседа из кэша; одинаковые блоки дают одну диаграмму.
  */
-export const createFenceExtractor = () => {
+export const createFenceExtractor = (langs: readonly string[]) => {
     const seen = new Set<string>();
     return {
         extract(md: string, base: string, source?: string): { markdown: string; diagrams: PageDiagram[] } {
@@ -38,7 +39,7 @@ export const createFenceExtractor = () => {
                 FENCE_RE,
                 (whole, indent: string, _fence, info: string, body: string) => {
                     const lang = info.trim().split(/\s+/)[0]?.toLowerCase() ?? '';
-                    const ext = ENGINE_EXT[lang];
+                    const ext = langs.includes(lang) ? ENGINE_EXT[lang] : undefined;
                     if (!ext) return whole;
                     // Отступ fence (в списке) снимаем со строк тела, как CommonMark.
                     const src = body
@@ -53,7 +54,7 @@ export const createFenceExtractor = () => {
                     const file = `${base}-${hash}${ext}`;
                     if (!seen.has(file)) {
                         seen.add(file);
-                        // soft: блок в артефакте — не файл проекта; синтаксическая
+                        // soft: блок в markdown — не файл диаграммы; синтаксическая
                         // ошибка в нём не должна ронять весь сайт (раньше такие блоки
                         // рендерил браузер и показывал картинку с ошибкой).
                         diagrams.push({ file, content, source, soft: true });

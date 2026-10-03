@@ -31,6 +31,17 @@ diagram's folder, not to the project root.
 
 **ditaa** (`@startditaa`) is supported too and is always rendered as PNG.
 
+## Diagrams inside a page
+
+A ```` ```plantuml ```` block in an `.md` page is rendered at build time just like a `.puml`
+file: the site, the markdown collection and the complete document get an image in its place,
+not the block text. `@startuml`/`@enduml` may be omitted, `!include` paths are relative to the
+page's folder. A broken block does not fail the build: the image is replaced by a placeholder
+and the log shows a warning with the `.md` file path.
+
+To show diagram source as code, mark the block `puml` or `text`: such blocks stay code, and
+so do ```` ```d2 ```` blocks.
+
 ## Determinism and the font
 
 Diagrams are drawn with the bundled Nimbus Sans font (Helvetica metrics, Cyrillic, Greek) rather

@@ -20,6 +20,8 @@ export interface DocsifyOptions {
     plantuml: { skin: string };
     stylesheet: string;
     alias?: Record<string, string>;
+    /** Emoji символами, а не картинками с github.githubassets.com: сайт без внешних запросов. */
+    nativeEmoji: boolean;
     supportSearch: boolean;
     executeScript: boolean;
 }
@@ -44,7 +46,6 @@ export default (options: DocsifyOptions): string => {
         window.$docsify = ${JSON.stringify(options, null, 2)};
         </script>
         <script src="vendor/docsify.min.js"></script>
-        <script src="vendor/docsify-plantuml.min.js"></script>
         <script src="vendor/zoom-image.min.js"></script>
         ${options.supportSearch ? `<script src="vendor/search.min.js"></script>` : ''}
         ${options.executeScript ? `<script src="vendor/swagger-ui-bundle.js"></script>` : ''}
