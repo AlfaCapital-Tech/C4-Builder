@@ -30,9 +30,9 @@ const subtreeEnd = (tree: TreeItem[], parent: TreeItem): number => {
 export const addPage = (tree: TreeItem[], options: BuildOptions, page: PageSpec): TreeItem => {
     const segments = page.path;
     if (!segments.length || segments.some((s) => !s || /[\\/]/.test(s) || s === '.' || s === '..'))
-        throw new Error(`addPage: некорректный путь страницы ${JSON.stringify(segments)}`);
+        throw new Error(`addPage: invalid page path ${JSON.stringify(segments)}`);
     const root = tree.find((x) => !x.parent);
-    if (!root) throw new Error('addPage: в дереве нет корневого элемента');
+    if (!root) throw new Error('addPage: tree has no root');
 
     let parent = root;
     let item = root;
@@ -44,10 +44,10 @@ export const addPage = (tree: TreeItem[], options: BuildOptions, page: PageSpec)
             if (last) {
                 if (!VIRTUAL.has(existing))
                     throw new Error(
-                        `addPage: путь ${segments.join('/')} занят реальной папкой ${dir} — переименуйте раздел плагина (mount)`
+                        `addPage: path ${segments.join('/')} is taken by a real folder ${dir} — rename the plugin section (mount)`
                     );
                 if (existing.mdFiles.length || existing.diagrams.length)
-                    throw new Error(`addPage: страница ${segments.join('/')} уже добавлена`);
+                    throw new Error(`addPage: page ${segments.join('/')} already added`);
             }
             item = existing;
         } else {
@@ -79,7 +79,7 @@ export const addPage = (tree: TreeItem[], options: BuildOptions, page: PageSpec)
         const engine = engineForExt(ext);
         if (!engine)
             throw new Error(
-                `addPage: у диаграммы "${d.file}" страницы ${segments.join('/')} неизвестное расширение`
+                `addPage: diagram "${d.file}" of page ${segments.join('/')} has an unknown extension`
             );
         item.diagrams.push({
             dir: d.file,

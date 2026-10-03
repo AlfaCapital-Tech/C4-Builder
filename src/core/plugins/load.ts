@@ -65,15 +65,15 @@ const importPlugin = async (id: string, cwd: string): Promise<Plugin> => {
                 resolved = resolveEsmMain(id, require.resolve.paths(id) ?? []);
             if (!resolved)
                 throw new Error(
-                    `не найден ни среди встроенных (${Object.keys(BUILTIN_PLUGINS).join(', ')}), ` +
-                        `ни как npm-пакет от ${cwd}: ${(e as Error).message}`
+                    `not found among built-ins (${Object.keys(BUILTIN_PLUGINS).join(', ')}) ` +
+                        `nor as an npm package from ${cwd}: ${(e as Error).message}`
                 );
         }
         mod = await import(pathToFileURL(resolved).href);
     }
     const plugin = (mod as { default?: unknown }).default ?? mod;
     if (!plugin || typeof plugin !== 'object' || typeof (plugin as Plugin).name !== 'string')
-        throw new Error('модуль должен экспортировать по умолчанию объект плагина с полем name');
+        throw new Error('module must default-export a plugin object with a name field');
     return plugin as Plugin;
 };
 
@@ -102,7 +102,7 @@ export const loadPlugins = async (
             const parsed = plugin.options.safeParse(opts);
             if (!parsed.success) {
                 const issues = parsed.error.issues.map(
-                    (iss) => `${iss.path.length ? iss.path.join('.') : '(опции)'} — ${iss.message}`
+                    (iss) => `${iss.path.length ? iss.path.join('.') : '(options)'} — ${iss.message}`
                 );
                 throw new Error(`plugins[${i}] ${plugin.name}: ${issues.join('; ')}`);
             }
@@ -110,7 +110,7 @@ export const loadPlugins = async (
         }
         if (plugin.requires?.executeScript && !options.EXECUTE_SCRIPT) {
             options.EXECUTE_SCRIPT = true;
-            console.log(chalk.gray(`плагин ${plugin.name} требует executeScript — включён для этой сборки`));
+            console.log(chalk.gray(`plugin ${plugin.name} requires executeScript — enabled for this build`));
         }
         loaded.push({ plugin, opts });
     }
@@ -128,7 +128,7 @@ export const pluginWatchPaths = (
             .map((p) => path.resolve(cwd, p))
             .filter((p) => {
                 if (exists(p)) return true;
-                console.log(chalk.yellow(`плагин ${plugin.name}: путь наблюдения не существует — ${p}`));
+                console.log(chalk.yellow(`plugin ${plugin.name}: watch path does not exist — ${p}`));
                 return false;
             })
     );

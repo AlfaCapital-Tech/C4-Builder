@@ -269,7 +269,7 @@ describe('плагин openspec: крайние случаи', () => {
     });
     it('отсутствующий dir — ошибка с путём; mount переименовывает раздел', () => {
         const d = makeFixture('nodir', [['openspec', { dir: 'nope' }]], false);
-        expect(() => runBuild(d)).toThrow(/OpenSpec store не найден: .*nope/);
+        expect(() => runBuild(d)).toThrow(/OpenSpec store not found: .*nope/);
         fs.rmSync(d, { recursive: true, force: true });
         const d2 = makeFixture('mount', [['openspec', { mount: 'Планы' }]]);
         runBuild(d2);

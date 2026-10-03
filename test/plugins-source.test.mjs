@@ -142,13 +142,13 @@ describe('resolveSource', () => {
         expect(err.message).not.toContain('SECRET');
         // не архив (200 с текстом) — тоже без query
         const bad = await resolveSource({ archive: `${base}/evil.txt?private_token=SECRET` }).catch((e) => e);
-        expect(bad.message).toMatch(/неизвестный формат архива/);
+        expect(bad.message).toMatch(/unknown archive format/);
         expect(bad.message).not.toContain('SECRET');
     });
 
     it('subdir отсутствует в архиве — ошибка', async () => {
         await expect(resolveSource({ archive: `${base}/repo.tar.gz`, subdir: 'nope' })).rejects.toThrow(
-            /нет каталога nope/
+            /has no folder nope/
         );
     });
 

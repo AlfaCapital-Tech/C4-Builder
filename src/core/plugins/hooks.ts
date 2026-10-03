@@ -10,7 +10,7 @@ const wrap = async (name: string, hook: string, fn: () => Promise<void> | void):
     try {
         await fn();
     } catch (e) {
-        throw new Error(`Плагин ${name} (${hook}): ${(e as Error).message ?? e}`, { cause: e });
+        throw new Error(`Plugin ${name} (${hook}): ${(e as Error).message ?? e}`, { cause: e });
     }
 };
 

@@ -16,7 +16,7 @@
 
 ## 4. Перевод: плагины и утилиты
 
-- [ ] 4.1 `core/plugins/{load,hooks,tree,source}.ts`, `plugins/{openapi,openspec}/index.ts`; тесты `plugins-load`, `plugins-tree`, `plugins-source`, `plugin-openapi`, `plugin-openspec` — на английские ожидания. Проверка: эти тесты зелёные
+- [x] 4.1 `core/plugins/{load,hooks,tree,source}.ts`, `plugins/{openapi,openspec}/index.ts`; тесты `plugins-load`, `plugins-tree`, `plugins-source`, `plugin-openapi`, `plugin-openspec` — на английские ожидания. Проверка: эти тесты зелёные
 - [ ] 4.2 `util/{lock,http,archive,paths}.ts`; тест `lock` при наличии русских ожиданий — на английские. Проверка: `npx vitest run test/lock.test.mjs` зелёный; `npx vitest run test/cli-language.test.mjs` зелёный (литералов с кириллицей в `src/` не осталось)
 
 ## 5. Актуализация

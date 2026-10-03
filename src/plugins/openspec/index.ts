@@ -37,7 +37,7 @@ export default definePlugin<Opts>({
     afterScan(ctx, o) {
         const storeDir = path.resolve(o.dir);
         if (!fs.existsSync(storeDir))
-            throw new Error(`OpenSpec store не найден: ${storeDir} (опция dir плагина openspec)`);
+            throw new Error(`OpenSpec store not found: ${storeDir} (dir option of the openspec plugin)`);
         const store: Store = scanStore(storeDir);
         const { mount } = o;
         const { options } = ctx;
