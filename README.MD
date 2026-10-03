@@ -476,7 +476,7 @@ Publishes to dist-tag `latest`.
 
 # Change log
 
-## Unreleased
+## v0.4.0
 
 - Plugin system: `plugins` key in `.c4builder`, `afterScan`/`afterBuild` hooks, virtual pages,
   plugin assets injected into `index.html`, `dir`/`archive` source resolver (see «Plugins»)

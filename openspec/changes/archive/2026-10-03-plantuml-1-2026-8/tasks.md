@@ -14,7 +14,7 @@
 
 ## 3. Релиз
 
-- [ ] 3.1 PR в `master`, CI зелёный (включая golden на пиновом runner), merge закрывает #14
-- [ ] 3.2 `npm version prerelease` → `v0.4.0-rc.4`, push тега; npm dist-tag `rc` = 0.4.0-rc.4
-- [ ] 3.3 Прогон rc.4 на `arch` (`c4builder --site`): диаграммы рендерятся, стрелки залиты; закрывает задачу 6.4 `plugin-system`
-- [ ] 3.4 Финальный релиз: `## Unreleased` → `## v0.4.0`, `npm version 0.4.0`, push тега; npm `latest` = 0.4.0
+- [x] 3.1 PR в `master`, CI зелёный (включая golden на пиновом runner), merge закрывает #14 — PR #21; `audit` падал на свежих advisories рантайм-зависимостей, починено в PR #22
+- [x] 3.2 `npm version prerelease` → `v0.4.0-rc.4`, push тега; npm dist-tag `rc` = 0.4.0-rc.4
+- [x] 3.3 Прогон rc.4 на `arch` (`c4builder --site`): диаграммы рендерятся, стрелки залиты; закрывает задачу 6.4 `plugin-system`
+- [x] 3.4 Финальный релиз: `## Unreleased` → `## v0.4.0`, `npm version 0.4.0`, push тега; npm `latest` = 0.4.0
