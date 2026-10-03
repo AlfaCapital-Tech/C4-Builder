@@ -1,0 +1,13 @@
+' Общая тема диаграмм сайта — те же цвета, что у лендинга.
+' Подключается после stdlib-инклюда C4: !include styles.iuml (из корня src),
+' !include ../styles.iuml (из папки страницы).
+
+skinparam shadowing false
+skinparam roundCorner 10
+
+UpdateElementStyle("person", $bgColor="#16324f", $fontColor="#ffffff", $borderColor="#0d2033")
+UpdateElementStyle("system", $bgColor="#c2410c", $fontColor="#ffffff", $borderColor="#9a3412")
+UpdateElementStyle("container", $bgColor="#ea580c", $fontColor="#ffffff", $borderColor="#c2410c")
+UpdateElementStyle("external_system", $bgColor="#64748b", $fontColor="#ffffff", $borderColor="#475569")
+UpdateElementStyle("external_container", $bgColor="#64748b", $fontColor="#ffffff", $borderColor="#475569")
+UpdateBoundaryStyle($bgColor="transparent", $fontColor="#c2410c", $borderColor="#c2410c")

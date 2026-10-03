@@ -8,10 +8,10 @@
 
 ## 2. Контент RU
 
-- [ ] 2.1 Обзор (`docs/ru/src/README.md`): что такое C4-Builder, чем форк отличается от upstream (поддержка, локальный детерминированный рендер, `check`, плагины, агентская разработка), агентский цикл, благодарность upstream. Плюс `context.puml`: C4-контекст c4builder (разработчик/агент → c4builder → PlantUML/D2, docsify-сайт, markdown, OpenSpec-store, OpenAPI-контракты) через stdlib `!include <C4/...>`. Проверка: `node dist/index.js check docs/ru/src/context.puml` → 0; сборка RU → 0, диаграмма есть на странице.
-- [ ] 2.2 Страницы `01 Быстрый старт` … `07 Docker и CI` по таблице design D6 из соответствующих разделов README, переведённые и актуализированные: без упоминаний PDF, vscode-plantuml, `C4Builder-Demo`, «Future plans»; локальный рендер как основной режим. Проверка: сборка RU → 0; `grep -rniE 'pdf|vscode|C4Builder-Demo|adrianvlupu' docs/ru/src` пусто.
-- [ ] 2.3 Страница `08 Агенты` (базовая часть): цикл правка → `c4builder check` (exit-код, формат ошибки `✗ file: line N`) → `--site -w`, pre-commit-хук, офлайн-рендер как свойство для агентов. Без `llms.txt` и скиллов: они в группе 7. Проверка: сборка RU → 0.
-- [ ] 2.4 Страница `09 Разработка`: сборка/тесты/golden, процесс OpenSpec (артефакты на русском, ссылка на раздел журнала решений), релизы rc/final из README «Releasing», правило `CHANGELOG.md`, `container.puml` с контейнерами c4builder (CLI, scan/compose/render, плагины, vendor). Проверка: `check` диаграммы → 0, сборка RU → 0.
+- [x] 2.1 Обзор (`docs/ru/src/README.md`): что такое C4-Builder, чем форк отличается от upstream (поддержка, локальный детерминированный рендер, `check`, плагины, агентская разработка), агентский цикл, благодарность upstream. Плюс `context.puml`: C4-контекст c4builder (разработчик/агент → c4builder → PlantUML/D2, docsify-сайт, markdown, OpenSpec-store, OpenAPI-контракты) через stdlib `!include <C4/...>`. Проверка: `node dist/index.js check docs/ru/src/context.puml` → 0; сборка RU → 0, диаграмма есть на странице.
+- [x] 2.2 Страницы `01 Быстрый старт` … `07 Docker и CI` по таблице design D6 из соответствующих разделов README, переведённые и актуализированные: без упоминаний PDF, vscode-plantuml, `C4Builder-Demo`, «Future plans»; локальный рендер как основной режим. Проверка: сборка RU → 0; `grep -rniE 'pdf|vscode|C4Builder-Demo|adrianvlupu' docs/ru/src` пусто.
+- [x] 2.3 Страница `08 Агенты` (базовая часть): цикл правка → `c4builder check` (exit-код, формат ошибки `✗ file: line N`) → `--site -w`, pre-commit-хук, офлайн-рендер как свойство для агентов. Без `llms.txt` и скиллов: они в группе 7. Проверка: сборка RU → 0.
+- [x] 2.4 Страница `09 Разработка`: сборка/тесты/golden, процесс OpenSpec (артефакты на русском, ссылка на раздел журнала решений), релизы rc/final из README «Releasing», правило `CHANGELOG.md`, `container.puml` с контейнерами c4builder (CLI, scan/compose/render, плагины, vendor). Проверка: `check` диаграммы → 0, сборка RU → 0.
 
 ## 3. Контент EN
 

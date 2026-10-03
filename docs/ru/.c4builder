@@ -12,7 +12,7 @@
 	"supportSearch": true,
 	"repoUrl": "https://github.com/AlfaCapital-Tech/C4-Builder",
 	"executeScript": false,
-	"docsifyTemplate": "",
+	"docsifyTemplate": "../docsify-template.mjs",
 	"webPort": "3000",
 	"includeBreadcrumbs": false,
 	"includeLinkToDiagram": false,

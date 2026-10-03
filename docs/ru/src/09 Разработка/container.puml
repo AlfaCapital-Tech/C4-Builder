@@ -1,0 +1,34 @@
+@startuml
+!include <C4/C4_Container>
+!include ../styles.iuml
+
+LAYOUT_TOP_DOWN()
+
+Person(user, "Разработчик или агент", "Запускает CLI в каталоге проекта")
+
+System_Boundary(c4b, "C4-Builder") {
+    Container(cli, "CLI", "TypeScript, commander", "src/cli: разбор аргументов, мастер настройки, команды new, config, check, jre, site")
+    Container(config, "Конфиг", "TypeScript, zod", "src/config: схема .c4builder, значения по умолчанию, опции сборки")
+    Container(scan, "scan", "TypeScript", "src/core/scan: обход src/, дерево страниц и диаграмм")
+    Container(plugins, "Плагины", "TypeScript", "src/core/plugins + src/plugins: хуки, виртуальные страницы; встроенные openspec и openapi")
+    Container(render, "render", "TypeScript", "src/core/render: PlantUML через java, D2 через WASM, PNG через resvg, кэш по чексуммам")
+    Container(compose, "compose", "TypeScript", "src/core/compose: страницы markdown, sidebar, index.html docsify")
+    ContainerDb(vendor, "vendor/", "Файлы", "PlantUML jar, шрифты Nimbus Sans, docsify, swagger-ui")
+}
+
+System_Ext(java, "Java 17+", "Системная или скачанная c4builder JRE (Temurin)")
+System_Ext(out, "Выход сборки", "dist: сайт, markdown, SVG/PNG")
+
+Rel(user, cli, "Запускает")
+Rel(cli, config, "Читает .c4builder")
+Rel(cli, scan, "Запускает сборку")
+Rel(scan, plugins, "afterScan: страницы плагинов")
+Rel(scan, render, "Дерево")
+Rel(render, compose, "Готовые диаграммы")
+Rel(render, java, "Запускает PlantUML", "java -jar")
+Rel(render, vendor, "jar, шрифт")
+Rel(compose, out, "Пишет")
+Rel(compose, vendor, "docsify")
+
+SHOW_LEGEND()
+@enduml
