@@ -27,7 +27,8 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
 ## v0.4.0
 
 - Plugin system: `plugins` key in `.c4builder`, `afterScan`/`afterBuild` hooks, virtual pages,
-  plugin assets injected into `index.html`, `dir`/`archive` source resolver (see «Plugins»)
+  plugin assets injected into `index.html`, `dir`/`archive` source resolver
+  (see [Plugins](docs/en/src/06%20Plugins/README.md))
 - Built-in plugins: `openspec` (local OpenSpec store → site section, local diagram render) and
   `openapi` (offline swagger-ui pages for a set of OpenAPI specs; `vendor/swagger-ui/swagger-ui.css` 5.32.1)
 - `c4builder check <file...>` — validate individual `.puml` / `.iuml` / `.d2` files with the
@@ -65,7 +66,8 @@ Full TypeScript rewrite (ESM, Node.js ≥ 20.19) with the same CLI and `.c4build
 - Bundled Nimbus Sans font for identical diagram geometry everywhere;
   `useSystemFonts` / `--system-fonts` opts out
 - Config is validated (zod): typos and wrong types fail with a clear message
-- Docker image on GHCR with a tag scheme in sync with npm dist-tags (see [Docker](#docker))
+- Docker image on GHCR with a tag scheme in sync with npm dist-tags
+  (see [Docker and CI](docs/en/src/07%20Docker%20and%20CI/README.md))
 - PDF output removed — use the docsify site or the single/collection markdown outputs
   instead (the `pdf`/`pdfCss` options no longer exist)
 

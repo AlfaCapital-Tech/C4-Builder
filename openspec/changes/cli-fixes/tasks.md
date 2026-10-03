@@ -12,7 +12,7 @@
 
 ## 3. CHANGELOG
 
-- [ ] 3.1 В `CHANGELOG.md` заменить `(see [Docker](#docker))` и `(see «Plugins»)` на относительные ссылки `docs/en/src/07%20Docker%20and%20CI/README.md` и `docs/en/src/06%20Plugins/README.md` (design §4). Проверка: `grep -n '](#\|see «' CHANGELOG.md` пусто; оба целевых файла существуют.
+- [x] 3.1 В `CHANGELOG.md` заменить `(see [Docker](#docker))` и `(see «Plugins»)` на относительные ссылки `docs/en/src/07%20Docker%20and%20CI/README.md` и `docs/en/src/06%20Plugins/README.md` (design §4). Проверка: `grep -n '](#\|see «' CHANGELOG.md` пусто; оба целевых файла существуют.
 
 ## 4. Актуализация
 
