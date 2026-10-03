@@ -1,6 +1,6 @@
 ---
 name: c4builder
-description: Work on a c4builder architecture-docs project - C4 model diagrams in PlantUML (C4-PlantUML stdlib) or D2 plus markdown, built into a docsify site or markdown files. Use when creating or editing .puml, .iuml, .d2 or .md files in a project that has a .c4builder config, when changing .c4builder settings or plugins (openspec, openapi), or when building, validating or previewing the docs. Teaches the edit, c4builder check, build loop and the C4-PlantUML conventions.
+description: Work on a c4builder architecture-docs project - C4 model diagrams in PlantUML (C4-PlantUML stdlib) or D2, BPMN process diagrams, plus markdown, built into a docsify site or markdown files. Use when creating or editing .puml, .iuml, .d2, .bpmn or .md files in a project that has a .c4builder config, when changing .c4builder settings or plugins (openspec, openapi), or when building, validating or previewing the docs. Teaches the edit, c4builder check, build loop and the C4-PlantUML conventions.
 ---
 
 # c4builder
@@ -37,13 +37,13 @@ How the source tree becomes pages:
   name (the root page is `homepageName`). Siblings are sorted by name — prefix folders with
   numbers (`1 …`, `2 …`) to order them.
 - All `.md` files of a folder are concatenated into its page.
-- Every `.puml` / `.d2` in a folder is rendered and attached to the page (on top by
+- Every `.puml` / `.d2` / `.bpmn` in a folder is rendered and attached to the page (on top by
   default, `diagramsOnTop`), unless the markdown places it explicitly with
   `![name](container.puml)` — then it appears exactly there.
 - Files and folders starting with `_` are skipped (use it for shared libraries and drafts);
   `CLAUDE.md` is skipped too. Other files (images, `.iuml`) are copied next to the page —
   keep their names unique across the project.
-- `foo.puml` and `foo.d2` in one folder render to the same image name → build error.
+- `foo.puml`, `foo.d2` and `foo.bpmn` in one folder render to the same image name → build error.
 - Never edit `docs/` (or whatever `distFolder` is): every build regenerates it.
 
 ## The loop: edit → check → build
@@ -57,11 +57,12 @@ How the source tree becomes pages:
 
    Exit code 0 means every file compiles. Otherwise each broken file is reported as
    `✗ <file>: line <N>: <message>` (PlantUML lines count from the top of the file). Errors
-   in a `.iuml` carry no line number; D2 errors end with `<file>:<line>:<col>: <message>`.
+   in a `.iuml` carry no line number; D2 errors end with `<file>:<line>:<col>: <message>`;
+   BPMN problems are `✗ <file>: <element id> [<rule>] <description>`, one line each.
    Fix and re-run until the exit code is 0. A changed `.iuml` is checked directly too: a
    styles file calling C4 macros (`UpdateElementStyle`) is checked with the C4 stdlib
-   included. Same engines as the build (bundled PlantUML jar, bundled D2), no `.c4builder`
-   needed.
+   included. Same engines as the build (bundled PlantUML jar, bundled D2, BPMN pipeline), no
+   `.c4builder` needed.
 3. **Build** the whole project:
 
    ```bash
@@ -111,6 +112,13 @@ Details — sequence/class diagrams, D2, fonts, PNG output: read
 [references/diagrams.md](references/diagrams.md) when writing anything beyond a plain
 C4-PlantUML diagram.
 
+## Business processes (BPMN)
+
+A `.bpmn` file is BPMN 2.0 XML with **only the semantic model** — no `bpmndi` coordinates:
+the build validates the model and lays it out with horizontal pools and lanes. Read
+[references/bpmn.md](references/bpmn.md) before creating or editing any `.bpmn` file: source
+format, pool/lane conventions and how to fix every `c4builder check` message.
+
 ## Config and plugins
 
 - Read [references/config.md](references/config.md) before editing `.c4builder`: unknown
@@ -122,7 +130,7 @@ C4-PlantUML diagram.
 ## Reading an existing architecture
 
 With `generateLLMS: true` the built site has `llms.txt` (every page in sidebar order, links
-to its `.md`) and `llms-full.txt` (all pages in one file, diagrams inlined as PlantUML/D2
+to its `.md`) and `llms-full.txt` (all pages in one file, diagrams inlined as PlantUML/D2/BPMN
 source, shared local includes once in an appendix). To answer questions about a documented
 system, read `llms-full.txt` from the site or `distFolder` instead of crawling pages or
 images: the C4 source (`Person`, `System`, `Rel`) is the model itself.
@@ -134,5 +142,6 @@ images: the C4 source (`Person`, `System`, `Rel`) is the model itself.
 - Running `c4builder --site -w` in the foreground — the agent hangs.
 - Forgetting `c4builder check` and reading a Java stack trace from the full build instead.
 - A page "missing" from the output because its file or folder starts with `_`.
-- `generateLocalImages: false` in a project with `.d2` files — D2 has no online renderer,
-  the build stops with an error.
+- `generateLocalImages: false` in a project with `.d2` or `.bpmn` files — they have no online
+  renderer, the build stops with an error.
+- Writing `bpmndi` coordinates into a `.bpmn` — they are ignored; the layout is always automatic.

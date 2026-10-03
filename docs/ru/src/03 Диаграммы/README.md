@@ -1,7 +1,8 @@
 # Диаграммы
 
-Движок выбирается по расширению файла: `.puml` рендерит PlantUML, `.d2` — D2. Оба формата
-могут жить в одном проекте и даже в одной папке, если у файлов разные имена.
+Движок выбирается по расширению файла: `.puml` рендерит PlantUML, `.d2` — D2, `.bpmn` —
+BPMN-движок. Форматы могут жить в одном проекте и даже в одной папке, если у файлов разные
+имена.
 
 ## PlantUML
 
@@ -53,7 +54,7 @@ Rel(user, bank, "Пользуется", "HTTPS")
 
 Неизменённые диаграммы при повторной сборке не рендерятся: c4builder хранит чексуммы в
 `.c4builder.cache`. В чексумму входят исходник, все локальные `!include` и D2-импорты, путь
-выхода и параметры рендера. Правка общего `styles.iuml` перерисует все диаграммы, которые
+выхода и параметры рендера, для D2 и BPMN — ещё версии пакетов движка. Правка общего `styles.iuml` перерисует все диаграммы, которые
 его подключают, и только их.
 
 ## D2
@@ -69,18 +70,82 @@ Rel(user, bank, "Пользуется", "HTTPS")
   рендерилась отдельной диаграммой: `...@../_c4lib`.
 - Раскладка — ключ `d2Layout`: `dagre` (по умолчанию) или `elk`.
 
+## BPMN
+
+`.bpmn` — бизнес-процесс в нотации BPMN 2.0: события, задачи, шлюзы, горизонтальные пулы и
+дорожки, message flow между участниками. Ссылка из markdown обычная: `![процесс](process.bpmn)`.
+
+**Пишется только семантика.** Файл — стандартный BPMN 2.0 XML: `collaboration` с участниками
+(пулами) и message flow, `process` с `laneSet`, узлами и sequence flow. Координаты (секция
+`bpmndi:BPMNDiagram`) не нужны, а если они есть — игнорируются: раскладку всегда делает
+сборка. Элементы `incoming`/`outgoing` писать не обязательно, связи берутся из
+`sourceRef`/`targetRef`.
+
+```xml
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  id="Definitions_1" targetNamespace="https://example.com/bpmn">
+  <bpmn:process id="Process_1" name="Заявка" isExecutable="false">
+    <bpmn:startEvent id="Start" name="Заявка получена" />
+    <bpmn:userTask id="Check" name="Проверить заявку" />
+    <bpmn:endEvent id="End" name="Заявка обработана" />
+    <bpmn:sequenceFlow id="Flow_1" sourceRef="Start" targetRef="Check" />
+    <bpmn:sequenceFlow id="Flow_2" sourceRef="Check" targetRef="End" />
+  </bpmn:process>
+</bpmn:definitions>
+```
+
+**Раскладка** — [bpmn-auto-layout](https://github.com/bpmn-io/bpmn-auto-layout): пулы и
+дорожки горизонтальными полосами с подписью слева, поток слева направо, каждый узел в полосе
+своей дорожки. Подпроцессы рисуются свёрнутыми — детализацию выносите в отдельный `.bpmn`.
+Раскладчик пока в alpha: если он потеряет элемент модели, сборка остановится с ошибкой и id
+элементов, а не выпустит урезанную схему. Ручными координатами неудачную раскладку не
+поправить — упростите модель или разбейте её на обзор и детализацию.
+
+**Рендер** — [bpmn-js](https://bpmn.io) в стандартной нотации, без браузера и сети. Текст
+меряется по вендорному Nimbus Sans, поэтому SVG одинаков на любой машине (режим
+`useSystemFonts` на BPMN не влияет), PNG — штатной растеризацией.
+
+**Проверка модели** идёт перед раскладкой — и в сборке, и в `c4builder check`. Набор правил
+фиксирован: рекомендованные правила [bpmnlint](https://github.com/bpmn-io/bpmnlint) (кроме
+`no-bpmndi`) и правила c4builder:
+
+| Правило | Уровень | Что проверяет |
+|---|---|---|
+| `no-disconnected`, `start-event-required`, `end-event-required`, `label-required`, … | error | рекомендованный набор bpmnlint |
+| `c4builder/lane-membership` | error | у процесса с дорожками каждый узел ровно в одной дорожке |
+| `c4builder/sequence-flow-in-pool` | error | sequence flow не пересекает границу пула |
+| `c4builder/message-flow-between-pools` | error | message flow соединяет разные пулы |
+| `c4builder/gateway-flow-labels` | warning | ветки XOR/inclusive-шлюза подписаны |
+
+Ошибка останавливает рендер диаграммы, предупреждение только печатается. Каждое нарушение —
+отдельная строка с id элемента и именем правила:
+
+```text
+✗ src/process.bpmn: Task_Check [no-disconnected] Element is not connected
+⚠ src/process.bpmn: Flow_No [c4builder/gateway-flow-labels] Outgoing flow of a diverging gateway has no label
+```
+
+**Конвенции:** пул — организация (внешняя — пулом без процесса, «чёрным ящиком»), дорожка —
+роль или подразделение внутри неё; между пулами только message flow; ветки шлюза подписаны;
+вместо диаграммы на 40+ узлов — обзорный процесс и отдельные `.bpmn` для подробностей.
+
+**Зависимости.** Пакеты движка (`bpmn-js`, `bpmn-moddle`, `bpmnlint`, `bpmn-auto-layout`,
+`jsdom`) — опциональные: npm ставит их вместе с c4builder, а загружаются они, только если в
+проекте есть `.bpmn`. Установка с `--omit=optional` оставляет только ядро — сборка проекта с
+`.bpmn` остановится с подсказкой переустановить c4builder без этого флага.
+
 ## PNG
 
 С `diagramFormat: png` c4builder рендерит SVG и растеризует его через
 [resvg](https://github.com/thx/resvg-js) тем же вендорным шрифтом. PNG получается
-одинаковым для PlantUML и D2 и не требует браузера. ditaa остаётся нативным PNG PlantUML.
+одинаковым для PlantUML, D2 и BPMN и не требует браузера. ditaa остаётся нативным PNG PlantUML.
 
 ## Онлайн-сервер PlantUML
 
 С `generateLocalImages: false` диаграммы не рендерятся локально: в выход попадают ссылки на
 сервер из `plantumlServerUrl` (по умолчанию `https://www.plantuml.com/plantuml`). Это значит,
-что исходники диаграмм уходят на внешний сервер, а D2 в этом режиме не работает — сборка
-остановится с ошибкой. Режим оставлен для совместимости; основной — локальный рендер.
+что исходники диаграмм уходят на внешний сервер, а D2 и BPMN в этом режиме не работают —
+сборка остановится с ошибкой. Режим оставлен для совместимости; основной — локальный рендер.
 
 ## Проверка отдельных диаграмм
 
@@ -88,8 +153,9 @@ Rel(user, bank, "Пользуется", "HTTPS")
 c4builder check src/context.puml "src/4 D2 Example/landscape.d2"
 ```
 
-`check` проверяет `.puml`, `.iuml` и `.d2` тем же движком, что и сборка, но ничего не пишет и
-не требует проекта или `.c4builder`. Код выхода 0 — все файлы собираются, 1 — есть ошибка:
+`check` проверяет `.puml`, `.iuml`, `.d2` и `.bpmn` тем же движком, что и сборка (для `.bpmn` —
+разбор, правила, раскладка и рендер), но ничего не пишет и не требует проекта или `.c4builder`.
+Код выхода 0 — все файлы собираются, 1 — есть ошибка (предупреждения на код не влияют):
 
 ```text
 ✓ src/context.puml
@@ -105,5 +171,5 @@ Pre-commit-хук, который проверяет диаграммы в ин�
 
 ```bash
 #!/bin/sh
-git diff --cached --name-only -z --diff-filter=ACM -- '*.puml' '*.iuml' '*.d2' | xargs -0 -r c4builder check
+git diff --cached --name-only -z --diff-filter=ACM -- '*.puml' '*.iuml' '*.d2' '*.bpmn' | xargs -0 -r c4builder check
 ```

@@ -46,6 +46,14 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
 - All CLI output is in English: config, build, plugin, JRE and lock errors, warnings, wizard
   validation and the "diagram not rendered" placeholder used to be in Russian — update scripts
   that match the old messages
+- BPMN diagrams: `.bpmn` files (BPMN 2.0 XML, semantic part only — coordinates are not needed
+  and ignored) are validated (bpmnlint recommended rules plus lane, pool and message-flow rules),
+  laid out automatically with horizontal pools and lanes and rendered offline to SVG/PNG in the
+  standard notation; `c4builder check` accepts `.bpmn` and prints one `<file>: <id> [<rule>]
+  <message>` line per problem. The engine (`bpmn-js`, `bpmn-moddle`, `bpmnlint`,
+  `bpmn-auto-layout`, `jsdom`) is an optional dependency loaded only for projects with `.bpmn`;
+  installs with `--omit=optional` stop such builds with an install hint. New projects contain the
+  "5 BPMN Example" section
 
 ## v0.4.0
 

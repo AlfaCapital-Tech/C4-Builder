@@ -2,7 +2,7 @@
 
 **Architecture as code that an agent writes, checks and reads.**
 
-C4-Builder is a CLI that builds a folder of markdown files and PlantUML or D2 diagrams into
+C4-Builder is a CLI that builds a folder of markdown files and PlantUML, D2 or BPMN diagrams into
 documentation: a docsify site, a markdown file per folder, or a single file. Folders define the
 hierarchy of the [C4 model](https://c4model.com/) (system → container → component), and git
 keeps the history of architecture decisions next to the code: a change to the architecture is
@@ -32,6 +32,8 @@ to working with AI agents:
   service contracts as offline swagger-ui pages.
 - **D2** as a second diagram engine, PNG via resvg, Java is optional: c4builder downloads a JRE
   if there is none.
+- **BPMN processes** as a third engine: the agent writes BPMN 2.0 XML without coordinates, the
+  build checks the model and lays it out with horizontal pools and lanes.
 - **Engineering basics.** TypeScript, golden snapshots of the rendering, CI on every pull
   request, an npm package and a Docker image per release tag.
 
@@ -51,7 +53,7 @@ Agent skills, `AGENTS.md` in a new project and `llms.txt` with diagram sources a
 
 - [Getting started](01%20Getting%20started/01%20Getting%20started.md) — installation and the first project.
 - [Project](02%20Project/02%20Project.md) — how folders and files become pages.
-- [Diagrams](03%20Diagrams/03%20Diagrams.md) — PlantUML, D2, fonts, PNG, checking.
+- [Diagrams](03%20Diagrams/03%20Diagrams.md) — PlantUML, D2, BPMN, fonts, PNG, checking.
 - [Outputs](04%20Outputs/04%20Outputs.md) — site, markdown per folder, single file.
 - [CLI & configuration](05%20CLI%20and%20configuration/05%20CLI%20and%20configuration.md) —
   commands and `.c4builder` keys.
