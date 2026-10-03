@@ -117,8 +117,8 @@ const clearConsole = (): void => {
 // рендер (Smetana) не зависит от версии, старые JAR удалены (см. change
 // remove-plantuml-version). Одна точка правды для имени и версии JAR.
 const VENDORED_JAR = {
-    version: '1.2025.2',
-    jar: 'plantuml-1.2025.2.jar'
+    version: '1.2026.8',
+    jar: 'plantuml-1.2026.8.jar'
 };
 
 export {

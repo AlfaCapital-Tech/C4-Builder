@@ -2,15 +2,15 @@
 
 ## 1. Обновление JAR
 
-- [ ] 1.1 Скачать `plantuml-1.2026.8.jar` из релиза `v1.2026.8`, сверить sha256 `5e1ecfa8…c462`, положить в `vendor/` вместо `plantuml-1.2025.2.jar`; в `vendor/` ровно один PlantUML-JAR
-- [ ] 1.2 Проверить `Build-Jdk-Spec` в манифесте нового JAR — не выше 17 (минимум JRE-резолвера)
-- [ ] 1.3 `VENDORED_JAR` в `src/util/utils.ts` → `1.2026.8`; `grep -rn 1.2025.2 src test` пуст; `npm run build` и `npm run check` зелёные
+- [x] 1.1 Скачать `plantuml-1.2026.8.jar` из релиза `v1.2026.8`, сверить sha256 `5e1ecfa8…c462`, положить в `vendor/` вместо `plantuml-1.2025.2.jar`; в `vendor/` ровно один PlantUML-JAR
+- [x] 1.2 Проверить совместимость с JRE ≥ 17 (минимум резолвера): `Build-Jdk-Spec: 21`, но ядро PlantUML собрано под Java 11 и работает на JRE 17; байткод Java 21 только у ELK (`!pragma layout elk`) и openpdf, а c4builder рендерит через Smetana. `MAJOR_MIN` не меняем
+- [x] 1.3 `VENDORED_JAR` в `src/util/utils.ts` → `1.2026.8`; `grep -rn 1.2025.2 src test` пуст; `npm run build` и `npm run check` зелёные
 
 ## 2. Регрессия рендера
 
-- [ ] 2.1 `npm run test:unit` зелёный
-- [ ] 2.2 `UPDATE_GOLDEN=1 npm run test:golden`, затем просмотр диффа эталонов: наконечники связей C4 залиты, кириллица и ditaa на месте, нет пустых или битых SVG; повторный `npm run test:golden` без UPDATE зелёный
-- [ ] 2.3 Строка в README changelog `## Unreleased`: PlantUML обновлён до 1.2026.8 (залитые наконечники `>>` в Smetana, closes #14)
+- [x] 2.1 `npm run test:unit` зелёный
+- [x] 2.2 `UPDATE_GOLDEN=1 npm run test:golden`, затем просмотр диффа эталонов: наконечники связей C4 залиты, кириллица и ditaa на месте, нет пустых или битых SVG; повторный `npm run test:golden` без UPDATE зелёный
+- [x] 2.3 Строка в README changelog `## Unreleased`: PlantUML обновлён до 1.2026.8 (залитые наконечники `>>` в Smetana, closes #14)
 
 ## 3. Релиз
 

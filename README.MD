@@ -498,6 +498,8 @@ Publishes to dist-tag `latest`.
 - Archive download failures caused by a TLS-intercepting proxy suggest `NODE_EXTRA_CA_CERTS`
 - `c4builder site` works as a positional subcommand, the same as `--site` (it is the form the
   post-build hint prints)
+- PlantUML updated to 1.2026.8: filled arrowheads for `>>` decorations in Smetana layout (#14).
+  Note: `!pragma layout elk` now requires Java 21
 
 ## v0.3.0
 
