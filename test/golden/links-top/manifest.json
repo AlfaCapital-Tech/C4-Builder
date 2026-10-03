@@ -34,12 +34,12 @@
     "_sidebar.md": "54b5a433c6b8c273bd0a1be2059e9ebcfcac0807f86073591199598bd8c2c59a",
     "context.svg": "2dc654bf4a4eaface436a553c0ca2f24a21c3335a3bc1f2117aa5600c661cce4",
     "golden-fixture.md": "191d7bd41c8c5048790273bc18b4ae520854ffcc2a60bace19733b7b8b35ddd0",
-    "index.html": "65e2a06376f48610d3c7c827715e5f394afbdbc45cccab012db16d7aa50030e9",
+    "index.html": "a549731da22877d4927ea877bdc728df3ca02639876fd51fb8818c51132516bf",
     "vendor/docsify-plantuml.min.js": "199142327e5b525f52d12fc9a5df13f4015c8882d2f3bffc915aa29dbb1079a2",
     "vendor/docsify.min.js": "9123f808d3f6ad736b4a8f99944a611f87c5d4f9328030080a5c029ed5f450a5",
     "vendor/search.min.js": "ab20792dc69dfd9cdb19479f716f69a619e577dec452739196770134dd71f297",
     "vendor/swagger-ui-bundle.js": "4d48f8d2e691dd56ee4c7ea26d786a10aac26c9bd3d80601bd8e957d51f4ea99",
-    "vendor/vue.css": "1f8ddcde10fe1d9f3ab60de8469ed26f9b09716fb882b225d666d4f62838de2e",
+    "vendor/vue.css": "153f8a221cba65ab9c4bcfabe97f692e7539c54572d8b75262e924bee7ab6feb",
     "vendor/zoom-image.min.js": "73e70a64af96532474cb43878ef43ad6e450316e37ebcee96b31e6fe4dc8cd43"
   }
 }

@@ -43,8 +43,9 @@ const TEXT_EXTENSIONS = new Set([
 const isText = (rel) => TEXT_EXTENSIONS.has(path.posix.extname(rel).toLowerCase());
 
 // Диффуемые файлы хранятся в golden/tree полным текстом; vendor-копии docsify
-// (1.8 МБ, прямая копия vendor/docsify) — только sha256 в манифесте.
-export const isDiffable = (rel) => isText(rel) && !rel.startsWith('vendor/');
+// (1.8 МБ, прямая копия vendor/docsify) — только sha256 в манифесте. Кроме CSS: тема
+// правится при копировании, и offline-site.test.mjs сканирует её на внешние адреса.
+export const isDiffable = (rel) => isText(rel) && (!rel.startsWith('vendor/') || rel.endsWith('.css'));
 
 // --- пин managed-JVM ---
 // Golden-рендер обязан идти на одной managed-JVM (Temurin) локально и на CI, а не
