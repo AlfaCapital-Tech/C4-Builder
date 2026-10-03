@@ -12,12 +12,12 @@ Take a look at
 
 - [C4-PlantUML](https://github.com/RicardoNiepel/C4-PlantUML) C4 syntax support for generating plantuml diagrams
 
-- [vscode-plantuml](https://github.com/qjebbs/vscode-plantuml) plugin for visual studio code to view diagrams at design time
+- `c4builder --site -w` live preview: rebuilds on save and reloads the browser; `c4builder check <file>` validates a single diagram
 
 Open the terminal and run the following commands to start compiling the documentation
 
 ```bash
-npm i -g c4builder
+npm i -g @alfacapital-tech/c4builder
 c4builder
 ```
 

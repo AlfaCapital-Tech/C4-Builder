@@ -18,7 +18,7 @@ It relies on these great projects :
 
 -   [Docsify](https://docsify.js.org/) creates a single page site based on markdown files.
 
--   [vscode-plantuml](https://github.com/qjebbs/vscode-plantuml) plugin for visual studio code to view diagrams at design time
+-   `c4builder --site -w` live preview: rebuilds on save and reloads the browser; `c4builder check <file>` validates a single diagram
 
 I strongly encourage people to check them out first but if you want to dive right in, the _new project_ template should be easy to understand and edit.
 
