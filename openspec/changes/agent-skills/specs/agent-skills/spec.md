@@ -20,7 +20,7 @@
 ### Requirement: Состав набора скиллов
 Набор SHALL включать два скилла:
 - `c4builder` — работа с проектом c4builder: структура проекта и `.c4builder`, конвенции C4-PlantUML (stdlib-инклюды `<C4/...>`, общие `.iuml`, кириллица, офлайн-рендер), цикл «правка → `c4builder check` → сборка / `c4builder --site -w`», D2, встроенные плагины `openspec` и `openapi`;
-- `c4builder-setup` — установка и диагностика: npm (каналы `latest` и `rc`) или Docker-образ, Node.js ≥ 20.19, системная java или managed JRE (`c4builder jre install` / `jre info`), функциональная проверка сборкой шаблонного проекта.
+- `c4builder-setup` — установка и диагностика: npm (каналы `latest` и `rc`) или Docker-образ, Node.js версии из `engines` в `package.json`, системная java или managed JRE (`c4builder jre install` / `jre info`), функциональная проверка сборкой шаблонного проекта.
 
 Тексты скиллов MUST быть на английском языке.
 
