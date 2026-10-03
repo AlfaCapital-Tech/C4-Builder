@@ -11,7 +11,7 @@ c4builder, конвенций C4-PlantUML и главного: цикла пра
 ## What Changes
 
 - **Каталог `skills/` в репозитории** в формате Agent Skills (`SKILL.md` с frontmatter),
-  устанавливается командой `npx skills add AlfaCapital-Tech/C4-Builder` в любой
+  устанавливается командой `npx skills add AlfaCapital-Tech/C4-Builder/skills` в любой
   поддерживаемый агент. В npm-пакет скиллы не входят.
 - **Первый набор из двух скиллов** (английский текст, без внутренних хостов):
   - `c4builder` — общий: структура проекта и `.c4builder`, конвенции C4-PlantUML

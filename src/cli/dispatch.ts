@@ -42,6 +42,9 @@ interface ConfStore {
     clear(): void;
 }
 
+// Позиционные подкоманды: allowExcessArguments пропускает любые, список — единственный фильтр.
+const COMMANDS = ['check', 'jre', 'site', 'new', 'config'];
+
 const intro = () => {
     console.log(chalk.blue(figlet.textSync('c4builder')));
     console.log(chalk.gray('Blow up your software documentation writing skills'));
@@ -160,14 +163,22 @@ export default async () => {
         .parse(process.argv);
 
     const opts = program.opts();
+    const [cmd, ...cmdArgs] = program.args;
 
+    // allowExcessArguments глотает любой позиционный аргумент — без этой проверки
+    // опечатка (`c4builder nwe`) молча превращалась бы в сборку.
+    if (cmd !== undefined && !COMMANDS.includes(cmd)) {
+        console.error(chalk.red(`unknown command: ${cmd}`));
+        console.error(`available commands: ${COMMANDS.join(', ')} (see c4builder --help for options)`);
+        process.exit(1);
+    }
     // Прогрев JRE — до загрузки конфига проекта и intro: команда самостоятельна.
-    if (program.args[0] === 'jre') return cmdJre(program.args.slice(1), { force: opts.force });
+    if (cmd === 'jre') return cmdJre(cmdArgs, { force: opts.force });
     // Проверка отдельных диаграмм — тоже без конфига проекта.
-    if (program.args[0] === 'check') return cmdCheck(program.args.slice(1));
-    // `c4builder site` — подсказка после сборки печатает именно эту форму; без
-    // этой строки allowExcessArguments молча глотал бы её и просто пересобирал.
-    if (program.args[0] === 'site') opts.site = true;
+    if (cmd === 'check') return cmdCheck(cmdArgs);
+    // `site`/`new`/`config` — позиционные синонимы одноимённых флагов: эту форму печатают
+    // подсказки CLI и учат README, шаблон и скиллы.
+    if (cmd) opts[cmd] = true;
 
     let conf: ConfStore = { get: () => {} } as unknown as ConfStore;
     let cacheConf: ConfStore = { get: () => {}, set: () => {}, clear: () => {} } as unknown as ConfStore;
@@ -215,7 +226,7 @@ export default async () => {
 
     if (!currentConfig.HAS_RUN && !opts.new) {
         console.log(
-            `\nif you created the project using the 'c4model new' command you can just press enter and go with the default options to get a basic idea of how it works.\n`
+            `\nif you created the project using the 'c4builder new' command you can just press enter and go with the default options to get a basic idea of how it works.\n`
         );
         console.log(`you can always change the configuration by running > c4builder config\n`);
     }

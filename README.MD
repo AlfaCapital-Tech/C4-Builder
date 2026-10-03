@@ -59,6 +59,10 @@ cd project
 c4builder
 ```
 
+The new project also contains `AGENTS.md`: how to build and check the diagrams, written for
+coding agents (Claude Code, Codex, Cursor…), plus the [agent skills](#agent-skills) install
+command. It lives outside `src/` and never reaches the generated documentation.
+
 A sample project is available at [C4Builder-Demo](https://github.com/adrianvlupu/C4Builder-Demo/tree/master/docs).
 
 ## Available Commands
@@ -91,9 +95,12 @@ Options:
   -h, --help                      display help for command
 ```
 
-There is also a `jre` subcommand: `c4builder jre install [--force]` pre-downloads the
-private JRE cache, `c4builder jre info` prints which Java would be used. `c4builder site`
-is accepted as a positional subcommand too, equivalent to `--site`.
+Positional subcommands: `c4builder check <file...>` (see below), `c4builder jre install
+[--force]` pre-downloads the private JRE cache, `c4builder jre info` prints which Java would
+be used. `c4builder new`, `c4builder config` and `c4builder site` are equivalent to `--new`,
+`--config` and `--site` and combine with the other flags (`c4builder new --name demo -y`).
+Any other positional argument is an error (`unknown command`, exit code 1) — a typo never
+starts a build.
 
 ### Validating single diagrams
 
@@ -124,6 +131,24 @@ If no configuration was set it will ask for it and then do the actual build. Run
 
 To change the configuration after building for the first time just run `c4builder config`. The default will be the configuration set previously so you can just edit the options you are interested in.
 
+## Agent skills
+
+c4builder ships [Agent Skills](https://agentskills.io) for coding agents (Claude Code, Codex,
+Cursor and the other agents supported by the [`skills`](https://github.com/vercel-labs/skills)
+CLI). They live in the `skills/` folder of this repository (not in the npm package) and
+describe the latest stable release. Install the whole set into the current project:
+
+```bash
+npx skills add AlfaCapital-Tech/C4-Builder/skills
+```
+
+`--skill <name>` installs a single skill, `-g` installs for the user instead of the project.
+
+| Skill | Use it for |
+|---|---|
+| `c4builder` | working on a project: layout of `src/` and `.c4builder`, the edit → `c4builder check` → build / `c4builder --site -w` loop, C4-PlantUML conventions (stdlib includes, shared `.iuml`, offline render), D2, the `openspec` / `openapi` plugins |
+| `c4builder-setup` | install / update (npm channels `latest` and `rc`, Docker image), Java or the managed JRE, a smoke build of the template project |
+
 ## The project
 
 The project consists of two main folders. The **source** folder and the **destination** folder.
@@ -132,6 +157,7 @@ Following the C4 model, folders inside the **source** represent Systems/Containe
 
 ```bash
 │   .gitignore
+│   AGENTS.md # instructions for coding agents
 │   README.MD
 ├───docs # destination folder
 └───src # source folder
@@ -475,6 +501,18 @@ git push --follow-tags
 Publishes to dist-tag `latest`.
 
 # Change log
+
+## Unreleased
+
+- `c4builder new` and `c4builder config` work as positional subcommands (the form the README
+  and the CLI hints use) — they used to silently start a build; an unknown positional command
+  now fails with `unknown command` and exit code 1 instead of building
+- Agent skills for coding agents in `skills/`, installed with
+  `npx skills add AlfaCapital-Tech/C4-Builder/skills`: `c4builder` (project layout, the
+  edit → check → build loop, C4-PlantUML and D2 conventions, plugins) and `c4builder-setup`
+  (install, update, diagnose) — see «Agent skills»
+- New projects (`--new`) contain `AGENTS.md` with build and check instructions for coding
+  agents; it is not part of the generated documentation
 
 ## v0.4.0
 
