@@ -21,10 +21,10 @@
 
 ## 3. `AGENTS.md` в шаблоне
 
-- [ ] 3.1 Написать `template/AGENTS.md` (английский, ~40 строк): `c4builder` (сборка), `c4builder check <file...>`, `c4builder --site -w`, исходники в `src/`, конвенции (stdlib `<C4/...>`, общий `styles.iuml`, офлайн), `npx skills add AlfaCapital-Tech/C4-Builder/skills`. Проверка — файл есть
-- [ ] 3.2 Добавить `template/AGENTS.md` во входы `test/skills.test.mjs` (флаги, подкоманды, денайлист). Проверка — тест зелёный
-- [ ] 3.3 Тест на шаблон (в `test/skills.test.mjs` или рядом): `node dist/index.js --new --name demo -y` во временном каталоге → `demo/AGENTS.md` существует; после сборки в `demo` (managed JRE, как в golden) в выходах нет `AGENTS.md`. Проверка — тест зелёный; `npm run test:golden` без изменений эталонов
-- [ ] 3.4 README: упомянуть `AGENTS.md` в описании `--new` и строку changelog; проверка — ревью глазами
+- [x] 3.1 Написать `template/AGENTS.md` (английский, ~40 строк): `c4builder` (сборка), `c4builder check <file...>`, `c4builder --site -w`, исходники в `src/`, конвенции (stdlib `<C4/...>`, общий `styles.iuml`, офлайн), `npx skills add AlfaCapital-Tech/C4-Builder/skills`. Проверка — файл есть
+- [x] 3.2 Добавить `template/AGENTS.md` во входы `test/skills.test.mjs` (флаги, подкоманды, денайлист). Проверка — тест зелёный
+- [x] 3.3 Тест на шаблон (в `test/skills.test.mjs` или рядом): `node dist/index.js --new --name demo -y` во временном каталоге → `demo/AGENTS.md` существует; после сборки в `demo` (managed JRE, как в golden) в выходах нет `AGENTS.md`. Проверка — тест зелёный; `npm run test:golden` без изменений эталонов
+- [x] 3.4 README: упомянуть `AGENTS.md` в описании `--new` и строку changelog; проверка — ревью глазами
 
 ## 4. Интеграция
 

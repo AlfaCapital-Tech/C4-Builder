@@ -59,6 +59,10 @@ cd project
 c4builder
 ```
 
+The new project also contains `AGENTS.md`: how to build and check the diagrams, written for
+coding agents (Claude Code, Codex, Cursor…), plus the [agent skills](#agent-skills) install
+command. It lives outside `src/` and never reaches the generated documentation.
+
 A sample project is available at [C4Builder-Demo](https://github.com/adrianvlupu/C4Builder-Demo/tree/master/docs).
 
 ## Available Commands
@@ -153,6 +157,7 @@ Following the C4 model, folders inside the **source** represent Systems/Containe
 
 ```bash
 │   .gitignore
+│   AGENTS.md # instructions for coding agents
 │   README.MD
 ├───docs # destination folder
 └───src # source folder
@@ -506,6 +511,8 @@ Publishes to dist-tag `latest`.
   `npx skills add AlfaCapital-Tech/C4-Builder/skills`: `c4builder` (project layout, the
   edit → check → build loop, C4-PlantUML and D2 conventions, plugins) and `c4builder-setup`
   (install, update, diagnose) — see «Agent skills»
+- New projects (`--new`) contain `AGENTS.md` with build and check instructions for coding
+  agents; it is not part of the generated documentation
 
 ## v0.4.0
 

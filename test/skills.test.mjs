@@ -1,12 +1,14 @@
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
 
-import { REPO_ROOT } from './helpers.mjs';
+import { BUILD_TIMEOUT_MS, REPO_ROOT, TMP_ROOT } from './helpers.mjs';
 
-// Скиллы (skills/*) учат агентов командам CLI — дрейф «скилл ↔ CLI» и утечка внутренних
-// хостов ловятся здесь, в обычном `npm test`, против собранного dist/.
+// Скиллы (skills/*) и template/AGENTS.md учат агентов командам CLI — дрейф «текст ↔ CLI»
+// и утечка внутренних хостов ловятся здесь, в обычном `npm test`, против собранного dist/.
+const CLI = path.join(REPO_ROOT, 'dist', 'index.js');
+const AGENTS_MD = path.join(REPO_ROOT, 'template', 'AGENTS.md');
 const SKILLS_DIR = path.join(REPO_ROOT, 'skills');
 const SKILLS = fs
     .readdirSync(SKILLS_DIR, { withFileTypes: true })
@@ -17,14 +19,12 @@ const references = (name) => {
     const dir = path.join(SKILLS_DIR, name, 'references');
     return fs.existsSync(dir) ? fs.readdirSync(dir).map((f) => path.join(dir, f)) : [];
 };
-const INPUTS = SKILLS.flatMap((name) => [skillFile(name), ...references(name)]);
+const INPUTS = [...SKILLS.flatMap((name) => [skillFile(name), ...references(name)]), AGENTS_MD];
 const rel = (file) => path.relative(REPO_ROOT, file);
 
 const COMMANDS = ['check', 'jre', 'site', 'new', 'config'];
 const FLAG = /(?<![\w-])--?[a-zA-Z][\w-]*/g;
-const help = spawnSync(process.execPath, [path.join(REPO_ROOT, 'dist', 'index.js'), '--help'], {
-    encoding: 'utf8'
-}).stdout;
+const help = spawnSync(process.execPath, [CLI, '--help'], { encoding: 'utf8' }).stdout;
 const KNOWN_FLAGS = new Set(help.match(FLAG));
 
 // Frontmatter Agent Skills — плоские `key: value` между `---`; YAML-парсера в зависимостях
@@ -79,5 +79,38 @@ describe('скиллы', () => {
     it.each(INPUTS.map(rel))('%s: нет внутренних хостов', (file) => {
         const found = fs.readFileSync(path.join(REPO_ROOT, file), 'utf8').match(/[\w.-]*alfacapital\.ru/gi);
         expect(found, `${file}: внутренний хост`).toBeNull();
+    });
+});
+
+// AGENTS.md лежит в корне шаблона, вне src/: `--new` копирует его в проект, а сборка
+// публикует только rootFolder. Java — как у пользователя (системная или managed): здесь
+// важен состав выходов, а не детерминизм рендера, пин JRE как в golden не нужен.
+describe('AGENTS.md в шаблоне', () => {
+    fs.mkdirSync(TMP_ROOT, { recursive: true });
+    const dir = fs.mkdtempSync(path.join(TMP_ROOT, 'agents-md-'));
+    const project = path.join(dir, 'demo');
+    afterAll(() => fs.rmSync(dir, { recursive: true, force: true }));
+    const marker = 'npx skills add AlfaCapital-Tech/C4-Builder/skills';
+    const run = (cwd, ...args) =>
+        spawnSync(process.execPath, [CLI, ...args], { cwd, encoding: 'utf8', timeout: BUILD_TIMEOUT_MS });
+
+    it('`--new -y` кладёт AGENTS.md в корень проекта', () => {
+        const res = run(dir, '--new', '--name', 'demo', '-y');
+        expect(res.status, res.stderr).toBe(0);
+        expect(fs.readFileSync(path.join(project, 'AGENTS.md'), 'utf8')).toContain(marker);
+    });
+
+    it('сборка не публикует AGENTS.md и его текст', () => {
+        const res = run(project);
+        expect(res.status, `${res.stdout}\n${res.stderr}`).toBe(0);
+        const out = path.join(project, 'docs');
+        const leaks = fs
+            .readdirSync(out, { recursive: true })
+            .filter(
+                (f) =>
+                    path.basename(f) === 'AGENTS.md' ||
+                    (/\.(md|html)$/.test(f) && fs.readFileSync(path.join(out, f), 'utf8').includes(marker))
+            );
+        expect(leaks).toEqual([]);
     });
 });
