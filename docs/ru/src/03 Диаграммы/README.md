@@ -83,17 +83,17 @@ c4builder check src/context.puml "src/4 D2 Example/landscape.d2"
 
 ```text
 ✓ src/context.puml
-✗ src/system.puml: строка 4: Fatal parsing error
+✗ src/system.puml: line 4: Fatal parsing error
 ```
 
 `!include` разрешается от папки проверяемого файла. Библиотека `.iuml` проверяется включением
-в пустую диаграмму — без C4-инклюда. Поэтому `.iuml` с макросами C4 (`UpdateElementStyle` и т. п.)
-отдельно не проходит: проверяйте диаграммы, которые его подключают.
+в пустую диаграмму, а `.iuml` с макросами C4 (`UpdateElementStyle` и т. п.) — в контексте
+C4-stdlib, как в диаграммах, которые его подключают. Номер строки для `.iuml` не печатается.
 
 Pre-commit-хук, который проверяет диаграммы в индексе (`.git/hooks/pre-commit`, пробелы в
 путях не мешают):
 
 ```bash
 #!/bin/sh
-git diff --cached --name-only -z --diff-filter=ACM -- '*.puml' '*.d2' | xargs -0 -r c4builder check
+git diff --cached --name-only -z --diff-filter=ACM -- '*.puml' '*.iuml' '*.d2' | xargs -0 -r c4builder check
 ```

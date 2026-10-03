@@ -13,8 +13,8 @@
 | `c4builder check <files...>` | checks `.puml`, `.iuml`, `.d2` diagrams without a build, exit code 0 or 1 |
 | `c4builder jre info` | which Java will be used (JSON) |
 | `c4builder jre install [--force]` | download a JRE into the cache in advance; `--force` — even if system Java exists |
-| `c4builder --list` | print the current config |
-| `c4builder --reset` | clear the project config |
+| `c4builder --list` | print the current config; since 0.5.0 outside a project — an error with exit code 1, no files created |
+| `c4builder --reset` | clear the project config; since 0.5.0 outside a project — an error with exit code 1 |
 | `c4builder --docs` | short reference of config keys and the address of this documentation |
 
 Positional commands are `check`, `jre`, `site`, and since 0.5.0 also `new` and `config`. Since

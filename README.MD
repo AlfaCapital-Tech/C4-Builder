@@ -49,7 +49,7 @@ Without `-y`, c4builder asks for the project name and the first build runs the s
 The agent loop — edit a diagram, check it, look at the result:
 
 ```bash
-c4builder check src/context.puml   # exit code 0 or 1, "✗ file: строка N: message" on error
+c4builder check src/context.puml   # exit code 0 or 1, "✗ file: line N: message" on error
 c4builder --site -w                # rebuilds and reloads the browser on every save
 ```
 

@@ -23,11 +23,18 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
   sidebar order and the full text with diagram sources instead of images, local includes listed
   once in an appendix. On for new projects; an existing `.c4builder` without the key builds as
   before
+- `c4builder check` output is in English: errors read `✗ <file>: line <N>: <message>` (was
+  `строка <N>` — update scripts that match it), usage and unsupported-extension messages too.
+  A `.iuml` calling C4 macros (`UpdateElementStyle`…) now passes `check`: after an engine error
+  it is re-checked with the C4 stdlib included
+- `c4builder --docs` no longer creates `.c4builder` and `.c4builder.cache` in the current
+  folder; `--list` and `--reset` outside a project fail with exit code 1 instead of creating them
 
 ## v0.4.0
 
 - Plugin system: `plugins` key in `.c4builder`, `afterScan`/`afterBuild` hooks, virtual pages,
-  plugin assets injected into `index.html`, `dir`/`archive` source resolver (see «Plugins»)
+  plugin assets injected into `index.html`, `dir`/`archive` source resolver
+  (see [Plugins](docs/en/src/06%20Plugins/README.md))
 - Built-in plugins: `openspec` (local OpenSpec store → site section, local diagram render) and
   `openapi` (offline swagger-ui pages for a set of OpenAPI specs; `vendor/swagger-ui/swagger-ui.css` 5.32.1)
 - `c4builder check <file...>` — validate individual `.puml` / `.iuml` / `.d2` files with the
@@ -65,7 +72,8 @@ Full TypeScript rewrite (ESM, Node.js ≥ 20.19) with the same CLI and `.c4build
 - Bundled Nimbus Sans font for identical diagram geometry everywhere;
   `useSystemFonts` / `--system-fonts` opts out
 - Config is validated (zod): typos and wrong types fail with a clear message
-- Docker image on GHCR with a tag scheme in sync with npm dist-tags (see [Docker](#docker))
+- Docker image on GHCR with a tag scheme in sync with npm dist-tags
+  (see [Docker and CI](docs/en/src/07%20Docker%20and%20CI/README.md))
 - PDF output removed — use the docsify site or the single/collection markdown outputs
   instead (the `pdf`/`pdfCss` options no longer exist)
 

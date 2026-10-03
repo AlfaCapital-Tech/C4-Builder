@@ -29,27 +29,38 @@ const getJava = (): Promise<string> => {
     return javaPromise;
 };
 
+// .iuml — библиотека без @startuml: сам по себе PlantUML «рендерит» его без ошибок,
+// поэтому проверяем через включение в пустую диаграмму. Контекст C4 библиотеке стилей
+// задаёт подключающая диаграмма — при ошибке движка повтор с C4-stdlib (Dynamic тянет
+// Component → Container → Context, Deployment — Container). Не сразу с C4: это +~1.2 с
+// java на файл, а самодостаточные библиотеки подключают C4 сами.
+const LIB_CONTEXTS = ['', '!include <C4/C4_Dynamic>\n!include <C4/C4_Deployment>\n'];
+
 const checkPlantUml = async (abs: string): Promise<void> => {
-    // .iuml — библиотека без @startuml: сам по себе PlantUML «рендерит» его без ошибок,
-    // поэтому проверяем через включение в пустую диаграмму.
     const isLib = path.extname(abs) === '.iuml';
-    const content = isLib ? `@startuml\n!include ${abs}\n@enduml\n` : await readFile(abs);
-    const isDitaa = /@startditaa/i.test(content.toString());
-    try {
-        await renderDiagram(content, {
-            javaBin: await getJava(),
-            jarPath: JAR_PATH,
-            includePath: path.dirname(abs),
-            format: isDitaa ? 'png' : 'svg',
-            charset: 'UTF-8',
-            isDitaa,
-            useSystemFonts: false
-        });
-    } catch (e) {
-        const m = (e as Error).message.match(PUML_ERROR);
-        if (!m) throw e;
-        // Для .iuml позиция относится к обёртке, а не к файлу — не показываем.
-        throw new Error(isLib ? m[2] : `строка ${Number(m[1]) + 1}: ${m[2]}`);
+    const attempts = isLib
+        ? LIB_CONTEXTS.map((ctx) => `@startuml\n${ctx}!include ${abs}\n@enduml\n`)
+        : [await readFile(abs)];
+    for (const [i, content] of attempts.entries()) {
+        const isDitaa = /@startditaa/i.test(content.toString());
+        try {
+            await renderDiagram(content, {
+                javaBin: await getJava(),
+                jarPath: JAR_PATH,
+                includePath: path.dirname(abs),
+                format: isDitaa ? 'png' : 'svg',
+                charset: 'UTF-8',
+                isDitaa,
+                useSystemFonts: false
+            });
+            return;
+        } catch (e) {
+            const m = (e as Error).message.match(PUML_ERROR);
+            if (!m) throw e;
+            if (i < attempts.length - 1) continue;
+            // Для .iuml позиция относится к обёртке, а не к файлу — не показываем.
+            throw new Error(isLib ? m[2] : `line ${Number(m[1]) + 1}: ${m[2]}`);
+        }
     }
 };
 
@@ -61,7 +72,7 @@ const CHECKERS: Record<string, (abs: string) => Promise<unknown>> = {
 
 export default async (files: string[]): Promise<void> => {
     if (files.length === 0) {
-        console.log(chalk.red('использование: c4builder check <file...>  (.puml | .iuml | .d2)'));
+        console.log(chalk.red('usage: c4builder check <file...>  (.puml | .iuml | .d2)'));
         process.exit(1);
     }
     let failed = 0;
@@ -70,7 +81,7 @@ export default async (files: string[]): Promise<void> => {
         const abs = path.resolve(file);
         const check = CHECKERS[path.extname(abs).toLowerCase()];
         try {
-            if (!check) throw new Error('неизвестное расширение (ожидается .puml, .iuml или .d2)');
+            if (!check) throw new Error('unsupported extension (expected .puml, .iuml or .d2)');
             await check(abs);
             console.log(chalk.green(`✓ ${file}`));
         } catch (e) {

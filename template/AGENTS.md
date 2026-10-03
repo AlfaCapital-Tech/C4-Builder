@@ -17,9 +17,8 @@ when present, otherwise c4builder downloads a private JRE).
 ## Workflow
 
 1. Edit files in `src/` only — `docs/` is generated and wiped on every build.
-2. Run `c4builder check` on every diagram you changed. Errors look like
-   `✗ <file>: строка <N>: <message>` (`строка` = line). Fix until the exit code is 0.
-   After editing `src/styles.iuml`, check the diagrams that include it.
+2. Run `c4builder check` on every diagram you changed, `src/styles.iuml` included. Errors
+   look like `✗ <file>: line <N>: <message>`. Fix until the exit code is 0.
 3. Run `c4builder` and make sure it exits with code 0. Leave `c4builder --site -w` to a
    human or run it in the background.
 

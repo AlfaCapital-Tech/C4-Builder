@@ -180,12 +180,23 @@ export default async () => {
     // `site`/`new`/`config` — позиционные синонимы одноимённых флагов: эту форму печатают
     // подсказки CLI и учат README, шаблон и скиллы.
     if (cmd) opts[cmd] = true;
+    // Справочные команды не должны оставлять файлов: конструктор Configstore сразу пишет
+    // .c4builder и .c4builder.cache, и следующий запуск считал бы каталог проектом.
+    if (opts.docs) return cmdHelp();
+    const configPath = path.join(process.cwd(), opts.configFile ?? '.c4builder');
+    if ((opts.list || opts.reset) && !opts.new && !fs.existsSync(configPath)) {
+        console.error(
+            chalk.red(
+                `no .c4builder in ${process.cwd()} — run inside a project or create one with c4builder new`
+            )
+        );
+        process.exit(1);
+    }
 
     let conf: ConfStore = { get: () => {} } as unknown as ConfStore;
     let cacheConf: ConfStore = { get: () => {}, set: () => {}, clear: () => {} } as unknown as ConfStore;
     // Лок сборки — рядом с конфигом проекта (см. util/lock.ts). Заполняется вместе с conf.
     let lockPath = '';
-    const configPath = path.join(process.cwd(), opts.configFile ?? '.c4builder');
     if (!opts.new) {
         const projectKey = process.cwd().split(path.sep).splice(1).join('_');
         lockPath = `${configPath}.lock`;
@@ -202,8 +213,6 @@ export default async () => {
             conf.delete('checksums');
         }
     }
-
-    if (opts.docs) return cmdHelp();
 
     // --reset чистит .c4builder при ЛЮБОМ его содержимом — до строгой проверки конфига,
     // чтобы сломанное значение не мешало собственному сбросу.

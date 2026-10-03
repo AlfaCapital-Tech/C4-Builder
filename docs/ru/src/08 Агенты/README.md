@@ -18,7 +18,7 @@ C4-модель в текстовом виде агент правит так ж
    Код выхода 0 — всё собирается. Код 1 — в выводе строка с файлом и номером строки:
 
    ```text
-   ✗ src/1 Internet Banking System/system.puml: строка 12: Fatal parsing error
+   ✗ src/1 Internet Banking System/system.puml: line 12: Fatal parsing error
    ```
 
    Проверка идёт тем же движком и с теми же `!include`, что и сборка, и занимает секунды:
