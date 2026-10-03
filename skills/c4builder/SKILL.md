@@ -56,12 +56,12 @@ How the source tree becomes pages:
    ```
 
    Exit code 0 means every file compiles. Otherwise each broken file is reported as
-   `✗ <file>: строка <N>: <message>` (`строка` means "line"; PlantUML lines count from the
-   top of the file). Errors in a `.iuml` carry no line number; D2 errors end with
-   `<file>:<line>:<col>: <message>`. Fix and re-run until the exit code is 0. After changing
-   a `.iuml`, check the `.puml` files that include it: a `.iuml` alone is checked inside an
-   empty diagram, so a styles file calling C4 macros (`UpdateElementStyle`) fails on its
-   own. Same engines as the build (bundled PlantUML jar, bundled D2), no `.c4builder` needed.
+   `✗ <file>: line <N>: <message>` (PlantUML lines count from the top of the file). Errors
+   in a `.iuml` carry no line number; D2 errors end with `<file>:<line>:<col>: <message>`.
+   Fix and re-run until the exit code is 0. A changed `.iuml` is checked directly too: a
+   styles file calling C4 macros (`UpdateElementStyle`) is checked with the C4 stdlib
+   included. Same engines as the build (bundled PlantUML jar, bundled D2), no `.c4builder`
+   needed.
 3. **Build** the whole project:
 
    ```bash

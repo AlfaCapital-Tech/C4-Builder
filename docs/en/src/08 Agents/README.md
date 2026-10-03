@@ -16,10 +16,10 @@ locally, without a network and without a human.
    ```
 
    Exit code 0 — everything compiles. Exit code 1 — the output has a line with the file and the
-   line number (`строка` is Russian for "line"):
+   line number:
 
    ```text
-   ✗ src/1 Internet Banking System/system.puml: строка 12: Fatal parsing error
+   ✗ src/1 Internet Banking System/system.puml: line 12: Fatal parsing error
    ```
 
    The check uses the same engine and the same `!include`s as the build and takes seconds: the

@@ -23,6 +23,12 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
   sidebar order and the full text with diagram sources instead of images, local includes listed
   once in an appendix. On for new projects; an existing `.c4builder` without the key builds as
   before
+- `c4builder check` output is in English: errors read `✗ <file>: line <N>: <message>` (was
+  `строка <N>` — update scripts that match it), usage and unsupported-extension messages too.
+  A `.iuml` calling C4 macros (`UpdateElementStyle`…) now passes `check`: after an engine error
+  it is re-checked with the C4 stdlib included
+- `c4builder --docs` no longer creates `.c4builder` and `.c4builder.cache` in the current
+  folder; `--list` and `--reset` outside a project fail with exit code 1 instead of creating them
 
 ## v0.4.0
 

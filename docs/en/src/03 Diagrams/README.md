@@ -82,21 +82,22 @@ c4builder check src/context.puml "src/4 D2 Example/landscape.d2"
 
 `check` validates `.puml`, `.iuml` and `.d2` files with the same engine as the build, but writes
 nothing and needs no project or `.c4builder`. Exit code 0 means every file compiles, 1 means
-there is an error (messages are printed in Russian for now; `строка` means "line"):
+there is an error:
 
 ```text
 ✓ src/context.puml
-✗ src/system.puml: строка 4: Fatal parsing error
+✗ src/system.puml: line 4: Fatal parsing error
 ```
 
 `!include` is resolved from the folder of the checked file. An `.iuml` library is checked by
-including it into an empty diagram — without the C4 include. So an `.iuml` that uses C4 macros
-(`UpdateElementStyle` and the like) does not pass on its own: check the diagrams that include it.
+including it into an empty diagram, and an `.iuml` with C4 macros (`UpdateElementStyle` and the
+like) — in the context of the C4 stdlib, as in the diagrams that include it. No line number is
+printed for an `.iuml`.
 
 A pre-commit hook that checks staged diagrams (`.git/hooks/pre-commit`; spaces in paths are
 fine):
 
 ```bash
 #!/bin/sh
-git diff --cached --name-only -z --diff-filter=ACM -- '*.puml' '*.d2' | xargs -0 -r c4builder check
+git diff --cached --name-only -z --diff-filter=ACM -- '*.puml' '*.iuml' '*.d2' | xargs -0 -r c4builder check
 ```
