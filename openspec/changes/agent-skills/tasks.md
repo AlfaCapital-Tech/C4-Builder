@@ -1,10 +1,15 @@
 # Tasks
 
+## 0. CLI: позиционные `new` и `config`
+
+- [ ] 0.1 `src/cli/dispatch.ts` по design §7: `new` → `opts.new`, `config` → `opts.config`; первый позиционный аргумент вне `check|jre|site|new|config` → `unknown command: <x>` со списком команд в stderr, код 1, без сборки и без промптов. Проверка: тест `test/cli-commands.test.mjs` (spawn `node dist/index.js`) — `new --name demo -y` в temp-каталоге создаёт проект как `--new`; `nwe` → код 1 и сообщение; `check`/`jre info`/`site` не затронуты (существующие тесты зелёные)
+- [ ] 0.2 README: строки 57/125 (`c4builder new`, `c4builder config`) теперь корректны — сверить, добавить `new`/`config` в описание команд; строка changelog `## Unreleased`. Проверка: ревью глазами
+
 ## 1. Скилл `c4builder-setup` и проверка скиллов
 
 - [ ] 1.1 Подготовить worktree: `npm ci && npm run build`; проверка — `node dist/index.js --help` печатает список опций
 - [ ] 1.2 Написать `skills/c4builder-setup/SKILL.md` на английском по design §3 (Node ≥ 20.19 → канал `latest`/`rc`, даунгрейд только с подтверждения → `npm i -g @alfacapital-tech/c4builder@<tag>` или Docker-образ `ghcr.io/alfacapital-tech/c4builder` → java / `c4builder jre install`, `c4builder jre info` → smoke `c4builder --new --name smoke -y` + `c4builder` во временном каталоге). Без внутренних хостов и `--registry`; проверка — файл существует, frontmatter `name: c4builder-setup`, описание говорит «что и когда»
-- [ ] 1.3 Добавить `test/skills.test.mjs` по design §4: разбор frontmatter `skills/*/SKILL.md` (правила `name`/`description` из спеки), извлечение флагов и подкоманды из строк `c4builder …` и сверка с `node dist/index.js --help` и списком `check|jre|site`, денайлист `alfacapital\.ru`; сообщения об ошибке называют файл и найденное значение. Проверка — `npx vitest run test/skills.test.mjs` зелёный; временная порча (`name: c4-builder-setup`, команда `c4builder new`, адрес `x.alfacapital.ru`) даёт красный тест с понятным сообщением, после отката — снова зелёный
+- [ ] 1.3 Добавить `test/skills.test.mjs` по design §4: разбор frontmatter `skills/*/SKILL.md` (правила `name`/`description` из спеки), извлечение флагов и подкоманды из строк `c4builder …` и сверка с `node dist/index.js --help` и списком `check|jre|site|new|config`, денайлист `alfacapital\.ru`; сообщения об ошибке называют файл и найденное значение. Проверка — `npx vitest run test/skills.test.mjs` зелёный; временная порча (`name: c4-builder-setup`, команда `c4builder serve`, адрес `x.alfacapital.ru`) даёт красный тест с понятным сообщением, после отката — снова зелёный
 - [ ] 1.4 README: раздел «Agent skills» (что это, `npx skills add AlfaCapital-Tech/C4-Builder`, `--skill <name>`, список скиллов) и строка в changelog `## Unreleased` (создать секцию над `## v0.4.0`; если change `docs-site` уже вмержен — в `CHANGELOG.md`); проверка — команды раздела совпадают с командами в `SKILL.md` (ревью глазами)
 
 ## 2. Общий скилл `c4builder`
