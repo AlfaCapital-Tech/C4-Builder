@@ -28,10 +28,10 @@
 
 ## 6. README, CHANGELOG и ссылки на upstream
 
-- [ ] 6.1 Перенести секции changelog из README в `CHANGELOG.md` без изменения текста (`## Unreleased` сверху, если секции нет — создать); добавить в `## Unreleased` строку о новом сайте документации и ссылке в `--docs`/шаблоне. Проверка: `grep -c '^## v' CHANGELOG.md` равен числу версий в старом README; в README нет `# Change log`.
-- [ ] 6.2 Переписать `README.MD` по design D7 (EN, ≤150 строк, ссылки на `https://alfacapital-tech.github.io/C4-Builder/ru/` и `/en/`). Проверка: `wc -l README.MD` ≤ 150; `grep -n 'docs/images\|adrianvlupu.github.io\|C4Builder-Demo' README.MD` пусто.
-- [ ] 6.3 Заменить адрес сайта upstream на сайт форка в `src/cli/commands/help.ts` и `template/readme.md`; `homepage` в `package.json` → адрес сайта. Проверка: `npm run build && node dist/index.js --docs | grep alfacapital-tech.github.io`; `grep -rn 'adrianvlupu.github.io' src template README.MD package.json` пусто; `npm run test:golden` не меняет эталоны (`template/readme.md` не в `src/` шаблона — если меняет, переснять и объяснить в PR).
-- [ ] 6.4 Обновить `CLAUDE.md` репо: правило changelog → `CHANGELOG.md`; изменение поведения → правка страницы сайта в обеих языковых версиях; ссылка «README Releasing» → страница «Разработка»; в «Структуре» — `docs/` (сайт RU/EN, лендинг). Проверка: в `CLAUDE.md` нет упоминания changelog в README.
+- [x] 6.1 Перенести секции changelog из README в `CHANGELOG.md` без изменения текста (`## Unreleased` сверху, если секции нет — создать); добавить в `## Unreleased` строку о новом сайте документации и ссылке в `--docs`/шаблоне. Проверка: `grep -c '^## v' CHANGELOG.md` равен числу версий в старом README; в README нет `# Change log`.
+- [x] 6.2 Переписать `README.MD` по design D7 (EN, ≤150 строк, ссылки на `https://alfacapital-tech.github.io/C4-Builder/ru/` и `/en/`). Проверка: `wc -l README.MD` ≤ 150; `grep -n 'docs/images\|adrianvlupu.github.io\|C4Builder-Demo' README.MD` пусто.
+- [x] 6.3 Заменить адрес сайта upstream на сайт форка в `src/cli/commands/help.ts` и `template/readme.md`; `homepage` в `package.json` → адрес сайта. Проверка: `npm run build && node dist/index.js --docs | grep alfacapital-tech.github.io`; `grep -rn 'adrianvlupu.github.io' src template README.MD package.json` пусто; `npm run test:golden` не меняет эталоны (`template/readme.md` не в `src/` шаблона — если меняет, переснять и объяснить в PR).
+- [x] 6.4 Обновить `CLAUDE.md` репо: правило changelog → `CHANGELOG.md`; изменение поведения → правка страницы сайта в обеих языковых версиях; ссылка «README Releasing» → страница «Разработка»; в «Структуре» — `docs/` (сайт RU/EN, лендинг). Проверка: в `CLAUDE.md` нет упоминания changelog в README.
 
 ## 7. Агентский раздел (ЗАВИСИТ от реализованных change'ей `llms-txt` и `agent-skills`)
 

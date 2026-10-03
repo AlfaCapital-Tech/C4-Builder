@@ -1,712 +1,98 @@
-# Overview
+**[Документация на русском](https://alfacapital-tech.github.io/C4-Builder/ru/)** · [English documentation](https://alfacapital-tech.github.io/C4-Builder/en/) · [Site](https://alfacapital-tech.github.io/C4-Builder/)
 
-c4builder is a lightweight nodejs cli tool for building, maintaining and sharing a software architecture project using only text.
+# C4-Builder
 
-The main idea behind the project is that a **developer** could use familiar tools to define software.
+**Architecture as code that an agent writes, checks and reads.**
 
-Combined with **git** any change to the architecture defined in those documents is easily traced. Pull requests, branches, cherry picks and all of the git features could be used as an easier way to keep track of the projects architectural changes.
+C4-Builder is a CLI that builds a folder of markdown files and [PlantUML](https://plantuml.com/)
+or [D2](https://d2lang.com/) diagrams into documentation: a [docsify](https://docsify.js.org/)
+site, a markdown file per folder, or a single file. Folders follow the
+[C4 model](https://c4model.com/) (system → container → component), and git keeps the history of
+architecture decisions next to the code.
 
-It relies on these great projects :
+## Why this fork
 
--   [PlantUml](http://plantuml.com/) creates diagrams from plain text.
+The original [C4-Builder](https://github.com/adrianvlupu/C4-Builder) by Adrian Victor Lupu has not
+been developed since March 2024. At Alfa-Capital it builds an architecture repository of more
+than a hundred diagrams, so we continue it as a maintained fork, adapted to working with AI agents:
 
--   [Markdown](https://guides.github.com/features/mastering-markdown/) creates rich text documents from plant text.
+- **Deterministic offline rendering.** The PlantUML jar, the diagram font and the engines ship
+  with the package; layout is computed by PlantUML's built-in Smetana engine, no Graphviz. The
+  same sources produce the same SVG on a laptop, in CI and in Docker, with no network access.
+- **`c4builder check`** validates individual `.puml`/`.iuml`/`.d2` files with the build's own
+  engine and returns an exit code and the error line — fast feedback for agents, pre-commit
+  hooks and CI.
+- **Plugins.** `openspec` publishes an [OpenSpec](https://github.com/Fission-AI/OpenSpec) store
+  (specs and changes) as a site section; `openapi` renders service contracts as offline
+  swagger-ui pages.
+- **D2** as a second diagram engine, deterministic **PNG** via resvg, and **optional Java**:
+  without a system Java, c4builder downloads a private JRE.
+- **Maintained.** TypeScript, golden rendering snapshots, CI on every pull request, releases to
+  npm and GHCR. The PDF output of the original was removed.
 
--   [C4Model](https://c4model.com/) the idea behind maps of your code
+## Quick start
 
--   [C4-PlantUML](https://github.com/RicardoNiepel/C4-PlantUML) C4 syntax support for generating plantuml diagrams
-
--   [Docsify](https://docsify.js.org/) creates a single page site based on markdown files.
-
--   `c4builder --site -w` live preview: rebuilds on save and reloads the browser; `c4builder check <file>` validates a single diagram
-
-I strongly encourage people to check them out first but if you want to dive right in, the _new project_ template should be easy to understand and edit.
-
-<!-- ![idea](docs/images/idea.jpg) -->
-
-![edit](docs/images/edit.gif)
-
-# Getting started
-
-`npm i -g @alfacapital-tech/c4builder`
-
-`npm install` (no tag) always installs the latest stable release. Release candidates are
-opt-in only — see [Installing a release candidate](#installing-a-release-candidate).
-
-**Requirements:** Node.js ≥ 20.19. Local diagram generation needs Java 17+: a system
-`java` (`JAVA_HOME`/`PATH`) is used when present, otherwise c4builder downloads a private
-JRE into its cache automatically (`c4builder jre install` pre-warms it, `jre info` shows
-what would be used). Graphviz is **not** required — layout is computed by PlantUML's
-built-in Java engine (Smetana). The PlantUML jar and the diagram font are bundled.
-
-With `diagramFormat: png`, diagrams are produced by rasterizing their SVG with
-[`@resvg/resvg-js`](https://github.com/thx/resvg-js) (a bundled dependency, prebuilt
-native binary, no browser). This gives a single deterministic PNG for both PlantUML and
-D2, using the bundled font. ditaa diagrams stay native PlantUML PNG.
-
-**Fonts.** Diagrams use the bundled Nimbus Sans (Helvetica metrics, Cyrillic and Greek —
-see `vendor/fonts/README.md`), so diagram geometry is identical on any machine.
-`useSystemFonts: true` in `.c4builder` (or `--system-fonts` for one run) renders with the
-machine's fonts instead — machine-dependent by design.
-
-The easiest way to get started is with the _new project_ template.
-
-![new](docs/images/new.gif)
+Requires Node.js ≥ 20.19. Java 17+ is optional.
 
 ```bash
-c4builder new
-cd project
-c4builder
+npm i -g @alfacapital-tech/c4builder
+
+c4builder new --name demo -y     # project from the template, full config, no prompts
+cd demo
+c4builder                        # build into docs/
+c4builder --site -w              # live preview at http://localhost:3000
 ```
 
-The new project also contains `AGENTS.md`: how to build and check the diagrams, written for
-coding agents (Claude Code, Codex, Cursor…), plus the [agent skills](#agent-skills) install
-command. It lives outside `src/` and never reaches the generated documentation.
+`c4builder new` and `c4builder config` are the same as the `--new` and `--config` flags.
+Without `-y`, `new` asks for the project name and the first build runs the setup wizard.
 
-A sample project is available at [C4Builder-Demo](https://github.com/adrianvlupu/C4Builder-Demo/tree/master/docs).
-
-## Available Commands
+The agent loop — edit a diagram, check it, look at the result:
 
 ```bash
-$ c4builder --help
-Usage: index [options]
-
-Options:
-  -V, --version                   output the version number
-  --new                           create a new project from template
-  --name <name>                   project name for --new (skips the name prompt)
-  -y, --yes                       non-interactive --new: defaults, no prompts
-                                  (requires --name)
-  --force                         for `jre install`: force JRE download even if
-                                  system java is present
-  --config                        change configuration for the current directory
-  -c, --config-file <.c4builder>  set the configuration file relative path
-  --list                          display the current configuration
-  --reset                         clear all configuration
-  --site                          serve the generated site
-  -w, --watch                     watch for changes and rebuild
-  -o, --open                      open the generated site in the browser (with
-                                  --site)
-  --docs                          a brief explanation for the available
-                                  configuration options
-  --system-fonts                  render with system fonts instead of the
-                                  bundled one (not deterministic)
-  -p, --port <n>                  port used for serving the generated site
-  -h, --help                      display help for command
+c4builder check src/context.puml   # exit code 0 or 1, "✗ file: строка N: message" on error
+c4builder --site -w                # rebuilds and reloads the browser on every save
 ```
 
-Positional subcommands: `c4builder check <file...>` (see below), `c4builder jre install
-[--force]` pre-downloads the private JRE cache, `c4builder jre info` prints which Java would
-be used. `c4builder new`, `c4builder config` and `c4builder site` are equivalent to `--new`,
-`--config` and `--site` and combine with the other flags (`c4builder new --name demo -y`).
-Any other positional argument is an error (`unknown command`, exit code 1) — a typo never
-starts a build.
-
-### Validating single diagrams
-
-`c4builder check <file...>` validates individual `.puml` / `.iuml` / `.d2` files with the
-same engines the build uses (bundled PlantUML jar + system/managed Java, bundled D2) —
-no project or `.c4builder` needed, nothing is written. Handy for pre-commit hooks and CI:
-exit code 0 when every file compiles, 1 otherwise; errors are printed as
-`✗ file: line N: <engine message>`.
-
-```bash
-c4builder check src/c4/context.puml lib/shared.iuml diagrams/flow.d2
-```
-
-`!include` paths resolve relative to the checked file's directory; a `.iuml` library is
-validated by including it into an empty diagram.
-
-A minimal pre-commit hook (`.git/hooks/pre-commit`) that validates staged diagrams:
-
-```bash
-#!/bin/sh
-files=$(git diff --cached --name-only --diff-filter=ACM -- '*.puml' '*.iuml' '*.d2')
-[ -z "$files" ] || exec c4builder check $files
-```
-
-By default, running `c4builder` will attempt to build the project.
-
-If no configuration was set it will ask for it and then do the actual build. Running just `c4builder` after a configuration will no longer show the wizard.
-
-To change the configuration after building for the first time just run `c4builder config`. The default will be the configuration set previously so you can just edit the options you are interested in.
-
-## Agent skills
-
-c4builder ships [Agent Skills](https://agentskills.io) for coding agents (Claude Code, Codex,
-Cursor and the other agents supported by the [`skills`](https://github.com/vercel-labs/skills)
-CLI). They live in the `skills/` folder of this repository (not in the npm package) and
-describe the latest stable release. Install the whole set into the current project:
-
-```bash
-npx skills add AlfaCapital-Tech/C4-Builder/skills
-```
-
-`--skill <name>` installs a single skill, `-g` installs for the user instead of the project.
-
-| Skill | Use it for |
-|---|---|
-| `c4builder` | working on a project: layout of `src/` and `.c4builder`, the edit → `c4builder check` → build / `c4builder --site -w` loop, C4-PlantUML conventions (stdlib includes, shared `.iuml`, offline render), D2, the `openspec` / `openapi` plugins |
-| `c4builder-setup` | install / update (npm channels `latest` and `rc`, Docker image), Java or the managed JRE, a smoke build of the template project |
-
-## The project
-
-The project consists of two main folders. The **source** folder and the **destination** folder.
-
-Following the C4 model, folders inside the **source** represent Systems/Containers/Components or any other additional type of information regarding the software.
-
-```bash
-│   .gitignore
-│   AGENTS.md # instructions for coding agents
-│   README.MD
-├───docs # destination folder
-└───src # source folder
-    │   context.md
-    │   context.puml
-    └───Internet Banking System
-        │   system.puml
-        │   system.md
-        ├───API Application
-        │       container.puml
-        │       container.md
-        └───Single Page Application
-            │   container.puml
-            │   container.md
-            └───Additional Information
-                    additionalDetails.md
-                    class.puml
-                    sequence.puml
-                    class.1.md
-```
-
-The **destination** folder is automatically generated by the **build** process and can have various formats. The folder can provide a drill down style view of the Systems/Containers/Components in different ways. Either by pushing it as a site to gitpages or using it as a navigable markdown directly in the repository.
-
-## The build
-
-The **build** process consists of parsing the folder structure and merging together all the information found in the markdown files and diagrams into a single file per folder.
-
-The basic navigation, table of contents, local generation of images and their inclusion in the end documentation is automatically handled.
-
-c4builder comes with a wizard for managing configuration for each project folder.
-
-![wizard](docs/images/build.gif)
-
-> NOTE
->
-> Files starting with \_ will be ignored during the build process
-
-**Diagrams can be placed at arbitrary positions by adding them to the markdown file like this: `![name](<diagram name>.puml)`**
-
-### D2 diagrams (second render backend)
-
-Besides PlantUML (`.puml`), c4builder renders [D2](https://d2lang.com) diagrams
-(`.d2`). The backend is chosen by file extension — `.puml` → PlantUML, `.d2` → D2
-(WASM → SVG, no external binaries) — and both can live side by side in the same
-project. Reference a `.d2` from markdown exactly like a `.puml`:
-`![name](<diagram name>.d2)`.
-
-The D2 engine is an **optional dependency** (`@terrastruct/d2`, ~60 MB) loaded
-lazily only when the project actually contains a `.d2` file. Install it once:
-
-```bash
-npm install @terrastruct/d2
-```
-
-If a `.d2` is present but the package is missing, the build stops with an explicit
-install hint instead of a cryptic module error.
-
-**Imports and shared styles.** D2 [imports](https://d2lang.com/tour/imports)
-(`@file` / spread `...@file`) let you factor reusable classes and vars into a shared
-`.d2` — the D2 counterpart of PlantUML's `.iuml`. c4builder resolves the import graph
-itself and feeds it to the engine, so no network access is needed. Prefix a shared
-library file with `_` (e.g. `_c4lib.d2`) so it is not rendered as a standalone
-diagram — like every `_`-prefixed file it is skipped by the build, yet it is still
-resolved when imported (`...@../_c4lib`). Editing an imported file invalidates the
-cache of every diagram that imports it. See the demo project's
-`4 D2 Example/landscape.d2` importing `...@../_c4lib`.
-
-**Layout.** The `d2Layout` config option selects the layout engine (`dagre`, the
-default, or `elk`). The golden test pins a specific engine for reproducibility.
-
-## The output
-
-Using the configuration wizard you can choose any combination of outputs. By default all are enabled.
-
-The output should have the same folder structure as the **source**. Each `.md` file inherits all the contents from the source `.md` files in that folder and appends either a link or the actual diagram images at the bottom/top of the file.
-
-```bash
-│   .gitignore
-│   README.MD
-├───docs
-│   │   README.md
-│   └───Internet Banking System
-│       │   README.md
-│       ├───API Application
-│       │       README.md
-│       └───Single Page Application
-│           │   README.md
-│           └───Additional Diagrams
-│                   README.md
-└───src
-    │   ...
-```
-
-### Collection of markdowns with navigation
-
-The generated markdown files can be pushed to git and viewed directly as a readme.
-
-![mds](docs/images/md.gif)
-
-#### Options:
-
--   basic navigation
-
-    The basic navigation comes in the form of a menu providing a link to the parent and descendants.
-
-    ![basicnav](docs/images/simple-nav.jpg)
-
--   table of contents (default)
-
-    The table navigation always shows all entities and bolds the current one
-
-    ![tablenav](docs/images/table-nav.jpg)
-
-### Single markdown file
-
-Outputs into a single file containing all entities. It includes a table of contents and a 'go to top' link after each section.
-
-The generated markdown file makes for an easy single page readme for the repository.
-
-![singlemd](docs/images/single-md.jpg)
-
-### Docsify site with a sidebar
-
-After choosing to generate a docsify site, it can be viewed locally by running `c4builder --site` and accessing `http://localhost:3000`;
-
-The site is minimalistic including only a sidebar with the System/Container/Components hierarchy.
-
-The sidebar is generated manually so that it only contains the main entities defined in the project in a hierarchical way.
-
-![site](docs/images/site.jpg)
-
-By going to the github repository settings and enabling GitHub pages the site be pushed with ease and provide an overview to all people involved in the project.
-
-![github](docs/images/githubpages.gif)
-
-### llms.txt for AI agents
-
-With `"generateLLMS": true` the site gets two more files in its root, following
-[llmstxt.org](https://llmstxt.org/):
-
-- `llms.txt` — the entry point: project name, a short description and a flat list of pages
-  `- [System / Container](System/Container/Container.md)` in sidebar order (folders from
-  `excludeSidebarFolderByPath` are left out, plugin pages such as `openspec` are included).
-  Links are relative to the site root.
-- `llms-full.txt` — the full text of all pages, in the same order as the single markdown file.
-  Every diagram is inserted as its **source** in a ```` ```plantuml ```` / ```` ```d2 ```` block
-  instead of an image, regardless of `diagramFormat`, `embedDiagram` and `includeLinkToDiagram`.
-  Local `!include` files and D2 imports (nested ones too) are listed once in the
-  `## Included files` appendix at the end; `!include <C4/...>` (stdlib) and URL includes stay
-  as lines in the diagram source.
-
-The files need the website (`generateWEB`): without it the build prints a warning and skips
-them. New projects (`c4builder --new`, the wizard option «llms.txt for AI agents») have it on;
-an existing `.c4builder` without the key builds exactly as before — enable it with
-`c4builder --config` or by adding `"generateLLMS": true`.
-
-### Generate diagrams locally
-
-By default this option is disabled. The output will contain image files generated using the plantuml server.
-
-```md
-![diagram](https://www.plantuml.com/plantuml/svg/0/fLLDRnen4BqZyH-c72eY4RZqr5CJWff48K5PqgIdQDOxW5j_h6ml9AhwtplsifibJPL3EO0yVfvvy_p6VF41NQYqwlS-I2DKLL3b56n2AFtdoSJXRho...)
-```
-
-If enabled, all images will be generated using the local copy of plantuml (via a
-direct `java` call, Smetana layout — no graphviz needed) and will get added to the
-**destination** folder.
-
-### Replace diagrams with link
-
-By default this is disabled. If enabled, the output will no longer include the actual diagrams but a link to the image file.
-
-### Include breadcrumbs
-
-The current entity structure is inserted after the header
-
-## Plugins
-
-Plugins extend the build with content from outside `rootFolder` (virtual pages that go through
-the regular pipeline: sidebar, search, `generateMD`, complete markdown, local diagram render)
-and with site assets. They are listed in `.c4builder` under `plugins` — either `"name"` or
-`["name", { ...options }]`:
-
-```json
-{
-  "plugins": [
-    "openspec",
-    ["openapi", { "dir": "../contracts", "glob": "*/openapi.yaml" }]
-  ]
-}
-```
-
-A plugin identifier resolves in this order: a built-in name (`openspec`, `openapi`) → a local
-ESM module (`./plugins/my.mjs`, `../shared/plugin.mjs`, absolute path) → an npm package resolved
-from the project directory. Options are validated by the plugin's own zod schema **before** the
-build starts (built-in plugins are strict — an unknown option key is an error); `${ENV_VAR}`
-placeholders inside string options are replaced from the environment (unset → empty string) and
-never printed (archive URLs appear in messages without their query string, so a token passed as
-`?private_token=${TOKEN}` stays out of the logs). A malformed `plugins` entry always fails the
-build (it is the one key the wizard cannot repair). Older c4builder versions ignore the `plugins`
-key, so a rollback keeps building.
-
-### `openspec` — publish a local OpenSpec store
-
-Renders an [OpenSpec](https://github.com/Fission-AI/OpenSpec) store as a site section:
-a summary (counters, task progress), a page per active change, the specs tree and the archive.
-A change page shows the header (schema, dates, task progress, links to subpages) plus the first
-artifact of `artifacts` (by default `proposal` — the "why" is visible without a click); the
-remaining artifacts (`design`, `tasks`, then any other `*.md` alphabetically) are subpages, and
-spec deltas live under `specs/…` mirroring the folder layout (a folder that has its own
-`spec.md` and nested specs gets one page: the spec followed by the list of nested ones).
-```` ```plantuml ```` / ```` ```d2 ```` fences inside artifacts, deltas and store specs are
-rendered by the **local** engines (nothing is sent to plantuml.com); the image name is derived
-from the fence content, so inserting or reordering fences never reuses a neighbour's cached
-image. A block that fails to render does not fail the build (these blocks used to be rendered by
-the browser, which showed an error image): the page gets a placeholder image and the build prints
-a warning naming the artifact file. Relative links between artifacts of a change point to their pages, referenced files
-(images, notes) are copied next to the page (and to the output root for the complete markdown;
-`excludeOtherFiles` applies). The store folder is watched in `-w`.
-
-| Option      | Default                        | Meaning                                                        |
-|-------------|--------------------------------|----------------------------------------------------------------|
-| `dir`       | `openspec`                     | store folder (relative to the project directory)               |
-| `mount`     | `OpenSpec`                     | section name (and its path in the output folder)               |
-| `artifacts` | `["proposal","design","tasks"]`| artifact order; the first one is shown on the change page itself |
-
-### `openapi` — swagger-ui pages for a set of OpenAPI specs
-
-Finds specs by `glob` in a local folder (`dir`) **or** in a `tar.gz`/`zip` archive fetched over
-HTTP (`archive`, e.g. a GitLab/GitHub repository archive URL; `subdir` picks a folder inside it,
-`headers` adds request headers such as `{"PRIVATE-TOKEN": "${GITLAB_TOKEN}"}` — empty values are
-dropped, so the same config works with and without a token). One page per spec, named after the
-spec's parent folder (file name for specs in the source root), plus an index. All `yaml`/`yml`/
-`json` files of the source are copied into `<mount>/_specs/…` keeping their relative layout, so
-relative `$ref`s (including shared schema files that do not match `glob`) keep resolving; pages
-load swagger-ui from the bundled `vendor/` files — no CDN, no access to the source repository is
-needed by readers. The plugin forces `executeScript` (logged) and injects `swagger-ui.css` and
-`swagger-ui-bundle.js` into `index.html` after the template is rendered (skipped when the template
-already links the bundle), so custom `docsifyTemplate`s need no change. The output folder is never
-treated as a source (`dir: "."` is fine). Archives are downloaded once per process (watch mode
-reuses them). Behind a TLS-intercepting proxy the download fails with `self-signed certificate in
-certificate chain` — point `NODE_EXTRA_CA_CERTS` at the CA bundle (Node reads neither the system
-store nor `SSL_CERT_FILE`); the error message says so as well.
-
-| Option    | Default                          | Meaning                                  |
-|-----------|----------------------------------|------------------------------------------|
-| `mount`   | `API`                            | section name                             |
-| `dir`     | —                                | local folder with specs (watched in `-w`)|
-| `archive` | —                                | HTTP(S) URL of a tar.gz/zip archive      |
-| `subdir`  | —                                | folder inside the archive / `dir`        |
-| `headers` | —                                | HTTP headers for the archive request     |
-| `glob`    | `**/openapi.{yaml,yml,json}`     | spec pattern (`**`, `*`, `?`, `{a,b}`)   |
-
-Example for a repository that keeps its `openspec/` store next to the C4 sources and consumes
-contracts from another repository:
-
-```json
-{
-  "plugins": [
-    "openspec",
-    ["openapi", {
-      "archive": "https://gitlab.example.com/api/v4/projects/123/repository/archive.tar.gz?sha=main",
-      "glob": "*/openapi.yaml",
-      "headers": { "PRIVATE-TOKEN": "${GITLAB_TOKEN}" }
-    }]
-  ]
-}
-```
-
-### Writing a plugin
-
-A plugin is an ESM module whose default export is a plain object (use `definePlugin` from
-`@alfacapital-tech/c4builder/dist/core/plugins/types.js` for typing):
-
-```js
-import { z } from 'zod';
-export default {
-  name: 'changelog',
-  options: z.object({ file: z.string().default('CHANGELOG.md') }).strict(), // optional
-  watchPaths: (opts) => [opts.file],                                          // optional
-  assets: { styles: ['/abs/path/x.css'], scripts: ['/abs/path/x.js'] },      // optional
-  requires: { executeScript: true },                                          // optional
-  async afterScan(ctx, opts) {
-    // ctx.tree, ctx.options — the build tree/options; ctx.source({ dir } | { archive, subdir, headers })
-    // resolves a folder; ctx.addPage adds a virtual page (missing parents become index pages).
-    ctx.addPage({
-      path: ['Changelog'],
-      markdown: '## Latest\n\n![flow](flow.puml)',
-      diagrams: [{ file: 'flow.puml', content: '@startuml\nA -> B\n@enduml' }]
-    });
-  },
-  async afterBuild(ctx, opts) { /* ctx.distFolder, ctx.options — copy extra files, run checks */ }
-};
-```
-
-Hooks run in the order of the `plugins` list; an exception aborts the build with the plugin's
-name (the previous `dist` backup is kept as usual).
-
-# Future plans
-
-I would like to bind the **build** phase to the C4 model. It could parse the diagrams and know what Person/System/Component/Container is related to what and help with additional validation. Maybe even export to [structurizr](https://structurizr.com/) or vice versa.
-
-The project is still in it's early phase and I intend on using it on some actual projects in order to find more use cases and fix bugs.
-
-## Installing a release candidate
-
-Pre-release builds (`0.x.y-rc.N`) are published under the npm dist-tag `rc` and never touch
-`latest`:
-
-`npm i @alfacapital-tech/c4builder@rc`
-
-`npm install` without a tag keeps installing the latest stable version.
-
-## Docker
-
-The image ships everything needed for a build (Node, JRE, PlantUML jar, fonts, D2) —
-mount a project into `/pwd`:
+Or with Docker (Node, JRE, PlantUML, fonts and D2 included):
 
 ```bash
 docker run --rm -v "$PWD:/pwd" ghcr.io/alfacapital-tech/c4builder:latest c4builder
 ```
 
-Tags (in sync with npm dist-tags):
+Release candidates are published under the `rc` tag: `npm i -g @alfacapital-tech/c4builder@rc`.
 
-| tag | meaning |
-|---|---|
-| `X.Y.Z`, `sha-…` | immutable releases / commits |
-| `latest` | latest stable release |
-| `rc` | latest release candidate |
-| `edge` | last master commit |
-| `pr-N` | pull request builds |
+## Documentation
 
-Use the image directly in CI (GitHub Actions, GitLab CI) as the job image — the
-`c4builder` binary is on `PATH`.
+The full reference lives on the documentation site, in Russian (primary) and English:
 
-## Releasing
+| | Русский | English |
+|---|---|---|
+| Getting started | [Быстрый старт](https://alfacapital-tech.github.io/C4-Builder/ru/#/01%20Быстрый%20старт/01%20Быстрый%20старт) | [Getting started](https://alfacapital-tech.github.io/C4-Builder/en/#/01%20Getting%20started/01%20Getting%20started) |
+| Diagrams, fonts, `check` | [Диаграммы](https://alfacapital-tech.github.io/C4-Builder/ru/#/03%20Диаграммы/03%20Диаграммы) | [Diagrams](https://alfacapital-tech.github.io/C4-Builder/en/#/03%20Diagrams/03%20Diagrams) |
+| CLI and `.c4builder` keys | [CLI и конфигурация](https://alfacapital-tech.github.io/C4-Builder/ru/#/05%20CLI%20и%20конфигурация/05%20CLI%20и%20конфигурация) | [CLI & configuration](https://alfacapital-tech.github.io/C4-Builder/en/#/05%20CLI%20and%20configuration/05%20CLI%20and%20configuration) |
+| Plugins | [Плагины](https://alfacapital-tech.github.io/C4-Builder/ru/#/06%20Плагины/06%20Плагины) | [Plugins](https://alfacapital-tech.github.io/C4-Builder/en/#/06%20Plugins/06%20Plugins) |
+| Docker and CI | [Docker и CI](https://alfacapital-tech.github.io/C4-Builder/ru/#/07%20Docker%20и%20CI/07%20Docker%20и%20CI) | [Docker & CI](https://alfacapital-tech.github.io/C4-Builder/en/#/07%20Docker%20and%20CI/07%20Docker%20and%20CI) |
+| Working with agents | [Агенты](https://alfacapital-tech.github.io/C4-Builder/ru/#/08%20Агенты/08%20Агенты) | [Agents](https://alfacapital-tech.github.io/C4-Builder/en/#/08%20Agents/08%20Agents) |
+| Development and releases | [Разработка](https://alfacapital-tech.github.io/C4-Builder/ru/#/09%20Разработка/09%20Разработка) | [Development](https://alfacapital-tech.github.io/C4-Builder/en/#/09%20Development/09%20Development) |
 
-Publishing is triggered by pushing a git tag `v<version>` — pushes/merges to `master` alone
-do not publish.
+What changed in each version: [CHANGELOG.md](https://github.com/AlfaCapital-Tech/C4-Builder/blob/master/CHANGELOG.md).
+Why things are the way they are: the design log (OpenSpec store) on the site.
 
-Every user-facing PR adds a line to the `## Unreleased` section of the change log below;
-the release commit renames it to `## vX.Y.Z`.
+## Contributing
 
-**Release candidate** (from `master`, as many as needed — consumers pinned to `rc`
-pick each one up automatically):
-
-```
-npm version X.Y.Z-rc.1 -m "rc: %s"      # first candidate
-npm version prerelease -m "rc: %s"      # next ones: rc.2, rc.3, …
-git push --follow-tags
+```bash
+npm ci && npm run build
+npm test            # all tests, golden rendering snapshots included
+npm run check       # biome lint and format
 ```
 
-Publishes to npm dist-tag `rc` and docker tag `rc`; `latest` is untouched.
-
-**Final release** (rename `## Unreleased` → `## vX.Y.Z` first):
-
-```
-npm version X.Y.Z -m "release: %s"
-git push --follow-tags
-```
-
-Publishes to dist-tag `latest`.
-
-# Change log
-
-## Unreleased
-
-- `c4builder new` and `c4builder config` work as positional subcommands (the form the README
-  and the CLI hints use) — they used to silently start a build; an unknown positional command
-  now fails with `unknown command` and exit code 1 instead of building
-- Agent skills for coding agents in `skills/`, installed with
-  `npx skills add AlfaCapital-Tech/C4-Builder/skills`: `c4builder` (project layout, the
-  edit → check → build loop, C4-PlantUML and D2 conventions, plugins) and `c4builder-setup`
-  (install, update, diagnose) — see «Agent skills»
-- New projects (`--new`) contain `AGENTS.md` with build and check instructions for coding
-  agents; it is not part of the generated documentation
-- `llms.txt` / `llms-full.txt` for AI agents (`generateLLMS`, needs the website): a page index in
-  sidebar order and the full text with diagram sources instead of images, local includes listed
-  once in an appendix. On for new projects; an existing `.c4builder` without the key builds as
-  before (see «llms.txt for AI agents»)
-
-## v0.4.0
-
-- Plugin system: `plugins` key in `.c4builder`, `afterScan`/`afterBuild` hooks, virtual pages,
-  plugin assets injected into `index.html`, `dir`/`archive` source resolver (see «Plugins»)
-- Built-in plugins: `openspec` (local OpenSpec store → site section, local diagram render) and
-  `openapi` (offline swagger-ui pages for a set of OpenAPI specs; `vendor/swagger-ui/swagger-ui.css` 5.32.1)
-- `c4builder check <file...>` — validate individual `.puml` / `.iuml` / `.d2` files with the
-  bundled engines, without a project build (#13)
-- D2 compile errors are printed as readable `file:line:col: message` lines instead of raw JSON
-- Regression test for two adjacent `![..](x.puml)` embeds (#12 — the bug itself was fixed in 0.3.0)
-- Diagram cache key now includes the output path: diagrams that swap contents (or fence blocks
-  that shift position) are re-rendered instead of silently reusing a neighbour's cached image.
-  The first build after upgrading re-renders everything once.
-- Watch mode ignores the output folder, its backup and `.c4builder*`, and de-duplicates nested
-  watch roots (a plugin `dir` covering the project no longer loops the rebuild)
-- A broken ```` ```plantuml ````/```` ```d2 ```` block inside an OpenSpec artifact no longer fails
-  the build: the page gets a placeholder image and the warning names the source file
-- Diagram errors name the file the diagram came from (fence names are content hashes)
-- `{a,b}` glob alternatives accept `*`/`?` inside them (`{*.yaml,*.yml}`)
-- Archive download failures caused by a TLS-intercepting proxy suggest `NODE_EXTRA_CA_CERTS`
-- `c4builder site` works as a positional subcommand, the same as `--site` (it is the form the
-  post-build hint prints)
-- PlantUML updated to 1.2026.8: filled arrowheads for `>>` decorations in Smetana layout (#14).
-  Note: `!pragma layout elk` now requires Java 21
-- Security: runtime dependencies bumped (figlet, tar, qs) to fix npm audit advisories
-
-## v0.3.0
-
-Full TypeScript rewrite (ESM, Node.js ≥ 20.19) with the same CLI and `.c4builder` format.
-
-- PlantUML renders via a direct `java` call with the built-in Smetana layout — graphviz
-  is no longer needed; the jar is bundled (`vendor/`)
-- Java itself is optional: system java ≥ 17 is used when present, otherwise a private
-  JRE is downloaded automatically (`c4builder jre install` / `jre info`)
-- Second diagram backend: [D2](https://d2lang.com) (`.d2` files, optional
-  `@terrastruct/d2` dependency, imports supported)
-- `diagramFormat: png` rasterizes SVG with `@resvg/resvg-js` — deterministic PNG for
-  PlantUML and D2 alike
-- Bundled Nimbus Sans font for identical diagram geometry everywhere;
-  `useSystemFonts` / `--system-fonts` opts out
-- Config is validated (zod): typos and wrong types fail with a clear message
-- Docker image on GHCR with a tag scheme in sync with npm dist-tags (see [Docker](#docker))
-- PDF output removed — use the docsify site or the single/collection markdown outputs
-  instead (the `pdf`/`pdfCss` options no longer exist)
-
-## v0.2.20
-
-Fork by [Alfa Capital Technologies](https://alfacapital.tech)
-
-- Updated commander to v14 (fixed compatibility with Node.js 20+)
-- Updated dependencies: fs-extra 11.x, node-watch 0.7.x
-- PlantUML updated to 1.2025.2
-- Added Dockerfile and CI for building Docker image to GHCR
-- Added CI for npm publishing via OIDC (Trusted Publisher)
-- Published as [@alfacapital-tech/c4builder](https://www.npmjs.com/package/@alfacapital-tech/c4builder)
-
-## v0.2.16
-
-Partial build (image generation) [#55](https://github.com/adrianvlupu/C4-Builder/pull/58) ([MickeJohannesson](https://github.com/MickeJohannesson))
-
-Bugfixes
-
-## v0.2.14
-
-Diagrams at arbitrary positions [#28](https://github.com/adrianvlupu/C4-Builder/pull/28) ([Sjuanola](https://github.com/sju66))
-
-Support for Ditaa Diagrams [#56](https://github.com/adrianvlupu/C4-Builder/pull/56) ([MickeJohannesson](https://github.com/MickeJohannesson))
-
-Resolved npm vulnerabilities
-
-Latest plantuml jar file 1.2022.3.jar
-
-Dockerfile [#51](https://github.com/adrianvlupu/C4-Builder/pull/51) ([craigwardman](https://github.com/craigwardman))
-
-Search in site sidebar [#48](https://github.com/adrianvlupu/C4-Builder/pull/48) ([arifinoid](https://github.com/arifinoid))
-
-## v0.2.12
-
-Relative urls in TOC for multiple markdown files [#9](https://github.com/adrianvlupu/C4-Builder/issues/5).
-
-Fixed Processed 1/1..2/2 files bug.
-
-Added another version of the PlantUML jar file.
-
-## v0.2.11
-
-Updated latest plantuml jar to 1.2021.7.jar [#41](https://github.com/adrianvlupu/C4-Builder/pull/41) ([pandasuit](https://github.com/pandasuit))
-
-Allow input plantuml source files to use relative include statements to other plantuml files [#42](https://github.com/adrianvlupu/C4-Builder/pull/42) ([pandasuit](https://github.com/pandasuit))
-
-Local image generation in sequence due to the jar failing with "dot executable not found".
-
-## v0.2.9
-
-Updated VSCode snippets and resolved npm audit issues
-
-Docsify image plugin [#20](https://github.com/adrianvlupu/C4-Builder/pull/20) ([alefcarlos](https://github.com/alefcarlos))
-
-PlantUML 1.2020.17 [#23](https://github.com/adrianvlupu/C4-Builder/pull/23) ([RohanTalip](https://github.com/RohanTalip))
-
-Configurable PlantUML Server url [#25](https://github.com/adrianvlupu/C4-Builder/pull/25) ([jikuja](https://github.com/jikuja)), [#29](https://github.com/adrianvlupu/C4-Builder/pull/29) ([coryodaniel](https://github.com/coryodaniel))
-
-GitHub Action for running C4 Builder in CI [#16](https://github.com/adrianvlupu/C4-Builder/issues/16) ([hkdobrev](https://github.com/hkdobrev))
-
-Overloading the docsify template [#27](https://github.com/adrianvlupu/C4-Builder/pull/27) ([sju66](https://github.com/sju66))
-
-## v0.2.12
-
-Relative urls in TOC for multiple markdown files [#9](https://github.com/adrianvlupu/C4-Builder/issues/5).
-
-Fixed Processed 1/1..2/2 files bug.
-
-Added another version of the PlantUML jar file.
-
-## v0.2.7
-
-Resolved npm audit issues
-
-The projects generated now support PlantUML versioning
-
-PlantUML jar files included
-
-## v0.2.4
-
-Solved the limation of including local images in the markdown files.
-
-Updated the project template with the diagram descriptions from [C4Model](https://c4model.com/#CoreDiagrams)
-
-## v0.2.3
-
-Updated template to include the new `Dynamic Diagram` in C4-PlantUML and fixed `npm audit` issues.
-
-## v0.2.1 + v0.2.2
-
-Added the `c4builder --watch` option and some refactoring.
-
-## v0.2.0
-
-Pdf generation now uses `puppeteer`. There are no more scaling issues for high resolution displays. Used the `css` file from [vscode-markdown-pdf](https://github.com/yzane/vscode-markdown-pdf.git).
-
-Removed unused dependencies.
-
-## v0.1.9
-
-Thanks to [howiefh](https://github.com/howiefh) for adding the [charset option](https://github.com/adrianvlupu/C4-Builder/pull/1).
-
-## v0.1.8
-
-Updated template to include the new `Deployment Diagram` in C4-PlantUML and more info inside `readme.md`
-
-`node-plantuml` accepted the pull request [#29](https://github.com/markushedvall/node-plantuml/pull/29) so I changed the dependency back to the original repository.
-
-## v0.1.7
-
-Changed template to include the latest C4-PlantUML`!include https://raw.githubusercontent.com/adrianvlupu/C4-PlantUML/latest/...`
-
-## v0.1.6
-
-Switched from http-server module to express for serving the static site.
-
-Added the option to place diagrams before text.
-
-## v0.1.5
-
-PlantUML recently switched to V1.2019.6 adding some breaking changes to `!define` and `!definelong`. You can still use them but when calling you have to add `()` method call (http://plantuml.com/preprocessing)
-
-Considering they updated their server to use the new version, diagrams generated locally that display correctly won't work on the plantuml server and viceversa
-
-Until the underlying `node-plantuml` package gets updated, I changed the dependency to the fork at https://github.com/adrianvlupu/node-plantuml.git
-
-Also the `!include` directives on each template diagram point to the 1.2019.6 compatible version hosted at https://github.com/adrianvlupu/C4-PlantUML.
+Behaviour changes are described in OpenSpec (`openspec/changes/`) first, add a line to
+`## Unreleased` in `CHANGELOG.md` and update the documentation pages in both languages
+(`docs/ru/src`, `docs/en/src`). Details are on the Development page.
+
+## Credits and license
+
+C4-Builder was created by [Adrian Victor Lupu](https://github.com/adrianvlupu/C4-Builder); this
+fork is maintained by [Alfa Capital Technologies](https://alfacapital.tech). Upstream changes and
+their contributors are listed in the changelog. MIT license, see
+[license](https://github.com/AlfaCapital-Tech/C4-Builder/blob/master/license).
