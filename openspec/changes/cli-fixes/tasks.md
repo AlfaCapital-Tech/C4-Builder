@@ -7,8 +7,8 @@
 
 ## 2. Справочные команды без побочных эффектов
 
-- [ ] 2.1 Тест сначала (`test/cli-commands.test.mjs`): в пустом temp-каталоге `--docs` → код 0, каталог пуст; `--list` и `--reset` → код ≠ 0, stderr содержит `no .c4builder`, каталог пуст; в каталоге проекта (`new --name demo -y`, затем `cd demo`) `--list` → код 0 и печатает `projectName`. Проверка: новые кейсы красные на текущем коде.
-- [ ] 2.2 `src/cli/dispatch.ts` по design §3: `if (opts.docs) return cmdHelp();` до создания `Configstore`; для `--list`/`--reset` без файла `configPath` — сообщение в stderr и `process.exit(1)` до `Configstore`. Проверка: `npx vitest run test/cli-commands.test.mjs` зелёный; ручной прогон в `mktemp -d`: `node dist/index.js --docs; ls -A` — пусто.
+- [x] 2.1 Тест сначала (`test/cli-commands.test.mjs`): в пустом temp-каталоге `--docs` → код 0, каталог пуст; `--list` и `--reset` → код ≠ 0, stderr содержит `no .c4builder`, каталог пуст; в каталоге проекта (`new --name demo -y`, затем `cd demo`) `--list` → код 0 и печатает `projectName`. Проверка: новые кейсы красные на текущем коде.
+- [x] 2.2 `src/cli/dispatch.ts` по design §3: `if (opts.docs) return cmdHelp();` до создания `Configstore`; для `--list`/`--reset` без файла `configPath` — сообщение в stderr и `process.exit(1)` до `Configstore`. Проверка: `npx vitest run test/cli-commands.test.mjs` зелёный; ручной прогон в `mktemp -d`: `node dist/index.js --docs; ls -A` — пусто.
 
 ## 3. CHANGELOG
 
