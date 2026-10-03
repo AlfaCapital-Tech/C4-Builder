@@ -16,7 +16,7 @@ Every step: check → fix only what is broken.
 ## 1. Node.js
 
 ```bash
-node --version   # needs >= 20.19
+node --version   # needs >= 22.17
 ```
 
 Missing or older → agree with the user on how to install a current LTS (nvm, OS package

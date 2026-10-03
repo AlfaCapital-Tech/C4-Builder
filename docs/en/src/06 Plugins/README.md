@@ -80,7 +80,7 @@ plus an index.
 | `archive` | — | HTTP(S) URL of a tar.gz/zip archive |
 | `subdir` | — | folder inside the archive or `dir` |
 | `headers` | — | HTTP headers for the archive request; empty values are dropped |
-| `glob` | `**/openapi.{yaml,yml,json}` | spec pattern (`**`, `*`, `?`, `{a,b}`) |
+| `glob` | `**/openapi.{yaml,yml,json}` | spec pattern (`**`, `*`, `?`, `{a,b}`); directories starting with a dot are skipped |
 
 Example: the OpenSpec store sits next to the C4 sources, and contracts come from another
 repository. An empty `GITLAB_TOKEN` drops the header, so the same config works with and without a

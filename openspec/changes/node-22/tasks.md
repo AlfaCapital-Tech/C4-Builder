@@ -3,7 +3,7 @@
 ## 1. Граница Node
 
 - [x] 1.1 `package.json` `engines.node` → `">=22.17"`, `npm install --package-lock-only` обновляет корневой `engines` в `package-lock.json`. Проверка: `node -p "require('./package.json').engines.node"` печатает `>=22.17`; `npm ci && npm run build && npm run test:unit` зелёные
-- [ ] 1.2 Тексты в репозитории: README.MD (требования к Node, если упоминаются после переписывания в `docs-site`), `CLAUDE.md` (строка стека), комментарий в `Dockerfile` (EOL Node 20 — оставить как обоснование мажора, без противоречия новой границе); строка в `CHANGELOG.md` (`## Unreleased`) с пометкой **BREAKING**. Проверка: `grep -rn "20\.19" --exclude-dir=node_modules --exclude-dir=.claude --exclude-dir=archive .` не находит упоминаний вне `openspec/specs/dev-toolchain` (обновится при архиве) и исторических записей changelog о прошлых версиях (их не переписываем)
+- [x] 1.2 Тексты в репозитории: README.MD (требования к Node, если упоминаются после переписывания в `docs-site`), `CLAUDE.md` (строка стека), комментарий в `Dockerfile` (EOL Node 20 — оставить как обоснование мажора, без противоречия новой границе); строка в `CHANGELOG.md` (`## Unreleased`) с пометкой **BREAKING**. Проверка: `grep -rn "20\.19" --exclude-dir=node_modules --exclude-dir=.claude --exclude-dir=archive .` не находит упоминаний вне `openspec/specs/dev-toolchain` (обновится при архиве) и исторических записей changelog о прошлых версиях (их не переписываем)
 
 ## 2. `fs.globSync` вместо `src/util/glob.ts`
 
@@ -13,5 +13,5 @@
 
 ## 3. Актуализация
 
-- [ ] 3.1 Заменить «20.19» на «22.17» в `skills/c4builder-setup/SKILL.md` (проверка `node --version`) и `template/AGENTS.md` (строка установки) — оба вмержены с `agent-skills`; а также в страницах сайта `docs/ru` и `docs/en` (быстрый старт, установка) с одинаковой правкой в обоих языках. Проверка: grep из 1.2 по всему репозиторию пуст; `npx vitest run test/skills.test.mjs` и проверка паритета RU/EN из `docs-site` зелёные
+- [x] 3.1 Заменить «20.19» на «22.17» в `skills/c4builder-setup/SKILL.md` (проверка `node --version`) и `template/AGENTS.md` (строка установки) — оба вмержены с `agent-skills`; а также в страницах сайта `docs/ru` и `docs/en` (быстрый старт, установка) с одинаковой правкой в обоих языках. Проверка: grep из 1.2 по всему репозиторию пуст; `npx vitest run test/skills.test.mjs` и проверка паритета RU/EN из `docs-site` зелёные
 - [ ] 3.2 Интеграция: `npm test` и `npm run check` зелёные на Node 22.17 (локально через `npx -p node@22.17 node …` или nvm) и на Node 24 (CI-матрица). Проверка: CI зелёный, в выводе сборки шаблона нет `ExperimentalWarning`
