@@ -13,7 +13,11 @@ const SKILLS = fs
     .filter((d) => d.isDirectory())
     .map((d) => d.name);
 const skillFile = (name) => path.join(SKILLS_DIR, name, 'SKILL.md');
-const INPUTS = SKILLS.map(skillFile);
+const references = (name) => {
+    const dir = path.join(SKILLS_DIR, name, 'references');
+    return fs.existsSync(dir) ? fs.readdirSync(dir).map((f) => path.join(dir, f)) : [];
+};
+const INPUTS = SKILLS.flatMap((name) => [skillFile(name), ...references(name)]);
 const rel = (file) => path.relative(REPO_ROOT, file);
 
 const COMMANDS = ['check', 'jre', 'site', 'new', 'config'];
@@ -48,6 +52,9 @@ const cliCommands = (text) => {
 
 describe('скиллы', () => {
     it('help CLI разобран', () => expect(KNOWN_FLAGS.has('--site')).toBe(true));
+
+    it('набор скиллов — ровно поставляемый (README, AGENTS.md ссылаются на него)', () =>
+        expect(SKILLS).toEqual(['c4builder', 'c4builder-setup']));
 
     it.each(SKILLS)('%s: frontmatter по спеке Agent Skills', (name) => {
         const file = rel(skillFile(name));

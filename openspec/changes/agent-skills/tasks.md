@@ -14,10 +14,10 @@
 
 ## 2. Общий скилл `c4builder`
 
-- [ ] 2.1 Написать `skills/c4builder/SKILL.md` (≤ ~200 строк, английский) по design §2: когда применять, раскладка проекта (`.c4builder`, `src/`, выходы), цикл правка → `c4builder check <file...>` → `c4builder --site -w` / `c4builder`, разбор ошибки `file: line N`, частые ошибки; ссылки на references с условием загрузки. Проверка — `test/skills.test.mjs` зелёный
-- [ ] 2.2 Написать `skills/c4builder/references/config.md` (ключи `.c4builder` по `node dist/index.js --docs` и `src/config/schema.ts`, `plugins`), `references/diagrams.md` (C4-PlantUML stdlib `<C4/...>`, общий `.iuml`, кириллица, D2, офлайн-рендер, `useSystemFonts`), `references/plugins.md` (`openspec`, `openapi` — опции из README «Plugins»). Проверка — каждый ключ/опция, упомянутые в references, есть в `src/config/schema.ts` или схеме плагина (сверка grep'ом), тест зелёный
-- [ ] 2.3 Расширить `test/skills.test.mjs`: входы — также `skills/*/references/*.md`; ожидаемый набор скиллов ровно `c4builder`, `c4builder-setup`. Проверка — тест зелёный; удаление одного каталога скилла даёт красный тест
-- [ ] 2.4 Дополнить раздел README «Agent skills» описанием `c4builder` и строку changelog; проверка — ревью глазами
+- [x] 2.1 Написать `skills/c4builder/SKILL.md` (≤ ~200 строк, английский) по design §2: когда применять, раскладка проекта (`.c4builder`, `src/`, выходы), цикл правка → `c4builder check <file...>` → `c4builder --site -w` / `c4builder`, разбор ошибки `file: line N`, частые ошибки; ссылки на references с условием загрузки. Проверка — `test/skills.test.mjs` зелёный
+- [x] 2.2 Написать `skills/c4builder/references/config.md` (ключи `.c4builder` по `node dist/index.js --docs` и `src/config/schema.ts`, `plugins`), `references/diagrams.md` (C4-PlantUML stdlib `<C4/...>`, общий `.iuml`, кириллица, D2, офлайн-рендер, `useSystemFonts`), `references/plugins.md` (`openspec`, `openapi` — опции из README «Plugins»). Проверка — каждый ключ/опция, упомянутые в references, есть в `src/config/schema.ts` или схеме плагина (сверка grep'ом), тест зелёный
+- [x] 2.3 Расширить `test/skills.test.mjs`: входы — также `skills/*/references/*.md`; ожидаемый набор скиллов ровно `c4builder`, `c4builder-setup`. Проверка — тест зелёный; удаление одного каталога скилла даёт красный тест
+- [x] 2.4 Дополнить раздел README «Agent skills» описанием `c4builder` и строку changelog; проверка — ревью глазами
 
 ## 3. `AGENTS.md` в шаблоне
 

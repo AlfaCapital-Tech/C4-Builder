@@ -142,6 +142,7 @@ npx skills add AlfaCapital-Tech/C4-Builder/skills
 
 | Skill | Use it for |
 |---|---|
+| `c4builder` | working on a project: layout of `src/` and `.c4builder`, the edit → `c4builder check` → build / `c4builder --site -w` loop, C4-PlantUML conventions (stdlib includes, shared `.iuml`, offline render), D2, the `openspec` / `openapi` plugins |
 | `c4builder-setup` | install / update (npm channels `latest` and `rc`, Docker image), Java or the managed JRE, a smoke build of the template project |
 
 ## The project
@@ -502,8 +503,9 @@ Publishes to dist-tag `latest`.
   and the CLI hints use) — they used to silently start a build; an unknown positional command
   now fails with `unknown command` and exit code 1 instead of building
 - Agent skills for coding agents in `skills/`, installed with
-  `npx skills add AlfaCapital-Tech/C4-Builder/skills`: `c4builder-setup` (install, update,
-  diagnose) — see «Agent skills»
+  `npx skills add AlfaCapital-Tech/C4-Builder/skills`: `c4builder` (project layout, the
+  edit → check → build loop, C4-PlantUML and D2 conventions, plugins) and `c4builder-setup`
+  (install, update, diagnose) — see «Agent skills»
 
 ## v0.4.0
 
