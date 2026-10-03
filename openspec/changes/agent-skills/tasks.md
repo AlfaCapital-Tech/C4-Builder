@@ -2,8 +2,8 @@
 
 ## 0. CLI: позиционные `new` и `config`
 
-- [ ] 0.1 `src/cli/dispatch.ts` по design §7: `new` → `opts.new`, `config` → `opts.config`; первый позиционный аргумент вне `check|jre|site|new|config` → `unknown command: <x>` со списком команд в stderr, код 1, без сборки и без промптов. Проверка: тест `test/cli-commands.test.mjs` (spawn `node dist/index.js`) — `new --name demo -y` в temp-каталоге создаёт проект как `--new`; `nwe` → код 1 и сообщение; `check`/`jre info`/`site` не затронуты (существующие тесты зелёные)
-- [ ] 0.2 README: строки 57/125 (`c4builder new`, `c4builder config`) теперь корректны — сверить, добавить `new`/`config` в описание команд; строка changelog `## Unreleased`. Проверка: ревью глазами
+- [x] 0.1 `src/cli/dispatch.ts` по design §7: `new` → `opts.new`, `config` → `opts.config`; первый позиционный аргумент вне `check|jre|site|new|config` → `unknown command: <x>` со списком команд в stderr, код 1, без сборки и без промптов. Проверка: тест `test/cli-commands.test.mjs` (spawn `node dist/index.js`) — `new --name demo -y` в temp-каталоге создаёт проект как `--new`; `nwe` → код 1 и сообщение; `check`/`jre info`/`site` не затронуты (существующие тесты зелёные)
+- [x] 0.2 README: строки 57/125 (`c4builder new`, `c4builder config`) теперь корректны — сверить, добавить `new`/`config` в описание команд; строка changelog `## Unreleased`. Проверка: ревью глазами
 
 ## 1. Скилл `c4builder-setup` и проверка скиллов
 

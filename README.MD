@@ -91,9 +91,12 @@ Options:
   -h, --help                      display help for command
 ```
 
-There is also a `jre` subcommand: `c4builder jre install [--force]` pre-downloads the
-private JRE cache, `c4builder jre info` prints which Java would be used. `c4builder site`
-is accepted as a positional subcommand too, equivalent to `--site`.
+Positional subcommands: `c4builder check <file...>` (see below), `c4builder jre install
+[--force]` pre-downloads the private JRE cache, `c4builder jre info` prints which Java would
+be used. `c4builder new`, `c4builder config` and `c4builder site` are equivalent to `--new`,
+`--config` and `--site` and combine with the other flags (`c4builder new --name demo -y`).
+Any other positional argument is an error (`unknown command`, exit code 1) — a typo never
+starts a build.
 
 ### Validating single diagrams
 
@@ -475,6 +478,12 @@ git push --follow-tags
 Publishes to dist-tag `latest`.
 
 # Change log
+
+## Unreleased
+
+- `c4builder new` and `c4builder config` work as positional subcommands (the form the README
+  and the CLI hints use) — they used to silently start a build; an unknown positional command
+  now fails with `unknown command` and exit code 1 instead of building
 
 ## v0.4.0
 
