@@ -119,6 +119,14 @@ C4-PlantUML diagram.
 - Read [references/plugins.md](references/plugins.md) when the project has or needs
   `plugins` — `openspec` (OpenSpec store as a site section) or `openapi` (swagger-ui pages).
 
+## Reading an existing architecture
+
+With `generateLLMS: true` the built site has `llms.txt` (every page in sidebar order, links
+to its `.md`) and `llms-full.txt` (all pages in one file, diagrams inlined as PlantUML/D2
+source, shared local includes once in an appendix). To answer questions about a documented
+system, read `llms-full.txt` from the site or `distFolder` instead of crawling pages or
+images: the C4 source (`Person`, `System`, `Rel`) is the model itself.
+
 ## Common mistakes
 
 - Editing generated files in `docs/` instead of `src/`.

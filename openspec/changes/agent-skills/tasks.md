@@ -30,4 +30,4 @@
 
 - [x] 4.1 `npm test` и `npm run check` зелёные; `npm pack --dry-run` не содержит `skills/` и содержит `template/AGENTS.md`
 - [x] 4.2 Ручная проверка установки (нужна сеть): в пустом каталоге `npx skills add <путь к worktree>` (после мержа — `AlfaCapital-Tech/C4-Builder/skills`) находит оба скилла и ставит их в `.claude/skills/`; при отсутствии сети — отметить задачу как ожидающую мейнтейнера в отчёте
-- [ ] 4.3 Зависит от change'а `llms-txt`: после его реализации добавить в `skills/c4builder/SKILL.md` (и `references/config.md`) упоминание `llms.txt`/`llms-full.txt` как точки входа для чтения архитектуры агентом; проверка — `test/skills.test.mjs` зелёный, ключ конфига совпадает с реализованным
+- [x] 4.3 Зависит от change'а `llms-txt`: после его реализации добавить в `skills/c4builder/SKILL.md` (и `references/config.md`) упоминание `llms.txt`/`llms-full.txt` как точки входа для чтения архитектуры агентом; проверка — `test/skills.test.mjs` зелёный, ключ конфига совпадает с реализованным

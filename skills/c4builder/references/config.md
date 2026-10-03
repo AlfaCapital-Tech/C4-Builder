@@ -26,6 +26,7 @@ Validation rules:
 | `generateMD` | `true` | markdown collection: `README.md` per folder |
 | `generateCompleteMD` | `false` | one `<projectName>.md` with everything |
 | `generateWEB` | `true` | docsify site (`index.html`, `<folder>.md` per folder) |
+| `generateLLMS` | `true` in new projects, off when absent | `llms.txt` (page index) and `llms-full.txt` (full text, diagrams as source) in the site root; needs `generateWEB` |
 | `excludeOtherFiles` | `false` | do not copy non-diagram, non-markdown files (images…) |
 
 ## Page content
@@ -84,6 +85,7 @@ c4builder to an existing repository:
   "generateMD": true,
   "generateCompleteMD": false,
   "generateWEB": true,
+  "generateLLMS": true,
   "includeNavigation": false,
   "includeTableOfContents": true,
   "webTheme": "vendor/vue.css",
