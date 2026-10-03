@@ -18,7 +18,7 @@ const require = createRequire(import.meta.url);
 type ResvgModule = typeof import('@resvg/resvg-js');
 
 let resvgMod: ResvgModule | null = null;
-const getResvg = (): ResvgModule => {
+export const getResvg = (): ResvgModule => {
     if (resvgMod) return resvgMod;
     try {
         resvgMod = require('@resvg/resvg-js') as ResvgModule;

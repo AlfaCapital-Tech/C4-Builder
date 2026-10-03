@@ -12,13 +12,15 @@ import { httpGetBuffer } from '../../util/http.ts';
 // D2-бэкенд: только статические хелперы (парсинг импортов) грузятся сразу; сам
 // движок @terrastruct/d2 тянется лениво внутри renderD2/teardownD2.
 import { renderD2, foldD2Imports } from './d2renderer.ts';
+// BPMN-бэкенд: пакеты движка грузятся лениво внутри renderBpmn.
+import { renderBpmn, BPMN_CACHE_PACKAGES } from './bpmnrenderer.ts';
 import { resolveJava } from './jre.ts';
 // PNG-выход: SVG обоих движков растеризуется resvg (ленивая загрузка внутри модуля).
 import { rasterizeSvgToPng } from './pngraster.ts';
 // Шрифт-пин общий с resvg-растеризатором (одна точка правды, см. fonts.ts).
 import { FONTS_DIR, DEFAULT_FONT_NAME } from './fonts.ts';
 import { VENDOR_DIR } from '../../util/paths.ts';
-import { foldIncludes, diagramOutputFormat, type TreeItem } from '../scan/tree.ts';
+import { foldIncludes, diagramOutputFormat, type Diagram, type TreeItem } from '../scan/tree.ts';
 import type { BuildOptions } from '../../config/options.ts';
 
 // cacheConf: Configstore-подобная заглушка чексумм картинок (см. cli/dispatch).
@@ -85,24 +87,53 @@ const runPool = async (tasks: Array<() => Promise<void>>, concurrency: number): 
     if (firstError !== undefined) throw firstError;
 };
 
-// Версия движка @terrastruct/d2 для чексуммы кэша (апгрейд движка → перерендер).
-// Читаем package.json лениво и один раз: pure-PlantUML сборки его не трогают.
-let d2VersionCache: string | null = null;
-const d2EngineVersion = (): string => {
-    if (d2VersionCache !== null) return d2VersionCache;
-    try {
-        const req = createRequire(import.meta.url);
-        d2VersionCache = (req('@terrastruct/d2/package.json') as { version: string }).version;
-    } catch {
-        d2VersionCache = 'unknown';
+// Версии пакетов движков (D2, BPMN) для чексуммы кэша (апгрейд движка → перерендер).
+// Читаем package.json лениво и один раз: pure-PlantUML сборки их не трогают.
+const versionCache = new Map<string, string>();
+const pkgVersion = (name: string): string => {
+    let version = versionCache.get(name);
+    if (version === undefined) {
+        // package.json ищем по путям поиска node_modules, а не require(`${name}/package.json`):
+        // пакеты с полем exports (bpmn-auto-layout) этот подпуть не отдают — версия молча
+        // становилась бы 'unknown', и апгрейд движка не перерисовывал бы диаграммы.
+        try {
+            const paths = createRequire(import.meta.url).resolve.paths(name) ?? [];
+            const dir = paths.find((p) => fs.existsSync(path.join(p, name, 'package.json')));
+            if (!dir) throw new Error(`${name} not found`);
+            version = (
+                JSON.parse(fs.readFileSync(path.join(dir, name, 'package.json'), 'utf8')) as {
+                    version: string;
+                }
+            ).version;
+        } catch {
+            version = 'unknown';
+        }
+        versionCache.set(name, version);
     }
-    return d2VersionCache;
+    return version;
 };
 
 // В ключ кеша: смена режима не должна отдавать картинку, отрисованную другим шрифтом
 // (D2 тоже — его PNG растрирует общий resvg).
 export const fontCacheTag = (options: BuildOptions): string =>
     options.USE_SYSTEM_FONTS ? 'system' : DEFAULT_FONT_NAME;
+
+// renderKey: параметры, влияющие на БАЙТЫ вывода помимо контента и графа импортов.
+// Без него смена layout (D2) или charset (PlantUML) не меняла чексумму → из бэкапа
+// копировалась старая картинка (новые параметры молча игнорировались, кэш чистился
+// только через --reset). Формат/движок/версия движка тоже в ключе: их смена обязана
+// приводить к перерендеру.
+export const renderKey = (
+    diagram: Pick<Diagram, 'engine' | 'isDitaa'>,
+    options: BuildOptions,
+    outFormat: string
+): string =>
+    (diagram.engine === 'd2'
+        ? `d2\0${pkgVersion('@terrastruct/d2')}\0layout=${options.D2_LAYOUT}\0fmt=${outFormat}`
+        : diagram.engine === 'bpmn'
+          ? `bpmn\0${BPMN_CACHE_PACKAGES.map(pkgVersion).join('\0')}\0fmt=${outFormat}`
+          : `puml\0${VENDORED_JAR.version}\0charset=${options.CHARSET}\0fmt=${outFormat}\0ditaa=${diagram.isDitaa}`) +
+    `\0font=${fontCacheTag(options)}`;
 
 export const getMime = (format: string): string => {
     if (format === 'svg') return `image/svg+xml`;
@@ -315,32 +346,26 @@ export const generateImages = async (
     // перепутываются). Движок всё равно однопоточный, так что сериализация D2 бесплатна.
     // PlantUML — отдельные процессы java, их гоняем пулом renderConcurrency().
     const d2Tasks: Array<() => Promise<void>> = [];
+    // BPMN рендерится в общем окне jsdom главного потока — параллельность ничего не даёт,
+    // а последовательная очередь исключает гонки на общем состоянии бандла bpmn-js.
+    const bpmnTasks: Array<() => Promise<void>> = [];
     const otherTasks: Array<() => Promise<void>> = [];
 
     for (const item of tree) {
         for (const diagram of item.diagrams) {
             // Чексумма = контент диаграммы + свёрнутый граф её зависимостей, чтобы
             // правка включаемого/импортируемого файла инвалидировала кэш: PlantUML —
-            // !include-граф (.iuml и пр.), D2 — граф @/...@-импортов.
+            // !include-граф (.iuml и пр.), D2 — граф @/...@-импортов. У BPMN зависимостей нет.
             const body = `${diagram.content || ''}`;
-            // entryPath нужен только D2 (граф импортов + рендер); для PlantUML не считаем.
-            // entryPath !== null ⟺ engine === 'd2' — используем как сужение типа вместо assertion.
-            const entryPath = diagram.engine === 'd2' ? path.join(item.dir, diagram.dir) : null;
-            const includes =
-                entryPath !== null
-                    ? foldD2Imports(entryPath, body)
-                    : foldIncludes(body, item.dir, item.dir, new Set());
+            const entryPath = path.join(item.dir, diagram.dir);
+            const isD2 = diagram.engine === 'd2';
+            const isBpmn = diagram.engine === 'bpmn';
+            const includes = isD2
+                ? foldD2Imports(entryPath, body)
+                : isBpmn
+                  ? ''
+                  : foldIncludes(body, item.dir, item.dir, new Set());
             const outFormat = diagramOutputFormat(diagram, options);
-            // renderKey: параметры, влияющие на БАЙТЫ вывода помимо контента и графа
-            // импортов. Без него смена layout (D2) или charset (PlantUML) не меняла
-            // чексумму → из бэкапа копировалась старая картинка (новые параметры молча
-            // игнорировались, кэш чистился только через --reset). Формат/движок/версия
-            // движка тоже в ключе: их смена обязана приводить к перерендеру.
-            const renderKey =
-                (entryPath !== null
-                    ? `d2\0${d2EngineVersion()}\0layout=${options.D2_LAYOUT}\0fmt=${outFormat}`
-                    : `puml\0${VENDORED_JAR.version}\0charset=${options.CHARSET}\0fmt=${outFormat}\0ditaa=${diagram.isDitaa}`) +
-                `\0font=${fontCacheTag(options)}`;
             const outName = `${path.parse(diagram.dir).name}.${outFormat}`;
             const relOut = path.join(item.dir.replace(options.ROOT_FOLDER, ''), outName);
             // Путь выхода — тоже в чексумме: восстановление из бэкапа идёт по паре
@@ -349,7 +374,10 @@ export const generateImages = async (
             // молча получали бы чужую старую картинку.
             const cksum = crypto
                 .createHash('sha256')
-                .update(`${body}${includes}${renderKey}\0out=${relOut.split(path.sep).join('/')}`, 'utf-8')
+                .update(
+                    `${body}${includes}${renderKey(diagram, options, outFormat)}\0out=${relOut.split(path.sep).join('/')}`,
+                    'utf-8'
+                )
                 .digest('hex');
 
             // Записи копим в порядке обхода дерева, СИНХРОННО и до запуска задач:
@@ -394,8 +422,14 @@ export const generateImages = async (
                 // Для растеризации PlantUML не-ditaa рендерим в svg (не -tpng), затем resvg.
                 let rendered: Buffer;
                 try {
-                    if (entryPath !== null) {
+                    if (isD2) {
                         rendered = await renderD2(entryPath, { layout: options.D2_LAYOUT, seed: body });
+                    } else if (isBpmn) {
+                        // Путь для сообщений валидации; у виртуальных страниц — их источник.
+                        rendered = await renderBpmn(
+                            body,
+                            source ?? path.relative(process.cwd(), entryPath).split(path.sep).join('/')
+                        );
                     } else {
                         // Резолв JRE отложен до первого реального PlantUML-рендера (эта
                         // ветка исполняется лишь при промахе кэша). getJava мемоизирует.
@@ -431,19 +465,19 @@ export const generateImages = async (
                 }
             });
 
-            if (entryPath !== null) d2Tasks.push(task);
-            else otherTasks.push(task);
+            (isD2 ? d2Tasks : isBpmn ? bpmnTasks : otherTasks).push(task);
         }
     }
 
-    // PlantUML-пул и D2-очередь работают независимо (процессы java vs WASM-worker) и
-    // параллельно друг другу. allSettled — чтобы падение одной очереди не оставляло
-    // вторую как floating promise с висящими JVM: обе доосушаются, затем бросаем первую
+    // PlantUML-пул, D2- и BPMN-очереди работают независимо (процессы java, WASM-worker,
+    // главный поток) и параллельно друг другу. allSettled — чтобы падение одной очереди не
+    // оставляло другие как floating promise с висящими JVM: все доосушаются, затем бросаем первую
     // ошибку (приоритет — PlantUML-пул, порядок между очередями не значим).
     try {
         const results = await Promise.allSettled([
             runPool(otherTasks, renderConcurrency()),
-            runPool(d2Tasks, 1)
+            runPool(d2Tasks, 1),
+            runPool(bpmnTasks, 1)
         ]);
         const failed = results.find((r) => r.status === 'rejected');
         if (failed && failed.status === 'rejected') throw failed.reason;

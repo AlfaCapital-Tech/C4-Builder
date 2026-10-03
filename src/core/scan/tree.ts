@@ -11,7 +11,7 @@ import { createFenceExtractor } from './fences.ts';
 export interface Diagram {
     dir: string; // имя файла диаграммы (историческое поле)
     ext: string;
-    engine: string; // 'plantuml' | 'd2'
+    engine: string; // 'plantuml' | 'd2' | 'bpmn'
     content: string | Buffer;
     isDitaa: boolean;
     /** Виртуальные страницы: исходный файл (у файловых диаграмм это сам `dir`). */
@@ -37,7 +37,8 @@ export interface TreeItem {
 // здесь; фазы подхватят его без синхронной правки.
 export const DIAGRAM_ENGINES = [
     { ext: '.puml', engine: 'plantuml', remoteRender: true },
-    { ext: '.d2', engine: 'd2', remoteRender: false }
+    { ext: '.d2', engine: 'd2', remoteRender: false },
+    { ext: '.bpmn', engine: 'bpmn', remoteRender: false }
 ] as const satisfies ReadonlyArray<{ ext: string; engine: string; remoteRender: boolean }>;
 
 export type DiagramEngine = (typeof DIAGRAM_ENGINES)[number]['engine'];
@@ -157,7 +158,7 @@ export const generateTree = async (dir: string, options: BuildOptions): Promise<
         }
         item.diagrams.sort((a, b) => `${a.dir}`.localeCompare(b.dir));
 
-        //copy all other files (.d2 исходники, как и .puml, не копируем — они рендерятся)
+        //copy all other files (.d2/.bpmn исходники, как и .puml, не копируем — они рендерятся)
         const otherFiles = options.EXCLUDE_OTHER_FILES
             ? []
             : files.filter((x) => {

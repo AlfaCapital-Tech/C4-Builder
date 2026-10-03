@@ -10,6 +10,7 @@
   * [2 Deployment](#2-Deployment)
   * [3 Локализация](#3-%D0%9B%D0%BE%D0%BA%D0%B0%D0%BB%D0%B8%D0%B7%D0%B0%D1%86%D0%B8%D1%8F)
   * [4 D2 Example](#4-D2-Example)
+  * [5 BPMN Example](#5-BPMN-Example)
 
 ---
 
@@ -470,6 +471,93 @@ email: Почтовый шлюз {
 client -> ib: Пользуется
 ib -> abs: Читает счета и проводки
 ib -> email: Шлёт уведомления
+```
+
+## 5 BPMN Example
+
+`/5 BPMN Example`
+
+[Overview](#golden-fixture)
+
+**Бизнес-процесс в нотации BPMN (третий бэкенд рендера)**
+
+Эта страница демонстрирует BPMN-диаграммы: процесс «Открытие счёта» с пулом «Банк» и его дорожками «Клиент», «Фронт-офис», «Бэк-офис», внешним пулом «Бюро кредитных историй», шлюзом с подписанными ветками, граничным таймером и message flow между пулами.
+
+Файл `.bpmn` содержит только семантическую часть BPMN 2.0 XML: пулы, дорожки, события, задачи, шлюзы и потоки. Координат (секции `bpmndi`) в нём нет — раскладку делает сборка: пулы и дорожки горизонтальными полосами, поток слева направо. Если координаты в файле есть, они игнорируются. Перед раскладкой модель проверяется (несвязанные узлы, узел вне дорожки, sequence flow между пулами и т.п.), ошибки ссылаются на id элемента. Отдельный файл проверяется командой `c4builder check account-opening.bpmn`.
+
+**Область применения**: показать, что `.bpmn`-диаграммы, их раскладка и кириллица корректно попадают в собранный сайт, SVG и PNG без обращений в интернет.
+
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Только семантическая часть BPMN: координат (bpmndi) нет, раскладку делает c4builder. -->
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  id="Definitions_AccountOpening"
+                  targetNamespace="https://example.com/bpmn/account-opening">
+  <bpmn:collaboration id="Collaboration_AccountOpening">
+    <bpmn:participant id="Pool_Bank" name="Банк" processRef="Process_AccountOpening" />
+    <bpmn:participant id="Pool_CreditBureau" name="Бюро кредитных историй" />
+    <bpmn:messageFlow id="Message_HistoryRequest" name="Запрос истории"
+                      sourceRef="Task_RequestHistory" targetRef="Pool_CreditBureau" />
+    <bpmn:messageFlow id="Message_CreditReport" name="Кредитный отчёт"
+                      sourceRef="Pool_CreditBureau" targetRef="Task_ReceiveReport" />
+  </bpmn:collaboration>
+
+  <bpmn:process id="Process_AccountOpening" name="Открытие счёта" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_Bank">
+      <bpmn:lane id="Lane_Client" name="Клиент">
+        <bpmn:flowNodeRef>Start_AccountNeeded</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_SubmitApplication</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End_AccountOpened</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End_Rejected</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_FrontOffice" name="Фронт-офис">
+        <bpmn:flowNodeRef>Task_CheckDocuments</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_RequestHistory</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_ReceiveReport</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_BackOffice" name="Бэк-офис">
+        <bpmn:flowNodeRef>Task_Assess</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Timer_AssessOverdue</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_Escalate</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End_Escalated</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_Decision</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_OpenAccount</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_PrepareRejection</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+
+    <bpmn:startEvent id="Start_AccountNeeded" name="Нужен счёт" />
+    <bpmn:userTask id="Task_SubmitApplication" name="Подать заявку" />
+    <bpmn:userTask id="Task_CheckDocuments" name="Проверить документы" />
+    <bpmn:sendTask id="Task_RequestHistory" name="Запросить кредитную историю" />
+    <bpmn:receiveTask id="Task_ReceiveReport" name="Получить кредитный отчёт" />
+    <bpmn:userTask id="Task_Assess" name="Оценить заявку" />
+    <bpmn:boundaryEvent id="Timer_AssessOverdue" name="3 рабочих дня" attachedToRef="Task_Assess">
+      <bpmn:timerEventDefinition id="TimerDef_AssessOverdue" />
+    </bpmn:boundaryEvent>
+    <bpmn:task id="Task_Escalate" name="Эскалировать руководителю" />
+    <bpmn:endEvent id="End_Escalated" name="Заявка у руководителя" />
+    <bpmn:exclusiveGateway id="Gateway_Decision" name="Одобрить?" />
+    <bpmn:serviceTask id="Task_OpenAccount" name="Открыть счёт" />
+    <bpmn:task id="Task_PrepareRejection" name="Подготовить отказ" />
+    <bpmn:endEvent id="End_AccountOpened" name="Счёт открыт" />
+    <bpmn:endEvent id="End_Rejected" name="Получен отказ" />
+
+    <bpmn:sequenceFlow id="Flow_Start" sourceRef="Start_AccountNeeded" targetRef="Task_SubmitApplication" />
+    <bpmn:sequenceFlow id="Flow_Submitted" sourceRef="Task_SubmitApplication" targetRef="Task_CheckDocuments" />
+    <bpmn:sequenceFlow id="Flow_Checked" sourceRef="Task_CheckDocuments" targetRef="Task_RequestHistory" />
+    <bpmn:sequenceFlow id="Flow_Requested" sourceRef="Task_RequestHistory" targetRef="Task_ReceiveReport" />
+    <bpmn:sequenceFlow id="Flow_Received" sourceRef="Task_ReceiveReport" targetRef="Task_Assess" />
+    <bpmn:sequenceFlow id="Flow_Assessed" sourceRef="Task_Assess" targetRef="Gateway_Decision" />
+    <bpmn:sequenceFlow id="Flow_Approved" name="Да" sourceRef="Gateway_Decision" targetRef="Task_OpenAccount" />
+    <bpmn:sequenceFlow id="Flow_Declined" name="Нет" sourceRef="Gateway_Decision" targetRef="Task_PrepareRejection" />
+    <bpmn:sequenceFlow id="Flow_Opened" sourceRef="Task_OpenAccount" targetRef="End_AccountOpened" />
+    <bpmn:sequenceFlow id="Flow_Rejected" sourceRef="Task_PrepareRejection" targetRef="End_Rejected" />
+    <bpmn:sequenceFlow id="Flow_Overdue" sourceRef="Timer_AssessOverdue" targetRef="Task_Escalate" />
+    <bpmn:sequenceFlow id="Flow_Escalated" sourceRef="Task_Escalate" targetRef="End_Escalated" />
+  </bpmn:process>
+</bpmn:definitions>
 ```
 
 ## Included files

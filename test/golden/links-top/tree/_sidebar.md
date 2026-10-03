@@ -8,3 +8,4 @@
   * [2 Deployment](2%20Deployment/2%20Deployment)
   * [3 Локализация](3%20%D0%9B%D0%BE%D0%BA%D0%B0%D0%BB%D0%B8%D0%B7%D0%B0%D1%86%D0%B8%D1%8F/3%20%D0%9B%D0%BE%D0%BA%D0%B0%D0%BB%D0%B8%D0%B7%D0%B0%D1%86%D0%B8%D1%8F)
   * [4 D2 Example](4%20D2%20Example/4%20D2%20Example)
+  * [5 BPMN Example](5%20BPMN%20Example/5%20BPMN%20Example)
