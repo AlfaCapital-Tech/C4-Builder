@@ -500,6 +500,7 @@ Publishes to dist-tag `latest`.
   post-build hint prints)
 - PlantUML updated to 1.2026.8: filled arrowheads for `>>` decorations in Smetana layout (#14).
   Note: `!pragma layout elk` now requires Java 21
+- Security: runtime dependencies bumped (figlet, tar, qs) to fix npm audit advisories
 
 ## v0.3.0
 
