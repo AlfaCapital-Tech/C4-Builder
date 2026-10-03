@@ -186,6 +186,8 @@ describe('generateLlmsFull: независимость от настроек к�
     const D2 = 'u: Клиент {class: person}\n...@_c4lib\n';
     const LIB = 'classes: {person: {style.fill: "#0b4884"}}\n';
     const DITAA = '@startditaa\n+--+\n|A |\n+--+\n@endditaa\n';
+    // Строка-ловушка: PlantUML-скан include'ов принял бы её за директиву и затащил bait.iuml.
+    const BPMN = '<?xml version="1.0"?>\n<!--\n!include bait.iuml\n-->\n<bpmn:definitions/>\n';
     let dir;
     let full;
 
@@ -194,6 +196,7 @@ describe('generateLlmsFull: независимость от настроек к�
         const src = path.join(dir, 'src');
         write(src, 'a.d2', D2);
         write(src, '_c4lib.d2', LIB);
+        write(src, 'bait.iuml', 'skinparam x y\n');
         const tree = [
             {
                 dir: src,
@@ -202,7 +205,14 @@ describe('generateLlmsFull: независимость от настроек к�
                 mdFiles: ['root\n'],
                 diagrams: [
                     { dir: 'a.d2', ext: '.d2', engine: 'd2', content: Buffer.from(D2), isDitaa: false },
-                    { dir: 'b.puml', ext: '.puml', engine: 'plantuml', content: DITAA, isDitaa: true }
+                    { dir: 'b.puml', ext: '.puml', engine: 'plantuml', content: DITAA, isDitaa: true },
+                    {
+                        dir: 'c.bpmn',
+                        ext: '.bpmn',
+                        engine: 'bpmn',
+                        content: Buffer.from(BPMN),
+                        isDitaa: false
+                    }
                 ],
                 descendants: []
             }
@@ -225,6 +235,11 @@ describe('generateLlmsFull: независимость от настроек к�
         expect(full).not.toContain('data:image');
         expect(full).toContain(`\`\`\`d2\n${D2}\`\`\``);
         expect(full).toContain(`\`\`\`plantuml\n${DITAA}\`\`\``);
+    });
+
+    it('BPMN — исходник в блоке xml, include-скан PlantUML к нему не применяется', () => {
+        expect(full).toContain(`\`\`\`xml\n${BPMN}\`\`\``);
+        expect(full).not.toContain('bait.iuml\n\n```');
     });
 
     it('D2-импорт — в приложении блоком d2', () => {

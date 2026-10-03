@@ -37,7 +37,7 @@ no positional form, only the `--new` flag.
 
 The new project contains the "Internet Banking System" demo from the C4 model: context,
 containers, deployment, a dynamic diagram, sequence, class and ditaa diagrams, a page in Cyrillic
-and a D2 example. All C4 diagrams include the library through the stdlib
+a D2 example and the "Account opening" BPMN process. All C4 diagrams include the library through the stdlib
 (`!include <C4/C4_Container>`): C4-PlantUML is built into the jar, so the build needs no
 internet. Next to `src/` there is `AGENTS.md` — instructions for AI agents on building and checking
 the diagrams (since 0.5.0; it does not end up in the documentation).

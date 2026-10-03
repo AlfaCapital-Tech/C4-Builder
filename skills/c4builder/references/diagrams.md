@@ -1,7 +1,8 @@
 # Diagrams reference
 
-The backend is chosen by file extension: `.puml` → PlantUML, `.d2` → D2. Both can live in
-one project and one folder (with different base names).
+The backend is chosen by file extension: `.puml` → PlantUML, `.d2` → D2, `.bpmn` → BPMN
+(validation + automatic layout + bpmn-js, see [bpmn.md](bpmn.md)). All of them can live in one
+project and one folder (with different base names).
 
 ## PlantUML and C4-PlantUML
 
@@ -61,7 +62,8 @@ install hint. D2 has no online renderer, so `generateLocalImages` must stay `tru
 ## Placement and output
 
 - Every diagram of a folder is attached to the folder's page; `![title](name.puml)` /
-  `![title](name.d2)` in a markdown file of the same folder places it inline instead.
+  `![title](name.d2)` / `![title](name.bpmn)` in a markdown file of the same folder places it
+  inline instead.
 - Image file = diagram base name + `.svg` (or `.png` with `diagramFormat: png`), next to
   the page in the output.
 - A ```` ```plantuml ```` block in a page `.md` is rendered at build time like a `.puml`

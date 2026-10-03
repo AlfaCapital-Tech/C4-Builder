@@ -7,9 +7,10 @@ import { VENDORED_JAR } from '../../util/utils.ts';
 import { resolveJava } from '../../core/render/jre.ts';
 import { renderDiagram } from '../../core/render/diagrams.ts';
 import { renderD2, teardownD2 } from '../../core/render/d2renderer.ts';
+import { BpmnError, renderBpmn, teardownBpmn } from '../../core/render/bpmnrenderer.ts';
 
 // `c4builder check <file...>` — валидация отдельных диаграмм ТЕМ ЖЕ движком, что и
-// сборка (вендорный PlantUML jar + системная/managed java, бандл D2), без проекта и
+// сборка (вендорный PlantUML jar + системная/managed java, бандл D2, конвейер BPMN), без проекта и
 // `.c4builder`. Рендер идёт в память и выбрасывается: проверяем ровно то, что упало бы
 // в сборке (системный `plantuml` может отличаться версией). Код выхода 0 — все файлы ок,
 // 1 — есть ошибка (движка, неизвестного расширения или чтения файла).
@@ -67,12 +68,13 @@ const checkPlantUml = async (abs: string): Promise<void> => {
 const CHECKERS: Record<string, (abs: string) => Promise<unknown>> = {
     '.puml': checkPlantUml,
     '.iuml': checkPlantUml,
-    '.d2': (abs) => renderD2(abs)
+    '.d2': (abs) => renderD2(abs),
+    '.bpmn': async (abs) => renderBpmn(await readFile(abs, 'utf8'), path.relative(process.cwd(), abs))
 };
 
 export default async (files: string[]): Promise<void> => {
     if (files.length === 0) {
-        console.log(chalk.red('usage: c4builder check <file...>  (.puml | .iuml | .d2)'));
+        console.log(chalk.red('usage: c4builder check <file...>  (.puml | .iuml | .d2 | .bpmn)'));
         process.exit(1);
     }
     let failed = 0;
@@ -81,14 +83,17 @@ export default async (files: string[]): Promise<void> => {
         const abs = path.resolve(file);
         const check = CHECKERS[path.extname(abs).toLowerCase()];
         try {
-            if (!check) throw new Error('unsupported extension (expected .puml, .iuml or .d2)');
+            if (!check) throw new Error('unsupported extension (expected .puml, .iuml, .d2 or .bpmn)');
             await check(abs);
             console.log(chalk.green(`✓ ${file}`));
         } catch (e) {
             failed++;
-            console.error(chalk.red(`✗ ${file}: ${(e as Error).message}`));
+            // BPMN: по строке на нарушение — агент правит их по id элемента.
+            const problems = e instanceof BpmnError ? e.problems : [(e as Error).message];
+            for (const p of problems) console.error(chalk.red(`✗ ${file}: ${p}`));
         }
     }
     await teardownD2();
+    await teardownBpmn();
     if (failed) process.exit(1);
 };

@@ -24,6 +24,7 @@ import { acquireBuildLock, BuildLockHeldError } from '../util/lock.ts';
 // переживать ребилды (его пересоздание — секунды), гасим его только когда сборок
 // больше не будет (одиночный запуск).
 import { teardownD2 } from '../core/render/d2renderer.ts';
+import { teardownBpmn } from '../core/render/bpmnrenderer.ts';
 import { packageJson as pkg } from '../util/paths.ts';
 import type { BuildOptions, C4ConfigFile, ConfigIssue } from '../config/options.ts';
 import { outputDirs, parseConfig } from '../config/options.ts';
@@ -368,7 +369,10 @@ export default async () => {
             release();
             // Одиночная сборка: D2-воркер больше не нужен, без teardown он держал бы
             // процесс. В watch-режиме воркер живёт до конца процесса (Ctrl+C).
-            if (!opts.watch) await teardownD2();
+            if (!opts.watch) {
+                await teardownD2();
+                await teardownBpmn();
+            }
         }
         isBuilding = false;
 

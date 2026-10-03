@@ -1,13 +1,13 @@
 # AGENTS.md
 
 Architecture documentation built with [c4builder](https://github.com/AlfaCapital-Tech/C4-Builder):
-C4 diagrams (PlantUML, D2) and markdown in `src/` are compiled into `docs/`.
+C4 diagrams (PlantUML, D2), BPMN processes and markdown in `src/` are compiled into `docs/`.
 
 ## Commands
 
 ```bash
 c4builder                    # build docs/ (non-interactive with a complete .c4builder)
-c4builder check <file...>    # validate .puml / .iuml / .d2 files, exit code 0 = OK
+c4builder check <file...>    # validate .puml / .iuml / .d2 / .bpmn files, exit code 0 = OK
 c4builder --site -w          # live preview on http://localhost:3000 - never exits
 ```
 
@@ -18,14 +18,15 @@ when present, otherwise c4builder downloads a private JRE).
 
 1. Edit files in `src/` only — `docs/` is generated and wiped on every build.
 2. Run `c4builder check` on every diagram you changed, `src/styles.iuml` included. Errors
-   look like `✗ <file>: line <N>: <message>`. Fix until the exit code is 0.
+   look like `✗ <file>: line <N>: <message>` (BPMN: `✗ <file>: <element id> [<rule>] <message>`).
+   Fix until the exit code is 0.
 3. Run `c4builder` and make sure it exits with code 0. Leave `c4builder --site -w` to a
    human or run it in the background.
 
 ## Layout
 
-- One folder = one page. All `.md` files of a folder form its text; every `.puml` / `.d2`
-  in it is rendered onto the page, or placed inline with `![title](diagram.puml)`.
+- One folder = one page. All `.md` files of a folder form its text; every `.puml` / `.d2` /
+  `.bpmn` in it is rendered onto the page, or placed inline with `![title](diagram.puml)`.
 - Files and folders starting with `_` are not published (shared libraries, drafts).
 - `.c4builder` is the config (JSON); unknown keys are silently ignored.
 
@@ -37,6 +38,9 @@ when present, otherwise c4builder downloads a private JRE).
 - Shared styles live in `src/styles.iuml`, included after the C4 include by a relative
   path: `!include styles.iuml` in `src/`, `!include ../styles.iuml` one level down.
 - D2 diagrams share classes through `src/_c4lib.d2` (`...@../_c4lib`).
+- BPMN: write only the semantic BPMN 2.0 XML, never `bpmndi` coordinates — the build lays the
+  diagram out. Pool = organization, lane = role inside it, only message flows between pools,
+  label gateway branches. Example: `src/5 BPMN Example/account-opening.bpmn`.
 
 ## Agent skills
 

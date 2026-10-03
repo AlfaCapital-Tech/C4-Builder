@@ -287,7 +287,7 @@ export const generateLlmsTxt = (tree: TreeItem[], options: BuildOptions): string
     return (
         `# ${options.PROJECT_NAME}\n\n` +
         '> Architecture documentation built with c4builder. Pages are markdown; full text with ' +
-        'diagram sources (PlantUML/D2): [llms-full.txt](llms-full.txt).\n\n' +
+        'diagram sources (PlantUML/D2/BPMN): [llms-full.txt](llms-full.txt).\n\n' +
         `## Pages\n\n${pages.join('')}`
     );
 };
@@ -298,14 +298,19 @@ const fenced = (text: string, lang = ''): string => {
     return `${fence}${lang}\n${text.endsWith('\n') ? text : `${text}\n`}${fence}`;
 };
 
-const FENCE_LANG: Record<string, string> = { '.puml': 'plantuml', '.iuml': 'plantuml', '.d2': 'd2' };
+const FENCE_LANG: Record<string, string> = {
+    '.puml': 'plantuml',
+    '.iuml': 'plantuml',
+    '.d2': 'd2',
+    '.bpmn': 'xml'
+};
 
 // llms-full.txt: состав complete-документа, но диаграмма — исходником (C4-PlantUML/D2-текст
 // агенту полезнее SVG). Локальные include/импорты — один раз в приложении, а не инлайном:
 // общий styles.iuml иначе повторился бы в каждой диаграмме. Резолв — тот же, что у рендера.
 export const generateLlmsFull = async (tree: TreeItem[], options: BuildOptions): Promise<string> => {
     const MD = await composeComplete(tree, options, async (_item, diagram) =>
-        fenced(`${diagram.content}`, diagram.engine)
+        fenced(`${diagram.content}`, FENCE_LANG[diagram.ext])
     );
     const deps = new Map<string, string>();
     for (const item of tree) {
@@ -314,7 +319,7 @@ export const generateLlmsFull = async (tree: TreeItem[], options: BuildOptions):
             if (diagram.engine === 'd2') {
                 for (const [abs, content] of d2LocalImports(path.join(item.dir, diagram.dir), body))
                     deps.set(abs, content);
-            } else {
+            } else if (diagram.engine === 'plantuml') {
                 for (const inc of collectIncludes(body, item.dir, item.dir, new Set()))
                     deps.set(inc.abs, inc.content);
             }

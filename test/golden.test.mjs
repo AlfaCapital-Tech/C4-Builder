@@ -123,6 +123,30 @@ describe('контентные проверки: default', () => {
         expect(svg).toContain('Клиент'); // кириллица в D2-SVG
         expect(svg).toMatch(/#0b4884/i); // C4-класс person из импортированного ../_c4lib.d2
     });
+
+    it('BPMN-диаграмма отрендерена: горизонтальные полосы дорожек, кириллица сохранена', () => {
+        const tree = runs.default.tree;
+        // .bpmn рендерится третьим бэкендом (раскладка + bpmn-js) → SVG по имени исходника
+        expect(Object.keys(tree)).toContain('5 BPMN Example/account-opening.svg');
+
+        const svg = decodeXmlEntities(tree['5 BPMN Example/account-opening.svg'].text);
+        expect(svg).toContain('Бюро кредитных историй');
+        expect(svg).toContain('Фронт-офис');
+        // Дорожки — полосы во всю ширину пула (ширина > высоты), одна под другой.
+        const lanes = ['Lane_Client', 'Lane_FrontOffice', 'Lane_BackOffice'].map((id) => {
+            const m = new RegExp(
+                `data-element-id="${id}" transform="matrix\\(1 0 0 1 ([\\d.]+) ([\\d.]+)\\)"[\\s\\S]*?<rect x="0" y="0" width="([\\d.]+)" height="([\\d.]+)"`
+            ).exec(svg);
+            expect(m, id).not.toBeNull();
+            const [x, y, w, h] = m.slice(1).map(Number);
+            return { x, y, w, h };
+        });
+        for (const [i, lane] of lanes.entries()) {
+            expect(lane.w).toBeGreaterThan(lane.h);
+            expect(lane.x).toBe(lanes[0].x);
+            if (i) expect(lane.y).toBe(lanes[i - 1].y + lanes[i - 1].h);
+        }
+    });
 });
 
 describe('контентные проверки: links-top', () => {
@@ -160,6 +184,9 @@ describe('контентные проверки: embed-png', () => {
         // D2 → PNG (растеризация SVG)
         expect(files).toContain('4 D2 Example/landscape.png');
         expect(files).not.toContain('4 D2 Example/landscape.svg');
+        // BPMN → PNG (растеризация SVG)
+        expect(files).toContain('5 BPMN Example/account-opening.png');
+        expect(files).not.toContain('5 BPMN Example/account-opening.svg');
         // ditaa — нативный PNG
         expect(files).toContain('1 Internet Banking System/Single Page Application/Extended Docs/ditaa.png');
         // ни одного .svg-выхода не осталось (vendor svg в шаблоне нет)

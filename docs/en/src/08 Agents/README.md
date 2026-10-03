@@ -7,8 +7,8 @@ locally, without a network and without a human.
 
 ## The edit → check → build loop
 
-1. **Edit.** The agent changes `.md` and `.puml`/`.d2` files in `src/` — adds a container, a
-   relationship, a page.
+1. **Edit.** The agent changes `.md` and `.puml`/`.d2`/`.bpmn` files in `src/` — adds a
+   container, a relationship, a page, a process step.
 2. **Check.** `c4builder check` on the changed files:
 
    ```bash
@@ -23,7 +23,8 @@ locally, without a network and without a human.
    ```
 
    The check uses the same engine and the same `!include`s as the build and takes seconds: the
-   agent fixes the error and repeats until it gets 0.
+   agent fixes the error and repeats until it gets 0. For `.bpmn`, every model violation is a
+   line with the element id and the rule: `✗ <file>: <id> [<rule>] <description>`.
 3. **Build.** `c4builder` builds the whole project; `c4builder --site -w` keeps the site open for
    the human and rebuilds it on every save the agent makes.
 
@@ -32,8 +33,8 @@ agent's last step or a CI step.
 
 ## Why offline rendering matters for agents
 
-- **No network, no random failures.** The PlantUML jar, the C4 library, the font and D2 ship with
-  the package; the build does not depend on plantuml.com, proxies or rate limits.
+- **No network, no random failures.** The PlantUML jar, the C4 library, the font, D2 and the BPMN
+  engine ship with the package; the build does not depend on plantuml.com, proxies or rate limits.
 - **Same input, same output.** The bundled font and pinned engine versions give identical SVG on
   any machine. The pull request diff shows what the agent changed in the model, not
   environmental noise.
@@ -58,7 +59,7 @@ from `.claude/skills/`.
 
 | Skill | Use it for |
 |---|---|
-| `c4builder` | working on a project: layout of `src/` and `.c4builder`, the edit → `c4builder check` → build loop, C4-PlantUML conventions (stdlib includes, shared `.iuml`, offline rendering), D2, the `openspec` and `openapi` plugins, `llms.txt` |
+| `c4builder` | working on a project: layout of `src/` and `.c4builder`, the edit → `c4builder check` → build loop, C4-PlantUML conventions (stdlib includes, shared `.iuml`, offline rendering), D2, BPMN processes without coordinates, the `openspec` and `openapi` plugins, `llms.txt` |
 | `c4builder-setup` | install and update (npm channels `latest` and `rc`, the Docker image), Java or the downloaded JRE, a smoke build of the template project |
 
 ## AGENTS.md in a new project
@@ -78,7 +79,7 @@ files following [llmstxt.org](https://llmstxt.org/):
   `excludeSidebarFolderByPath` are left out, plugin pages (such as `openspec`) are included. Links
   are relative to the site root.
 - **`llms-full.txt`** — the full text of all pages in one file, in the same order as the single
-  markdown file. Every diagram is inserted as its **source** in a `plantuml` or `d2` block instead
+  markdown file. Every diagram is inserted as its **source** in a `plantuml`, `d2` or `xml` (BPMN) block instead
   of an image, regardless of `diagramFormat`, `embedDiagram` and `includeLinkToDiagram`. Local
   `!include` files and D2 imports (nested ones too) are listed once in the `## Included files`
   appendix at the end; stdlib includes `!include <C4/...>` and URL includes stay as lines in the
@@ -108,7 +109,7 @@ such a project:
 - include C4 through the stdlib (`!include <C4/C4_Container>`), shared styles with
   `!include ../styles.iuml`;
 - a new page is a new folder in `src/`, the order is set by a numeric prefix;
-- `.puml` and `.d2` files in one folder must not share a name ignoring the extension: they share
+- `.puml`, `.d2` and `.bpmn` files in one folder must not share a name ignoring the extension: they share
   the output file, and the build stops with an error.
 
 Add the pre-commit hook from the [Diagrams](03%20Diagrams/03%20Diagrams.md) page: it keeps a
