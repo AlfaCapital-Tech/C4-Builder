@@ -7,6 +7,7 @@ import { REPO_ROOT, TMP_ROOT } from './helpers.mjs';
 
 // Блоки ```plantuml в страницах проекта рендерятся при сборке (системной java, как в
 // check.test.mjs) во всех выходах; ```puml/```d2 — показ исходника, остаются кодом.
+// Шаблон — пользовательский с клиентским docsify-plantuml (как у арх-репо).
 const CLI = path.join(REPO_ROOT, 'dist', 'index.js');
 const CONFIG = {
     ...JSON.parse(
@@ -16,7 +17,8 @@ const CONFIG = {
     includeNavigation: false,
     includeTableOfContents: false,
     includeBreadcrumbs: false,
-    supportSearch: false
+    supportSearch: false,
+    docsifyTemplate: 'tpl.mjs'
 };
 
 const FILES = {
@@ -25,7 +27,10 @@ const FILES = {
         '```puml\n@startuml\nAlice -> Bob : puml-source\n@enduml\n```\n\n```d2\na -> d2-source\n```\n',
     'src/shared.iuml': 'Alice -> Bob : from-include\n',
     'src/A/README.md': '# A\n\n```plantuml\n!include ../shared.iuml\n```\n',
-    'src/B/README.md': '# B\n\n```plantuml\n[a[b] --> [c]\n```\n'
+    'src/B/README.md': '# B\n\n```plantuml\n[a[b] --> [c]\n```\n',
+    'tpl.mjs':
+        "export default (o) => '<script>window.$docsify = ' + JSON.stringify(o) + ';</script>' +\n" +
+        '  \'<script src="vendor/docsify-plantuml.min.js"></script>\';\n'
 };
 
 let dir;
@@ -80,6 +85,11 @@ describe('блоки ```plantuml в страницах', () => {
     it('битый блок: сборка жива, заглушка, предупреждение с путём .md', () => {
         expect(out).toMatch(/src[/\\]B[/\\]README\.md/);
         expect(image('B/B.md')).toContain('не отрендерена');
+    });
+
+    it('пользовательский шаблон: родные emoji в опциях, docsify-plantuml.min.js в выходе', () => {
+        expect(read('index.html')).toContain('"nativeEmoji":true');
+        expect(fs.existsSync(path.join(dir, 'docs', 'vendor', 'docsify-plantuml.min.js'))).toBe(true);
     });
 
     it('llms-full.txt: исходник блока в fence plantuml, include — в приложении', () => {

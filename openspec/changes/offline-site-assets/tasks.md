@@ -8,9 +8,9 @@
 
 ## 2. Шаблон и тема без внешних ресурсов
 
-- [ ] 2.1 `compose/docsify.template.ts`: убрать `<script src="vendor/docsify-plantuml.min.js">`; в объект опций `generateWebMD` (и `DocsifyOptions`) добавить `nativeEmoji: true`; копирование `vendor/docsify` в выход сохранить целиком (`docsify-plantuml.min.js` остаётся для пользовательских шаблонов). Проверка: `node dist/index.js` на шаблонном проекте → в `index.html` нет `docsify-plantuml`, есть `"nativeEmoji": true`, файл `vendor/docsify-plantuml.min.js` в выходе есть.
-- [ ] 2.2 После копирования вендора вырезать ведущий `@import url(...)` из `dist/vendor/vue.css` (design §2). Проверка: в выходе `vue.css` без `fonts.googleapis`, `git diff vendor/` пуст.
-- [ ] 2.3 Ручная проверка в браузере (devtools → Network) собранного шаблонного проекта: нет запросов к внешним доменам, `:smile:` на временной странице показан символом, шрифты системные. Проверка: отметка в отчёте с перечнем увиденных доменов (должен быть только localhost).
+- [x] 2.1 `compose/docsify.template.ts`: убрать `<script src="vendor/docsify-plantuml.min.js">`; в объект опций `generateWebMD` (и `DocsifyOptions`) добавить `nativeEmoji: true`; копирование `vendor/docsify` в выход сохранить целиком (`docsify-plantuml.min.js` остаётся для пользовательских шаблонов). Проверка: `node dist/index.js` на шаблонном проекте → в `index.html` нет `docsify-plantuml`, есть `"nativeEmoji": true`, файл `vendor/docsify-plantuml.min.js` в выходе есть.
+- [x] 2.2 После копирования вендора вырезать ведущий `@import url(...)` из `dist/vendor/vue.css` (design §2). Проверка: в выходе `vue.css` без `fonts.googleapis`, `git diff vendor/` пуст.
+- [x] 2.3 Ручная проверка в браузере (devtools → Network) собранного шаблонного проекта: нет запросов к внешним доменам, `:smile:` на временной странице показан символом, шрифты системные. Проверка: отметка в отчёте с перечнем увиденных доменов (должен быть только localhost).
 
 ## 3. openapi без валидатора
 

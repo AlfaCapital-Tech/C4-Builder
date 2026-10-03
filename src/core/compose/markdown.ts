@@ -474,6 +474,7 @@ export const generateWebMD = async (tree: TreeItem[], options: BuildOptions): Pr
                 },
                 stylesheet: options.WEB_THEME,
                 alias: { '/.*/_sidebar.md': '/_sidebar.md' },
+                nativeEmoji: true,
                 supportSearch: options.SUPPORT_SEARCH,
                 executeScript: options.EXECUTE_SCRIPT
             })
@@ -483,7 +484,17 @@ export const generateWebMD = async (tree: TreeItem[], options: BuildOptions): Pr
     //copy local docsify vendor files to dist
     const docsifyVendorSrc = path.join(VENDOR_DIR, 'docsify');
     if (fs.existsSync(docsifyVendorSrc)) {
-        filePromises.push(fsextra.copy(docsifyVendorSrc, path.join(options.DIST_FOLDER, 'vendor')));
+        const vendorDist = path.join(options.DIST_FOLDER, 'vendor');
+        // Тема — без ведущего @import Google Fonts (у её шрифтов есть системный fallback).
+        // Правим копию, а не vendor/: повторное вендорение вернуло бы @import.
+        const theme = path.join(vendorDist, 'vue.css');
+        filePromises.push(
+            fsextra
+                .copy(docsifyVendorSrc, vendorDist)
+                .then(async () =>
+                    writeFile(theme, (await readFile(theme)).toString().replace(/^@import url\([^)]*\);/, ''))
+                )
+        );
     }
 
     //github pages preparation
