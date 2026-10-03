@@ -2,8 +2,8 @@
 
 ## 1. Подготовка и тест против регресса
 
-- [ ] 1.1 Убедиться, что `cli-fixes` влит в базу ветки (`git log --oneline | grep -i cli-fixes` или переведённый вывод `check` в `src/cli/commands/check.ts`); иначе остановиться и сообщить. `npm run build`. Проверка: `node dist/index.js check /nonexistent.txt` печатает английское сообщение
-- [ ] 1.2 Добавить `test/cli-language.test.mjs` по design §3: обход `src/**/*.ts`, AST через `typescript`, литералы `StringLiteral`/`NoSubstitutionTemplateLiteral`/`TemplateHead|Middle|Tail` без кириллицы, сообщение — список `файл:строка: литерал`. Проверка: тест красный на текущем коде и перечисляет литералы из инвентаря design (в том числе `core/render/jre.ts`, `cli/wizard/collect.ts`), но НЕ комментарии `jre.ts:60` и `dispatch.ts:163`
+- [x] 1.1 Убедиться, что `cli-fixes` влит в базу ветки (`git log --oneline | grep -i cli-fixes` или переведённый вывод `check` в `src/cli/commands/check.ts`); иначе остановиться и сообщить. `npm run build`. Проверка: `node dist/index.js check /nonexistent.txt` печатает английское сообщение
+- [x] 1.2 Добавить `test/cli-language.test.mjs` по design §3: обход `src/**/*.ts`, AST через `typescript`, литералы `StringLiteral`/`NoSubstitutionTemplateLiteral`/`TemplateHead|Middle|Tail` без кириллицы, сообщение — список `файл:строка: литерал`. Проверка: тест красный на текущем коде и перечисляет литералы из инвентаря design (в том числе `core/render/jre.ts`, `cli/wizard/collect.ts`), но НЕ комментарии `jre.ts:60` и `dispatch.ts:163`
 
 ## 2. Перевод: CLI и конфиг
 
