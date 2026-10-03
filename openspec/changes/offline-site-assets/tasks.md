@@ -18,13 +18,13 @@
 
 ## 4. Автопроверка и golden
 
-- [ ] 4.1 `npm run test:golden:update`: осознанно переснять `index.html` и `vendor/vue.css` во всех вариантах (`default`, `links-top`, `embed-png`). Проверка: `git diff --stat test/golden` — меняются только эти файлы и их строки в `manifest.json`; страницы `.md`, `.svg`, `llms*.txt` без изменений (SVG-шум fontconfig на Arch не коммитить).
-- [ ] 4.2 `test/offline-site.test.mjs` по design §6: скан `test/golden/default/tree` (`index.html`, `**/*.css`, `**/*.md`), исключение — значение `repo` в `$docsify`, в `.md` — только адреса в изображениях; сообщение называет файл и адрес. Проверка: тест зелёный; временная вставка `<script src="https://cdn.example/x.js">` во встроенный шаблон + `test:golden:update` даёт красный тест с `index.html` и адресом (откатить).
+- [x] 4.1 `npm run test:golden:update`: осознанно переснять `index.html` и `vendor/vue.css` во всех вариантах (`default`, `links-top`, `embed-png`). Проверка: `git diff --stat test/golden` — меняются только эти файлы и их строки в `manifest.json`; страницы `.md`, `.svg`, `llms*.txt` без изменений (SVG-шум fontconfig на Arch не коммитить).
+- [x] 4.2 `test/offline-site.test.mjs` по design §6: скан `test/golden/default/tree` (`index.html`, `**/*.css`, `**/*.md`), исключение — значение `repo` в `$docsify`, в `.md` — только адреса в изображениях; сообщение называет файл и адрес. Проверка: тест зелёный; временная вставка `<script src="https://cdn.example/x.js">` во встроенный шаблон + `test:golden:update` даёт красный тест с `index.html` и адресом (откатить).
 - [ ] 4.3 Полный прогон: `npm run build`, `npm test`, `npm run check`, `openspec validate offline-site-assets --strict` — всё зелёное.
 
 ## 5. Актуализация
 
-- [ ] 5.1 Сайт документации: `docs/docsify-template.mjs` — убрать инлайн темы и `noEmoji`, тема через `<link href="${options.stylesheet}">`, оставить `lang` и `nameLink` (design §7). Проверка: сборка `docs/ru` и `docs/en` → код 0; в `dist/index.html` и `dist/vendor/vue.css` нет внешних адресов.
+- [x] 5.1 Сайт документации: `docs/docsify-template.mjs` — убрать инлайн темы и `noEmoji`, тема через `<link href="${options.stylesheet}">`, оставить `lang` и `nameLink` (design §7). Проверка: сборка `docs/ru` и `docs/en` → код 0; в `dist/index.html` и `dist/vendor/vue.css` нет внешних адресов.
 - [ ] 5.2 Страницы сайта RU и EN: «03 Диаграммы» — блоки ```` ```plantuml ```` в страницах рендерятся при сборке, ```` ```puml ````/```` ```text ```` — для показа исходника; «04 Выводы» или «02 Проект» — сайт работает без интернета (что именно не загружается извне), оговорка про `generateLocalImages: false`; «06 Плагины» — openapi без валидатора. Проверка: `npx vitest run test/docs-parity.test.mjs` зелёный, сборка RU/EN → 0.
 - [ ] 5.3 `skills/c4builder` (`SKILL.md` или `references/diagrams.md`): блоки ```` ```plantuml ```` в `.md` рендерятся при сборке, исходник показывать через `puml`; `template/AGENTS.md` — без изменений, если там нет упоминания блоков. Проверка: `npx vitest run test/skills.test.mjs` зелёный.
 - [ ] 5.4 `CHANGELOG.md`, `## Unreleased`: сайт без внешних запросов (шрифты, emoji, клиентский PlantUML, валидатор swagger-ui); **BREAKING (вывод):** блоки ```` ```plantuml ```` в страницах теперь картинки во всех выходах, для исходника — `puml`/`text`. Проверка: ревью глазами.
