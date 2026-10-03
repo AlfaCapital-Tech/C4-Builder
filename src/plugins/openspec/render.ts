@@ -4,8 +4,8 @@ import path from 'node:path';
 
 import type { BuildOptions } from '../../config/options.ts';
 import type { PageDiagram } from '../../core/plugins/types.ts';
+import { createFenceExtractor, mapOutsideFences } from '../../core/scan/fences.ts';
 import { encodeURIPath } from '../../util/utils.ts';
-import { createFenceExtractor, mapOutsideFences } from './fences.ts';
 import type { Artifact, Change, Spec, Store } from './scan.ts';
 
 // Ссылка на страницу сайта от корня (без ведущего «/»): так же строится sidebar,
@@ -118,6 +118,10 @@ const ignoreTitle = (title: string): string => {
 export const relSource = (root: string, rel: string): string =>
     path.relative(process.cwd(), path.join(root, rel)).split(path.sep).join('/');
 
+// В артефактах OpenSpec любой блок диаграммы — иллюстрация, а не пример исходника
+// (в отличие от страниц проекта, где извлекается только ```plantuml).
+const FENCE_LANGS = ['plantuml', 'puml', 'd2'];
+
 /**
  * Markdown одного исходного файла → страница сайта: fenced-диаграммы вырезаются, ссылки
  * на другие страницы источника (`target`, `#x` → `?id=x`) — на их адреса, прочие
@@ -144,7 +148,7 @@ export const renderMarkdown = (
         options: BuildOptions;
     }
 ): RenderedPage => {
-    const { markdown, diagrams } = createFenceExtractor().extract(content, base, source);
+    const { markdown, diagrams } = createFenceExtractor(FENCE_LANGS).extract(content, base, source);
     const files: PageFile[] = [];
     const rewrite = (t: string): string =>
         t.replace(LINK_RE, (whole, bang: string, text: string, href: string, title = '') => {
