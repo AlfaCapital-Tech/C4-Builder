@@ -6,7 +6,7 @@
 npm i -g @alfacapital-tech/c4builder
 ```
 
-Node.js 20.19 or newer is required. `npm install` without a tag installs the latest stable
+Node.js 22.17 or newer is required. `npm install` without a tag installs the latest stable
 release.
 
 Rendering PlantUML needs Java 17+. If `java` is available in `JAVA_HOME` or on `PATH`, c4builder

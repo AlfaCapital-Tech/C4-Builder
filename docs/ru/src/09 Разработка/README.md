@@ -23,7 +23,7 @@ npm run test:unit      # без golden: быстро и без Java
 npm run check          # biome: линт и формат
 ```
 
-TypeScript, ESM, Node 20.19+. Тесты запускают собранный CLI из `dist/`, поэтому `npm test`
+TypeScript, ESM, Node 22.17+. Тесты запускают собранный CLI из `dist/`, поэтому `npm test`
 сначала компилирует.
 
 **Golden-снапшоты.** `test/golden.test.mjs` собирает шаблон `template/src` в нескольких

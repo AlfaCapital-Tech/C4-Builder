@@ -9,7 +9,7 @@ import { z } from 'zod';
 import { outputDirs } from '../../config/options.ts';
 import { redactUrl } from '../../core/plugins/source.ts';
 import { definePlugin } from '../../core/plugins/types.ts';
-import { globFiles } from '../../util/glob.ts';
+import { isPathInside } from '../../util/archive.ts';
 import { VENDOR_DIR } from '../../util/paths.ts';
 import { encodeURIPath } from '../../util/utils.ts';
 
@@ -28,6 +28,17 @@ const optionsSchema = z
     });
 
 type Opts = z.output<typeof optionsSchema>;
+
+// Файлы под root по glob: posix-пути, сортировка. Каталоги с точкой (.git) fs.glob не
+// обходит сам. Выходные каталоги (skip) отсеиваются по результату, а не в exclude:
+// под `**` Node передаёт в exclude лишь имя записи, и вложенный `x/docs` был бы
+// неотличим от корневого `docs`.
+const findFiles = (root: string, pattern: string, skip: string[]): string[] =>
+    fs
+        .globSync(pattern, { cwd: root, exclude: (p) => path.basename(p) === 'node_modules' })
+        .filter((rel) => !skip.some((d) => isPathInside(d, path.resolve(root, rel))))
+        .map((rel) => rel.split(path.sep).join('/'))
+        .sort();
 
 // Имя страницы: родительская папка спеки; в корне источника — имя файла без расширения.
 const pageName = (rel: string): string => {
@@ -59,7 +70,7 @@ export default definePlugin<Opts>({
         // Источник может быть предком выходного каталога (dir: '.') — свои же копии
         // спек прошлой сборки в dist/dist_bk не считаются источником.
         const skip = outputDirs(ctx.options);
-        const files = globFiles(root, o.glob, skip);
+        const files = findFiles(root, o.glob, skip);
         if (!files.length) throw new Error(`по шаблону "${o.glob}" в ${source} не найдено ни одной спеки`);
         const names = new Map<string, string>();
         for (const rel of files) {
@@ -70,7 +81,7 @@ export default definePlugin<Opts>({
         }
         // Статикой в dist — все yaml/json источника, а не только совпавшие с glob: $ref
         // может вести в общие схемы (components), не являющиеся спеками.
-        for (const rel of globFiles(root, '**/*.{yaml,yml,json}', skip)) {
+        for (const rel of findFiles(root, '**/*.{yaml,yml,json}', skip)) {
             const dest = path.join(ctx.options.DIST_FOLDER, mount, '_specs', rel);
             fs.mkdirSync(path.dirname(dest), { recursive: true });
             fs.copyFileSync(path.join(root, rel), dest);

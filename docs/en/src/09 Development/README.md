@@ -23,7 +23,7 @@ npm run test:unit      # without golden: fast and Java-free
 npm run check          # biome: lint and format
 ```
 
-TypeScript, ESM, Node 20.19+. The tests run the built CLI from `dist/`, so `npm test` compiles
+TypeScript, ESM, Node 22.17+. The tests run the built CLI from `dist/`, so `npm test` compiles
 first.
 
 **Golden snapshots.** `test/golden.test.mjs` builds the `template/src` template in several

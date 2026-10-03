@@ -49,7 +49,7 @@ swagger-ui is bundled, readers need no network. Exactly one source — `dir` **o
 | `archive` | — | HTTP(S) URL of a `tar.gz` / `zip` archive (e.g. a repository archive) |
 | `subdir` | — | folder inside the archive or `dir` |
 | `headers` | — | HTTP headers for the archive request, e.g. `{"PRIVATE-TOKEN": "${GITLAB_TOKEN}"}` |
-| `glob` | `**/openapi.{yaml,yml,json}` | spec pattern (`**`, `*`, `?`, `{a,b}`) |
+| `glob` | `**/openapi.{yaml,yml,json}` | spec pattern (`**`, `*`, `?`, `{a,b}`); directories starting with a dot are skipped |
 
 All `yaml`/`yml`/`json` files of the source are published under `<mount>/_specs/…` with
 their relative layout, so relative `$ref`s keep working. Archive download fails with

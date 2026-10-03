@@ -11,7 +11,7 @@ c4builder check <file...>    # validate .puml / .iuml / .d2 files, exit code 0 =
 c4builder --site -w          # live preview on http://localhost:3000 - never exits
 ```
 
-Not installed: `npm i -g @alfacapital-tech/c4builder` (Node.js 20.19+; Java 17+ is used
+Not installed: `npm i -g @alfacapital-tech/c4builder` (Node.js 22.17+; Java 17+ is used
 when present, otherwise c4builder downloads a private JRE).
 
 ## Workflow

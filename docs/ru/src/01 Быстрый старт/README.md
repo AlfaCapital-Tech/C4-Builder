@@ -6,7 +6,7 @@
 npm i -g @alfacapital-tech/c4builder
 ```
 
-Нужен Node.js 20.19 или новее. `npm install` без тега ставит последний стабильный релиз.
+Нужен Node.js 22.17 или новее. `npm install` без тега ставит последний стабильный релиз.
 
 Для рендера PlantUML нужна Java 17+. Если `java` есть в `JAVA_HOME` или в `PATH`, c4builder
 возьмёт её; если нет — при первой сборке скачает приватную JRE (Temurin) в свой кэш.
