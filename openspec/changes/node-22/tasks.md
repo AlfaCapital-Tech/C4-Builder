@@ -14,4 +14,4 @@
 ## 3. Актуализация
 
 - [x] 3.1 Заменить «20.19» на «22.17» в `skills/c4builder-setup/SKILL.md` (проверка `node --version`) и `template/AGENTS.md` (строка установки) — оба вмержены с `agent-skills`; а также в страницах сайта `docs/ru` и `docs/en` (быстрый старт, установка) с одинаковой правкой в обоих языках. Проверка: grep из 1.2 по всему репозиторию пуст; `npx vitest run test/skills.test.mjs` и проверка паритета RU/EN из `docs-site` зелёные
-- [ ] 3.2 Интеграция: `npm test` и `npm run check` зелёные на Node 22.17 (локально через `npx -p node@22.17 node …` или nvm) и на Node 24 (CI-матрица). Проверка: CI зелёный, в выводе сборки шаблона нет `ExperimentalWarning`
+- [x] 3.2 Интеграция: `npm test` и `npm run check` зелёные на Node 22.17 (локально через `npx -p node@22.17 node …` или nvm) и на Node 24 (CI-матрица). Проверка: CI зелёный, в выводе сборки шаблона нет `ExperimentalWarning`
