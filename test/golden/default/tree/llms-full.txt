@@ -1,0 +1,525 @@
+# golden-fixture
+
+* [Overview](#Overview)
+  * [1 Internet Banking System](#1-Internet-Banking-System)
+    * [API Application](#API-Application)
+    * [API Specs](#API-Specs)
+    * [Single Page Application](#Single-Page-Application)
+      * [Dynamic Diagram](#Dynamic-Diagram)
+      * [Extended Docs](#Extended-Docs)
+  * [2 Deployment](#2-Deployment)
+  * [3 Локализация](#3-%D0%9B%D0%BE%D0%BA%D0%B0%D0%BB%D0%B8%D0%B7%D0%B0%D1%86%D0%B8%D1%8F)
+  * [4 D2 Example](#4-D2-Example)
+
+---
+
+## Overview
+
+**Level 1: System Context diagram**
+
+A System Context diagram is a good starting point for diagramming and documenting a software system, allowing you to step back and see the big picture. Draw a diagram showing your system as a box in the centre, surrounded by its users and the other systems that it interacts with.
+
+Detail isn't important here as this is your zoomed out view showing a big picture of the system landscape. The focus should be on people (actors, roles, personas, etc) and software systems rather than technologies, protocols and other low-level details. It's the sort of diagram that you could show to non-technical people.
+
+**Scope**: A single software system.
+
+**Primary elements**: The software system in scope.
+Supporting elements: People (e.g. users, actors, roles, or personas) and software systems (external dependencies) that are directly connected to the software system in scope. Typically these other software systems sit outside the scope or boundary of your own software system, and you don’t have responsibility or ownership of them.
+
+**Intended audience**: Everybody, both technical and non-technical people, inside and outside of the software development team.
+
+```plantuml
+@startuml
+!include <C4/C4_Context>
+!include styles.iuml
+
+LAYOUT_WITH_LEGEND()
+
+Person(pbc, "Personal Banking Customer", "A customer of the bank, with personal bank accounts.")
+System(ibs, "Internet Banking System", "Allows customers to view information about their bank accounts, and make payments.")
+System_Ext(es, "E-mail system", "The internal Microsoft Exchange e-mail system.")
+System_Ext(mbs, "Mainframe Banking System", "Stores all of the core banking information about customers, accounts, transactions, etc.")
+
+Rel(pbc, ibs, "Uses")
+Rel(es, pbc, "Sends e-mails to")
+Rel(ibs, es, "Sends e-mails", "SMTP")
+Rel(ibs, mbs, "Uses")
+@enduml
+```
+
+## 1 Internet Banking System
+
+`/1 Internet Banking System`
+
+[Overview](#golden-fixture)
+
+**Level 2: Container diagram**
+
+Once you understand how your system fits in to the overall IT environment, a really useful next step is to zoom-in to the system boundary with a Container diagram. A "container" is something like a server-side web application, single-page application, desktop application, mobile app, database schema, file system, etc. Essentially, a container is a separately runnable/deployable unit (e.g. a separate process space) that executes code or stores data.
+
+The Container diagram shows the high-level shape of the software architecture and how responsibilities are distributed across it. It also shows the major technology choices and how the containers communicate with one another. It's a simple, high-level technology focussed diagram that is useful for software developers and support/operations staff alike.
+
+**Scope**: A single software system.
+
+**Primary elements**: Containers within the software system in scope.
+Supporting elements: People and software systems directly connected to the containers.
+
+**Intended audience**: Technical people inside and outside of the software development team; including software architects, developers and operations/support staff.
+
+**Notes**: This diagram says nothing about deployment scenarios, clustering, replication, failover, etc.
+
+```plantuml
+@startuml
+!include <C4/C4_Container>
+!include ../styles.iuml
+
+LAYOUT_WITH_LEGEND()
+
+Person(pbc, "Personal Banking Customer", "A customer of the bank, with personal bank accounts.")
+System_Ext(es, "E-mail system", "The internal Microsoft Exchange e-mail system.")
+System_Ext(mbs, "Mainframe Banking System", "Stores all of the core banking information about customers, accounts, transactions, etc.")
+System_Boundary(ibs, "Internet Banking") {
+    Container(wa, "Web Application", "java and Spring MVC", "Delivers the static content and the internet banking single page application.")
+    Container(spa, "Single Page Application", "javascript and angular", "Provides all the internet banking functionality to customers via their web browser.")
+    Container(ma, "Mobile App", "Xamarin", "Provides a limited subset ot the internet banking functionality to customers via their mobile mobile device.")
+    Container(db, "Database", "Relational Database Schema", "Stores user registration information, hashed authentication credentials, access logs, etc.")
+    Container(api, "API Application", "java and String MVC", "Provides internet banking functionality via a JSON/HTTP API.")
+
+    Rel(api, es, "Sends e-mails", "SMTP")
+    Rel(api, mbs, "Uses", "XML/HTTPS")
+    Rel(api, db, "Reads & writes to", "JDBC")
+    Rel(wa, spa, "Delivers")
+    Rel(spa, api, "Uses", "JSON/HTTPS")
+    Rel(ma, api, "Uses", "JSON/HTTPS")
+}
+
+Rel(pbc, wa, "Uses", "HTTPS")
+Rel(pbc, spa, "Uses")
+Rel(pbc, ma, "Uses")
+Rel(es, pbc, "Sends e-mails to")
+@enduml
+```
+
+## API Application
+
+`/1 Internet Banking System/API Application`
+
+[Overview](#golden-fixture)
+
+**Level 3: Component diagram**
+
+Next you can zoom in and decompose each container further to identify the major structural building blocks and their interactions.
+
+The Component diagram shows how a container is made up of a number of "components", what each of those components are, their responsibilities and the technology/implementation details.
+
+**Scope**: A single container.
+
+**Primary elements**: Components within the container in scope.
+Supporting elements: Containers (within the software system in scope) plus people and software systems directly connected to the components.
+
+**Intended audience**: Software architects and developers.
+
+```plantuml
+@startuml
+!include <C4/C4_Component>
+
+LAYOUT_WITH_LEGEND()
+
+Container(spa, "Single Page Application", "javascript and react", "Provides all the internet banking functionality to customers via their web browser.")
+Container(ma, "Mobile App", "Xamarin", "Provides a limited subset ot the internet banking functionality to customers via their mobile mobile device.")
+Container(db, "Database", "Relational Database Schema", "Stores user registration information, hashed authentication credentials, access logs, etc.")
+System_Ext(mbs, "Mainframe Banking System", "Stores all of the core banking information about customers, accounts, transactions, etc.")
+
+Container_Boundary(api, "API Application") {
+    Component(sign, "Sign In Controller", "MVC Rest Controlle", "Allows users to sign in to the internet banking system")
+    Component(accounts, "Accounts Summary Controller", "MVC Rest Controlle", "Provides customers with a summory of their bank accounts")
+    Component(security, "Security Component", "Spring Bean", "Provides functionality related to singing in, changing passwords, etc.")
+    Component(mbsfacade, "Mainframe Banking System Facade", "Spring Bean", "A facade onto the mainframe banking system.")
+
+    Rel(sign, security, "Uses")
+    Rel(accounts, mbsfacade, "Uses")
+    Rel(security, db, "Read & write to", "JDBC")
+    Rel(mbsfacade, mbs, "Uses", "XML/HTTPS")
+}
+
+Rel(spa, sign, "Uses", "JSON/HTTPS")
+Rel(spa, accounts, "Uses", "JSON/HTTPS")
+
+Rel(ma, sign, "Uses", "JSON/HTTPS")
+Rel(ma, accounts, "Uses", "JSON/HTTPS")
+@enduml
+```
+
+## API Specs
+
+`/1 Internet Banking System/API Specs`
+
+[Overview](#golden-fixture)
+
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta
+    name="description"
+    content="SwaggerIU"
+  />
+  <title>SwaggerUI</title>
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@4.5.0/swagger-ui.css" />
+</head>
+<body>
+<div id="swagger-ui"></div>
+<script>
+  window.onload = () => {
+    window.ui = SwaggerUIBundle({
+      url: 'https://petstore3.swagger.io/api/v3/openapi.json',
+      dom_id: '#swagger-ui',
+    });
+  };
+</script>
+</body>
+</html>
+
+
+## Single Page Application
+
+`/1 Internet Banking System/Single Page Application`
+
+[Overview](#golden-fixture)
+
+**Level 3: Component diagram**
+
+Next you can zoom in and decompose each container further to identify the major structural building blocks and their interactions.
+
+The Component diagram shows how a container is made up of a number of "components", what each of those components are, their responsibilities and the technology/implementation details.
+
+**Scope**: A single container.
+
+**Primary elements**: Components within the container in scope.
+Supporting elements: Containers (within the software system in scope) plus people and software systems directly connected to the components.
+
+**Intended audience**: Software architects and developers.
+
+> Example of included local image
+
+![](2020-01-10-16-21-41.png)
+
+```plantuml
+@startuml
+!include <C4/C4_Component>
+
+LAYOUT_WITH_LEGEND()
+
+Container(api, "API Application", "java and Spring MVC", "Delivers the static content and the internet banking single page application.")
+
+Container_Boundary(spa, "Single Page Application") {
+    Component(routing, "Routing", "React router", "Handler slient side routing")
+    Component(store, "Data Store", "Redux", "The central object holding the application state")
+    Component(login, "Login form", "React Class", "The login page")
+    Component(profile, "Profile Page", "React Class", "The page where the logged in user can view and edit his/her information")
+}
+
+Rel(spa, api, "Uses", "JSON/HTTPS")
+
+Rel(login, store, "Uses");
+Rel(routing, store, "Uses");
+Rel(profile, store, "Uses");
+
+@enduml
+```
+
+## Dynamic Diagram
+
+`/1 Internet Banking System/Single Page Application/Dynamic Diagram`
+
+[Overview](#golden-fixture)
+
+**Dynamic diagram**
+
+A simple dynamic diagram can be useful when you want to show how elements in a static model collaborate at runtime to implement a user story, use case, feature, etc. This dynamic diagram is based upon a UML communication diagram (previously known as a "UML collaboration diagram"). It is similar to a UML sequence diagram although it allows a free-form arrangement of diagram elements with numbered interactions to indicate ordering.
+
+**Scope**: An enterprise, software system or container.
+
+**Primary and supporting elements**: Depends on the diagram scope; enterprise (see System Landscape diagram), software system (see System Context or Container diagrams), container (see Component diagram).
+
+**Intended audience**: Technical and non-technical people, inside and outside of the software development team.
+
+```plantuml
+@startuml
+!include <C4/C4_Dynamic>
+
+Container(spa, "Single Page Application", "javascript and Angular", "Provides all the internet banking functionality to customers via thier web browser.")
+ContainerDb(db, "Database", "Oracle Database Schema", "Stores user registration information hashed authentication credentials, access logs, etc.")
+Container_Boundary(bc, "API Application"){
+    Component(signin, "Sign In Controller", "Spring MVC Rest Controller", "Allows users to sign in to the internet Banking System")
+    Component(security, "Security Component", "Spring Bean", "Provides functionality related to signing in, changing passwords, etc.")
+}
+
+Rel(spa, signin, "Submits credentials to", "JSON/HTTPS")
+Rel(signin, security, "Calls isAuthenticated() on")
+Rel(security, db, "select * from users where username = ?", "JDBC")
+
+@enduml
+```
+
+## Extended Docs
+
+`/1 Internet Banking System/Single Page Application/Extended Docs`
+
+[Overview](#golden-fixture)
+
+Multiple markdowns can be ordered using `<name>.1.md, <name>.2.md .. <name>.<n>.md`
+
+You can choose where to place a certain diagram by using `![name](<diagram name>.puml)`
+
+```plantuml
+@startditaa -E
++---------+  /--------\   +-------+
+| cBLU    +--+cAAA    +---+Version|
+|         |  |  Data  |   |   V3  |
+|    +----+  |  Base  |   |cRED{d}|
+|    |cPNK|  |     {s}|   +-------+
+|    |    |  \---+----/
++----+----+    
+@endditaa
+```
+
+Feel free to add any additional details necesary.
+
+
+```plantuml
+@startuml
+' Split into 4 pages
+page 2x2
+skinparam pageMargin 10
+skinparam pageExternalColor gray
+skinparam pageBorderColor black
+
+class BaseClass
+
+namespace net.dummy #DDDDDD {
+	.BaseClass <|-- Person
+	Meeting o-- Person
+	
+	.BaseClass <|- Meeting
+
+}
+
+namespace net.foo {
+  net.dummy.Person  <|- Person
+  .BaseClass <|-- Person
+
+  net.dummy.Meeting o-- Person
+}
+
+BaseClass <|-- net.unused.Person
+@enduml
+```
+
+```plantuml
+@startuml
+participant User
+
+User -> A: DoWork
+activate A
+
+A -> B: << createRequest >>
+activate B
+
+B -> C: DoWork
+activate C
+C --> B: WorkDone
+destroy C
+
+B --> A: RequestCreated
+deactivate B
+
+A -> User: Done
+deactivate A
+
+@enduml
+```
+
+## 2 Deployment
+
+`/2 Deployment`
+
+[Overview](#golden-fixture)
+
+**Deployment diagram**
+
+A deployment diagram allows you to illustrate how containers in the static model are mapped to infrastructure. This deployment diagram is based upon a UML deployment diagram, although simplified slightly to show the mapping between containers and deployment nodes. A deployment node is something like physical infrastructure (e.g. a physical server or device), virtualised infrastructure (e.g. IaaS, PaaS, a virtual machine), containerised infrastructure (e.g. a Docker container), an execution environment (e.g. a database server, Java EE web/application server, Microsoft IIS), etc. Deployment nodes can be nested.
+
+**Scope**: A single software system.
+
+**Primary elements**: Deployment nodes and containers within the software system in scope.
+
+**Intended audience**: Technical people inside and outside of the software development team; including software architects, developers and operations/support staff.
+
+```plantuml
+@startuml
+!include <C4/C4_Deployment>
+
+LAYOUT_WITH_LEGEND()
+
+Deployment_Node(plc, "Big Bank plc", "Big Bank plc data center"){
+    Deployment_Node(dn, "bigbank-api***\tx8", "Ubuntu 16.04 LTS"){
+        Deployment_Node(apache, "Apache Tomcat", "Apache Tomcat 8.x"){
+            Container(api, "API Application", "Java and Spring MVC", "Provides Internet Banking functionality via a JSON/HTTPS API.")
+        }
+    }
+    Deployment_Node(bigbankdb01, "bigbank-db01", "Ubuntu 16.04 LTS"){
+        Deployment_Node(oracle, "Oracle - Primary", "Oracle 12c"){
+            ContainerDb(db, "Database", "Relational Database Schema", "Stores user registration information, hashed authentication credentials, access logs, etc.")
+        }
+    }
+    Deployment_Node(bigbankdb02, "bigbank-db02", "Ubuntu 16.04 LTS"){
+        Deployment_Node(oracle2, "Oracle - Secondary", "Oracle 12c"){
+            ContainerDb(db2, "Database", "Relational Database Schema", "Stores user registration information, hashed authentication credentials, access logs, etc.")
+        }
+    }
+    Deployment_Node(bb2, "bigbank-web***\tx4", "Ubuntu 16.04 LTS"){
+        Deployment_Node(apache2, "Apache Tomcat", "Apache Tomcat 8.x"){
+            Container(web, "Web Application", "Java and Spring MVC", "Delivers the static content and the Internet Banking single page application.")
+        }
+    }
+}
+
+Deployment_Node(mob, "Customer's mobile device", "Apple IOS or Android"){
+    Container(mobile, "Mobile App", "Xamarin", "Provides a limited subset of the Internet Banking functionality to customers via their mobile device.")
+}
+
+Deployment_Node(comp, "Customer's computer", "Mircosoft Windows of Apple macOS"){
+    Deployment_Node(browser, "Web Browser", "Google Chrome, Mozilla Firefox"){
+        Container(spa, "Single Page Application", "JavaScript and Angular", "Provides all of the Internet Banking functionality to customers via their web browser.")
+    }
+}
+
+Rel(mobile, api, "Makes API calls to", "json/HTTPS")
+Rel(spa, api, "Makes API calls to", "json/HTTPS")
+Rel(web, spa, "Delivers to the customer's web browser")
+Rel(api, db, "Reads from and writes to", "JDBC")
+Rel(api, db2, "Reads from and writes to", "JDBC")
+Rel(db, db2, "Replicates data to")
+
+@enduml
+```
+
+## 3 Локализация
+
+`/3 Локализация`
+
+[Overview](#golden-fixture)
+
+**Кириллица в документации**
+
+Эта страница демонстрирует поддержку кириллицы: русский текст в markdown и русские подписи элементов на C4-диаграмме ниже. Диаграмма рендерится локальным PlantUML без обращений в интернет, поэтому сборка работает и в закрытом контуре.
+
+**Область применения**: проверка того, что текст на русском языке корректно попадает в собранный сайт, PDF и SVG-диаграммы.
+
+
+```plantuml
+@startuml
+!include <C4/C4_Context>
+!include ../styles.iuml
+
+LAYOUT_WITH_LEGEND()
+
+Person(client, "Клиент банка", "Пользуется интернет-банком с компьютера и телефона.")
+System(ib, "Интернет-банк", "Личный кабинет: счета, платежи, выписки.")
+System_Ext(abs, "АБС", "Автоматизированная банковская система — мастер-данные по счетам и проводкам.")
+
+Rel(client, ib, "Пользуется", "HTTPS")
+Rel(ib, abs, "Читает счета и проводки")
+@enduml
+```
+
+## 4 D2 Example
+
+`/4 D2 Example`
+
+[Overview](#golden-fixture)
+
+**Диаграмма на D2 (второй бэкенд рендера)**
+
+Эта страница демонстрирует второй бэкенд диаграмм — [D2](https://d2lang.com). Файл с расширением `.d2` рендерится движком D2 (WASM → SVG) наравне с `.puml`; бэкенд выбирается по расширению.
+
+C4-стили (классы `person`, `system`, `external` с фирменными цветами) вынесены в общий `../_c4lib.d2` и подключаются спред-импортом `...@../_c4lib` — это D2-аналог `!include ../styles.iuml` у PlantUML. Префикс `_` помечает файл как библиотеку: c4builder не рендерит его отдельной диаграммой, но резолвит как импорт. Импорты собирает сам c4builder и подаёт движку через виртуальную файловую систему, поэтому внешних обращений в интернет нет и сборка работает в закрытом контуре.
+
+**Область применения**: показать, что `.d2`-диаграммы, их импорты и кириллица корректно попадают в собранный сайт и SVG.
+
+
+```d2
+# C4-контекст на D2. C4-классы (person/system/external) вливаются спред-импортом
+# из общего ../_c4lib.d2 — так же, как PlantUML-диаграммы подключают ../styles.iuml.
+...@../_c4lib
+
+client: Клиент банка {
+  class: person
+}
+ib: Интернет-банк {
+  class: system
+}
+abs: АБС {
+  class: external
+}
+email: Почтовый шлюз {
+  class: external
+}
+
+client -> ib: Пользуется
+ib -> abs: Читает счета и проводки
+ib -> email: Шлёт уведомления
+```
+
+## Included files
+
+### src/_c4lib.d2
+
+```d2
+# Общая C4-библиотека демо-проекта для D2 (аналог styles.iuml для PlantUML).
+# Имя с префиксом `_`: как и все `_`-файлы, c4builder не рендерит её как отдельную
+# диаграмму, но резолвит как импорт. Подключается спред-импортом из диаграммы:
+# `...@_c4lib` (из корня src) или `...@../_c4lib` (из вложенной папки).
+
+classes: {
+  person: {
+    shape: person
+    style: {
+      fill: "#0b4884"
+      stroke: "#052e56"
+      font-color: "#ffffff"
+    }
+  }
+  system: {
+    style: {
+      fill: "#1168bd"
+      stroke: "#0b4884"
+      font-color: "#ffffff"
+    }
+  }
+  external: {
+    style: {
+      fill: "#999999"
+      stroke: "#6b6b6b"
+      font-color: "#ffffff"
+    }
+  }
+}
+```
+
+### src/styles.iuml
+
+```plantuml
+' Общая тема демо-проекта.
+' Подключается после stdlib-инклюда C4 относительным путём:
+'   !include styles.iuml      — из диаграммы в корне src
+'   !include ../styles.iuml   — из вложенной папки
+
+skinparam shadowing false
+skinparam roundCorner 8
+
+UpdateElementStyle("person", $bgColor="#0b4884", $fontColor="#ffffff", $borderColor="#052e56")
+UpdateElementStyle("system", $bgColor="#1168bd", $fontColor="#ffffff", $borderColor="#0b4884")
+UpdateElementStyle("container", $bgColor="#438dd5", $fontColor="#ffffff", $borderColor="#2e6295")
+```

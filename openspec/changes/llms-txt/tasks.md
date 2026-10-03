@@ -23,5 +23,5 @@
 
 ## 4. Golden и интеграция
 
-- [ ] 4.1 В `test/fixtures/default.c4builder.json` добавить `"generateLLMS": true`; `npm run test:golden:update`. Проверка: `git status test/golden` — в `default` новые только `tree/llms.txt`, `tree/llms-full.txt` и их строки в `manifest.json`; `links-top`/`embed-png` и прочие файлы `default` без изменений (SVG-дифф от fontconfig на Arch не коммитить); `llms-full.txt` содержит `styles.iuml` и `_c4lib.d2` в приложении по одному разу
-- [ ] 4.2 Полный прогон: `npm run check`, `npm test`, `openspec validate llms-txt` — всё зелёное
+- [x] 4.1 В `test/fixtures/default.c4builder.json` добавить `"generateLLMS": true`; `npm run test:golden:update`. Проверка: `git status test/golden` — в `default` новые только `tree/llms.txt`, `tree/llms-full.txt` и их строки в `manifest.json`; `links-top`/`embed-png` и прочие файлы `default` без изменений (SVG-дифф от fontconfig на Arch не коммитить); `llms-full.txt` содержит `styles.iuml` и `_c4lib.d2` в приложении по одному разу
+- [x] 4.2 Полный прогон: `npm run check`, `npm test`, `openspec validate llms-txt` — всё зелёное
