@@ -115,10 +115,10 @@ describe('плагин openapi', () => {
 describe('плагин openapi: ошибки', () => {
     const opts = () => ({ EXECUTE_SCRIPT: false });
     it('dir и archive одновременно либо ни одного — ошибка схемы', async () => {
-        await expect(loadPlugins([['openapi', {}]], dir, opts())).rejects.toThrow(/ровно один источник/);
+        await expect(loadPlugins([['openapi', {}]], dir, opts())).rejects.toThrow(/exactly one source/);
         await expect(
             loadPlugins([['openapi', { dir: 'a', archive: 'http://x/y.zip' }]], dir, opts())
-        ).rejects.toThrow(/ровно один источник/);
+        ).rejects.toThrow(/exactly one source/);
         await expect(loadPlugins([['openapi', { dir: 'a', globs: 'x' }]], dir, opts())).rejects.toThrow(
             /globs/
         );
@@ -126,14 +126,14 @@ describe('плагин openapi: ошибки', () => {
     it('пустой glob — ошибка сборки с источником и шаблоном', () => {
         const d = makeFixture('empty', [['openapi', { dir: 'contracts', glob: '*.nothing' }]]);
         expect(() => runBuild(d)).toThrow(
-            /Плагин openapi \(afterScan\): по шаблону "\*\.nothing" в contracts/
+            /Plugin openapi \(afterScan\): no specs match "\*\.nothing" in contracts/
         );
         fs.rmSync(d, { recursive: true, force: true });
     });
     it('коллизия имён страниц — ошибка', () => {
         const d = makeFixture('dup', [['openapi', { dir: 'contracts', glob: '**/*.yaml' }]]);
         write(d, 'contracts/other/finch/openapi.yaml', 'openapi: 3.0.0\n');
-        expect(() => runBuild(d)).toThrow(/одно имя страницы "finch"/);
+        expect(() => runBuild(d)).toThrow(/same page name "finch"/);
         fs.rmSync(d, { recursive: true, force: true });
     });
 });

@@ -25,9 +25,9 @@ const getResvg = (): ResvgModule => {
     } catch (err) {
         const e = err as Error;
         throw new Error(
-            'Для PNG-вывода (DIAGRAM_FORMAT=png) нужен пакет @resvg/resvg-js.\n' +
-                'Установите его: npm install @resvg/resvg-js\n' +
-                `Исходная ошибка: ${e.message || e}`
+            'PNG output (DIAGRAM_FORMAT=png) requires the @resvg/resvg-js package.\n' +
+                'Install it: npm install @resvg/resvg-js\n' +
+                `Original error: ${e.message || e}`
         );
     }
     return resvgMod;

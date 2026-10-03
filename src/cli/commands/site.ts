@@ -7,6 +7,9 @@ import type { EventEmitter } from 'node:events';
 import type { BuildOptions } from '../../config/options.ts';
 
 const LIVERELOAD_PATH = '/__livereload';
+// Восстановление скролла после reload: docsify рендерит контент асинхронно после fetch md,
+// высота страницы доступна не сразу — поллим до достижения нужной y или таймаута.
+// Комментарии держим здесь, а не в сниппете: он уходит в браузер пользователя.
 const LIVERELOAD_SNIPPET = `
 <script>
 (function () {
@@ -19,8 +22,6 @@ const LIVERELOAD_SNIPPET = `
             sessionStorage.removeItem(KEY);
             var data = JSON.parse(saved);
             if (data && data.hash === location.hash && typeof data.y === 'number') {
-                // docsify рендерит контент асинхронно после fetch md,
-                // высота страницы доступна не сразу — поллим до достижения нужной y или таймаута.
                 var deadline = Date.now() + 2000;
                 var tryRestore = function () {
                     var maxScroll = document.documentElement.scrollHeight - window.innerHeight;

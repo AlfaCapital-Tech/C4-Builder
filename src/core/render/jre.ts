@@ -201,16 +201,16 @@ const fetchAssetMeta = async (): Promise<{
     const asset = Array.isArray(json) ? json.find((a) => a.binary?.package) : null;
     if (!asset) {
         throw new Error(
-            `Adoptium не отдал JRE-сборку под ${adoptiumOs()}/${adoptiumArch()} (Temurin ${TEMURIN_FEATURE})`
+            `Adoptium has no JRE build for ${adoptiumOs()}/${adoptiumArch()} (Temurin ${TEMURIN_FEATURE})`
         );
     }
     const pkg = asset.binary.package;
-    if (!pkg.link) throw new Error('Adoptium не вернул ссылку на архив JRE');
+    if (!pkg.link) throw new Error('Adoptium returned no JRE archive link');
     // Отсутствие checksum — ошибка, а не молчаливый пропуск проверки целостности.
     if (!pkg.checksum) {
         throw new Error(
-            `Adoptium не вернул sha256 для ${pkg.name || 'архива JRE'}: ` +
-                'отказ принимать архив без проверки целостности'
+            `Adoptium returned no sha256 for ${pkg.name || 'the JRE archive'}: ` +
+                'refusing to accept an archive without an integrity check'
         );
     }
     return { link: pkg.link, sha256: pkg.checksum, name: pkg.name, release: asset.release_name };
@@ -228,9 +228,9 @@ const downloadAndVerify = async (link: string, expectedSha: string, destFile: st
         res.pipe(out);
     });
     const actual = hash.digest('hex').toLowerCase();
-    if (!expectedSha) throw new Error('Нет ожидаемого sha256 — проверка целостности архива невозможна');
+    if (!expectedSha) throw new Error('No expected sha256 — cannot verify archive integrity');
     if (actual !== expectedSha.toLowerCase()) {
-        throw new Error(`sha256 архива не совпал: ожидалось ${expectedSha}, получено ${actual}`);
+        throw new Error(`archive sha256 mismatch: expected ${expectedSha}, got ${actual}`);
     }
 };
 
@@ -251,13 +251,13 @@ const downloadJre = async ({ log }: { log?: (msg: string) => void } = {}): Promi
     const tmpArchive = path.join(parent, `.download-${process.pid}${isZip ? '.zip' : '.tar.gz'}`);
     const stageDir = `${dir}.tmp-${process.pid}`;
     try {
-        if (log) log(`Скачивание Temurin ${TEMURIN_FEATURE} JRE (${meta.release || meta.name})…`);
+        if (log) log(`Downloading Temurin ${TEMURIN_FEATURE} JRE (${meta.release || meta.name})…`);
         await downloadAndVerify(meta.link, meta.sha256, tmpArchive);
         fs.rmSync(stageDir, { recursive: true, force: true });
         fs.mkdirSync(stageDir, { recursive: true });
         await extractArchive(tmpArchive, stageDir, isZip);
         if (!findJavaUnder(stageDir)) {
-            throw new Error('JRE распакован, но исполняемый bin/java не найден');
+            throw new Error('JRE extracted, but the bin/java executable was not found');
         }
         fs.writeFileSync(
             markerPath(stageDir),
@@ -289,17 +289,17 @@ const downloadJre = async ({ log }: { log?: (msg: string) => void } = {}): Promi
         fs.rmSync(stageDir, { recursive: true, force: true }); // подчистить staging (no-op, если переименован)
     }
     const bin = findJavaUnder(dir);
-    if (!bin) throw new Error('JRE распакован, но исполняемый bin/java не найден');
+    if (!bin) throw new Error('JRE extracted, but the bin/java executable was not found');
     return { path: bin, source: 'download' };
 };
 
 const failureMessage = (cause?: { message?: string }): string =>
     [
-        'Не удалось получить Java для рендеринга PlantUML-диаграмм.',
-        'Ни системная java (17+), ни кеш, ни скачивание с Adoptium не сработали. Сделайте одно из двух:',
-        '  • установите JRE 17+ (например, Eclipse Temurin) — java на PATH или задайте JAVA_HOME;',
-        '  • выполните `c4builder jre install`, чтобы загрузить JRE в локальный кеш.',
-        cause?.message ? `Причина: ${cause.message}` : ''
+        'Could not get Java to render PlantUML diagrams.',
+        'Neither system java (17+), the cache, nor a download from Adoptium worked. Do one of the following:',
+        '  • install JRE 17+ (e.g. Eclipse Temurin) — java on PATH or set JAVA_HOME;',
+        '  • run `c4builder jre install` to download a JRE into the local cache.',
+        cause?.message ? `Cause: ${cause.message}` : ''
     ]
         .filter(Boolean)
         .join('\n');

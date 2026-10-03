@@ -114,7 +114,7 @@ describe('ошибки плагинов прерывают сборку', () => 
             'throw',
             `export default { name: 'boom', afterScan() { throw new Error('kaput'); } };`
         );
-        expect(() => runBuild(d)).toThrow(/Плагин boom \(afterScan\): kaput/);
+        expect(() => runBuild(d)).toThrow(/Plugin boom \(afterScan\): kaput/);
         fs.rmSync(d, { recursive: true, force: true });
     });
     it('коллизия с реальной папкой', () => {
@@ -122,7 +122,7 @@ describe('ошибки плагинов прерывают сборку', () => 
             'collide',
             `export default { name: 'c', afterScan(ctx) { ctx.addPage({ path: ['A'], markdown: 'x' }); } };`
         );
-        expect(() => runBuild(d)).toThrow(/занят реальной папкой/);
+        expect(() => runBuild(d)).toThrow(/taken by a real folder/);
         fs.rmSync(d, { recursive: true, force: true });
     });
 });
@@ -157,7 +157,7 @@ describe('addPage (юнит)', () => {
         // пустой промежуточный узел плагин вправе наполнить позже
         addPage(tree, opts, { path: ['A', 'C'], markdown: 'index' });
         expect(tree[3].mdFiles).toEqual(['index']);
-        expect(() => addPage(tree, opts, { path: ['A', 'C'], markdown: 'again' })).toThrow(/уже добавлена/);
+        expect(() => addPage(tree, opts, { path: ['A', 'C'], markdown: 'again' })).toThrow(/already added/);
     });
     it('диаграммы: движок по расширению, неизвестное — ошибка', () => {
         const tree = [mk('src')];
@@ -165,7 +165,7 @@ describe('addPage (юнит)', () => {
         expect(item.diagrams[0]).toMatchObject({ dir: 'a.d2', engine: 'd2', ext: '.d2' });
         expect(() =>
             addPage(tree, opts, { path: ['Q'], diagrams: [{ file: 'a.txt', content: '' }] })
-        ).toThrow(/неизвестное расширение/);
-        expect(() => addPage(tree, opts, { path: ['a/b'] })).toThrow(/некорректный путь/);
+        ).toThrow(/unknown extension/);
+        expect(() => addPage(tree, opts, { path: ['a/b'] })).toThrow(/invalid page path/);
     });
 });

@@ -43,6 +43,9 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
   time and become images in every output (site, markdown, complete markdown); their source no
   longer reaches the browser or plantuml.com. To show diagram source as code, fence it as
   `puml` or `text`
+- All CLI output is in English: config, build, plugin, JRE and lock errors, warnings, wizard
+  validation and the "diagram not rendered" placeholder used to be in Russian — update scripts
+  that match the old messages
 
 ## v0.4.0
 

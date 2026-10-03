@@ -91,7 +91,7 @@ describe('generateLLMS без website', () => {
         );
         const { status, out } = runCli(dir);
         expect(status, out).toBe(0);
-        expect(out).toContain('generateLLMS требует generateWEB');
+        expect(out).toContain('generateLLMS requires generateWEB');
         expect(exists(dir, 'README.md')).toBe(true);
         expect(exists(dir, 'llms.txt')).toBe(false);
         expect(exists(dir, 'llms-full.txt')).toBe(false);

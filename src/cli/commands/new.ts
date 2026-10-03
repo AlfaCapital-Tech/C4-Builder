@@ -12,14 +12,14 @@ import { TEMPLATE_DIR } from '../../util/paths.ts';
 // Общая проверка имени проекта: возвращает текст ошибки или null (валидно).
 // Интерактив показывает её и переспрашивает; --yes падает с ней (exit≠0), без ре-промпта.
 const validateProjectName = (name?: string): string | null => {
-    if (!name?.trim()) return 'имя проекта не задано';
+    if (!name?.trim()) return 'project name is not set';
     if (name.indexOf('/') !== -1 || name.indexOf('\\') !== -1)
-        return 'имя проекта не должно содержать «/» или «\\»';
+        return 'project name must not contain "/" or "\\"';
     const target = path.join(process.cwd(), name);
     if (fs.existsSync(target)) {
         // readdirSync по файлу бросает ENOTDIR — сперва различаем файл и каталог.
-        if (!fs.statSync(target).isDirectory()) return `«${name}» уже существует и является файлом`;
-        if (fs.readdirSync(target).length > 0) return `папка «${name}» уже существует и не пуста`;
+        if (!fs.statSync(target).isDirectory()) return `"${name}" already exists and is a file`;
+        if (fs.readdirSync(target).length > 0) return `folder "${name}" already exists and is not empty`;
     }
     return null;
 };
@@ -37,12 +37,12 @@ export default async (opts: { yes?: boolean; name?: string } = {}): Promise<void
     if (opts.name) {
         const err = validateProjectName(opts.name);
         if (err) {
-            console.log(chalk.red(`ОШИБКА: ${err}`));
+            console.log(chalk.red(`ERROR: ${err}`));
             process.exit(1);
         }
         projectName = opts.name;
     } else if (nonInteractive) {
-        console.log(chalk.red('ОШИБКА: режим --yes требует --name <name>'));
+        console.log(chalk.red('ERROR: --yes requires --name <name>'));
         process.exit(1);
     } else {
         console.log('\nThis will create a new folder with the name of the project');

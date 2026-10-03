@@ -24,7 +24,7 @@ const optionsSchema = z
     })
     .strict()
     .refine((o) => (o.dir === undefined) !== (o.archive === undefined), {
-        message: 'нужен ровно один источник: dir либо archive'
+        message: 'exactly one source required: dir or archive'
     });
 
 type Opts = z.output<typeof optionsSchema>;
@@ -71,12 +71,12 @@ export default definePlugin<Opts>({
         // спек прошлой сборки в dist/dist_bk не считаются источником.
         const skip = outputDirs(ctx.options);
         const files = findFiles(root, o.glob, skip);
-        if (!files.length) throw new Error(`по шаблону "${o.glob}" в ${source} не найдено ни одной спеки`);
+        if (!files.length) throw new Error(`no specs match "${o.glob}" in ${source}`);
         const names = new Map<string, string>();
         for (const rel of files) {
             const name = pageName(rel);
             const dup = names.get(name);
-            if (dup) throw new Error(`две спеки дают одно имя страницы "${name}": ${dup} и ${rel}`);
+            if (dup) throw new Error(`two specs give the same page name "${name}": ${dup} and ${rel}`);
             names.set(name, rel);
         }
         // Статикой в dist — все yaml/json источника, а не только совпавшие с glob: $ref

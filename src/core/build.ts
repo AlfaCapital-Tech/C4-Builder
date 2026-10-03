@@ -74,8 +74,8 @@ const build = async (
             );
             if (offline.size) {
                 throw new Error(
-                    `В проекте есть диаграммы без онлайн-сервера рендера (${[...offline].join(', ')}), ` +
-                        'но generateLocalImages выключен — включите локальную генерацию изображений ' +
+                    `The project has diagrams with no online render server (${[...offline].join(', ')}), ` +
+                        'but generateLocalImages is off — enable local image generation ' +
                         '(generateLocalImages).'
                 );
             }
@@ -115,7 +115,7 @@ const build = async (
                 await generateLlmsFull(tree, options)
             );
         } else if (options.GENERATE_LLMS) {
-            console.log(chalk.yellow('generateLLMS требует generateWEB — llms.txt не создан'));
+            console.log(chalk.yellow('generateLLMS requires generateWEB — llms.txt not created'));
         }
         if (options.GENERATE_COMPLETE_MD_FILE) {
             console.log(chalk.blue('generating complete markdown file'));
@@ -128,7 +128,7 @@ const build = async (
             console.log(chalk.bold(chalk.yellow('WARNING:')));
             console.log(
                 chalk.yellow(
-                    `PDF-вывод больше не поддерживается. Удалите вручную из .c4builder: ${options.LEGACY_PDF_KEYS.join(
+                    `PDF output is no longer supported. Remove manually from .c4builder: ${options.LEGACY_PDF_KEYS.join(
                         ', '
                     )}.`
                 )
@@ -147,7 +147,7 @@ const build = async (
             await fsextra.removeSync(bkFolderName);
         } else if (options.GENERATE_LOCAL_IMAGES && fsextra.existsSync(bkFolderName)) {
             console.log(
-                chalk.yellow(`\nсборка прервана — бэкап предыдущего билда сохранён в ./${bkFolderName}`)
+                chalk.yellow(`\nbuild aborted — the previous build is backed up in ./${bkFolderName}`)
             );
         }
         // Пофайловые кеши нужны только внутри сборки — чистим и на выходе, чтобы

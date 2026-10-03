@@ -32,7 +32,7 @@ export const redactUrl = (url: string): string => {
 // корней он берёт не из системы и не из SSL_CERT_FILE — только NODE_EXTRA_CA_CERTS.
 export const tlsHint = (reason: string): string =>
     /certificate|self.signed|unable to (?:verify|get local issuer)/i.test(reason)
-        ? ' — TLS-перехват? укажите путь к CA-бандлу в NODE_EXTRA_CA_CERTS'
+        ? ' — TLS interception? set the CA bundle path in NODE_EXTRA_CA_CERTS'
         : '';
 
 const downloadArchive = async (url: string, headers: Record<string, string>): Promise<string> => {
@@ -49,7 +49,7 @@ const downloadArchive = async (url: string, headers: Record<string, string>): Pr
         body = await httpGetBuffer(url, { headers });
     } catch (e) {
         const reason = (e as Error).message.replaceAll(url, redactUrl(url));
-        throw new Error(`архив недоступен: ${reason}${tlsHint(reason)}`);
+        throw new Error(`archive unavailable: ${reason}${tlsHint(reason)}`);
     }
     fs.rmSync(stage, { recursive: true, force: true });
     fs.mkdirSync(stage, { recursive: true });
@@ -57,7 +57,7 @@ const downloadArchive = async (url: string, headers: Record<string, string>): Pr
     try {
         if (isZipBuffer(body)) await extractZip(archive, stage);
         else if (isGzipBuffer(body)) await extractTarGz(archive, stage);
-        else throw new Error(`неизвестный формат архива ${redactUrl(url)} (ожидается zip или tar.gz)`);
+        else throw new Error(`unknown archive format ${redactUrl(url)} (expected zip or tar.gz)`);
         fs.rmSync(dir, { recursive: true, force: true });
         fs.renameSync(stage, dir);
     } finally {
@@ -78,10 +78,10 @@ export const resolveSource = async (spec: SourceSpec, cwd: string = process.cwd(
     if (spec.dir !== undefined) {
         const abs = path.resolve(cwd, spec.dir, spec.subdir ?? '');
         if (!fs.existsSync(abs) || !fs.statSync(abs).isDirectory())
-            throw new Error(`источник dir не найден: ${abs}`);
+            throw new Error(`dir source not found: ${abs}`);
         return abs;
     }
-    if (spec.archive === undefined) throw new Error('источник должен задавать dir либо archive');
+    if (spec.archive === undefined) throw new Error('source must set dir or archive');
     const url = spec.archive;
     const headers = Object.fromEntries(Object.entries(spec.headers ?? {}).filter(([, v]) => v !== ''));
     let rootPromise = archiveCache.get(url);
@@ -94,7 +94,7 @@ export const resolveSource = async (spec: SourceSpec, cwd: string = process.cwd(
     const result = spec.subdir ? path.join(root, spec.subdir) : root;
     if (!fs.existsSync(result) || !fs.statSync(result).isDirectory())
         throw new Error(
-            `в архиве ${redactUrl(url)} нет каталога ${spec.subdir ?? '.'} (распаковано в ${root})`
+            `archive ${redactUrl(url)} has no folder ${spec.subdir ?? '.'} (extracted to ${root})`
         );
     return result;
 };

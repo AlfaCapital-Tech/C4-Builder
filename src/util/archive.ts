@@ -38,7 +38,7 @@ export const extractZip = (archive: string, destDir: string): Promise<void> =>
                 // zip-slip: злонамеренная запись `../../evil` вышла бы за destDir.
                 if (!isPathInside(destDir, entry.fileName)) {
                     return reject(
-                        new Error(`Небезопасный путь в архиве (выход за каталог): ${entry.fileName}`)
+                        new Error(`Unsafe path in archive (escapes the folder): ${entry.fileName}`)
                     );
                 }
                 // Симлинки пропускаем: в недоверенном архиве симлинк мог бы указывать

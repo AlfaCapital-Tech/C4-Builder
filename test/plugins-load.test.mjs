@@ -91,7 +91,7 @@ describe('loadPlugins', () => {
             /plugins\[0\] "\.\/nope\.mjs"/
         );
         await expect(loadPlugins(['no-such-npm-plugin-xyz'], tmp, opts())).rejects.toThrow(
-            /"no-such-npm-plugin-xyz".*встроенных/
+            /"no-such-npm-plugin-xyz".*built-ins/
         );
     });
 
@@ -113,7 +113,7 @@ describe('loadPlugins', () => {
 
     it('модуль без объекта плагина — ошибка', async () => {
         const id = writePlugin('bad', 'export default 42;');
-        await expect(loadPlugins([id], tmp, opts())).rejects.toThrow(/полем name/);
+        await expect(loadPlugins([id], tmp, opts())).rejects.toThrow(/with a name field/);
     });
 });
 

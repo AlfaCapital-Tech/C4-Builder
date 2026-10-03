@@ -163,7 +163,7 @@ export const renderDiagram = (content: string | Buffer, options: RenderDiagramOp
         // с одним guard вместо non-null assertion на каждом обращении.
         const { stdin, stdout: childOut, stderr: childErr } = child;
         if (!stdin || !childOut || !childErr) {
-            return reject(new Error('PlantUML: не удалось открыть stdio-потоки процесса java'));
+            return reject(new Error('PlantUML: failed to open stdio streams of the java process'));
         }
 
         // Smetana печатает диагностический шум (UNSURE_ABOUT…) — это не ошибка
@@ -187,7 +187,7 @@ export const renderDiagram = (content: string | Buffer, options: RenderDiagramOp
             const tail = cleanStderr();
             reject(
                 new Error(
-                    `PlantUML не завершился за ${RENDER_TIMEOUT_MS / 1000} c и был прерван` +
+                    `PlantUML did not finish in ${RENDER_TIMEOUT_MS / 1000} s and was aborted` +
                         (tail ? `\n${tail}` : '')
                 )
             );
@@ -213,7 +213,7 @@ export const renderDiagram = (content: string | Buffer, options: RenderDiagramOp
             settled = true;
             const errText = cleanStderr();
             if (code !== 0) {
-                return reject(new Error(`PlantUML завершился с кодом ${code}\n${errText}`));
+                return reject(new Error(`PlantUML exited with code ${code}\n${errText}`));
             }
             if (errText) process.stderr.write(`${errText}\n`);
             resolve(Buffer.concat(stdout));
@@ -232,7 +232,7 @@ export const renderDiagram = (content: string | Buffer, options: RenderDiagramOp
 const errorPlaceholderSvg = (name: string, reason: string): string => {
     const esc = (s: string): string =>
         s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c] as string);
-    const lines = [`${name}: диаграмма не отрендерена`, ...reason.split('\n')]
+    const lines = [`${name}: diagram not rendered`, ...reason.split('\n')]
         .flatMap((l) => l.match(/.{1,88}/g) ?? [''])
         .slice(0, 8);
     const w = 720;
@@ -275,8 +275,8 @@ export const generateImages = async (
         console.log(chalk.bold(chalk.yellow('WARNING:')));
         console.log(
             chalk.yellow(
-                `Выбор версии PlantUML удалён — сборка идёт вендорным JAR ${VENDORED_JAR.version}. ` +
-                    `Ключ plantumlVersion: "${pinned}" в .c4builder можно убрать.`
+                `Choosing the PlantUML version was removed — builds use the vendored JAR ${VENDORED_JAR.version}. ` +
+                    `The plantumlVersion: "${pinned}" key can be removed from .c4builder.`
             )
         );
     }
@@ -418,7 +418,7 @@ export const generateImages = async (
                 } catch (err: unknown) {
                     // Имя диаграммы в ошибку: renderDiagram/renderD2 сами его не знают.
                     const reason = `${(err as Error).message || err}`;
-                    const msg = `Диаграмма "${outName}"${source ? ` (${source})` : ''}: ${reason}`;
+                    const msg = `Diagram "${outName}"${source ? ` (${source})` : ''}: ${reason}`;
                     if (!soft) throw new Error(msg);
                     // Диаграммы из markdown-блоков плагинов писались под онлайн-рендер,
                     // где битый блок давал картинку с ошибкой, а не падение сборки.

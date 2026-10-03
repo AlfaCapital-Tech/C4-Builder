@@ -38,9 +38,9 @@ const getD2 = (): Promise<D2Engine> => {
             d2Promise = null; // провал импорта не кешируем — даём повторить
             const e = err as Error;
             throw new Error(
-                'Для рендера .d2-диаграмм нужен пакет @terrastruct/d2 (опциональная зависимость, ~60 МБ).\n' +
-                    'Установите его: npm install @terrastruct/d2\n' +
-                    `Исходная ошибка: ${e.message || e}`
+                'Rendering .d2 diagrams requires the @terrastruct/d2 package (optional dependency, ~60 MB).\n' +
+                    'Install it: npm install @terrastruct/d2\n' +
+                    `Original error: ${e.message || e}`
             );
         }
         return new mod.D2() as unknown as D2Engine;
@@ -172,7 +172,7 @@ const buildCompileRequest = (
     // Пустой граф = не прочитался сам входной файл (удалён/недоступен — гонка в watch).
     // Без guard'а commonAncestor([]) давал бы сырой TypeError (Math.min()=Infinity).
     if (files.size === 0) {
-        throw new Error(`D2: не удалось прочитать ${entryAbs} (файл удалён или недоступен?)`);
+        throw new Error(`D2: failed to read ${entryAbs} (file deleted or unavailable?)`);
     }
     const root = commonAncestor([...files.keys()]);
     const toKey = (abs: string): string => path.relative(root, abs).split(path.sep).join('/');
@@ -204,14 +204,14 @@ const renderD2 = async (
         result = await d2.compile({ fs: fsMap, inputPath, options: { layout } });
     } catch (err) {
         const e = err as Error;
-        throw new Error(`Ошибка компиляции D2 (${entryAbs}):\n${d2ErrorText(e.message || String(e))}`);
+        throw new Error(`D2 compile error (${entryAbs}):\n${d2ErrorText(e.message || String(e))}`);
     }
     let svg: string;
     try {
         svg = await d2.render(result.diagram, result.renderOptions);
     } catch (err) {
         const e = err as Error;
-        throw new Error(`Ошибка рендера D2 (${entryAbs}):\n${e.message || e}`);
+        throw new Error(`D2 render error (${entryAbs}):\n${e.message || e}`);
     }
     return Buffer.from(svg, 'utf8');
 };

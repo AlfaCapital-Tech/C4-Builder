@@ -21,4 +21,5 @@ rules:
       паритет — тест docs-parity); skills/* и template/AGENTS.md, если затронуты команды,
       флаги, ключи или требования; строка в `## Unreleased` CHANGELOG.md; новый ключ вывода —
       включить в docs/ru/.c4builder и docs/en/.c4builder. README — только если меняется
-      quickstart. llms.txt не трогать — генерируется сборкой.
+      quickstart. llms.txt не трогать — генерируется сборкой. Новые сообщения CLI — на
+      английском (тест cli-language).
