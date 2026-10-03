@@ -104,6 +104,7 @@ function getOptions(c: Partial<C4ConfigFile>): BuildOptions | Partial<BuildOptio
         GENERATE_MD: c.generateMD,
         GENERATE_WEBSITE: c.generateWEB,
         GENERATE_COMPLETE_MD_FILE: c.generateCompleteMD,
+        GENERATE_LLMS: c.generateLLMS,
         // Легаси-детект: PDF-вывод удалён, но truthy-ключи в старых .c4builder
         // ловим здесь (где доступен conf) и отдаём build.js для предупреждения.
         LEGACY_PDF_KEYS: (['generatePDF', 'generateCompletePDF'] as const).filter((k) => c[k]),

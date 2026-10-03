@@ -13,11 +13,14 @@ import {
     diagramOutputFormat,
     DIAGRAM_ENGINES,
     engineSupportsRemote,
+    collectIncludes,
     type TreeItem,
     type Diagram
 } from '../scan/tree.ts';
 // Фаза render: mime-тип формата и загрузка удалённо отрендеренной картинки (embed-ветка).
 import { getMime, httpGet } from '../render/diagrams.ts';
+// Граф D2-импортов — тот же, что у рендера (приложение llms-full.txt).
+import { d2LocalImports } from '../render/d2renderer.ts';
 import type { BuildOptions } from '../../config/options.ts';
 
 // Стратегия подстановки диаграммы в markdown (embed/link/img) — задаётся вызывающим.
@@ -211,6 +214,16 @@ const relativeMdLink = (fromLevel: number, rootRel: string, mdFileName: string):
         path.join('./', fromLevel - 1 > 0 ? '../'.repeat(fromLevel - 1) : '', rootRel, `${mdFileName}.md`)
     );
 
+// Состав и ссылки sidebar сайта — общие с llms.txt, чтобы оглавление агента не
+// разъехалось с навигацией. Чистоту string[] гарантирует zod-схема.
+const inSidebar = (item: TreeItem, options: BuildOptions): boolean =>
+    !options.EXCLUDE_SIDEBAR_FOLDER_BY_PATH?.some((pathToExclude) => item.dir.startsWith(pathToExclude));
+
+// Путь веб-страницы от корня сайта, без .md. path.relative, а не отрезание первого
+// сегмента: то ломалось на многосегментном rootFolder из рукописного конфига.
+const sitePagePath = (item: TreeItem, options: BuildOptions): string =>
+    path.join(path.relative(options.ROOT_FOLDER, item.dir), options.WEB_FILE_NAME || item.name);
+
 // Тело страницы (титул + контент с диаграммами) — общий скелет generateMD и
 // generateWebMD. chrome (breadcrumbs/TOC/навигация) встаёт под заголовок: при
 // авто-титуле — сразу за ним, при пользовательском h1 — пост-вставкой после него.
@@ -223,9 +236,13 @@ const compilePage = async (item: TreeItem, options: BuildOptions, chrome = ''): 
     return MD.trimStart();
 };
 
-export const generateCompleteMD = async (tree: TreeItem[], options: BuildOptions): Promise<void> => {
-    const filePromises: Promise<void>[] = [];
-
+// Единый документ со всеми страницами в порядке дерева. Стратегия диаграмм — у вызывающего:
+// complete.md вставляет картинки, llms-full.txt — исходники; состав и порядок общие.
+const composeComplete = async (
+    tree: TreeItem[],
+    options: BuildOptions,
+    getDiagram: GetDiagram
+): Promise<string> => {
     //title
     let MD = `# ${options.PROJECT_NAME}`;
     //table of contents
@@ -245,16 +262,74 @@ export const generateCompleteMD = async (tree: TreeItem[], options: BuildOptions
         }
 
         //concatenate markdown files
-        MD = await compileDocument(MD, item, options, (item, diagram, options) =>
-            // complete: ссылки на диаграммы префиксуются папкой элемента.
-            buildDiagramMarkdown(item, diagram, options, 'complete')
-        );
+        MD = await compileDocument(MD, item, options, getDiagram);
     }
+    return MD;
+};
 
-    //write file to disk
-    filePromises.push(writeFile(path.join(options.DIST_FOLDER, `${options.PROJECT_NAME}.md`), MD));
+export const generateCompleteMD = async (tree: TreeItem[], options: BuildOptions): Promise<void> =>
+    writeFile(
+        path.join(options.DIST_FOLDER, `${options.PROJECT_NAME}.md`),
+        // complete: ссылки на диаграммы префиксуются папкой элемента.
+        await composeComplete(tree, options, (i, d, o) => buildDiagramMarkdown(i, d, o, 'complete'))
+    );
 
-    await Promise.all(filePromises);
+// llms.txt (llmstxt.org): плоский список — парсеры читают строки `- [..](..)` от начала
+// строки и теряют вложенные; иерархию несёт заголовок «A / B / C».
+export const generateLlmsTxt = (tree: TreeItem[], options: BuildOptions): string => {
+    const pages = tree
+        .filter((item) => inSidebar(item, options))
+        .map((item) => {
+            const rel = path.relative(options.ROOT_FOLDER, item.dir);
+            const title = rel ? rel.split(path.sep).join(' / ') : options.HOMEPAGE_NAME;
+            return `- [${title}](${encodeURIPath(`${sitePagePath(item, options)}.md`)})\n`;
+        });
+    return (
+        `# ${options.PROJECT_NAME}\n\n` +
+        '> Architecture documentation built with c4builder. Pages are markdown; full text with ' +
+        'diagram sources (PlantUML/D2): [llms-full.txt](llms-full.txt).\n\n' +
+        `## Pages\n\n${pages.join('')}`
+    );
+};
+
+// Fence длиннее самой длинной серии обратных кавычек текста — иначе блок закрылся бы изнутри.
+const fenced = (text: string, lang = ''): string => {
+    const fence = '`'.repeat(Math.max(3, ...(text.match(/`+/g) ?? []).map((run) => run.length + 1)));
+    return `${fence}${lang}\n${text.endsWith('\n') ? text : `${text}\n`}${fence}`;
+};
+
+const FENCE_LANG: Record<string, string> = { '.puml': 'plantuml', '.iuml': 'plantuml', '.d2': 'd2' };
+
+// llms-full.txt: состав complete-документа, но диаграмма — исходником (C4-PlantUML/D2-текст
+// агенту полезнее SVG). Локальные include/импорты — один раз в приложении, а не инлайном:
+// общий styles.iuml иначе повторился бы в каждой диаграмме. Резолв — тот же, что у рендера.
+export const generateLlmsFull = async (tree: TreeItem[], options: BuildOptions): Promise<string> => {
+    const MD = await composeComplete(tree, options, async (_item, diagram) =>
+        fenced(`${diagram.content}`, diagram.engine)
+    );
+    const deps = new Map<string, string>();
+    for (const item of tree) {
+        for (const diagram of item.diagrams) {
+            const body = `${diagram.content}`;
+            if (diagram.engine === 'd2') {
+                for (const [abs, content] of d2LocalImports(path.join(item.dir, diagram.dir), body))
+                    deps.set(abs, content);
+            } else {
+                for (const inc of collectIncludes(body, item.dir, item.dir, new Set()))
+                    deps.set(inc.abs, inc.content);
+            }
+        }
+    }
+    if (!deps.size) return `${MD}\n`;
+    const files = [...deps]
+        .map(([abs, content]) => [path.relative(process.cwd(), abs).split(path.sep).join('/'), content])
+        .sort(([a], [b]) => (a < b ? -1 : 1));
+    const appendix = files
+        .map(
+            ([p, content]) => `\n\n### ${p}\n\n${fenced(content, FENCE_LANG[path.extname(p).toLowerCase()])}`
+        )
+        .join('');
+    return `${MD}\n\n## Included files${appendix}\n`;
 };
 
 export const generateMD = async (
@@ -340,16 +415,10 @@ export const generateWebMD = async (tree: TreeItem[], options: BuildOptions): Pr
 
     const getWebFileName = (originalFileName: string): string => options.WEB_FILE_NAME || originalFileName;
 
-    // Чистоту string[] гарантирует zod-схема (не-строки отброшены препроцессом).
-    const isExcluded = (dir: string): boolean =>
-        !!options.EXCLUDE_SIDEBAR_FOLDER_BY_PATH?.some((pathToExclude) => dir.startsWith(pathToExclude));
-
     for (const item of tree) {
-        //sidebar — путь от ROOT_FOLDER (path.relative, а не отрезание первого сегмента:
-        // то ломалось на многосегментном rootFolder из рукописного конфига)
-        if (!isExcluded(item.dir)) {
+        if (inSidebar(item, options)) {
             docsifySideBar += `${'  '.repeat(item.level - 1)}* [${item.name}](${encodeURIPath(
-                path.join(path.relative(options.ROOT_FOLDER, item.dir), getWebFileName(item.name))
+                sitePagePath(item, options)
             )})\n`;
         }
 

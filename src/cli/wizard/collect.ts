@@ -111,7 +111,8 @@ export default async (
                 defaultConfig.generateCompleteMD,
                 'generateCompleteMD'
             ),
-            checkedKey(currentConfiguration.GENERATE_WEBSITE, defaultConfig.generateWEB, 'generateWEB')
+            checkedKey(currentConfiguration.GENERATE_WEBSITE, defaultConfig.generateWEB, 'generateWEB'),
+            checkedKey(currentConfiguration.GENERATE_LLMS, defaultConfig.generateLLMS, 'generateLLMS')
         ];
 
         responses = await inquirer.prompt({
@@ -131,6 +132,10 @@ export default async (
                 {
                     name: 'Generate website',
                     value: 'generateWEB'
+                },
+                {
+                    name: 'llms.txt for AI agents (needs website)',
+                    value: 'generateLLMS'
                 }
             ]
         });
@@ -138,6 +143,7 @@ export default async (
         conf.set('generateMD', responses.generate.includes('generateMD'));
         conf.set('generateCompleteMD', responses.generate.includes('generateCompleteMD'));
         conf.set('generateWEB', responses.generate.includes('generateWEB'));
+        conf.set('generateLLMS', responses.generate.includes('generateLLMS'));
 
         if (responses.generate.includes('generateMD')) {
             let mdOptions: PromptAnswers = await inquirer.prompt({

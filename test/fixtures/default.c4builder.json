@@ -8,6 +8,7 @@
   "generateCompleteMD": true,
   "generateCompletePDF": false,
   "generateWEB": true,
+  "generateLLMS": true,
   "includeNavigation": true,
   "includeTableOfContents": true,
   "webTheme": "vendor/vue.css",

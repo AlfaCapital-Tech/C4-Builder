@@ -61,6 +61,11 @@ Generate website: ${
     }`
             : ''
     }
+    Generate llms.txt for AI agents: ${
+        currentConfiguration.GENERATE_LLMS !== undefined
+            ? chalk.green(currentConfiguration.GENERATE_LLMS)
+            : chalk.red('not set')
+    }
     Repository Url: ${
         currentConfiguration.REPO_NAME ? chalk.green(currentConfiguration.REPO_NAME) : chalk.red('not set')
     }

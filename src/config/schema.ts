@@ -37,6 +37,9 @@ export const configSchema = z.object({
     generateMD: bool(defaultConfig.generateMD),
     generateCompleteMD: bool(defaultConfig.generateCompleteMD),
     generateWEB: bool(defaultConfig.generateWEB),
+    // Намеренно не defaultConfig.generateLLMS: отсутствующий ключ = выкл — легаси-конфиги
+    // не меняют вывод. Новые проекты получают true из defaultConfig (new --yes, wizard).
+    generateLLMS: bool(false),
     includeNavigation: bool(defaultConfig.includeNavigation),
     includeTableOfContents: bool(defaultConfig.includeTableOfContents),
     webTheme: str(defaultConfig.webTheme),

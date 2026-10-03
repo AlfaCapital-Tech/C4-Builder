@@ -12,6 +12,7 @@ const defaultConfig = {
     generateMD: true,
     generateCompleteMD: false,
     generateWEB: true,
+    generateLLMS: true,
     includeNavigation: false,
     includeTableOfContents: true,
     webTheme: 'vendor/vue.css',

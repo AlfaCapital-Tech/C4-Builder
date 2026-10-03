@@ -68,3 +68,14 @@ describe('parseConfig: salvage битых ключей', () => {
         expect(r.salvaged.projectName).toBe('demo'); // валидное сохранено
     });
 });
+
+describe('generateLLMS', () => {
+    it('отсутствующий ключ = выкл (легаси-конфиг не меняет вывод), true — вкл', () => {
+        expect(configSchema.parse({}).generateLLMS).toBe(false);
+        expect(configSchema.parse({ generateLLMS: true }).generateLLMS).toBe(true);
+    });
+
+    it('строка вместо булева — ошибка', () => {
+        expect(configSchema.safeParse({ generateLLMS: 'yes' }).success).toBe(false);
+    });
+});

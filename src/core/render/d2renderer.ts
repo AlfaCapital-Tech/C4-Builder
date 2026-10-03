@@ -134,7 +134,7 @@ const collectFiles = (
 // buildCompileRequest (рендер) иначе читают один и тот же граф с диска дважды.
 // Ключ — абсолютный путь входного файла. Сбрасывается clearD2FileCache() на границах
 // build(), иначе watch-режим отдавал бы устаревшее содержимое. Возвращаемую Map
-// потребители НЕ мутируют (foldD2Imports исключает входной файл фильтром, не delete).
+// потребители НЕ мутируют (d2LocalImports исключает входной файл фильтром, не delete).
 let filesMemo: Map<string, Map<string, string>> | null = null;
 const clearD2FileCache = (): void => {
     filesMemo = null;
@@ -216,24 +216,25 @@ const renderD2 = async (
     return Buffer.from(svg, 'utf8');
 };
 
-// Материал импортов для чексуммы кэша (без самого входного файла — его контент
-// хэшируется отдельно). Правка импортируемого .d2 меняет чексумму зависимой
-// диаграммы — аналог foldIncludes для PlantUML.
-// Путь в материале — относительный к cwd, posix-разделители: чексумма не зависит
-// от машины/чекаута/ОС (абсолютный путь делал кеш непереносимым).
-const foldD2Imports = (entryAbs: string, seed?: string): string => {
+// Локальные импорты .d2 рекурсивно, без самого входного файла. Один граф на рендер,
+// чексумму кэша (foldD2Imports) и приложение llms-full.txt.
+const d2LocalImports = (entryAbs: string, seed?: string): [string, string][] => {
     const abs = path.resolve(entryAbs);
-    const files = collectFilesCached(entryAbs, seed);
+    return [...collectFilesCached(entryAbs, seed).entries()].filter(([p]) => p !== abs);
+};
+
+// Материал импортов для чексуммы кэша (входной файл хэшируется отдельно). Правка
+// импортируемого .d2 меняет чексумму зависимой диаграммы — аналог foldIncludes для PlantUML.
+// Путь в материале — относительный к cwd, posix-разделители: чексумма не зависит
+// от машины/чекаута/ОС (абсолютный путь делал кеш непереносимым). Сортировка по
+// относительному ключу — тому же, что уходит в материал.
+const foldD2Imports = (entryAbs: string, seed?: string): string => {
     const rel = (p: string): string => path.relative(process.cwd(), p).split(path.sep).join('/');
-    // Мемоизированную Map не мутируем (её же использует buildCompileRequest) —
-    // входной файл исключаем фильтром, а не delete. Сортировка по относительному
-    // ключу — тому же, что уходит в материал.
-    return [...files.entries()]
-        .filter(([p]) => p !== abs)
+    return d2LocalImports(entryAbs, seed)
         .map(([p, content]) => [rel(p), content])
         .sort((a, b) => a[0].localeCompare(b[0]))
         .map(([p, content]) => ` ${p} ${content}`)
         .join('');
 };
 
-export { renderD2, foldD2Imports, teardownD2, clearD2FileCache };
+export { renderD2, foldD2Imports, d2LocalImports, teardownD2, clearD2FileCache };

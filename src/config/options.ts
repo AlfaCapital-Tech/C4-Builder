@@ -21,6 +21,7 @@ export interface BuildOptions {
     GENERATE_MD: boolean;
     GENERATE_WEBSITE: boolean;
     GENERATE_COMPLETE_MD_FILE: boolean;
+    GENERATE_LLMS: boolean;
     GENERATE_LOCAL_IMAGES: boolean;
     EMBED_DIAGRAM: boolean;
     INCLUDE_NAVIGATION: boolean;
