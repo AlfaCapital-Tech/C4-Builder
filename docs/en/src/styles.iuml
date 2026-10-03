@@ -1,0 +1,9 @@
+' Shared diagram theme of the site. Colours are the standard C4-PlantUML ones, as on the
+' landing page; external systems are darker than the standard grey so white text reads well.
+' Included after the C4 stdlib include: !include styles.iuml (from the src root),
+' !include ../styles.iuml (from a page folder).
+
+skinparam shadowing false
+skinparam roundCorner 10
+
+UpdateElementStyle("external_system", $bgColor="#5c6977", $borderColor="#46535f")

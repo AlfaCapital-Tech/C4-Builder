@@ -1,0 +1,39 @@
+{
+	"projectName": "C4-Builder",
+	"homepageName": "Обзор",
+	"rootFolder": "src",
+	"distFolder": "dist",
+	"generateMD": false,
+	"generateCompleteMD": false,
+	"generateWEB": true,
+	"generateLLMS": true,
+	"includeNavigation": false,
+	"includeTableOfContents": false,
+	"webTheme": "vendor/vue.css",
+	"supportSearch": true,
+	"repoUrl": "https://github.com/AlfaCapital-Tech/C4-Builder",
+	"executeScript": false,
+	"docsifyTemplate": "../docsify-template.mjs",
+	"webPort": "3000",
+	"includeBreadcrumbs": false,
+	"includeLinkToDiagram": false,
+	"diagramsOnTop": false,
+	"embedDiagram": false,
+	"excludeOtherFiles": false,
+	"generateLocalImages": true,
+	"plantumlServerUrl": "https://www.plantuml.com/plantuml",
+	"diagramFormat": "svg",
+	"d2Layout": "dagre",
+	"charset": "UTF-8",
+	"useSystemFonts": false,
+	"plugins": [
+		[
+			"openspec",
+			{
+				"dir": "../../openspec",
+				"mount": "Журнал решений"
+			}
+		]
+	],
+	"hasRun": true
+}

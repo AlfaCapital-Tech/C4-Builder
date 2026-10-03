@@ -1,0 +1,76 @@
+name: Pages — сайт документации
+
+# Сайт собирается CLI из этого же коммита (dogfooding): на pull request — только сборка
+# (битая диаграмма или страница в документации краснит PR), публикация в GitHub Pages —
+# только с master (push или ручной запуск на master).
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - run: npm ci --ignore-scripts
+
+      - run: npm run build
+
+      # Системная java вместо скачивания managed-JRE: быстрее и без отдельного кэша.
+      # Пиксельный детерминизм golden сайту не нужен.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # Каждый язык — отдельный c4builder-проект; cwd = папка проекта, как при локальной
+      # сборке (`cd docs/ru && c4builder --site -w`), поэтому относительные пути конфига
+      # и dir плагина openspec работают одинаково.
+      - name: Сборка docs/ru
+        working-directory: docs/ru
+        run: node ../../dist/index.js
+
+      - name: Сборка docs/en
+        working-directory: docs/en
+        run: node ../../dist/index.js
+
+      # В артефакт — только dist обоих языков (без dist_bk) и лендинг в корне.
+      - name: Раскладка _site
+        run: |
+          mkdir -p _site
+          cp -r docs/landing/. _site/
+          cp -r docs/ru/dist _site/ru
+          cp -r docs/en/dist _site/en
+          touch _site/.nojekyll
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    if: github.ref == 'refs/heads/master' && github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

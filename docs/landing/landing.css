@@ -1,0 +1,375 @@
+/* Лендинг C4-Builder: без JS и внешних ресурсов, шрифты системные.
+   Палитра — канонические цвета C4-PlantUML (person/system/external), первый экран —
+   сама C4-диаграмма: человек → система → выходы сборки. */
+
+:root {
+    color-scheme: light dark;
+
+    --paper: #f4f7fa;
+    --ink: #12263a;
+    --muted: #4b5e71;
+    --rule: #cdd8e3;
+    --arrow: #5d7084;
+    --link: #0b5cad;
+    --focus: #e8a317;
+
+    --person: #08427b;
+    --system: #1168bd;
+    --external: #5c6977;
+    --on-box: #ffffff;
+
+    --code-bg: #e6edf4;
+    --term-bg: #0c1a29;
+    --term-ink: #d7e3ef;
+    --term-muted: #7f93a8;
+    --ok: #4cc26a;
+    --err: #ff8078;
+
+    --display: Bahnschrift, "DIN Alternate", "DIN Condensed", "Nimbus Sans Narrow", "Arial Narrow",
+        sans-serif-condensed, sans-serif;
+    --text: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --paper: #0b1622;
+        --ink: #e2eaf2;
+        --muted: #9aaec2;
+        --rule: #223649;
+        --arrow: #7f93a8;
+        --link: #82bdf5;
+
+        --person: #1b5596;
+        --system: #1667b8;
+        --external: #46535f;
+
+        --code-bg: #142739;
+        --term-bg: #050d16;
+    }
+}
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+html {
+    -webkit-text-size-adjust: 100%;
+}
+
+body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font: 1.0625rem/1.6 var(--text);
+}
+
+a {
+    color: var(--link);
+    text-underline-offset: 0.18em;
+}
+
+a:focus-visible {
+    outline: 3px solid var(--focus);
+    outline-offset: 3px;
+    border-radius: 2px;
+}
+
+code,
+pre {
+    font-family: var(--mono);
+    font-size: 0.9em;
+}
+
+:not(pre) > code {
+    background: var(--code-bg);
+    padding: 0.1em 0.35em;
+    border-radius: 3px;
+    overflow-wrap: anywhere;
+}
+
+pre {
+    margin: 0;
+    padding: 1rem 1.25rem;
+    overflow-x: auto;
+    background: var(--code-bg);
+    border-radius: 6px;
+    line-height: 1.55;
+}
+
+.wrap {
+    max-width: 62rem;
+    margin: 0 auto;
+    padding-inline: 1rem;
+}
+
+/* шапка */
+
+.top {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.5rem 1.5rem;
+    padding-top: 1.25rem;
+    padding-bottom: 1.25rem;
+}
+
+.mark {
+    font: 700 1.35rem/1 var(--display);
+    color: var(--ink);
+    text-decoration: none;
+    letter-spacing: 0.01em;
+}
+
+.top nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 1.25rem;
+}
+
+/* первый экран: C4-диаграмма из HTML */
+
+.diagram {
+    padding-top: 1.5rem;
+    padding-bottom: 3rem;
+}
+
+.box {
+    display: block;
+    color: var(--on-box);
+    padding: 1.1rem 1.4rem 1.25rem;
+    border-radius: 4px;
+}
+
+.box p {
+    margin: 0.5rem 0 0;
+}
+
+.kind {
+    display: block;
+    font-size: 0.85rem;
+    font-style: italic;
+    opacity: 0.85;
+}
+
+.name {
+    display: block;
+    font: 700 1.25rem/1.2 var(--display);
+}
+
+.person {
+    max-width: 24rem;
+    background: var(--person);
+    border-radius: 22px;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0 1rem;
+    align-items: start;
+}
+
+.person svg {
+    width: 2.4rem;
+    height: 2.4rem;
+    margin-top: 0.2rem;
+    fill: currentColor;
+}
+
+.system {
+    background: var(--system);
+    padding: 1.6rem clamp(1.25rem, 4vw, 2.5rem) 2rem;
+}
+
+.system h1 {
+    margin: 0.6rem 0 0;
+    max-width: 18ch;
+    font: 700 clamp(2.1rem, 6.2vw, 3.9rem) / 1.04 var(--display);
+    letter-spacing: -0.005em;
+}
+
+.system .lead {
+    max-width: 38rem;
+    margin-top: 1.1rem;
+    font-size: 1.1rem;
+}
+
+.system pre {
+    margin-top: 1.5rem;
+    max-width: 30rem;
+    background: rgb(0 0 0 / 0.22);
+    color: var(--on-box);
+}
+
+/* связь C4: вертикальная линия со стрелкой и подписью */
+
+.rel {
+    position: relative;
+    margin-left: 2.6rem;
+    padding: 1.1rem 0 1.4rem 1.1rem;
+    border-left: 2px solid var(--arrow);
+    color: var(--muted);
+    font-size: 0.95rem;
+    line-height: 1.4;
+}
+
+.rel::after {
+    content: "";
+    position: absolute;
+    left: -8px;
+    bottom: -2px;
+    border-style: solid;
+    border-width: 11px 7px 0;
+    border-color: var(--arrow) transparent transparent;
+}
+
+.box p code {
+    background: rgb(255 255 255 / 0.18);
+    color: inherit;
+}
+
+.rel b {
+    color: var(--ink);
+}
+
+.rel code {
+    display: block;
+    background: none;
+    padding: 0;
+    font-size: 0.85rem;
+    font-style: italic;
+}
+
+.outputs {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+    gap: 1rem;
+}
+
+a.box {
+    background: var(--external);
+    text-decoration: none;
+}
+
+a.box:hover .name {
+    text-decoration: underline;
+    text-underline-offset: 0.15em;
+}
+
+/* разделы */
+
+section {
+    padding-top: 2.5rem;
+    padding-bottom: 2.5rem;
+    border-top: 1px solid var(--rule);
+}
+
+h2 {
+    margin: 0 0 1.25rem;
+    font: 700 clamp(1.6rem, 3.6vw, 2.2rem) / 1.15 var(--display);
+}
+
+.split {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr));
+    gap: 1.5rem 2.5rem;
+    align-items: start;
+}
+
+.steps {
+    margin: 0;
+    padding-left: 1.4rem;
+}
+
+.steps li + li {
+    margin-top: 0.9rem;
+}
+
+.steps li::marker {
+    font: 700 1.1rem var(--display);
+    color: var(--system);
+}
+
+.term {
+    background: var(--term-bg);
+    color: var(--term-ink);
+}
+
+.term .p {
+    color: var(--term-muted);
+    user-select: none;
+}
+
+.term .ok {
+    color: var(--ok);
+}
+
+.term .err {
+    color: var(--err);
+}
+
+.note {
+    color: var(--muted);
+    font-size: 0.95rem;
+    margin: 0.75rem 0 0;
+}
+
+section h3 {
+    margin: 0 0 0.6rem;
+    font: 700 1.15rem/1.2 var(--display);
+}
+
+.diff {
+    margin: 0;
+    max-width: 48rem;
+}
+
+.diff dt {
+    font: 700 1.15rem/1.3 var(--display);
+}
+
+.diff dd {
+    margin: 0.2rem 0 1.1rem;
+}
+
+.diff dd:last-child {
+    margin-bottom: 0;
+}
+
+.intro {
+    max-width: 44rem;
+    margin: 0 0 1.5rem;
+}
+
+.links {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+    gap: 0.75rem 2rem;
+}
+
+.links a {
+    font-weight: 600;
+}
+
+.links span {
+    display: block;
+    color: var(--muted);
+    font-size: 0.95rem;
+}
+
+footer {
+    border-top: 1px solid var(--rule);
+    padding-top: 1.5rem;
+    padding-bottom: 2.5rem;
+    color: var(--muted);
+    font-size: 0.95rem;
+}
+
+footer p {
+    margin: 0 0 0.4rem;
+    max-width: 48rem;
+}

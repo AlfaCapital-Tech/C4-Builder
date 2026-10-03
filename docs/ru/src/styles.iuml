@@ -1,0 +1,9 @@
+' Общая тема диаграмм сайта. Цвета — стандартные C4-PlantUML, как у лендинга;
+' внешние системы темнее стандартного серого, чтобы белый текст читался.
+' Подключается после stdlib-инклюда C4: !include styles.iuml (из корня src),
+' !include ../styles.iuml (из папки страницы).
+
+skinparam shadowing false
+skinparam roundCorner 10
+
+UpdateElementStyle("external_system", $bgColor="#5c6977", $borderColor="#46535f")

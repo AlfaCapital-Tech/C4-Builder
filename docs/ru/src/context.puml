@@ -1,0 +1,27 @@
+@startuml
+!include <C4/C4_Context>
+!include styles.iuml
+
+LAYOUT_TOP_DOWN()
+
+Person(dev, "Разработчик", "Пишет markdown и диаграммы, ревьюит архитектуру в pull request")
+Person(agent, "AI-агент", "Claude Code, Codex, Cursor: правит модель и проверяет её через c4builder check")
+
+System(c4b, "C4-Builder", "CLI: собирает папку markdown + PlantUML/D2 в документацию, проверяет отдельные диаграммы")
+
+System_Ext(engines, "Движки диаграмм", "PlantUML (вендорный jar + Java, Smetana), D2 (WASM)")
+System_Ext(openspec, "OpenSpec-store", "Спеки и change'и проекта: proposal, design, tasks")
+System_Ext(openapi, "OpenAPI-контракты", "Спеки сервисов: папка или архив репозитория")
+System_Ext(site, "Docsify-сайт", "Статика без CDN: GitHub Pages, GitLab Pages, любой веб-сервер")
+System_Ext(md, "Markdown", "README по папкам или один файл для репозитория")
+
+Rel(dev, c4b, "Собирает и смотрит", "c4builder --site -w")
+Rel(agent, c4b, "Проверяет правки", "c4builder check")
+Rel(c4b, engines, "Рендерит диаграммы", "локально, без сети")
+Rel(c4b, openspec, "Публикует раздел", "плагин openspec")
+Rel(c4b, openapi, "Публикует swagger-ui", "плагин openapi")
+Rel(c4b, site, "Собирает")
+Rel(c4b, md, "Собирает")
+
+SHOW_LEGEND()
+@enduml
