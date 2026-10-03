@@ -13,12 +13,12 @@ context: |
   онлайн-сервисы PlantUML не использовать.
   Артефакты OpenSpec пишем на русском; код и идентификаторы — на английском.
 
-# Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always include a "Non-goals" section
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
+rules:
+  tasks:
+    - >-
+      Последняя группа задач — «Актуализация» (если change меняет поведение, CLI, ключи
+      .c4builder или требования): страницы сайта в обеих версиях (docs/ru/src, docs/en/src,
+      паритет — тест docs-parity); skills/* и template/AGENTS.md, если затронуты команды,
+      флаги, ключи или требования; строка в `## Unreleased` CHANGELOG.md; новый ключ вывода —
+      включить в docs/ru/.c4builder и docs/en/.c4builder. README — только если меняется
+      quickstart. llms.txt не трогать — генерируется сборкой.
