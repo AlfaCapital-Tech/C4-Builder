@@ -26,6 +26,9 @@ npm run check          # biome: lint and format
 TypeScript, ESM, Node 20.19+. The tests run the built CLI from `dist/`, so `npm test` compiles
 first.
 
+**Output language.** Everything the CLI prints for the user is in English; code comments are in
+Russian. The `test/cli-language.test.mjs` test fails on Cyrillic in string literals under `src/`.
+
 **Golden snapshots.** `test/golden.test.mjs` builds the `template/src` template in several
 configurations and compares the whole output with the reference in `test/golden/` —
 byte-for-byte, SVG included. Rendering is pinned to a specific JRE (Temurin), which the test

@@ -21,9 +21,9 @@
 
 ## 5. Актуализация
 
-- [ ] 5.1 Сайт: в `docs/en/src` убрать оговорки о русском выводе (например `03 Diagrams` — «messages are printed in Russian for now»), в RU и EN поправить цитаты сообщений CLI, если они есть (`grep -rnP '[А-Яа-яЁё]' docs/en/src` и поиск процитированных сообщений в `docs/ru/src`). Проверка: `npx vitest run test/docs-parity.test.mjs` зелёный; сборка `cd docs/ru && node ../../dist/index.js` и `docs/en` — код 0
-- [ ] 5.2 `skills/c4builder/**` и `template/AGENTS.md`: убрать оговорки о русских сообщениях CLI, если остались после `cli-fixes`. Проверка: `grep -rniE 'russian|строка' skills template/AGENTS.md` — только осознанные упоминания; `npx vitest run test/skills.test.mjs` зелёный
-- [ ] 5.3 `CLAUDE.md`: в «Правила» — пользовательский вывод CLI только на английском (тест `cli-language`), комментарии — по-прежнему на русском. Строка в `## Unreleased` `CHANGELOG.md`: весь вывод CLI на английском, скриптам, разбиравшим русские сообщения, — обновиться. Проверка: ревью глазами
+- [x] 5.1 Сайт: в `docs/en/src` убрать оговорки о русском выводе (например `03 Diagrams` — «messages are printed in Russian for now»), в RU и EN поправить цитаты сообщений CLI, если они есть (`grep -rnP '[А-Яа-яЁё]' docs/en/src` и поиск процитированных сообщений в `docs/ru/src`). Проверка: `npx vitest run test/docs-parity.test.mjs` зелёный; сборка `cd docs/ru && node ../../dist/index.js` и `docs/en` — код 0
+- [x] 5.2 `skills/c4builder/**` и `template/AGENTS.md`: убрать оговорки о русских сообщениях CLI, если остались после `cli-fixes`. Проверка: `grep -rniE 'russian|строка' skills template/AGENTS.md` — только осознанные упоминания; `npx vitest run test/skills.test.mjs` зелёный
+- [x] 5.3 `CLAUDE.md`: в «Правила» — пользовательский вывод CLI только на английском (тест `cli-language`), комментарии — по-прежнему на русском. Строка в `## Unreleased` `CHANGELOG.md`: весь вывод CLI на английском, скриптам, разбиравшим русские сообщения, — обновиться. Проверка: ревью глазами
 
 ## 6. Интеграция
 

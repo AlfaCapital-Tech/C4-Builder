@@ -29,6 +29,9 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
   it is re-checked with the C4 stdlib included
 - `c4builder --docs` no longer creates `.c4builder` and `.c4builder.cache` in the current
   folder; `--list` and `--reset` outside a project fail with exit code 1 instead of creating them
+- All CLI output is in English: config, build, plugin, JRE and lock errors, warnings, wizard
+  validation and the "diagram not rendered" placeholder used to be in Russian — update scripts
+  that match the old messages
 
 ## v0.4.0
 
