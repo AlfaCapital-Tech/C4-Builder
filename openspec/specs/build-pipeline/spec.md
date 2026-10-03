@@ -1,7 +1,8 @@
 # build-pipeline Specification
 
 ## Purpose
-TBD - created by archiving change ts-scaffold. Update Purpose after archive.
+Как устроен и собирается код CLI: TypeScript/ESM под `strict`, компиляция `tsc` в `dist/` без бандлера, запуск из собранного `dist/`, сохранение наблюдаемого поведения при порте и пофазная модульность ядра сборки (scan → render → compose).
+
 ## Requirements
 ### Requirement: Исходники на TypeScript и ESM
 
