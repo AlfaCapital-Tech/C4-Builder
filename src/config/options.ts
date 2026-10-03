@@ -97,7 +97,7 @@ export function parseConfig(raw: Record<string, unknown>): ConfigParseResult {
     const issues: ConfigIssue[] = [];
     const brokenKeys = new Set<string>();
     for (const issue of parsed.error.issues) {
-        const key = issue.path.length ? String(issue.path[0]) : '(корень)';
+        const key = issue.path.length ? String(issue.path[0]) : '(root)';
         if (brokenKeys.has(key)) continue; // один ключ — одно сообщение (напр. массив с N битых элементов)
         brokenKeys.add(key);
         issues.push({ key, value: raw[key], message: issue.message });

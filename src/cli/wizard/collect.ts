@@ -16,7 +16,7 @@ const nonEmptyString = z.string().trim().min(1);
 // Пустой Enter уже подставил дефолт (answer = value || default) — сообщение получают
 // только явно введённые пробелы/пустая строка при отсутствии дефолта.
 const validate =
-    (schema: z.ZodType, message = 'значение обязательно') =>
+    (schema: z.ZodType, message = 'a value is required') =>
     (answer: unknown): string | true =>
         schema.safeParse(answer).success || message;
 
@@ -39,7 +39,7 @@ export default async (
             name: 'projectName',
             message: 'Project Name',
             default: currentConfiguration.PROJECT_NAME || path.parse(process.cwd()).name,
-            validate: validate(nonEmptyString, 'укажите имя проекта')
+            validate: validate(nonEmptyString, 'enter a project name')
         });
         conf.set('projectName', responses.projectName);
     }
@@ -50,7 +50,7 @@ export default async (
             name: 'homepageName',
             message: 'HomePage Name',
             default: currentConfiguration.HOMEPAGE_NAME || defaultConfig.homepageName,
-            validate: validate(nonEmptyString, 'укажите имя главной страницы')
+            validate: validate(nonEmptyString, 'enter a home page name')
         });
         conf.set('homepageName', responses.homepageName);
     }
@@ -62,16 +62,16 @@ export default async (
             message: 'Root documentation folder',
             default: currentConfiguration.ROOT_FOLDER || defaultConfig.rootFolder,
             validate: (answer: string): string | true => {
-                if (!nonEmptyString.safeParse(answer).success) return 'укажите папку с документацией';
+                if (!nonEmptyString.safeParse(answer).success) return 'enter the documentation folder';
                 if (answer.indexOf('/') !== -1 || answer.indexOf('\\') !== -1)
-                    return 'имя папки не должно содержать «/» или «\\»';
+                    return 'folder name must not contain "/" or "\\"';
                 // statSync бросает ENOENT для несуществующего пути — ловим и превращаем в
                 // сообщение, иначе async-хендлер inquirer уронит процесс сырым стектрейсом.
                 try {
                     if (!fs.statSync(path.join(process.cwd(), answer)).isDirectory())
-                        return 'указанный путь не является каталогом';
+                        return 'the path is not a directory';
                 } catch {
-                    return 'папка не найдена';
+                    return 'folder not found';
                 }
                 return true;
             }
@@ -306,7 +306,7 @@ export default async (
             name: 'plantumlServerUrl',
             message: 'PlantUML Server URL',
             default: currentConfiguration.PLANTUML_SERVER_URL || defaultConfig.plantumlServerUrl,
-            validate: validate(nonEmptyString, 'укажите URL сервера PlantUML')
+            validate: validate(nonEmptyString, 'enter the PlantUML server URL')
         });
         conf.set('plantumlServerUrl', responses.plantumlServerUrl);
     }
@@ -317,7 +317,7 @@ export default async (
             name: 'diagramFormat',
             message: 'Diagram Image Format',
             default: currentConfiguration.DIAGRAM_FORMAT || defaultConfig.diagramFormat,
-            validate: validate(nonEmptyString, 'укажите формат изображения диаграмм')
+            validate: validate(nonEmptyString, 'enter the diagram image format')
         });
         conf.set('diagramFormat', responses.diagramFormat);
     }

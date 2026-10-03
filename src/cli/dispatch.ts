@@ -76,7 +76,7 @@ function readLenientConfig(conf: ConfStore): {
 // Строгий путь (сборка) не терпит битого конфига: печатает внятную ошибку и завершает
 // процесс с ненулевым кодом. Держим решение о выходе здесь, в CLI, а не в config/*.
 function failOnConfigIssues(issues: ConfigIssue[]): never {
-    console.error(chalk.red('Ошибка в .c4builder — невалидные значения не дают собрать документацию:'));
+    console.error(chalk.red('.c4builder error — invalid values prevent building the documentation:'));
     for (const { key, message } of issues) console.error(chalk.red(`  ${key} — ${message}`));
     process.exit(1);
 }
@@ -85,7 +85,7 @@ function failOnConfigIssues(issues: ConfigIssue[]): never {
 // трактуются как «не задано» и будут перезаписаны валидными значениями после визарда.
 function warnConfigIssues(issues: ConfigIssue[]): void {
     console.log(
-        chalk.yellow('\n⚠ Невалидные ключи в .c4builder (трактуются как «не задано», визард их перезапишет):')
+        chalk.yellow('\n⚠ Invalid keys in .c4builder (treated as "not set", the wizard will overwrite them):')
     );
     for (const { key, value, message } of issues)
         console.log(chalk.yellow(`  ⚠ ${key}: ${JSON.stringify(value)} — ${message}`));
@@ -157,7 +157,7 @@ export default async () => {
         .option('--system-fonts', 'render with system fonts instead of the bundled one (not deterministic)')
         .option('-p, --port <n>', 'port used for serving the generated site', (v) => {
             // parseInt молча резал бы опечатку ('30OO' → 30) — валидируем строго.
-            if (!isValidPort(v)) throw new InvalidArgumentError('ожидается TCP-порт: целое число 1..65535');
+            if (!isValidPort(v)) throw new InvalidArgumentError('expected a TCP port: an integer 1..65535');
             return Number(v);
         })
         .allowExcessArguments() // позиционные аргументы подкоманд `jre <action>` и `check <file...>`
@@ -279,7 +279,7 @@ export default async () => {
         if (opts.systemFonts) options.USE_SYSTEM_FONTS = true; // флаг сильнее ключа конфига
         // Плагины грузятся и валидируются до первой сборки: битые опции — exit 1 сразу.
         const plugins = await loadPlugins(options.PLUGINS, process.cwd(), options).catch((e: Error) => {
-            console.error(chalk.red(`Ошибка загрузки плагинов: ${e.message}`));
+            console.error(chalk.red(`failed to load plugins: ${e.message}`));
             return process.exit(1);
         });
         const reloadEmitter = new EventEmitter();
@@ -341,7 +341,7 @@ export default async () => {
                     attemptedWatchBuild = false;
                     if (err instanceof BuildLockHeldError) {
                         // Соседняя сборка ещё идёт — ребилд пропущен, watch жив.
-                        console.log(chalk.yellow(`ребилд пропущен: ${err.message}`));
+                        console.log(chalk.yellow(`rebuild skipped: ${err.message}`));
                     } else {
                         const e = err as Error;
                         console.log(chalk.red(`build failed: ${e?.stack ? e.stack : e}`));

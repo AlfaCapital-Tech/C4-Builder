@@ -7,7 +7,7 @@
 
 ## 2. Перевод: CLI и конфиг
 
-- [ ] 2.1 `cli/dispatch.ts`, `cli/commands/{new,jre,list,help}.ts` (в `help.ts` — «(по-русски)» → «(in Russian)»), `cli/wizard/collect.ts` (сообщения валидаторов), `config/schema.ts`, `config/options.ts` («(корень)» → «(root)»); тесты с русскими ожиданиями этих сообщений (`cli-commands`, `config`) — на английские. Проверка: `npx vitest run test/cli-commands.test.mjs test/config.test.mjs` зелёный; в `cli-language` больше нет литералов из этих файлов
+- [x] 2.1 `cli/dispatch.ts`, `cli/commands/{new,jre,list,help}.ts` (в `help.ts` — «(по-русски)» → «(in Russian)»), `cli/wizard/collect.ts` (сообщения валидаторов), `config/schema.ts`, `config/options.ts` («(корень)» → «(root)»); тесты с русскими ожиданиями этих сообщений (`cli-commands`, `config`) — на английские. Проверка: `npx vitest run test/cli-commands.test.mjs test/config.test.mjs` зелёный; в `cli-language` больше нет литералов из этих файлов
 
 ## 3. Перевод: ядро сборки и рендер
 

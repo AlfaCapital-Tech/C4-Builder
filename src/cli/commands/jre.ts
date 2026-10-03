@@ -22,8 +22,8 @@ export default async (args: string[] = [], { force = false }: { force?: boolean 
         return;
     }
     if (action !== 'install') {
-        console.log(chalk.red(`неизвестная подкоманда: c4builder jre ${action || ''}`.trim()));
-        console.log(chalk.gray('доступно: c4builder jre install [--force] | jre info'));
+        console.log(chalk.red(`unknown subcommand: c4builder jre ${action || ''}`.trim()));
+        console.log(chalk.gray('available: c4builder jre install [--force] | jre info'));
         process.exit(1);
     }
 
@@ -31,16 +31,16 @@ export default async (args: string[] = [], { force = false }: { force?: boolean 
         if (!force) {
             const sys = detectSystemJava();
             if (sys) {
-                console.log(chalk.green(`системная java годна (v${sys.major}): ${sys.path}`));
+                console.log(chalk.green(`system java is suitable (v${sys.major}): ${sys.path}`));
                 console.log(
-                    chalk.gray('скачивание не требуется — для форс-загрузки: c4builder jre install --force')
+                    chalk.gray('no download needed — to force it: c4builder jre install --force')
                 );
                 return;
             }
         }
         const resolved = await resolveJava({ force, log: (m) => console.log(chalk.gray(m)) });
-        const from = resolved.source === 'download' ? `Temurin ${TEMURIN_FEATURE}, скачан` : resolved.source;
-        console.log(chalk.green(`JRE готов (${from}): ${resolved.path}`));
+        const from = resolved.source === 'download' ? `Temurin ${TEMURIN_FEATURE}, downloaded` : resolved.source;
+        console.log(chalk.green(`JRE ready (${from}): ${resolved.path}`));
     } catch (e) {
         console.log(chalk.red((e as Error).message));
         process.exit(1);

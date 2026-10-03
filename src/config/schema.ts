@@ -51,7 +51,7 @@ export const configSchema = z.object({
         strPre,
         z
             .string()
-            .refine(isValidPort, 'ожидается TCP-порт: целое число 1..65535')
+            .refine(isValidPort, 'expected a TCP port: an integer 1..65535')
             .default(defaultConfig.webPort)
     ),
     includeBreadcrumbs: bool(defaultConfig.includeBreadcrumbs),
@@ -86,7 +86,7 @@ export const configSchema = z.object({
         z
             .array(
                 z.union([z.string(), z.tuple([z.string(), z.record(z.string(), z.unknown())])], {
-                    error: 'ожидается "имя" либо ["имя", {опции}]'
+                    error: 'expected "name" or ["name", {options}]'
                 })
             )
             .default([])

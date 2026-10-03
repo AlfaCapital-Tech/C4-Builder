@@ -5,7 +5,7 @@ export default (): void => {
     console.log(chalk.blue(figlet.textSync('c4builder')));
     console.log(`
 Full documentation
-${chalk.blue('https://alfacapital-tech.github.io/C4-Builder/ru/')} (по-русски)
+${chalk.blue('https://alfacapital-tech.github.io/C4-Builder/ru/')} (in Russian)
 ${chalk.blue('https://alfacapital-tech.github.io/C4-Builder/en/')} (English)
 
 CONFIGURATION OPTIONS 
@@ -43,7 +43,7 @@ Shows the original folder hierarchy after each title.
 ${chalk.cyan('Plugins')} (${chalk.gray('.c4builder → "plugins", no wizard prompt')})
 List of build plugins: "name" or ["name", { options }]. Built-in: openspec (local OpenSpec store →
 site section), openapi (swagger-ui pages for OpenAPI specs from a folder or an HTTP archive).
-See the «Plugins» page of the documentation.
+See the "Plugins" page of the documentation.
 ${chalk.cyan('Place diagrams before text')}
 Choose to place diagrams before or after the text.
 ${chalk.cyan('Exclude other files')}
