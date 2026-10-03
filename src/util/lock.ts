@@ -49,12 +49,12 @@ export const acquireBuildLock = (lockPath: string): (() => void) => {
             const fresh = typeof meta.at === 'number' && Date.now() - meta.at < STALE_MS;
             if (alive && fresh) {
                 throw new BuildLockHeldError(
-                    `сборка уже идёт в этом каталоге (pid ${meta.pid}) — дождитесь её завершения ` +
-                        `или удалите ${lockPath}, если это остаток упавшего процесса`
+                    `a build is already running in this folder (pid ${meta.pid}) — wait for it to finish ` +
+                        `or delete ${lockPath} if it is left over from a crashed process`
                 );
             }
             fs.rmSync(lockPath, { force: true });
         }
     }
-    throw new BuildLockHeldError(`не удалось захватить лок сборки: ${lockPath}`);
+    throw new BuildLockHeldError(`failed to acquire the build lock: ${lockPath}`);
 };

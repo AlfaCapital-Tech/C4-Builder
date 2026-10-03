@@ -12,7 +12,7 @@ const findPackageRoot = (startDir: string): string => {
     for (;;) {
         if (fs.existsSync(path.join(dir, 'package.json'))) return dir;
         const parent = path.dirname(dir);
-        if (parent === dir) throw new Error(`package.json не найден вверх от ${startDir}`);
+        if (parent === dir) throw new Error(`package.json not found above ${startDir}`);
         dir = parent;
     }
 };

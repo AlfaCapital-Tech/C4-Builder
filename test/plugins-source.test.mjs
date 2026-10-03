@@ -156,10 +156,10 @@ describe('resolveSource', () => {
         const out = path.join(tmp, 'slip-out');
         fs.mkdirSync(out);
         await expect(extractZip(path.join(tmp, 'evil.zip'), out)).rejects.toThrow(
-            /Небезопасный путь|invalid relative path/
+            /Unsafe path in archive|invalid relative path/
         );
         await expect(resolveSource({ archive: `${base}/evil.zip` })).rejects.toThrow(
-            /Небезопасный путь|invalid relative path/
+            /Unsafe path in archive|invalid relative path/
         );
     });
 });

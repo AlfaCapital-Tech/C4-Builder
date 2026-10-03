@@ -39,21 +39,21 @@ export const httpGetStream = (url: string, opts: HttpGetOptions = {}): Promise<I
             if (status >= 300 && status < 400 && location) {
                 res.resume();
                 if (redirectsLeft <= 0) {
-                    return reject(new Error(`Слишком много редиректов (>${MAX_REDIRECTS}) для ${url}`));
+                    return reject(new Error(`Too many redirects (>${MAX_REDIRECTS}) for ${url}`));
                 }
                 const next = new URL(location, url).toString();
                 return resolve(httpGetStream(next, { headers, redirectsLeft: redirectsLeft - 1 }));
             }
             if (status < 200 || status > 299) {
                 res.resume();
-                return reject(new Error(`Не удалось загрузить ${url}, код ответа: ${status}`));
+                return reject(new Error(`Failed to download ${url}, status code: ${status}`));
             }
             // Коннект установлен → с таймаута коннекта переключаемся на таймаут простоя
             // приёма (крупный ответ тянется дольше): молчащий сокет уронит таймаут.
             req.setTimeout(IDLE_TIMEOUT_MS);
             resolve(res);
         });
-        req.on('timeout', () => req.destroy(new Error(`Таймаут сети (${url})`)));
+        req.on('timeout', () => req.destroy(new Error(`Network timeout (${url})`)));
         req.on('error', reject);
     });
 };
