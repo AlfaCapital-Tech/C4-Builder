@@ -9,9 +9,9 @@
 
 ## 2. Единый резолвер зависимостей диаграмм
 
-- [ ] 2.1 ДО рефакторинга: тест-эталон материала — `foldIncludes` на temp-файлах (вложенный `.iuml`, повтор, `<C4/...>`, URL) и `foldD2Imports` на `.d2` с импортом; ожидаемые строки фиксируются из текущего кода. Экспорт в `test/dist.mjs`. Проверка: тест зелёный на текущем коде
-- [ ] 2.2 `scan/tree.ts`: выделить `collectIncludes(content, fileDir, searchDir, visited): {abs, content}[]` (DFS, тот же regex/порядок поиска/кэш), `foldIncludes` = маппинг списка в материал. Проверка: тест 2.1 зелёный без изменения ожидаемых строк
-- [ ] 2.3 `render/d2renderer.ts`: экспорт `d2LocalImports(entryAbs, seed): [abs, content][]` (без входного файла), `foldD2Imports` на нём. Проверка: тест 2.1 зелёный без изменения ожидаемых строк
+- [x] 2.1 ДО рефакторинга: тест-эталон материала — `foldIncludes` на temp-файлах (вложенный `.iuml`, повтор, `<C4/...>`, URL) и `foldD2Imports` на `.d2` с импортом; ожидаемые строки фиксируются из текущего кода. Экспорт в `test/dist.mjs`. Проверка: тест зелёный на текущем коде
+- [x] 2.2 `scan/tree.ts`: выделить `collectIncludes(content, fileDir, searchDir, visited): {abs, content}[]` (DFS, тот же regex/порядок поиска/кэш), `foldIncludes` = маппинг списка в материал. Проверка: тест 2.1 зелёный без изменения ожидаемых строк
+- [x] 2.3 `render/d2renderer.ts`: экспорт `d2LocalImports(entryAbs, seed): [abs, content][]` (без входного файла), `foldD2Imports` на нём. Проверка: тест 2.1 зелёный без изменения ожидаемых строк
 
 ## 3. Генерация llms.txt / llms-full.txt
 

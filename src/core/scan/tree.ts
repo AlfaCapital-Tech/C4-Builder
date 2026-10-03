@@ -188,19 +188,18 @@ export const generateTree = async (dir: string, options: BuildOptions): Promise<
 const includeReadCache = new Map<string, string | null>();
 export const clearIncludeCache = (): void => includeReadCache.clear();
 
-// Свернуть локальные !include (.iuml и пр.) диаграммы в материал для чексуммы — рекурсивно.
-// Иначе правка включённого .iuml не инвалидирует кэш и на сайт уезжает устаревший рендер.
+// Локальные !include (.iuml и пр.) диаграммы рекурсивно, в DFS-порядке: каждый файл —
+// один раз (visited). Один резолвер на чексумму кэша (foldIncludes) и приложение
+// llms-full.txt — иначе граф зависимостей у них разъехался бы.
 // URL (!include https://…) и stdlib (!include <…>) пропускаем: локально не меняются.
-// Путь в материале — относительный к cwd, posix-разделители: чексумма не зависит от
-// машины/чекаута/ОС (абсолютный путь делал кеш непереносимым).
-export const foldIncludes = (
+export const collectIncludes = (
     content: string,
     fileDir: string,
     searchDir: string,
     visited: Set<string>
-): string => {
+): { abs: string; content: string }[] => {
     const re = /^[ \t]*!include(?:_once|_many|sub|url)?[ \t]+(.+?)[ \t]*$/gim;
-    let out = '';
+    const out: { abs: string; content: string }[] = [];
     let m: RegExpExecArray | null;
     // biome-ignore lint/suspicious/noAssignInExpressions: идиома regex.exec() в условии while
     while ((m = re.exec(content)) !== null) {
@@ -226,8 +225,22 @@ export const foldIncludes = (
             includeReadCache.set(resolved, inc);
         }
         if (inc === null) continue;
-        out += ` ${path.relative(process.cwd(), resolved).split(path.sep).join('/')} ${inc}`;
-        out += foldIncludes(inc, path.dirname(resolved), searchDir, visited); // вложенные include
+        out.push({ abs: resolved, content: inc });
+        out.push(...collectIncludes(inc, path.dirname(resolved), searchDir, visited)); // вложенные include
     }
     return out;
 };
+
+// Свернуть include-граф диаграммы в материал для чексуммы: правка включённого .iuml
+// обязана инвалидировать кэш, иначе на сайт уезжает устаревший рендер.
+// Путь в материале — относительный к cwd, posix-разделители: чексумма не зависит от
+// машины/чекаута/ОС (абсолютный путь делал кеш непереносимым).
+export const foldIncludes = (
+    content: string,
+    fileDir: string,
+    searchDir: string,
+    visited: Set<string>
+): string =>
+    collectIncludes(content, fileDir, searchDir, visited)
+        .map((inc) => ` ${path.relative(process.cwd(), inc.abs).split(path.sep).join('/')} ${inc.content}`)
+        .join('');

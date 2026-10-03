@@ -15,3 +15,5 @@ export { extractZip, extractTarGz } from '../dist/util/archive.js';
 export { globToRegExp, globFiles } from '../dist/util/glob.js';
 export { BUILTIN_PLUGINS } from '../dist/plugins/index.js';
 export { createFenceExtractor, mapOutsideFences } from '../dist/plugins/openspec/fences.js';
+export { foldIncludes, clearIncludeCache } from '../dist/core/scan/tree.js';
+export { foldD2Imports, clearD2FileCache } from '../dist/core/render/d2renderer.js';
