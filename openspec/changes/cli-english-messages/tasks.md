@@ -11,8 +11,8 @@
 
 ## 3. Перевод: ядро сборки и рендер
 
-- [ ] 3.1 `core/build.ts`, `core/scan/tree.ts`, `core/compose/markdown.ts`; тесты (`llms` — предупреждение `generateLLMS`/`generateWEB`, `compose-h1`) — на английские ожидания. Проверка: `npx vitest run test/llms.test.mjs test/compose-h1.test.mjs` зелёный
-- [ ] 3.2 `core/render/{diagrams,jre,d2renderer,pngraster}.ts`, включая заглушку «диаграмма не отрендерена»; тесты `plugin-openspec` (текст заглушки), `jre`, `pngraster` — на английские ожидания. Проверка: `npx vitest run test/plugin-openspec.test.mjs test/jre.test.mjs test/pngraster.test.mjs` зелёный
+- [x] 3.1 `core/build.ts`, `core/scan/tree.ts`, `core/compose/markdown.ts`; тесты (`llms` — предупреждение `generateLLMS`/`generateWEB`, `compose-h1`) — на английские ожидания. Проверка: `npx vitest run test/llms.test.mjs test/compose-h1.test.mjs` зелёный
+- [x] 3.2 `core/render/{diagrams,jre,d2renderer,pngraster}.ts`, включая заглушку «диаграмма не отрендерена»; тесты `plugin-openspec` (текст заглушки), `jre`, `pngraster` — на английские ожидания. Проверка: `npx vitest run test/plugin-openspec.test.mjs test/jre.test.mjs test/pngraster.test.mjs` зелёный
 
 ## 4. Перевод: плагины и утилиты
 

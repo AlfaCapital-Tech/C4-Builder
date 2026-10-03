@@ -171,8 +171,8 @@ export const generateTree = async (dir: string, options: BuildOptions): Promise<
             const out = `${path.parse(d.dir).name}.${diagramOutputFormat(d, options)}`;
             if (seen.has(out))
                 throw new Error(
-                    `Коллизия имени выхода '${out}' в ${item.dir}: '${seen.get(out)}' и '${d.dir}' ` +
-                        `рендерятся в один файл. Переименуйте одну из диаграмм.`
+                    `Output name collision '${out}' in ${item.dir}: '${seen.get(out)}' and '${d.dir}' ` +
+                        `render to the same file. Rename one of the diagrams.`
                 );
             seen.set(out, d.dir);
         }

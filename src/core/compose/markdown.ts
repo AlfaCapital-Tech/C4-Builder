@@ -444,8 +444,8 @@ export const generateWebMD = async (tree: TreeItem[], options: BuildOptions): Pr
         const fn = typeof loaded === 'function' ? loaded : loaded?.default;
         if (typeof fn !== 'function') {
             throw new Error(
-                `docsifyTemplate «${options.DOCSIFY_TEMPLATE}» должен экспортировать функцию ` +
-                    `(module.exports = fn или export default fn), получено: ${typeof fn}`
+                `docsifyTemplate "${options.DOCSIFY_TEMPLATE}" must export a function ` +
+                    `(module.exports = fn or export default fn), got: ${typeof fn}`
             );
         }
         docsifyTemplate = fn;
@@ -455,7 +455,7 @@ export const generateWebMD = async (tree: TreeItem[], options: BuildOptions): Pr
     // (только если не задан WEB_FILE_NAME); отсутствие корня — явная ошибка вместо assertion.
     const rootName = (): string => {
         const root = tree.find((item) => !item.parent);
-        if (!root) throw new Error('docsify: корневой элемент дерева не найден');
+        if (!root) throw new Error('docsify: tree root not found');
         return root.name;
     };
 
