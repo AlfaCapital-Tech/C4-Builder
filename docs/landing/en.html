@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>C4-Builder — architecture as code for people and agents</title>
-    <meta name="description" content="C4-Builder builds markdown and PlantUML/D2 diagrams into a documentation site. Local deterministic rendering, diagram checks for agents, OpenSpec and OpenAPI plugins.">
+    <meta name="description" content="C4-Builder builds markdown and PlantUML, D2 and BPMN diagrams into a documentation site. Local deterministic rendering, diagram checks for agents, OpenSpec and OpenAPI plugins.">
     <link rel="alternate" hreflang="ru" href="./">
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='2' fill='%231168bd'/%3E%3C/svg%3E">
     <link rel="stylesheet" href="landing.css">
@@ -26,7 +26,7 @@
             <div>
                 <span class="name">Developer or AI agent</span>
                 <span class="kind">[Person]</span>
-                <p>Writes markdown and PlantUML or D2 diagrams and keeps them in git next to the code.</p>
+                <p>Writes markdown and PlantUML, D2 or BPMN diagrams and keeps them in git next to the code.</p>
             </div>
         </div>
 
@@ -144,6 +144,9 @@ c4builder --site -w</code></pre>
                 offline swagger-ui pages for service contracts.</dd>
             <dt>D2 and PNG</dt>
             <dd>A second diagram engine and rasterization via resvg with the same font.</dd>
+            <dt>BPMN processes</dt>
+            <dd>BPMN 2.0 XML without coordinates: the build validates the model, lays out pools and
+                lanes and draws the process in the standard bpmn.io notation.</dd>
             <dt>Maintenance</dt>
             <dd>TypeScript, golden rendering tests, CI on every pull request, releases to npm and GHCR.</dd>
         </dl>

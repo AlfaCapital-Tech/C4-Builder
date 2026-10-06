@@ -3,7 +3,7 @@
 User-facing changes of C4-Builder. Every pull request that changes behaviour adds a line to
 `## Unreleased`; the release commit renames it to `## vX.Y.Z`.
 
-## Unreleased
+## v0.5.0
 
 - **BREAKING:** Node.js 22.17 or newer is required (`engines.node: ">=22.17"`); Node.js 20 is
   past its end of life. On older Node.js npm warns with `EBADENGINE` (or refuses with
