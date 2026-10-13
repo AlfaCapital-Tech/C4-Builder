@@ -18,8 +18,8 @@
 
 ### Requirement: Состав набора скиллов
 Набор SHALL включать два скилла:
-- `c4builder` — работа с проектом c4builder: структура проекта и `.c4builder`, конвенции C4-PlantUML (stdlib-инклюды `<C4/...>`, общие `.iuml`, кириллица, офлайн-рендер), цикл «правка → `c4builder check` → сборка / `c4builder --site -w`», D2, встроенные плагины `openspec` и `openapi`;
-- `c4builder-setup` — установка и диагностика: npm (каналы `latest` и `rc`) или Docker-образ, Node.js версии из `engines` в `package.json`, системная java или managed JRE (`c4builder jre install` / `jre info`), функциональная проверка сборкой шаблонного проекта.
+- `c4builder` — работа с проектом c4builder: структура проекта и `.c4builder`, конвенции C4-PlantUML (stdlib-инклюды `<C4/...>`, общие `.iuml`, кириллица, офлайн-рендер), цикл «правка → `c4builder check` → сборка / `c4builder --site -w`», D2, встроенные плагины `openspec` и `openapi`, реакция на уведомление о новой версии;
+- `c4builder-setup` — установка, обновление (`c4builder update`) и диагностика: npm (каналы `latest` и `rc`) или Docker-образ, Node.js версии из `engines` в `package.json`, системная java или managed JRE (`c4builder jre install` / `jre info`), функциональная проверка сборкой шаблонного проекта.
 
 Тексты скиллов MUST быть на английском языке.
 
@@ -30,6 +30,10 @@
 #### Scenario: Скилл установки проверяет работоспособность, а не только версию
 - **WHEN** агент выполняет скилл `c4builder-setup`
 - **THEN** скилл завершается созданием проекта `c4builder --new --name <name> -y` во временном каталоге и его сборкой, а не только проверкой `c4builder --version`
+
+#### Scenario: Агент видит уведомление о новой версии
+- **WHEN** вывод c4builder содержит строку `c4builder <new> is available (current <current>). Run: c4builder update`
+- **THEN** скилл `c4builder` предписывает сообщить об этом пользователю и запускать `c4builder update` только по его просьбе
 
 ### Requirement: Метаданные скилла валидны
 Frontmatter каждого `SKILL.md` MUST содержать `name` и `description`. `name` MUST совпадать с именем каталога скилла, иметь длину 1–64 символа, состоять из `a-z`, `0-9` и `-`, не начинаться и не заканчиваться дефисом и не содержать `--`. `description` MUST быть непустым, не длиннее 1024 символов и описывать, что делает скилл и когда его применять. Проверка MUST выполняться автоматическими тестами на каждом прогоне CI.
