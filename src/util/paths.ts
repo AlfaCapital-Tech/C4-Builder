@@ -20,7 +20,7 @@ const findPackageRoot = (startDir: string): string => {
 export const PACKAGE_ROOT = findPackageRoot(path.dirname(fileURLToPath(import.meta.url)));
 export const VENDOR_DIR = path.join(PACKAGE_ROOT, 'vendor');
 export const TEMPLATE_DIR = path.join(PACKAGE_ROOT, 'template');
-// Потребляется только как pkg.version (cli/dispatch) — типизируем по факту.
-export const packageJson: { version: string } = JSON.parse(
+// Потребляются только version и name (cli/dispatch, cli/update) — типизируем по факту.
+export const packageJson: { name: string; version: string } = JSON.parse(
     fs.readFileSync(path.join(PACKAGE_ROOT, 'package.json'), 'utf8')
 );

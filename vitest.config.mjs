@@ -9,6 +9,9 @@ export default defineConfig({
         // BUILD_TIMEOUT_MS в helpers.mjs). hookTimeout ДОЛЖЕН покрывать сумму, иначе
         // vitest уронит хук невнятным «hook timed out» раньше, чем сборка отдаст свою
         // внятную ошибку: 3×240 с + запас на скачивание JRE ≈ 840 с.
-        hookTimeout: 840_000
+        hookTimeout: 840_000,
+        // Спавны CLI наследуют env: без этого любой тест запускал бы настоящий `npm view` и
+        // писал кэш в настоящий ~/.config. Тесты проверки обновлений снимают переменную сами.
+        env: { NO_UPDATE_NOTIFIER: '1' }
     }
 });

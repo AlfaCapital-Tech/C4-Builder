@@ -12,7 +12,8 @@ c4builder --site -w          # live preview on http://localhost:3000 - never exi
 ```
 
 Not installed: `npm i -g @alfacapital-tech/c4builder` (Node.js 22.17+; Java 17+ is used
-when present, otherwise c4builder downloads a private JRE).
+when present, otherwise c4builder downloads a private JRE). Installed: `c4builder update`
+updates it.
 
 ## Workflow
 
@@ -22,6 +23,8 @@ when present, otherwise c4builder downloads a private JRE).
    Fix until the exit code is 0.
 3. Run `c4builder` and make sure it exits with code 0. Leave `c4builder --site -w` to a
    human or run it in the background.
+4. A stderr line `c4builder <new> is available (current <current>). Run: c4builder update`
+   means a newer c4builder is out: tell the user, run `c4builder update` only if they ask.
 
 ## Layout
 

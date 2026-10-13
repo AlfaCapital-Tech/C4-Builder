@@ -41,6 +41,10 @@ npm install -g @alfacapital-tech/c4builder@latest   # stable
 npm install -g @alfacapital-tech/c4builder@rc       # release candidate
 ```
 
+- An installed global CLI is updated with `c4builder update`: it installs the newest version
+  (`latest`; on a release candidate the newer of `latest` and `rc`). For a project dependency
+  or the Docker image it installs nothing and prints the command to use instead. Switching the
+  channel is the `npm install -g` line above.
 - Do not pass `--omit=optional`: the D2 engine (`@terrastruct/d2`) is an optional
   dependency; without it a project with `.d2` files stops with an install hint.
 - `c4builder: command not found` after a successful install → the global npm bin folder

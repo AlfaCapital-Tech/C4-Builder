@@ -5,6 +5,8 @@ import express from 'express';
 import open from 'open';
 import type { EventEmitter } from 'node:events';
 import type { BuildOptions } from '../../config/options.ts';
+import { packageJson as pkg } from '../../util/paths.ts';
+import { pendingUpdate } from '../update.ts';
 
 const LIVERELOAD_PATH = '/__livereload';
 // Восстановление скролла после reload: docsify рендерит контент асинхронно после fetch md,
@@ -56,6 +58,29 @@ const LIVERELOAD_SNIPPET = `
 })();
 </script>`;
 
+// Плашка о новой версии — только в отдаче dev-сервера, в dist не попадает. Флаг закрытия — в
+// sessionStorage: переживает reload ребилдом и живёт до закрытия вкладки.
+const updateBanner = (next: string): string => `
+<div id="c4builder-update" style="position:fixed;right:16px;bottom:16px;z-index:1000;max-width:360px;padding:10px 36px 10px 14px;border:1px solid #e0c060;border-radius:6px;background:#fff8dc;color:#333;font:14px/1.4 sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.15)">
+c4builder ${next} is available (current ${pkg.version}). Run: <code>c4builder update</code>
+<button type="button" aria-label="Close" style="position:absolute;top:4px;right:8px;border:0;background:none;color:inherit;font-size:18px;line-height:1;cursor:pointer">&times;</button>
+</div>
+<script>
+(function () {
+    var KEY = '__c4builderUpdateClosed';
+    var el = document.getElementById('c4builder-update');
+    try {
+        if (sessionStorage.getItem(KEY)) return el.remove();
+    } catch (e) {}
+    el.querySelector('button').onclick = function () {
+        el.remove();
+        try {
+            sessionStorage.setItem(KEY, '1');
+        } catch (e) {}
+    };
+})();
+</script>`;
+
 export default (
     currentConfiguration: BuildOptions,
     program: { port?: number; watch?: boolean; open?: boolean },
@@ -104,9 +129,13 @@ export default (
             });
         });
 
+        // Кэш проверки обновлений читается на каждую страницу: результат фоновой проверки,
+        // запущенной этим же `site -w`, виден со следующей перезагрузки без рестарта сервера.
         const inject = (html: string): string => {
-            if (html.includes('</body>')) return html.replace('</body>', `${LIVERELOAD_SNIPPET}</body>`);
-            return html + LIVERELOAD_SNIPPET;
+            const next = pendingUpdate();
+            const snippet = next ? LIVERELOAD_SNIPPET + updateBanner(next) : LIVERELOAD_SNIPPET;
+            if (html.includes('</body>')) return html.replace('</body>', `${snippet}</body>`);
+            return html + snippet;
         };
 
         app.use((req, res, next) => {
@@ -138,8 +167,9 @@ export default (
                     }
                     return next();
                 }
-                if (isIndex) lastIndexHtml = inject(data);
-                res.set('Cache-Control', 'no-store').type('html').send(inject(data));
+                const page = inject(data);
+                if (isIndex) lastIndexHtml = page;
+                res.set('Cache-Control', 'no-store').type('html').send(page);
             });
         });
     }

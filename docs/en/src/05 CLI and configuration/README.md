@@ -16,8 +16,9 @@
 | `c4builder --list` | print the current config; since 0.5.0 outside a project — an error with exit code 1, no files created |
 | `c4builder --reset` | clear the project config; since 0.5.0 outside a project — an error with exit code 1 |
 | `c4builder --docs` | short reference of config keys and the address of this documentation |
+| `c4builder update` | updates a global npm install to the newest version, otherwise prints how to update, see "Updating" below |
 
-Positional commands are `check`, `jre`, `site`, and since 0.5.0 also `new` and `config`. Since
+Positional commands are `check`, `jre`, `site`, `update`, and since 0.5.0 also `new` and `config`. Since
 0.5.0 any other positional argument is an `unknown command` error with exit code 1: a typo
 (`c4builder nwe`) no longer starts a build.
 
@@ -31,6 +32,32 @@ Flags:
 | `-p, --port <n>` | port for `--site` (defaults to `webPort` from the config, 3000) |
 | `--system-fonts` | render with system fonts for one run |
 | `-V, --version` | version |
+
+## Updating
+
+Once a day c4builder asks the npm registry in the background whether a new version is out. The
+request is made by `npm view` with the registry, proxy and certificates from your npmrc — the same
+path the update is installed through later. A run neither waits for the check nor depends on the
+network: the answer is saved to `~/.config/c4builder/dist-tags.json` (`$XDG_CONFIG_HOME/c4builder/`
+when the variable is set) and used from the next run on. A stable version is compared with `latest`,
+a release candidate with the greater of `latest` and `rc`.
+
+When a newer version is known, one line is printed to stderr at the end of the run:
+
+```text
+c4builder 0.6.0 is available (current 0.5.1). Run: c4builder update
+```
+
+In `c4builder site -w` a dismissible banner in the corner of the page tells about the new version;
+it never gets into the build output.
+
+`c4builder update` installs the newest version when c4builder is installed globally (`npm i -g`),
+showing npm's output. Otherwise it installs nothing, prints the update command and exits with code
+1: `npm i -D` for a project dependency, `docker pull` in the Docker image.
+
+The check and the notices are off when the `CI` variable is set (GitLab CI, GitHub Actions and most
+CI systems set it) or `NO_UPDATE_NOTIFIER` is set, and in the Docker image. To turn them off on your
+machine: `NO_UPDATE_NOTIFIER=1`.
 
 ## How the config is read
 

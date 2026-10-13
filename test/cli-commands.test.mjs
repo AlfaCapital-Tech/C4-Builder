@@ -34,8 +34,23 @@ describe('позиционные подкоманды CLI', () => {
         const res = run('nwe');
         expect(res.status).toBe(1);
         expect(res.stderr).toContain('unknown command: nwe');
-        expect(res.stderr).toContain('check, jre, site, new, config');
+        expect(res.stderr).toContain('check, jre, site, new, config, update');
         expect(listTree(dir)).toEqual(before); // ни .c4builder, ни docs
+    });
+
+    // npm убран из PATH: настоящий реестр и глобальная установка в тестах недопустимы, а ошибка
+    // реестра доказывает, что пошло именно обновление, а не мастер или сборка.
+    it('`update` в пустом каталоге — обновление CLI без мастера и сборки, каталог пуст', () => {
+        const empty = fs.mkdtempSync(path.join(dir, 'empty-'));
+        const res = spawnSync(process.execPath, [path.join(REPO_ROOT, 'dist', 'index.js'), 'update'], {
+            cwd: empty,
+            encoding: 'utf8',
+            env: { ...process.env, PATH: empty }
+        });
+        expect(res.status).toBe(1);
+        expect(res.stderr).toContain('could not query the npm registry');
+        expect(res.stdout).toBe(''); // ни заставки, ни вопросов мастера
+        expect(fs.readdirSync(empty)).toEqual([]);
     });
 });
 

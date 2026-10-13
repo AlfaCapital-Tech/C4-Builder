@@ -22,7 +22,7 @@ const references = (name) => {
 const INPUTS = [...SKILLS.flatMap((name) => [skillFile(name), ...references(name)]), AGENTS_MD];
 const rel = (file) => path.relative(REPO_ROOT, file);
 
-const COMMANDS = ['check', 'jre', 'site', 'new', 'config'];
+const COMMANDS = ['check', 'jre', 'site', 'new', 'config', 'update'];
 const FLAG = /(?<![\w-])--?[a-zA-Z][\w-]*/g;
 const help = spawnSync(process.execPath, [CLI, '--help'], { encoding: 'utf8' }).stdout;
 const KNOWN_FLAGS = new Set(help.match(FLAG));
@@ -45,9 +45,10 @@ const frontmatter = (text) => {
 const cliCommands = (text) => {
     const fenced = [...text.matchAll(/^```[^\n]*\n([\s\S]*?)^```/gm)].flatMap((m) => m[1].split('\n'));
     const inline = [...text.replace(/^```[\s\S]*?^```/gm, '').matchAll(/`([^`\n]+)`/g)].map((m) => m[1]);
+    // Строка уведомления о новой версии тоже начинается с `c4builder`, но это вывод CLI, не команда.
     return [...fenced, ...inline]
         .map((s) => s.replace(/\s#.*$/, '').trim())
-        .filter((s) => /^c4builder(\s|$)/.test(s));
+        .filter((s) => /^c4builder(\s|$)/.test(s) && !s.includes(' is available (current '));
 };
 
 describe('скиллы', () => {
