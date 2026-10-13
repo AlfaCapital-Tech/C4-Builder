@@ -3,7 +3,7 @@
 User-facing changes of C4-Builder. Every pull request that changes behaviour adds a line to
 `## Unreleased`; the release commit renames it to `## vX.Y.Z`.
 
-## Unreleased
+## v0.6.0
 
 - New version notice: once a day c4builder asks the npm registry from your npmrc for the newest
   version in a detached background process, so a run never waits for the network. When a newer
