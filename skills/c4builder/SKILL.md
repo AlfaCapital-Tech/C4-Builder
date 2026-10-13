@@ -135,6 +135,17 @@ source, shared local includes once in an appendix). To answer questions about a 
 system, read `llms-full.txt` from the site or `distFolder` instead of crawling pages or
 images: the C4 source (`Person`, `System`, `Rel`) is the model itself.
 
+## New version notice
+
+When c4builder output ends with a stderr line
+
+```text
+c4builder <new> is available (current <current>). Run: c4builder update
+```
+
+a newer c4builder is published. Tell the user. Run `c4builder update` only when the user asks
+for it: it reinstalls the global CLI. The notice changes neither stdout nor the exit code.
+
 ## Common mistakes
 
 - Editing generated files in `docs/` instead of `src/`.

@@ -28,6 +28,10 @@ COPY vendor ./vendor
 RUN ln -s /app/dist/index.js /usr/local/bin/c4builder && \
     chmod +x /app/dist/index.js
 
+# Двойное назначение: отключает фоновую проверку новой версии (в образе обновляются через
+# docker pull, а CI часто без сети) и сообщает `c4builder update`, что CLI запущен в образе.
+ENV C4BUILDER_DOCKER=1
+
 USER node
 WORKDIR /pwd
 CMD ["c4builder"]

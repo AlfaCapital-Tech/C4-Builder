@@ -28,6 +28,10 @@ Image tags are in sync with npm tags:
 
 For reproducible CI builds, pin `X.Y.Z`: a different PlantUML version may shift diagram layout.
 
+The image sets `C4BUILDER_DOCKER=1`: the new-version check does not run, and `c4builder update`
+prints the image update command instead of installing anything —
+`docker pull ghcr.io/alfacapital-tech/c4builder:latest` (or change the pinned tag).
+
 ## Building in CI
 
 The image can be used directly as the job image: `c4builder` is on `PATH`.
@@ -64,6 +68,9 @@ download a JRE itself):
 If the runner has no Java, c4builder downloads a JRE on the first build. To avoid downloading it
 every time, cache the folder reported by `c4builder jre info` (the `cacheDir` field) and warm it
 up with `c4builder jre install` on a cache miss.
+
+In CI the background new-version check turns itself off by the `CI` variable: no process, no
+registry requests, a build without internet takes as long as before.
 
 The build behaves in CI just like locally: the exit code is not 0 if even one diagram fails to
 render. A separate quick `c4builder check` step on changed files reports a clear error before the

@@ -23,6 +23,15 @@ const goldenManifest = (variant) => path.join(goldenDir(variant), 'manifest.json
 const goldenTree = (variant) => path.join(goldenDir(variant), 'tree');
 
 export const TMP_ROOT = path.join(__dirname, '.tmp');
+
+// env спавна CLI с включённой проверкой обновлений: vitest.config ставит NO_UPDATE_NOTIFIER,
+// GitHub Actions — CI; кэш — во временном XDG_CONFIG_HOME, а не в настоящем ~/.config.
+const UPDATE_GATES = ['CI', 'NO_UPDATE_NOTIFIER', 'C4BUILDER_DOCKER'];
+export const updateCheckEnv = (xdg, extra = {}) => ({
+    ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !UPDATE_GATES.includes(k))),
+    XDG_CONFIG_HOME: xdg,
+    ...extra
+});
 const ACTUAL_ROOT = path.join(TMP_ROOT, 'actual');
 export const actualDir = (variant) => path.join(ACTUAL_ROOT, variant);
 

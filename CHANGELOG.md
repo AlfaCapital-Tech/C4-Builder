@@ -3,6 +3,18 @@
 User-facing changes of C4-Builder. Every pull request that changes behaviour adds a line to
 `## Unreleased`; the release commit renames it to `## vX.Y.Z`.
 
+## Unreleased
+
+- New version notice: once a day c4builder asks the npm registry from your npmrc for the newest
+  version in a detached background process, so a run never waits for the network. When a newer
+  version is known, a run ends with one stderr line
+  `c4builder <new> is available (current <current>). Run: c4builder update`, and
+  `c4builder site -w` shows a dismissible banner (never written to the build output). Off in CI
+  (`CI` is set), in the Docker image and with `NO_UPDATE_NOTIFIER=1`
+- `c4builder update` installs the newest version over a global npm install; for a project
+  dependency or the Docker image it installs nothing, prints the update command and exits with
+  code 1
+
 ## v0.5.1
 
 - The `openspec` plugin inlines markdown files embedded with `':include'` (e.g. `_back/back.md`

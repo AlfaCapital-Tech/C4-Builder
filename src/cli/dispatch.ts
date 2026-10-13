@@ -11,6 +11,7 @@ import cmdJre from './commands/jre.ts';
 import cmdCheck from './commands/check.ts';
 import cmdList from './commands/list.ts';
 import cmdSite from './commands/site.ts';
+import { cmdUpdate, pendingUpdate, startUpdateCheck } from './update.ts';
 import cmdCollect from './wizard/collect.ts';
 import { build } from '../core/build.ts';
 import { loadPlugins, pluginWatchPaths } from '../core/plugins/load.ts';
@@ -44,7 +45,7 @@ interface ConfStore {
 }
 
 // Позиционные подкоманды: allowExcessArguments пропускает любые, список — единственный фильтр.
-const COMMANDS = ['check', 'jre', 'site', 'new', 'config'];
+const COMMANDS = ['check', 'jre', 'site', 'new', 'config', 'update'];
 
 const intro = () => {
     console.log(chalk.blue(figlet.textSync('c4builder')));
@@ -174,10 +175,24 @@ export default async () => {
         console.error(`available commands: ${COMMANDS.join(', ')} (see c4builder --help for options)`);
         process.exit(1);
     }
+    // --version/--help уже вышли в parse. Уведомление — по кэшу прошлой проверки, до её
+    // перезапуска; exit покрывает и выходы через process.exit.
+    if (cmd !== 'update') {
+        const next = pendingUpdate();
+        if (next)
+            process.once('exit', () =>
+                process.stderr.write(
+                    `c4builder ${next} is available (current ${pkg.version}). Run: c4builder update\n`
+                )
+            );
+        startUpdateCheck();
+    }
     // Прогрев JRE — до загрузки конфига проекта и intro: команда самостоятельна.
     if (cmd === 'jre') return cmdJre(cmdArgs, { force: opts.force });
     // Проверка отдельных диаграмм — тоже без конфига проекта.
     if (cmd === 'check') return cmdCheck(cmdArgs);
+    // Обновление CLI — до Configstore, чтобы не создавать .c4builder в любом каталоге.
+    if (cmd === 'update') return cmdUpdate();
     // `site`/`new`/`config` — позиционные синонимы одноимённых флагов: эту форму печатают
     // подсказки CLI и учат README, шаблон и скиллы.
     if (cmd) opts[cmd] = true;
