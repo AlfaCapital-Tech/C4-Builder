@@ -46,8 +46,16 @@ const makeStore = (dir, store = 'openspec') => {
     write(
         s,
         'changes/dig-1-alpha/design.md',
-        '## Context\n\nDiagram:\n\n```plantuml\n!include <C4/C4_Context>\nPerson(u, "Alice")\nSystem(s, "Sys")\nRel(u, s, "uses")\n```\n\nAfter.\n\n```js\nconst x = 1; // не диаграмма\n```\n'
+        '## Context\n\nDiagram:\n\n```plantuml\n!include <C4/C4_Context>\nPerson(u, "Alice")\nSystem(s, "Sys")\nRel(u, s, "uses")\n```\n\nAfter.\n\n```js\nconst x = 1; // не диаграмма\n```\n\n[Backend](_back/back.md \':include\')\n\n[DDL](_back/ddl.sql \':include :type=code\')\n'
     );
+    // подфайлы design через ':include': диаграмма, картинка и ссылка от каталога подфайла, цикл include
+    write(
+        s,
+        'changes/dig-1-alpha/_back/back.md',
+        "# Backend\n\n```plantuml\nBob -> Carol\n```\n\n![pic](../img/pic.png) [tasks](../tasks.md)\n\n[loop](loop.md ':include')\n"
+    );
+    write(s, 'changes/dig-1-alpha/_back/loop.md', "loop body\n\n[back](back.md ':include')\n");
+    write(s, 'changes/dig-1-alpha/_back/ddl.sql', 'create table t (id int);\n');
     // артефакт specs.md рядом с дельтами — делит страницу с индексом дельт
     write(s, 'changes/dig-1-alpha/specs.md', '## Specs notes\n\nabout deltas\n');
     write(
@@ -187,6 +195,30 @@ describe('плагин openspec', () => {
         const svg = read(`OpenSpec/Changes/dig-1-alpha/design/${m[1]}.svg`);
         expect(svg).toContain('<svg');
         expect(svg).toContain('Alice');
+    });
+
+    it("':include' markdown-подфайла встроен при сборке, прочие include — относительно страницы", () => {
+        const md = read('OpenSpec/Changes/dig-1-alpha/design/design.md');
+        expect(md).not.toContain('[Backend](');
+        expect(md).toContain('# Backend');
+        // диаграмма подфайла отрендерена локально, а не сырым ```plantuml в браузере
+        const m = [...md.matchAll(/!\[diagram\]\((design-[0-9a-f]{8})\.svg\)/g)].map((x) => x[1]);
+        expect(m).toHaveLength(2);
+        expect(read(`OpenSpec/Changes/dig-1-alpha/design/${m[1]}.svg`)).toContain('Carol');
+        // ссылки подфайла резолвятся от его каталога, пути — от страницы
+        expect(md).toContain('![pic](img/pic.png)');
+        expect(fs.existsSync(path.join(dir, 'docs/OpenSpec/Changes/dig-1-alpha/design/img/pic.png'))).toBe(
+            true
+        );
+        expect(md).toContain('[tasks](OpenSpec/Changes/dig-1-alpha/tasks/tasks)');
+        // цикл: loop встроен, повторный back.md не встраивается, а остаётся embed от страницы
+        expect(md).toContain('loop body');
+        expect(md).toContain("[back](_back/back.md ':include')");
+        // не-markdown embed docsify грузит относительно страницы — путь не переписан от корня
+        expect(md).toContain("[DDL](_back/ddl.sql ':include :type=code')");
+        expect(fs.existsSync(path.join(dir, 'docs/OpenSpec/Changes/dig-1-alpha/design/_back/ddl.sql'))).toBe(
+            true
+        );
     });
 
     it('спеки: страницы, папка со своей spec.md + список вложенных, d2 отрендерен локально', () => {
