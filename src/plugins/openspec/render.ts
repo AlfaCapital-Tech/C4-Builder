@@ -126,8 +126,11 @@ const FENCE_LANGS = ['plantuml', 'puml', 'd2'];
  * Markdown одного исходного файла → страница сайта: fenced-диаграммы вырезаются, ссылки
  * на другие страницы источника (`target`, `#x` → `?id=x`) — на их адреса, прочие
  * относительные ссылки на существующие файлы источника регистрируются для копирования к
- * странице (картинки docsify грузит относительно страницы, обычные ссылки — от корня сайта).
- * `fromDir` — posix-каталог файла относительно `srcRoot` (ссылки в нём резолвятся от файла).
+ * странице (картинки и embed docsify грузит относительно страницы, обычные ссылки — от корня
+ * сайта). Embed `':include'` markdown-файла встраивается при сборке: сырой файл docsify
+ * показал бы без локального рендера диаграмм и переписывания ссылок.
+ * `fromDir` — posix-каталог файла относительно `srcRoot` (ссылки в нём резолвятся от файла),
+ * `pageDir` — каталог, от которого считаются пути файлов страницы (у встроенного — каталог страницы).
  */
 export const renderMarkdown = (
     pagePath: string[],
@@ -136,12 +139,17 @@ export const renderMarkdown = (
     {
         srcRoot,
         fromDir = '',
+        pageDir = fromDir,
+        included = new Set<string>(),
         target = () => undefined,
         source,
         options
     }: {
         srcRoot: string;
         fromDir?: string;
+        pageDir?: string;
+        /** Уже встраиваемые файлы — защита от циклических include. */
+        included?: Set<string>;
         target?: (rel: string) => string[] | undefined;
         /** Исходный файл артефакта/спеки — попадёт в сообщение об ошибке диаграммы. */
         source?: string;
@@ -168,10 +176,28 @@ export const renderMarkdown = (
                 return `${bang}[${inner}](${pageLink(page, options)}${hash ? `?id=${hash}` : ''}${title})`;
             const abs = path.join(srcRoot, rel);
             if (!fs.existsSync(abs) || fs.statSync(abs).isDirectory()) return whole;
-            files.push({ from: rel, to: decoded });
-            return bang
-                ? `![${inner}](${href}${title})`
-                : `[${inner}](${encodeURIPath(path.posix.join(...pagePath, decoded))}${ignoreTitle(title)})`;
+            const embed = !bang && /:include\b/.test(title);
+            if (embed && /\.md$/i.test(rel) && !included.has(rel)) {
+                const dir = path.posix.dirname(rel);
+                const sub = renderMarkdown(pagePath, base, fs.readFileSync(abs, 'utf8'), {
+                    srcRoot,
+                    fromDir: dir === '.' ? '' : dir,
+                    pageDir,
+                    included: new Set([...included, rel]),
+                    target,
+                    source: relSource(srcRoot, rel),
+                    options
+                });
+                diagrams.push(...sub.diagrams);
+                files.push(...sub.files);
+                return sub.markdown;
+            }
+            const sameDir = fromDir === pageDir;
+            const to = sameDir ? decoded : path.posix.relative(pageDir, rel);
+            files.push({ from: rel, to });
+            return bang || embed
+                ? `${bang}[${inner}](${sameDir ? href : encodeURIPath(to)}${title})`
+                : `[${inner}](${encodeURIPath(path.posix.join(...pagePath, to))}${ignoreTitle(title)})`;
         });
     return { path: pagePath, markdown: mapOutsideFences(markdown, rewrite).trim(), diagrams, files };
 };

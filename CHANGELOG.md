@@ -3,6 +3,14 @@
 User-facing changes of C4-Builder. Every pull request that changes behaviour adds a line to
 `## Unreleased`; the release commit renames it to `## vX.Y.Z`.
 
+## Unreleased
+
+- The `openspec` plugin inlines markdown files embedded with `':include'` (e.g. `_back/back.md`
+  of a `design.md`) at build time: their diagrams are rendered locally and their links resolve
+  from the embedded file. Before, the embed path was rewritten from the site root, docsify
+  loaded it relative to the page, got 404 and showed an empty page. Other `':include'` embeds
+  keep a path relative to the page
+
 ## v0.5.0
 
 - **BREAKING:** Node.js 22.17 or newer is required (`engines.node: ">=22.17"`); Node.js 20 is
