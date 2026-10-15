@@ -328,7 +328,8 @@ const addFamily = (d) => {
         // хвост совпадает с подстраницей родителя (design) — подпись полным id
         ['dig-3-root-design', 'spec-driven']
     ]) {
-        write(s, `changes/${id}/.openspec.yaml`, `schema: ${schema}\nx-parent: dig-3-root\n`);
+        // комментарий в конце строки — не часть значения
+        write(s, `changes/${id}/.openspec.yaml`, `schema: ${schema}\nx-parent: dig-3-root # root task\n`);
         write(s, `changes/${id}/proposal.md`, `## Why\n\n${id}\n`);
     }
     // родителя нет в store — остаётся на верхнем уровне

@@ -79,7 +79,9 @@ const readMeta = (file: string): { schema?: string; created?: string; meta: Reco
     if (fs.existsSync(file))
         for (const line of fs.readFileSync(file, 'utf8').split('\n')) {
             const m = line.match(/^([A-Za-z0-9_.-]+):[ \t]*(.+?)\s*$/);
-            if (m && !m[2].startsWith('#')) meta[m[1]] = m[2].replace(/^["']|["']$/g, '');
+            if (!m || m[2].startsWith('#')) continue;
+            // Комментарий в конце строки (` # …`) — не часть значения.
+            meta[m[1]] = m[2].replace(/\s+#.*$/, '').replace(/^["']|["']$/g, '');
         }
     return { schema: meta.schema, created: meta.created, meta };
 };
