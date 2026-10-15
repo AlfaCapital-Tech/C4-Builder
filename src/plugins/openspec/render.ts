@@ -6,6 +6,7 @@ import type { BuildOptions } from '../../config/options.ts';
 import type { PageDiagram } from '../../core/plugins/types.ts';
 import { createFenceExtractor, mapOutsideFences } from '../../core/scan/fences.ts';
 import { encodeURIPath } from '../../util/utils.ts';
+import { type Layout, pageOrder } from './layout.ts';
 import type { Artifact, Change, Spec, Store } from './scan.ts';
 
 // Ссылка на страницу сайта от корня (без ведущего «/»): так же строится sidebar,
@@ -20,20 +21,33 @@ const progressBar = (done: number, total: number): string =>
 const fmtProgress = (c: Change): string =>
     c.progress ? progressBar(c.progress.done, c.progress.total) : '—';
 
-/** Таблица change'ов (сводка и индекс Changes): по дате изменения от новых к старым. */
-export const renderChangesIndex = (changes: Change[], mount: string, options: BuildOptions): string => {
+/**
+ * Таблица change'ов (сводка и индекс Changes): по дате изменения от новых к старым. С `layout`
+ * вложенные change'ы идут сразу под родителем (`↳` + подпись) и ведут на свои вложенные страницы.
+ */
+export const renderChangesIndex = (
+    changes: Change[],
+    mount: string,
+    options: BuildOptions,
+    layout?: Layout
+): string => {
     if (!changes.length) return '_No changes._';
-    const rows = [...changes]
-        .sort((a, b) => b.mtime - a.mtime)
-        .map(
-            (c) =>
-                `| [${c.id}](${pageLink([mount, 'Changes', c.id], options)}) | ${c.schema ?? '—'} | ${fmtProgress(c)} | ${fmtDate(c.mtime)} |`
-        );
+    const byDate = [...changes].sort((a, b) => b.mtime - a.mtime);
+    const rows = (layout ? pageOrder(byDate, layout) : byDate).map((c) => {
+        const at = layout?.get(c);
+        const link = `[${at?.label ?? c.id}](${pageLink(at?.segments ?? [mount, 'Changes', c.id], options)})`;
+        return `| ${at?.parent ? `↳ ${link}` : link} | ${c.schema ?? '—'} | ${fmtProgress(c)} | ${fmtDate(c.mtime)} |`;
+    });
     return ['| Change | Schema | Tasks | Updated |', '|---|---|---|---|', ...rows].join('\n');
 };
 
 /** Сводка store (страница mount): счётчики, суммарный прогресс, таблица активных change'ов. */
-export const renderSummary = (store: Store, mount: string, options: BuildOptions): string => {
+export const renderSummary = (
+    store: Store,
+    mount: string,
+    options: BuildOptions,
+    layout?: Layout
+): string => {
     const withProgress = store.changes.filter((c) => c.progress);
     const done = withProgress.reduce((s, c) => s + (c.progress?.done ?? 0), 0);
     const total = withProgress.reduce((s, c) => s + (c.progress?.total ?? 0), 0);
@@ -46,13 +60,25 @@ export const renderSummary = (store: Store, mount: string, options: BuildOptions
         '',
         '## Active changes',
         '',
-        renderChangesIndex(store.changes, mount, options)
+        renderChangesIndex(store.changes, mount, options, layout)
     ].join('\n');
 };
 
-export const renderArchiveIndex = (archive: Change[], mount: string, options: BuildOptions): string =>
+/** Список архива: от новых к старым; с `layout` вложенные — пунктами под родителем. */
+export const renderArchiveIndex = (
+    archive: Change[],
+    mount: string,
+    options: BuildOptions,
+    layout?: Layout
+): string =>
     archive.length
-        ? archive.map((c) => `- [${c.id}](${pageLink([mount, 'Archive', c.id], options)})`).join('\n')
+        ? (layout ? pageOrder(archive, layout) : archive)
+              .map((c) => {
+                  const at = layout?.get(c);
+                  const link = pageLink(at?.segments ?? [mount, 'Archive', c.id], options);
+                  return `${at?.parent ? '  ' : ''}- [${at?.label ?? c.id}](${link})`;
+              })
+              .join('\n')
         : '_Archive is empty._';
 
 /** Индекс папки спек (Specs, промежуточные папки, дельты change'а): вложенный список под prefix. */
@@ -252,7 +278,8 @@ export const renderChange = (
     change: Change,
     segments: string[],
     order: string[],
-    options: BuildOptions
+    options: BuildOptions,
+    layout?: Layout
 ): RenderedPage[] => {
     const ordered = orderArtifacts(change.artifacts, order);
     const inline = ordered[0]?.name === order[0] ? ordered[0] : undefined;
@@ -304,11 +331,23 @@ export const renderChange = (
     ]
         .filter(Boolean)
         .join(' · ');
+    // Связи по опции parentKey: у вложенного — ссылка на родителя, у родителя — на вложенные.
+    const at = layout?.get(change);
+    const linkTo = (c: Change): string => {
+        const p = layout?.get(c);
+        return p ? `[${p.label}](${pageLink(p.segments, options)})` : c.id;
+    };
+    const family = [
+        at?.parent && `**Parent:** ${linkTo(at.parent)}`,
+        at?.children.length && `**Sub-changes:** ${at.children.map(linkTo).join(' · ')}`
+    ]
+        .filter(Boolean)
+        .join(' · ');
     const main = inline ? render(segments, inline.name, inline.content) : undefined;
     const pages: RenderedPage[] = [
         {
             path: segments,
-            markdown: [head, links.join(' · '), main?.markdown].filter(Boolean).join('\n\n'),
+            markdown: [head, family, links.join(' · '), main?.markdown].filter(Boolean).join('\n\n'),
             diagrams: main?.diagrams ?? [],
             files: main?.files ?? []
         },

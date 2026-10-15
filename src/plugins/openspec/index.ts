@@ -5,6 +5,7 @@ import path from 'node:path';
 import { z } from 'zod';
 
 import { definePlugin } from '../../core/plugins/types.ts';
+import { type Layout, layoutChanges, pageOrder } from './layout.ts';
 import { type Change, scanStore, type Store } from './scan.ts';
 import {
     type RenderedPage,
@@ -23,7 +24,10 @@ const optionsSchema = z
         mount: z.string().min(1).default('OpenSpec'),
         // Порядок артефактов change'а; первый выводится на странице change'а, остальные —
         // подстраницами; не перечисленные — после, по алфавиту.
-        artifacts: z.array(z.string()).default(['proposal', 'design', 'tasks'])
+        artifacts: z.array(z.string()).default(['proposal', 'design', 'tasks']),
+        // Ключ `.openspec.yaml` со ссылкой на родительский change (например `x-parent`):
+        // вложенный change выводится страницей под родителем. Не задан — плоский список.
+        parentKey: z.string().min(1).optional()
     })
     .strict();
 
@@ -61,16 +65,25 @@ export default definePlugin<Opts>({
                 }
             }
         };
-        const addChange = (change: Change, segments: string[]): void =>
-            addPages(renderChange(change, segments, o.artifacts, options), change.dir);
+        // Родитель добавляется раньше вложенных: в sidebar под ним сначала его артефакты,
+        // затем вложенные change'ы.
+        const addChanges = (changes: Change[], layout: Layout): void => {
+            for (const change of pageOrder(changes, layout)) {
+                const at = layout.get(change);
+                if (at) addPages(renderChange(change, at.segments, o.artifacts, options, layout), change.dir);
+            }
+        };
+        const { parentKey } = o;
+        const active = layoutChanges(store.changes, [mount, 'Changes'], { parentKey });
+        const archived = layoutChanges(store.archive, [mount, 'Archive'], { parentKey, archived: true });
 
-        ctx.addPage({ path: [mount], markdown: renderSummary(store, mount, options) });
+        ctx.addPage({ path: [mount], markdown: renderSummary(store, mount, options, active) });
 
         ctx.addPage({
             path: [mount, 'Changes'],
-            markdown: renderChangesIndex(store.changes, mount, options)
+            markdown: renderChangesIndex(store.changes, mount, options, active)
         });
-        for (const change of store.changes) addChange(change, [mount, 'Changes', change.id]);
+        addChanges(store.changes, active);
 
         // Specs: индекс, промежуточные папки, страницы спек — тем же рендером, что и
         // дельты (fenced-диаграммы локально, ссылки на файлы рядом со спекой).
@@ -89,8 +102,8 @@ export default definePlugin<Opts>({
 
         ctx.addPage({
             path: [mount, 'Archive'],
-            markdown: renderArchiveIndex(store.archive, mount, options)
+            markdown: renderArchiveIndex(store.archive, mount, options, archived)
         });
-        for (const change of store.archive) addChange(change, [mount, 'Archive', change.id]);
+        addChanges(store.archive, archived);
     }
 });

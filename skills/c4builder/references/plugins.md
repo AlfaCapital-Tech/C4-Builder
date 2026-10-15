@@ -35,6 +35,7 @@ placeholder image and a warning naming the file instead of failing the build.
 | `dir` | `openspec` | store folder, relative to the project |
 | `mount` | `OpenSpec` | section name and its path in the output |
 | `artifacts` | `["proposal", "design", "tasks"]` | artifact order; the first is shown on the change page |
+| `parentKey` | — | `.openspec.yaml` key pointing at the parent change (e.g. `x-parent`); when set, child changes are nested under their parent in the sidebar, the Changes table and the archive |
 
 ## `openapi` — swagger-ui pages for OpenAPI specs
 
