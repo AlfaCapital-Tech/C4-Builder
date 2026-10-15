@@ -3,7 +3,7 @@
 User-facing changes of C4-Builder. Every pull request that changes behaviour adds a line to
 `## Unreleased`; the release commit renames it to `## vX.Y.Z`.
 
-## Unreleased
+## v0.8.0
 
 - `openspec` plugin: the new `groupKey` option splits top-level changes into groups, e.g. by team.
   A `.openspec.yaml` key (e.g. `x-team: Service`) sets the group: the change page moves to
