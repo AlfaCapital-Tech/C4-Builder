@@ -3,6 +3,21 @@
 User-facing changes of C4-Builder. Every pull request that changes behaviour adds a line to
 `## Unreleased`; the release commit renames it to `## vX.Y.Z`.
 
+## Unreleased
+
+- `openspec` plugin: the new `groupKey` option splits top-level changes into groups, e.g. by team.
+  A `.openspec.yaml` key (e.g. `x-team: Service`) sets the group: the change page moves to
+  `Changes/<group>/<id>`, every group gets a page with its table, and the Changes table and the archive
+  list get per-group sections (changes without a group last, under `Ungrouped`). Without the option the
+  section is unchanged
+- `openspec` plugin: the new `nameKey` option labels a top-level change with a human name from
+  `.openspec.yaml` (e.g. `x-name: DIG-12 Card payment`) instead of its id; the name is also its page
+  path segment. A value with `/`, `#`, `?` or a duplicate in the same folder keeps the id
+- `openspec` plugin: the new `columns` option adds `.openspec.yaml` columns to the Changes table,
+  the summary and the group pages, e.g. `[{ "key": "x-assignee", "title": "Assignee" }]`
+- `openspec` plugin: a quoted `.openspec.yaml` value is read whole — a `#` inside the quotes is not a
+  comment (`x-name: "Task #5"`)
+
 ## v0.7.0
 
 - `openspec` plugin: the new `parentKey` option nests a change under its parent change. A

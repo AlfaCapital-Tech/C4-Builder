@@ -54,6 +54,20 @@ folder.
   the archive list a row right below the parent; `Parent` and `Sub-changes` links on the pages. One
   level of nesting; a change whose parent is not found stays at the top level. Without the option
   the list stays flat, as before.
+- With `groupKey`, top-level changes are split into groups — for example by team. A `.openspec.yaml`
+  key (e.g. `x-team: Service`) sets the group: the change page becomes `Changes/<group>/<id>`, the
+  group gets its own page with a table, the Changes table and the archive list get `### <group>`
+  sections, and changes without a group go to a last `Ungrouped` section. Nested changes
+  (`parentKey`) follow their parent. A value with `/`, `#`, `?` or equal to the id of an ungrouped
+  change is not used as a group.
+- With `nameKey`, a top-level change is labelled with a human name from `.openspec.yaml` (e.g.
+  `x-name: DIG-12 Card payment`) instead of its id; the name is also the page path segment, so the
+  address stays stable as long as the name is unchanged. A value with `/`, `#`, `?` or a duplicate in
+  the same folder (group) keeps the id. Nested changes are still labelled with the id tail.
+- The `columns` option adds `.openspec.yaml` columns to the Changes table (also the summary and the
+  group pages) after the standard ones — e.g. the assignee:
+  `"columns": [{ "key": "x-assignee", "title": "Assignee" }]`. A missing value is shown as `—`. A value
+  containing ` #` is quoted (`x-assignee: "Alice #1"`), otherwise the rest is a comment.
 
 | Option | Default | Meaning |
 |---|---|---|
@@ -61,6 +75,9 @@ folder.
 | `mount` | `OpenSpec` | section name and its path in the output |
 | `artifacts` | `["proposal","design","tasks"]` | artifact order; the first one is shown on the change page |
 | `parentKey` | — | `.openspec.yaml` key that points at the parent change (e.g. `x-parent`); when set, child changes are nested under their parent |
+| `groupKey` | — | `.openspec.yaml` key with the change's group (e.g. `x-team`); when set, top-level changes are placed into group folders |
+| `nameKey` | — | `.openspec.yaml` key with the change's name (e.g. `x-name`); when set, top-level changes are labelled and addressed by that name |
+| `columns` | — | extra Changes table columns: `[{ "key": "<.openspec.yaml key>", "title": "<header>" }]` |
 
 ## `openapi` — swagger-ui for a set of specs
 
