@@ -3,7 +3,7 @@
 User-facing changes of C4-Builder. Every pull request that changes behaviour adds a line to
 `## Unreleased`; the release commit renames it to `## vX.Y.Z`.
 
-## Unreleased
+## v0.7.0
 
 - `openspec` plugin: the new `parentKey` option nests a change under its parent change. A
   `.openspec.yaml` key (e.g. `x-parent: dig-1-root`) points at the parent; the child gets a page
