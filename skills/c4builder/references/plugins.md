@@ -36,6 +36,9 @@ placeholder image and a warning naming the file instead of failing the build.
 | `mount` | `OpenSpec` | section name and its path in the output |
 | `artifacts` | `["proposal", "design", "tasks"]` | artifact order; the first is shown on the change page |
 | `parentKey` | — | `.openspec.yaml` key pointing at the parent change (e.g. `x-parent`); when set, child changes are nested under their parent in the sidebar, the Changes table and the archive |
+| `groupKey` | — | `.openspec.yaml` key with the change's group (e.g. `x-team`); when set, top-level changes go to `Changes/<group>/<id>`, the Changes table and the archive get per-group sections |
+| `nameKey` | — | `.openspec.yaml` key with the change's name (e.g. `x-name`); when set, the name labels the top-level change and is its page path segment (falls back to the id on `/`, `#`, `?` or a duplicate) |
+| `columns` | — | extra Changes table columns from `.openspec.yaml`: `[{ "key": "x-assignee", "title": "Assignee" }]`; missing value — `—` |
 
 ## `openapi` — swagger-ui pages for OpenAPI specs
 

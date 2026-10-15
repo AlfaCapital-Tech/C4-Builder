@@ -6,7 +6,7 @@ import type { BuildOptions } from '../../config/options.ts';
 import type { PageDiagram } from '../../core/plugins/types.ts';
 import { createFenceExtractor, mapOutsideFences } from '../../core/scan/fences.ts';
 import { encodeURIPath } from '../../util/utils.ts';
-import { type Layout, pageOrder } from './layout.ts';
+import { groupNames, type Layout, pageOrder } from './layout.ts';
 import type { Artifact, Change, Spec, Store } from './scan.ts';
 
 // Ссылка на страницу сайта от корня (без ведущего «/»): так же строится sidebar,
@@ -21,24 +21,59 @@ const progressBar = (done: number, total: number): string =>
 const fmtProgress = (c: Change): string =>
     c.progress ? progressBar(c.progress.done, c.progress.total) : '—';
 
+// Секции по группам (опция groupKey): `### <группа>` над своей частью таблицы или списка,
+// change'ы без группы — последней секцией `### Ungrouped`. Групп нет или `sections` выключен
+// (страница самой группы) — один блок без заголовка, как раньше.
+const bySections = (
+    changes: Change[],
+    layout: Layout | undefined,
+    sections: boolean,
+    render: (part: Change[]) => string
+): string => {
+    const groups = layout && sections ? groupNames(changes, layout) : [];
+    if (!groups.length) return render(changes);
+    const groupOf = (c: Change): string | undefined => layout?.get(c)?.group;
+    const parts = groups.map((g) => `### ${g}\n\n${render(changes.filter((c) => groupOf(c) === g))}`);
+    const rest = changes.filter((c) => !groupOf(c));
+    if (rest.length) parts.push(`### Ungrouped\n\n${render(rest)}`);
+    return parts.join('\n\n');
+};
+
+/** Дополнительная колонка таблицы Changes: значение ключа `.openspec.yaml` под своим заголовком. */
+export interface MetaColumn {
+    key: string;
+    title: string;
+}
+
+// Значение ячейки markdown-таблицы: `|` разорвал бы строку на колонки.
+const cell = (v: string | undefined): string => (v ? v.replace(/\|/g, '\\|') : '—');
+
 /**
  * Таблица change'ов (сводка и индекс Changes): по дате изменения от новых к старым. С `layout`
- * вложенные change'ы идут сразу под родителем (`↳` + подпись) и ведут на свои вложенные страницы.
+ * вложенные change'ы идут сразу под родителем (`↳` + подпись) и ведут на свои вложенные
+ * страницы, а при группах таблица делится на секции по группам. `columns` — колонки из
+ * `.openspec.yaml` после стандартных (например исполнитель); нет значения — `—`.
  */
 export const renderChangesIndex = (
     changes: Change[],
     mount: string,
     options: BuildOptions,
-    layout?: Layout
+    layout?: Layout,
+    { sections = true, columns = [] }: { sections?: boolean; columns?: MetaColumn[] } = {}
 ): string => {
     if (!changes.length) return '_No changes._';
-    const byDate = [...changes].sort((a, b) => b.mtime - a.mtime);
-    const rows = (layout ? pageOrder(byDate, layout) : byDate).map((c) => {
-        const at = layout?.get(c);
-        const link = `[${at?.label ?? c.id}](${pageLink(at?.segments ?? [mount, 'Changes', c.id], options)})`;
-        return `| ${at?.parent ? `↳ ${link}` : link} | ${c.schema ?? '—'} | ${fmtProgress(c)} | ${fmtDate(c.mtime)} |`;
-    });
-    return ['| Change | Schema | Tasks | Updated |', '|---|---|---|---|', ...rows].join('\n');
+    const head = ['Change', 'Schema', 'Tasks', 'Updated', ...columns.map((c) => cell(c.title))];
+    const table = (part: Change[]): string => {
+        const byDate = [...part].sort((a, b) => b.mtime - a.mtime);
+        const rows = (layout ? pageOrder(byDate, layout) : byDate).map((c) => {
+            const at = layout?.get(c);
+            const link = `[${at?.label ?? c.id}](${pageLink(at?.segments ?? [mount, 'Changes', c.id], options)})`;
+            const extra = columns.map((col) => ` ${cell(c.meta[col.key])} |`).join('');
+            return `| ${at?.parent ? `↳ ${link}` : link} | ${c.schema ?? '—'} | ${fmtProgress(c)} | ${fmtDate(c.mtime)} |${extra}`;
+        });
+        return [`| ${head.join(' | ')} |`, `|${'---|'.repeat(head.length)}`, ...rows].join('\n');
+    };
+    return bySections(changes, layout, sections, table);
 };
 
 /** Сводка store (страница mount): счётчики, суммарный прогресс, таблица активных change'ов. */
@@ -46,7 +81,8 @@ export const renderSummary = (
     store: Store,
     mount: string,
     options: BuildOptions,
-    layout?: Layout
+    layout?: Layout,
+    columns: MetaColumn[] = []
 ): string => {
     const withProgress = store.changes.filter((c) => c.progress);
     const done = withProgress.reduce((s, c) => s + (c.progress?.done ?? 0), 0);
@@ -60,25 +96,28 @@ export const renderSummary = (
         '',
         '## Active changes',
         '',
-        renderChangesIndex(store.changes, mount, options, layout)
+        renderChangesIndex(store.changes, mount, options, layout, { columns })
     ].join('\n');
 };
 
-/** Список архива: от новых к старым; с `layout` вложенные — пунктами под родителем. */
+/** Список архива: от новых к старым; с `layout` вложенные — пунктами под родителем, по секциям групп. */
 export const renderArchiveIndex = (
     archive: Change[],
     mount: string,
     options: BuildOptions,
-    layout?: Layout
+    layout?: Layout,
+    { sections = true }: { sections?: boolean } = {}
 ): string =>
     archive.length
-        ? (layout ? pageOrder(archive, layout) : archive)
-              .map((c) => {
-                  const at = layout?.get(c);
-                  const link = pageLink(at?.segments ?? [mount, 'Archive', c.id], options);
-                  return `${at?.parent ? '  ' : ''}- [${at?.label ?? c.id}](${link})`;
-              })
-              .join('\n')
+        ? bySections(archive, layout, sections, (part) =>
+              (layout ? pageOrder(part, layout) : part)
+                  .map((c) => {
+                      const at = layout?.get(c);
+                      const link = pageLink(at?.segments ?? [mount, 'Archive', c.id], options);
+                      return `${at?.parent ? '  ' : ''}- [${at?.label ?? c.id}](${link})`;
+                  })
+                  .join('\n')
+          )
         : '_Archive is empty._';
 
 /** Индекс папки спек (Specs, промежуточные папки, дельты change'а): вложенный список под prefix. */

@@ -400,3 +400,184 @@ describe('плагин openspec: опция parentKey', () => {
         fs.rmSync(flat, { recursive: true, force: true });
     });
 });
+
+// Группы (опция groupKey, например команда): change'ы верхнего уровня — под папкой группы,
+// вложенные — за родителем; группа с именем change'а без группы не создаётся.
+describe('плагин openspec: опция groupKey', () => {
+    let d;
+    const readD = (rel) => fs.readFileSync(path.join(d, 'docs', rel), 'utf8');
+    beforeAll(() => {
+        d = makeFixture('group', [['openspec', { parentKey: 'x-parent', groupKey: 'x-team' }]]);
+        addFamily(d);
+        const s = path.join(d, 'openspec');
+        write(s, 'changes/dig-3-root/.openspec.yaml', 'schema: spec-driven\nx-team: Service\n');
+        write(s, 'changes/dig-4-orphan/.openspec.yaml', 'x-parent: dig-404\nx-team: Innovation\n');
+        // имя группы совпадает с id change'а без группы — коллизия путей, группой не считается
+        write(
+            s,
+            'changes/dig-1-alpha/.openspec.yaml',
+            'schema: spec-driven\ncreated: 2026-08-01\nx-team: dig-2-beta\n'
+        );
+        write(s, 'changes/archive/2026-08-02-dig-5-old/.openspec.yaml', 'x-team: Service\n');
+        runBuild(d);
+    });
+    afterAll(() => fs.rmSync(d, { recursive: true, force: true }));
+
+    it("sidebar: группы по алфавиту, под ними change'ы и их вложенные; без группы — после групп", () => {
+        const lines = readD('_sidebar.md').trimEnd().split('\n');
+        const at = (l) => lines.indexOf(l);
+        const inno = at('      * [Innovation](OpenSpec/Changes/Innovation/Innovation)');
+        const service = at('      * [Service](OpenSpec/Changes/Service/Service)');
+        const alpha = at('      * [dig-1-alpha](OpenSpec/Changes/dig-1-alpha/dig-1-alpha)');
+        expect(inno).toBeGreaterThan(-1);
+        expect(service).toBeGreaterThan(inno);
+        expect(alpha).toBeGreaterThan(service);
+        expect(lines[inno + 1]).toBe(
+            '        * [dig-4-orphan](OpenSpec/Changes/Innovation/dig-4-orphan/dig-4-orphan)'
+        );
+        expect(lines[service + 1]).toBe(
+            '        * [dig-3-root](OpenSpec/Changes/Service/dig-3-root/dig-3-root)'
+        );
+        expect(lines).toContain('          * [ios](OpenSpec/Changes/Service/dig-3-root/ios/ios)');
+        expect(lines).toContain('      * [Service](OpenSpec/Archive/Service/Service)');
+        expect(lines).toContain('          * [web](OpenSpec/Archive/Service/2026-08-02-dig-5-old/web/web)');
+    });
+
+    it('таблица Changes — секции по группам, страница группы — её таблица без секций', () => {
+        const md = readD('OpenSpec/Changes/Changes.md');
+        const pos = ['### Innovation', '### Service', '### Ungrouped'].map((h) => md.indexOf(h));
+        expect(pos.every((p, i) => p > -1 && (i === 0 || p > pos[i - 1]))).toBe(true);
+        expect(md).toContain('| ↳ [ios](OpenSpec/Changes/Service/dig-3-root/ios/ios) | spec-driven |');
+        const group = readD('OpenSpec/Changes/Service/Service.md');
+        expect(group).toContain('| [dig-3-root](OpenSpec/Changes/Service/dig-3-root/dig-3-root)');
+        expect(group).not.toContain('### ');
+        expect(readD('OpenSpec/Changes/Service/dig-3-root/ios/ios.md')).toContain(
+            '**Parent:** [dig-3-root](OpenSpec/Changes/Service/dig-3-root/dig-3-root)'
+        );
+    });
+
+    it('архив: секция группы, вложенный — пунктом под родителем', () => {
+        const md = readD('OpenSpec/Archive/Archive.md');
+        expect(md).toContain('### Service');
+        expect(md).toContain(
+            '- [2026-08-02-dig-5-old](OpenSpec/Archive/Service/2026-08-02-dig-5-old/2026-08-02-dig-5-old)\n  - [web](OpenSpec/Archive/Service/2026-08-02-dig-5-old/web/web)'
+        );
+        expect(fs.existsSync(path.join(d, 'docs/OpenSpec/Archive/Service/Service.md'))).toBe(true);
+    });
+});
+
+// Человеческое имя (опция nameKey): подпись и сегмент пути change'а верхнего уровня —
+// значение ключа; повтор в той же папке и недопустимое значение — откат на id.
+describe('плагин openspec: опция nameKey', () => {
+    let d;
+    const readD = (rel) => fs.readFileSync(path.join(d, 'docs', rel), 'utf8');
+    const page = (...segs) => encodeURI(`${segs.join('/')}/${segs.at(-1)}`);
+    beforeAll(() => {
+        d = makeFixture('name', [
+            ['openspec', { parentKey: 'x-parent', groupKey: 'x-team', nameKey: 'x-name' }]
+        ]);
+        addFamily(d);
+        const s = path.join(d, 'openspec');
+        write(
+            s,
+            'changes/dig-3-root/.openspec.yaml',
+            'schema: spec-driven\nx-team: Service\nx-name: Корень задачи\n'
+        );
+        // то же имя в другой группе — допустимо
+        write(
+            s,
+            'changes/dig-4-orphan/.openspec.yaml',
+            'x-parent: dig-404\nx-team: Innovation\nx-name: Корень задачи\n'
+        );
+        // повтор имени в одной папке: первый по порядку получает имя, второй — id
+        write(
+            s,
+            'changes/dig-1-alpha/.openspec.yaml',
+            'schema: spec-driven\ncreated: 2026-08-01\nx-name: Бета\n'
+        );
+        write(s, 'changes/dig-2-beta/.openspec.yaml', 'x-name: Бета\n');
+        // недопустимое значение для сегмента пути — id
+        write(s, 'changes/archive/2026-08-02-dig-5-old/.openspec.yaml', 'x-name: a/b\n');
+        // `#` encodeURI не кодирует — ссылка оборвалась бы на якоре, поэтому id
+        write(s, 'changes/dig-6-hash/.openspec.yaml', 'x-name: "Задача #6"\n');
+        write(s, 'changes/dig-6-hash/proposal.md', '## Why\n\ndig-6-hash\n');
+        runBuild(d);
+    });
+    afterAll(() => fs.rmSync(d, { recursive: true, force: true }));
+
+    it('sidebar: имена вместо id, вложенные — под именем родителя', () => {
+        const sidebar = readD('_sidebar.md');
+        expect(sidebar).toContain(
+            `        * [Корень задачи](${page('OpenSpec', 'Changes', 'Service', 'Корень задачи')})`
+        );
+        expect(sidebar).toContain(
+            `        * [Корень задачи](${page('OpenSpec', 'Changes', 'Innovation', 'Корень задачи')})`
+        );
+        expect(sidebar).toContain(
+            `          * [ios](${page('OpenSpec', 'Changes', 'Service', 'Корень задачи', 'ios')})`
+        );
+        expect(sidebar).toContain(`      * [Бета](${page('OpenSpec', 'Changes', 'Бета')})`);
+        expect(sidebar).toContain('      * [dig-2-beta](OpenSpec/Changes/dig-2-beta/dig-2-beta)');
+        expect(sidebar).toContain(
+            '      * [2026-08-02-dig-5-old](OpenSpec/Archive/2026-08-02-dig-5-old/2026-08-02-dig-5-old)'
+        );
+        expect(sidebar).toContain('      * [dig-6-hash](OpenSpec/Changes/dig-6-hash/dig-6-hash)');
+        expect(sidebar).not.toContain('Задача');
+        expect(sidebar).not.toContain('OpenSpec/Changes/Service/dig-3-root/');
+    });
+
+    it('таблица и связи — по именам', () => {
+        expect(readD('OpenSpec/Changes/Changes.md')).toContain(
+            `| [Корень задачи](${page('OpenSpec', 'Changes', 'Service', 'Корень задачи')}) |`
+        );
+        expect(readD('OpenSpec/Changes/Service/Корень задачи/ios/ios.md')).toContain(
+            `**Parent:** [Корень задачи](${page('OpenSpec', 'Changes', 'Service', 'Корень задачи')})`
+        );
+    });
+});
+
+// Колонки из `.openspec.yaml` в таблице Changes (опция columns), например исполнитель.
+describe('плагин openspec: опция columns', () => {
+    let d;
+    const readD = (rel) => fs.readFileSync(path.join(d, 'docs', rel), 'utf8');
+    beforeAll(() => {
+        d = makeFixture('columns', [
+            [
+                'openspec',
+                {
+                    parentKey: 'x-parent',
+                    columns: [
+                        { key: 'x-assignee', title: 'Assignee' },
+                        { key: 'x-jira', title: 'Jira' }
+                    ]
+                }
+            ]
+        ]);
+        addFamily(d);
+        const s = path.join(d, 'openspec');
+        write(
+            s,
+            'changes/dig-3-root/.openspec.yaml',
+            // значение в кавычках — целиком, `#` внутри — не комментарий
+            'schema: spec-driven\nx-assignee: "Alice #1" # lead\nx-jira: DIG-3\n'
+        );
+        // `|` в значении экранируется, иначе строка таблицы развалится
+        write(s, 'changes/dig-3-root-ios/.openspec.yaml', 'x-parent: dig-3-root\nx-assignee: Bob | Carol\n');
+        runBuild(d);
+    });
+    afterAll(() => fs.rmSync(d, { recursive: true, force: true }));
+
+    it('заголовок и значения колонок; нет значения — прочерк', () => {
+        const md = readD('OpenSpec/Changes/Changes.md');
+        expect(md).toContain(
+            '| Change | Schema | Tasks | Updated | Assignee | Jira |\n|---|---|---|---|---|---|'
+        );
+        expect(md).toMatch(
+            /\| \[dig-3-root\]\(OpenSpec\/Changes\/dig-3-root\/dig-3-root\) \| spec-driven \| .* \| Alice #1 \| DIG-3 \|/
+        );
+        expect(md).toMatch(
+            /\| ↳ \[ios\]\(OpenSpec\/Changes\/dig-3-root\/ios\/ios\) \| — \| .* \| Bob \\\| Carol \| — \|/
+        );
+        expect(readD('OpenSpec/OpenSpec.md')).toContain('| Assignee | Jira |');
+    });
+});
