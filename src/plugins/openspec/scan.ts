@@ -22,6 +22,8 @@ export interface Change {
     deltas: Delta[];
     schema?: string;
     created?: string;
+    /** Скаляры верхнего уровня `.openspec.yaml` как есть — в т.ч. пользовательские ключи (`x-parent`). */
+    meta: Record<string, string>;
     /** Прогресс чекбоксов tasks.md; undefined — нет tasks.md или чекбоксов. */
     progress?: { done: number; total: number };
     /** max mtime файлов change'а, мс. */
@@ -70,15 +72,18 @@ export const taskProgress = (tasks: string): { done: number; total: number } | u
     return { done: boxes.filter((m) => m[1] !== ' ').length, total: boxes.length };
 };
 
-// Метаданные `.openspec.yaml` построчно: нужны два скаляра, yaml-парсер избыточен.
-const readMeta = (file: string): { schema?: string; created?: string } => {
-    if (!fs.existsSync(file)) return {};
-    const meta: { schema?: string; created?: string } = {};
-    for (const line of fs.readFileSync(file, 'utf8').split('\n')) {
-        const m = line.match(/^(schema|created):\s*(.+?)\s*$/);
-        if (m) meta[m[1] as 'schema' | 'created'] = m[2].replace(/^["']|["']$/g, '');
-    }
-    return meta;
+// Метаданные `.openspec.yaml` построчно: нужны только скаляры верхнего уровня (schema,
+// created и пользовательские ключи вроде `x-parent`), yaml-парсер избыточен.
+const readMeta = (file: string): { schema?: string; created?: string; meta: Record<string, string> } => {
+    const meta: Record<string, string> = {};
+    if (fs.existsSync(file))
+        for (const line of fs.readFileSync(file, 'utf8').split('\n')) {
+            const m = line.match(/^([A-Za-z0-9_.-]+):[ \t]*(.+?)\s*$/);
+            if (!m || m[2].startsWith('#')) continue;
+            // Комментарий в конце строки (` # …`) — не часть значения.
+            meta[m[1]] = m[2].replace(/\s+#.*$/, '').replace(/^["']|["']$/g, '');
+        }
+    return { schema: meta.schema, created: meta.created, meta };
 };
 
 const scanChange = (dir: string): Change => {

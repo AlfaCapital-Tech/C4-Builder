@@ -48,12 +48,19 @@ folder.
 - Relative links between artifacts point to their pages; files referenced by artifacts (images,
   notes) are copied next to the page.
 - In `-w` mode the store folder is watched too.
+- With `parentKey`, changes form a tree. A change whose `.openspec.yaml` key `parentKey` points at
+  another change (e.g. `x-parent: dig-1-root`) gets a page under it: in the sidebar after the
+  parent's artifacts, labelled with the id tail (`dig-1-root-ios` → `ios`); in the Changes table and
+  the archive list a row right below the parent; `Parent` and `Sub-changes` links on the pages. One
+  level of nesting; a change whose parent is not found stays at the top level. Without the option
+  the list stays flat, as before.
 
 | Option | Default | Meaning |
 |---|---|---|
 | `dir` | `openspec` | store folder (relative to the project folder) |
 | `mount` | `OpenSpec` | section name and its path in the output |
 | `artifacts` | `["proposal","design","tasks"]` | artifact order; the first one is shown on the change page |
+| `parentKey` | — | `.openspec.yaml` key that points at the parent change (e.g. `x-parent`); when set, child changes are nested under their parent |
 
 ## `openapi` — swagger-ui for a set of specs
 

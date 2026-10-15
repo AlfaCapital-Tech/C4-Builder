@@ -314,3 +314,89 @@ describe('плагин openspec: крайние случаи', () => {
         fs.rmSync(d2, { recursive: true, force: true });
     });
 });
+
+// Корень задачи и подзадачи по платформам: ссылка на родителя — ключ `.openspec.yaml`
+// (`x-parent`), опция parentKey кладёт вложенные под родителя с подписью-хвостом id.
+const addFamily = (d) => {
+    const s = path.join(d, 'openspec');
+    write(s, 'changes/dig-3-root/.openspec.yaml', 'schema: spec-driven\n');
+    write(s, 'changes/dig-3-root/proposal.md', '## Why\n\nroot\n');
+    write(s, 'changes/dig-3-root/design.md', '## Context\n\nroot design\n');
+    for (const [id, schema] of [
+        ['dig-3-root-ios', 'spec-driven'],
+        ['dig-3-root-back-api', 'spec-driven'],
+        // хвост совпадает с подстраницей родителя (design) — подпись полным id
+        ['dig-3-root-design', 'spec-driven']
+    ]) {
+        // комментарий в конце строки — не часть значения
+        write(s, `changes/${id}/.openspec.yaml`, `schema: ${schema}\nx-parent: dig-3-root # root task\n`);
+        write(s, `changes/${id}/proposal.md`, `## Why\n\n${id}\n`);
+    }
+    // родителя нет в store — остаётся на верхнем уровне
+    write(s, 'changes/dig-4-orphan/.openspec.yaml', 'x-parent: dig-404\n');
+    write(s, 'changes/dig-4-orphan/proposal.md', '## Why\n\norphan\n');
+    // архив: ссылка — по активному id родителя, без даты архивации
+    write(s, 'changes/archive/2026-08-02-dig-5-old/proposal.md', '## Why\n\nold root\n');
+    write(s, 'changes/archive/2026-08-01-dig-5-old-web/.openspec.yaml', 'x-parent: dig-5-old\n');
+    write(s, 'changes/archive/2026-08-01-dig-5-old-web/proposal.md', '## Why\n\nold web\n');
+};
+
+describe('плагин openspec: опция parentKey', () => {
+    let d;
+    const readD = (rel) => fs.readFileSync(path.join(d, 'docs', rel), 'utf8');
+    beforeAll(() => {
+        d = makeFixture('parent', [['openspec', { parentKey: 'x-parent' }]]);
+        addFamily(d);
+        runBuild(d);
+    });
+    afterAll(() => fs.rmSync(d, { recursive: true, force: true }));
+
+    it('sidebar: вложенные — под родителем после его артефактов, подпись — хвост id', () => {
+        const lines = readD('_sidebar.md').trimEnd().split('\n');
+        const from = lines.indexOf('      * [dig-3-root](OpenSpec/Changes/dig-3-root/dig-3-root)');
+        expect(lines.slice(from, from + 5)).toEqual([
+            '      * [dig-3-root](OpenSpec/Changes/dig-3-root/dig-3-root)',
+            '        * [design](OpenSpec/Changes/dig-3-root/design/design)',
+            '        * [back-api](OpenSpec/Changes/dig-3-root/back-api/back-api)',
+            '        * [dig-3-root-design](OpenSpec/Changes/dig-3-root/dig-3-root-design/dig-3-root-design)',
+            '        * [ios](OpenSpec/Changes/dig-3-root/ios/ios)'
+        ]);
+        expect(lines).toContain('      * [dig-4-orphan](OpenSpec/Changes/dig-4-orphan/dig-4-orphan)');
+        expect(lines.some((l) => l.includes('OpenSpec/Changes/dig-3-root-ios/'))).toBe(false);
+        expect(lines).toContain('        * [web](OpenSpec/Archive/2026-08-02-dig-5-old/web/web)');
+    });
+
+    it('таблица Changes: вложенные сразу под родителем, со стрелкой; страницы связаны', () => {
+        const rows = readD('OpenSpec/Changes/Changes.md').split('\n');
+        const root = rows.findIndex((r) =>
+            r.startsWith('| [dig-3-root](OpenSpec/Changes/dig-3-root/dig-3-root)')
+        );
+        expect(root).toBeGreaterThan(-1);
+        expect(rows.slice(root + 1, root + 4).every((r) => r.startsWith('| ↳ ['))).toBe(true);
+        expect(rows.join('\n')).toContain('| ↳ [ios](OpenSpec/Changes/dig-3-root/ios/ios) | spec-driven |');
+        expect(readD('OpenSpec/Changes/dig-3-root/dig-3-root.md')).toMatch(
+            /\*\*Sub-changes:\*\* .*\[ios\]\(OpenSpec\/Changes\/dig-3-root\/ios\/ios\)/
+        );
+        expect(readD('OpenSpec/Changes/dig-3-root/ios/ios.md')).toContain(
+            '**Parent:** [dig-3-root](OpenSpec/Changes/dig-3-root/dig-3-root)'
+        );
+    });
+
+    it('архив: вложенный — пунктом под родителем', () => {
+        expect(readD('OpenSpec/Archive/Archive.md')).toContain(
+            '- [2026-08-02-dig-5-old](OpenSpec/Archive/2026-08-02-dig-5-old/2026-08-02-dig-5-old)\n  - [web](OpenSpec/Archive/2026-08-02-dig-5-old/web/web)'
+        );
+    });
+
+    it('без опции — прежний плоский список', () => {
+        const flat = makeFixture('noparent', ['openspec']);
+        addFamily(flat);
+        runBuild(flat);
+        const sidebar = fs.readFileSync(path.join(flat, 'docs/_sidebar.md'), 'utf8');
+        expect(sidebar).toContain('      * [dig-3-root-ios](OpenSpec/Changes/dig-3-root-ios/dig-3-root-ios)');
+        expect(fs.readFileSync(path.join(flat, 'docs/OpenSpec/Changes/Changes.md'), 'utf8')).not.toContain(
+            '↳'
+        );
+        fs.rmSync(flat, { recursive: true, force: true });
+    });
+});
