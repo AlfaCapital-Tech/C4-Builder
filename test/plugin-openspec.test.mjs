@@ -496,6 +496,9 @@ describe('плагин openspec: опция nameKey', () => {
             'schema: spec-driven\ncreated: 2026-08-01\nx-name: Бета\n'
         );
         write(s, 'changes/dig-2-beta/.openspec.yaml', 'x-name: Бета\n');
+        // имя совпадает с id другого change'а — тот же путь, остаётся id
+        write(s, 'changes/dig-0-zero/.openspec.yaml', 'x-name: dig-2-beta\n');
+        write(s, 'changes/dig-0-zero/proposal.md', '## Why\n\ndig-0-zero\n');
         // недопустимое значение для сегмента пути — id
         write(s, 'changes/archive/2026-08-02-dig-5-old/.openspec.yaml', 'x-name: a/b\n');
         // `#` encodeURI не кодирует — ссылка оборвалась бы на якоре, поэтому id
@@ -518,6 +521,7 @@ describe('плагин openspec: опция nameKey', () => {
         );
         expect(sidebar).toContain(`      * [Бета](${page('OpenSpec', 'Changes', 'Бета')})`);
         expect(sidebar).toContain('      * [dig-2-beta](OpenSpec/Changes/dig-2-beta/dig-2-beta)');
+        expect(sidebar).toContain('      * [dig-0-zero](OpenSpec/Changes/dig-0-zero/dig-0-zero)');
         expect(sidebar).toContain(
             '      * [2026-08-02-dig-5-old](OpenSpec/Archive/2026-08-02-dig-5-old/2026-08-02-dig-5-old)'
         );

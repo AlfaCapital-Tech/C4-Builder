@@ -65,7 +65,12 @@ export const layoutChanges = (
         const v = key ? c.meta[key]?.trim() : undefined;
         return v && !/[\\/#?]/.test(v) && v !== '.' && v !== '..' ? v : undefined;
     };
-    const wanted = (c: Change): string => segment(nameKey, c) ?? c.id;
+    // Имя, совпадающее с id другого change'а, дало бы тот же путь — остаётся id.
+    const ids = new Set(changes.map((c) => c.id));
+    const wanted = (c: Change): string => {
+        const name = segment(nameKey, c);
+        return name && !ids.has(name) ? name : c.id;
+    };
     // Подписи change'ов без группы заняты на уровне base — группа с таким именем дала бы коллизию.
     const flat = new Set(top.filter((c) => !segment(groupKey, c)).map(wanted));
     const groups = new Set<string>();
