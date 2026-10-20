@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
+import http from 'node:http';
 import path from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 
@@ -123,6 +124,29 @@ describe('комментарии в site -w', () => {
                             )
                         ).status
                     ).toBe(403);
+                    // DNS rebinding: Host и Origin согласованы, но домен чужой. fetch Host не
+                    // подменяет — нужен голый http.request.
+                    const rebound = await new Promise((resolve, reject) => {
+                        const body = JSON.stringify({ page: 'Overview.md', comment: 'x' });
+                        http.request(
+                            {
+                                host: '127.0.0.1',
+                                port,
+                                method: 'POST',
+                                path: '/__c4builder/comments',
+                                headers: {
+                                    Host: `evil.test:${port}`,
+                                    Origin: `http://evil.test:${port}`,
+                                    'Content-Type': 'application/json',
+                                    'Content-Length': Buffer.byteLength(body)
+                                }
+                            },
+                            (res) => resolve(res.resume().statusCode)
+                        )
+                            .on('error', reject)
+                            .end(body);
+                    });
+                    expect(rebound).toBe(403);
                     const origin = { Origin: `http://127.0.0.1:${port}` };
                     expect((await post(port, { page: 'Nope.md', comment: 'x' }, origin)).status).toBe(404);
                     expect((await post(port, { page: 'Overview.md', comment: '  ' }, origin)).status).toBe(

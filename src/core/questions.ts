@@ -14,12 +14,17 @@ export interface QuestionInput {
 
 const collapse = (s: string): string => s.replace(/\s+/g, ' ').trim();
 
+// docsify рендерит HTML из markdown как есть: без экранирования цитата `List<String>` теряет
+// `<String>` на странице, а `<img onerror>` из комментария становится скриптом и в dist.
+const escapeHtml = (s: string): string =>
+    s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
 /** Текст вопроса: комментарий, цитата (до 200 символов) и раздел страницы, где сделано выделение. */
 export const formatQuestion = ({ comment, quote, section }: QuestionInput): string => {
     let q = collapse(quote ?? '');
     if (q.length > QUOTE_MAX) q = `${q.slice(0, QUOTE_MAX - 1).trimEnd()}…`;
     const s = collapse(section ?? '');
-    return `${collapse(comment)}${q ? ` — «${q}»` : ''}${s ? ` (§ ${s})` : ''}`;
+    return escapeHtml(`${collapse(comment)}${q ? ` — «${q}»` : ''}${s ? ` (§ ${s})` : ''}`);
 };
 
 // Заголовок раздела: любой уровень, без учёта регистра и лишних пробелов, с необязательными
@@ -45,10 +50,15 @@ const isPlaceholder = (cell: string): boolean => /^(\.{3}|…|)$/.test(cell);
 const escapeCell = (s: string): string => s.replace(/\|/g, '\\|');
 
 // Текст ячейки/пункта без inline-разметки — для сравнения с тем, что видно на странице
-// (docsify отрисовал markdown, клиент прислал textContent).
+// (docsify отрисовал markdown, клиент прислал textContent). Применяется к обеим сторонам:
+// сущности декодируются до срезания тегов, чтобы `&lt;T&gt;` из файла и `<T>` со страницы
+// свелись к одному.
 const plain = (s: string): string =>
     collapse(
         s
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&amp;/g, '&')
             .replace(/\\\|/g, '|')
             .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
             .replace(/<[^>]+>/g, '')
@@ -165,7 +175,15 @@ export const appendQuestion = (markdown: string, heading: string, text: string):
         const insert = ['', `- ${text}`];
         if (start + 1 < lines.length && lines[start + 1].trim() !== '') insert.push('');
         lines.splice(start + 1, 0, ...insert);
-    } else lines.splice(lastText + 1, 0, `- ${text}`);
+        return { markdown: lines.join(eol), number: null };
+    }
+    // Нумерованный список продолжаем его же маркером: `-` после `2.` начал бы второй список.
+    const ordered = lines
+        .slice(start + 1, lastText + 1)
+        .reverse()
+        .find((l) => /^([-*+]|\d+[.)])\s/.test(l))
+        ?.match(/^(\d+)([.)])\s/);
+    lines.splice(lastText + 1, 0, ordered ? `${Number(ordered[1]) + 1}${ordered[2]} ${text}` : `- ${text}`);
     return { markdown: lines.join(eol), number: null };
 };
 

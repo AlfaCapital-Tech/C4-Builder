@@ -2,12 +2,12 @@
 
 ## 1. Источники страниц
 
-- [x] 1.1 `TreeItem.sources` в `src/core/scan/tree.ts` (абсолютные пути `.md` папки), `PageSpec.sources` в `src/core/plugins/types.ts`, перенос в `addPage` (`src/core/plugins/tree.ts`). `RenderedPage.sources` в `src/plugins/openspec/render.ts`: `renderMarkdown` — свой файл + источники `:include`; `renderChange` — источники первого артефакта на странице change'а; `renderSpecTree` — пустой массив у папок; `addPages` в `src/plugins/openspec/index.ts` передаёт `sources`. Проверка: `test/plugin-openspec.test.mjs` — у страницы артефакта `sources` = путь артефакта, у страницы с `:include` — оба файла, у индекса Changes — пусто.
+- [x] 1.1 `TreeItem.sources` в `src/core/scan/tree.ts` (абсолютные пути `.md` папки), `PageSpec.sources` в `src/core/plugins/types.ts`, перенос в `addPage` (`src/core/plugins/tree.ts`). `RenderedPage.sources` в `src/plugins/openspec/render.ts`: `renderMarkdown` — свой файл + источники `:include`; `renderChange` — источники первого артефакта на странице change'а; `renderSpecTree` — пустой массив у папок; `addPages` в `src/plugins/openspec/index.ts` передаёт `sources`. Проверка: `test/page-sources.test.mjs` — `addPage` делает пути абсолютными (без `sources` — пусто), у страницы change'а — файл первого артефакта, у страницы с `:include` — свой файл и встроенные по порядку.
 - [x] 1.2 `generateWebMD` возвращает карту `страница → sources` (posix-путь `.md` от корня dist); `build()` возвращает `{ pages }`; `dispatch` хранит карту последней успешной сборки (первой и каждой из watch) и передаёт `cmdSite` функцией-геттером. Проверка: `npm run build` без ошибок типов.
 
 ## 2. Конфиг и правка раздела
 
-- [x] 2.1 Ключ `questionsHeading` (`Open questions`) в `src/config/{defaults,schema,options}.ts` и `getOptions` (`QUESTIONS_HEADING`). Проверка: `test/config.test.mjs` (или существующий тест схемы) — дефолт и пользовательское значение.
+- [x] 2.1 Ключ `questionsHeading` (`Open questions`) в `src/config/{defaults,schema,options}.ts` и `getOptions` (`QUESTIONS_HEADING`). Проверка: `test/config.test.mjs` — дефолт и пользовательское значение.
 - [x] 2.2 `src/core/questions.ts`: `formatQuestion(comment, quote, section)`, `appendQuestion(markdown, heading, text)`, `pickSource(files, heading)` по design D4. Экспорт в `test/dist.mjs`. Проверка: `test/questions.test.mjs` — таблица с номерами (`# | Вопрос | Кому`), заглушка `1 | ... | ...` заменяется, таблица без номеров, список, раздел с прозой, раздела нет, заголовок другого уровня/регистра, `\r\n`, экранирование `|`, обрезка цитаты.
 
 ## 3. Dev-сервер и клиент

@@ -61,6 +61,15 @@ describe('подсветка цитат вопросов', () => {
         expect(doc.querySelectorAll('li.c4b-qrow').length).toBe(2);
     });
 
+    it('« — «» в комментарии: цитата — первый кандидат, найденный на странице', async () => {
+        const doc = await render(`
+<p>Alpha beta gamma delta.</p>
+<h2>${H}</h2>
+<ul><li>Is it — «x» or not — «beta gamma»</li></ul>`);
+        expect([...doc.querySelectorAll('mark.c4b-hl')].map((m) => m.textContent)).toEqual(['beta gamma']);
+        expect(doc.querySelector('sup.c4b-ref a').title).toBe('Is it — «x» or not');
+    });
+
     it('без раздела вопросов — ничего не меняется', async () => {
         const doc = await render('<h2>Intro</h2><p>text «quoted» text</p>');
         expect(doc.querySelector('mark.c4b-hl')).toBeNull();

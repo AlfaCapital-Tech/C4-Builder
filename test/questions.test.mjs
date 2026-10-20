@@ -22,6 +22,11 @@ describe('formatQuestion', () => {
         const text = formatQuestion({ comment: 'q', quote: 'x'.repeat(300) });
         expect(text).toBe(`q — «${'x'.repeat(199)}…»`);
     });
+    it('HTML экранируется: docsify отрисовал бы теги из комментария и цитаты', () => {
+        expect(formatQuestion({ comment: '<img onerror=x> & co', quote: 'List<String>' })).toBe(
+            '&lt;img onerror=x&gt; &amp; co — «List&lt;String&gt;»'
+        );
+    });
 });
 
 describe('appendQuestion: таблица', () => {
@@ -67,6 +72,10 @@ describe('appendQuestion: список, проза, нет раздела', () =
         expect(appendQuestion(md, H, 'Why?').markdown).toBe(
             `## ${H}\n\n- a\n- b\n- Why?\n\n## Next\n\ntext\n`
         );
+    });
+    it('нумерованный список продолжается своим маркером', () => {
+        const md = `## ${H}\n\n1) a\n2) b\n   continued\n`;
+        expect(appendQuestion(md, H, 'Why?').markdown).toBe(`## ${H}\n\n1) a\n2) b\n   continued\n3) Why?\n`);
     });
     it('проза — пункт после неё', () => {
         const md = `## ${H}\n\nNone.\n`;
@@ -119,6 +128,12 @@ describe('removeQuestion', () => {
     });
     it('экранированный | сравнивается с текстом страницы', () => {
         expect(removeQuestion(table, H, { number: 1, text: 'a | b' }).markdown).not.toContain('a \\| b');
+    });
+    it('сущности из файла сравниваются с декодированным текстом страницы', () => {
+        const md = `## ${H}\n\n- why — «List&lt;String&gt; &amp; co»\n- c\n`;
+        expect(removeQuestion(md, H, { text: 'why — «List<String> & co»' })).toEqual({
+            markdown: `## ${H}\n\n- c\n`
+        });
     });
     it('одинаковый текст без номера — ambiguous; чужой текст — not-found', () => {
         expect(removeQuestion(table, H, { text: 'Why? — «foo» (§ Flow)' })).toEqual({ error: 'ambiguous' });

@@ -161,7 +161,10 @@ export default (
         ): { file: string; rel: string; body: Record<string, unknown> } | undefined => {
             const origin = req.get('origin');
             const host = req.get('host');
-            if (!origin || !host || origin !== `http://${host}`) {
+            // Host — только локальный: при DNS rebinding чужой домен резолвится в 127.0.0.1 и
+            // присылает согласованные Host и Origin, сверка Origin с одним Host это пропускает.
+            const local = [`127.0.0.1:${req.socket.localPort}`, `localhost:${req.socket.localPort}`];
+            if (!origin || !host || !local.includes(host) || origin !== `http://${host}`) {
                 res.status(403).json({ error: 'comments are accepted only from the site itself' });
                 return undefined;
             }

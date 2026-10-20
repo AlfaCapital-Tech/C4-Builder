@@ -1,5 +1,3 @@
-//
-//
 export const COMMENTS_PATH = '/__c4builder/comments';
 
 const CSS = [
@@ -78,12 +76,15 @@ export const commentsSnippet = (heading: string): string => `
         return null;
     };
 
-    var parseQuestion = function (text) {
-        var m = collapse(text).match(/^(.*?) \\u2014 \\u00ab([\\s\\S]*)\\u00bb(?: \\(\\u00a7 (.*)\\))?$/);
-        if (!m || !m[2]) return null;
-        var quote = m[2], prefix = false;
-        if (/\\u2026$/.test(quote)) { quote = quote.slice(0, -1).trim(); prefix = true; }
-        return { comment: m[1], quote: quote, section: m[3] || '', prefix: prefix };
+    var SEP = ' \\u2014 \\u00ab';
+    var parseQuestions = function (text) {
+        var s = collapse(text), out = [];
+        for (var at = s.indexOf(SEP); at >= 0; at = s.indexOf(SEP, at + 1)) {
+            var m = s.slice(at + SEP.length).match(/^([\\s\\S]*)\\u00bb(?: \\(\\u00a7 (.*)\\))?$/);
+            var quote = m ? m[1].replace(/\\u2026$/, '').trim() : '';
+            if (quote) out.push({ comment: s.slice(0, at), quote: quote, section: m[2] || '' });
+        }
+        return out;
     };
     var textIndex = function (roots, skip) {
         var chars = [], map = [], lastBlock = null, prevSpace = true;
@@ -188,27 +189,27 @@ export const commentsSnippet = (heading: string): string => `
             item.cell.appendChild(del);
         };
         var skip = [h].concat(section);
-        var pageIdx = null;
+        var tryIn = function (idx, q) {
+            var at = idx.text.indexOf(q.quote);
+            var marks = at < 0 ? null : wrapRange(idx, at, at + q.quote.length, q.comment);
+            return marks && marks.length ? marks : null;
+        };
         items.forEach(function (item) {
             item.row.classList.add('c4b-qrow');
             item.row.id = item.row.id || 'c4b-q-' + item.number;
             addDelete(item);
-            var q = parseQuestion(item.text);
-            if (!q) return;
-            var marks = null;
-            var tryIn = function (idx) {
-                var at = idx.text.indexOf(q.quote);
-                return at < 0 ? null : wrapRange(idx, at, at + q.quote.length, q.comment);
-            };
-            if (q.section) {
-                var sh = findHeading(root, q.section);
-                if (sh && skip.indexOf(sh) < 0) marks = tryIn(textIndex(sectionOf(sh), skip));
-            }
-            if (!marks) {
-                pageIdx = textIndex([root], skip);
-                marks = tryIn(pageIdx);
-            }
-            if (!marks || !marks.length) return;
+            // Index is rebuilt per try: wrapping splits text nodes and stales the previous map.
+            var q = null, marks = null;
+            parseQuestions(item.text).some(function (c) {
+                if (c.section) {
+                    var sh = findHeading(root, c.section);
+                    if (sh && skip.indexOf(sh) < 0) marks = tryIn(textIndex(sectionOf(sh), skip), c);
+                }
+                marks = marks || tryIn(textIndex([root], skip), c);
+                q = marks ? c : null;
+                return !!marks;
+            });
+            if (!marks) return;
             var sup = document.createElement('sup');
             sup.className = 'c4b-ref';
             var a = document.createElement('a');
