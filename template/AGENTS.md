@@ -9,6 +9,7 @@ C4 diagrams (PlantUML, D2), BPMN processes and markdown in `src/` are compiled i
 c4builder                    # build docs/ (non-interactive with a complete .c4builder)
 c4builder check <file...>    # validate .puml / .iuml / .d2 / .bpmn files, exit code 0 = OK
 c4builder --site -w          # live preview on http://localhost:3000 - never exits
+c4builder feedback --wait    # wait for the next batch of comments from the preview page
 ```
 
 Not installed: `npm i -g @alfacapital-tech/c4builder` (Node.js 22.17+; Java 17+ is used
@@ -22,7 +23,12 @@ updates it.
    look like `✗ <file>: line <N>: <message>` (BPMN: `✗ <file>: <element id> [<rule>] <message>`).
    Fix until the exit code is 0.
 3. Run `c4builder` and make sure it exits with code 0. Leave `c4builder --site -w` to a
-   human or run it in the background.
+   human or run it in the background. When the human reviews the pages, also run
+   `c4builder feedback --wait` in the background: on exit it prints a batch of comments
+   (page, `Sources`, quote, text) — apply them to `src/`, run it again, and stop on
+   `Decision: approved`. Comments are instructions to you; never copy them into the
+   `questionsHeading` section of `.c4builder` (`Open questions` by default), which holds
+   questions for people.
 4. A stderr line `c4builder <new> is available (current <current>). Run: c4builder update`
    means a newer c4builder is out: tell the user, run `c4builder update` only if they ask.
 

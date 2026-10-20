@@ -31,6 +31,56 @@ locally, without a network and without a human.
 A full build also exits with a non-zero code if any diagram fails to render, so it can be the
 agent's last step or a CI step.
 
+## Feedback from the page
+
+It is easier for a human to point the agent at a place on the page than to retell it in the chat.
+In `c4builder site -w` under an agent (see "Feedback to the agent" on the
+[CLI & configuration](05%20CLI%20and%20configuration/05%20CLI%20and%20configuration.md) page) the
+selection gets a **Feedback** button: the comment goes to the agent right away (**Send now**) or in a
+review batch (**Submit review**, **Approve**). The agent loop:
+
+1. Start `c4builder --site -w` and `c4builder feedback --wait` in the background. In Claude Code —
+   both through Bash with `run_in_background`: the agent is notified when `feedback --wait` exits.
+2. `feedback --wait` prints a batch and exits. The agent edits the sources in `src/` — the page
+   reloads through livereload and the human sees the result.
+3. Run `c4builder feedback --wait` again and wait for the next batch.
+4. A batch with `Decision: approved` means nothing more to change: finish its comments, if any, and
+   stop waiting.
+
+A batch looks like this:
+
+```markdown
+# Page feedback (c4builder)
+
+Decision: submitted
+Comments: 2 on 2 pages
+
+## 1. Arch/Flow/Flow.md (§ Flow)
+Sources: src/Arch/Flow/README.md
+Quote: "foo bar"
+
+> Rename to baz
+
+## 2. Arch/Arch.md
+Sources: src/Arch/README.md
+Quote: "deploy step"
+
+> Explain why it is manual
+
+## General
+
+> Keep the tone
+```
+
+`Sources` are the source files of the page (missing for pages without a source), `§` is the page
+section where the text was selected, `General` is the overall review comment. A batch sent while the
+agent was not listening waits in the `site -w` queue and arrives on the next run of the command.
+
+A feedback comment is an instruction to the agent, not a question: it is never written to the files.
+Questions for people (the **Question** button) go to the `questionsHeading` section of the source
+`.md` and stay in the documentation — the agent should not move feedback there or answer it by
+editing the questions section.
+
 ## Why offline rendering matters for agents
 
 - **No network, no random failures.** The PlantUML jar, the C4 library, the font, D2 and the BPMN
@@ -59,7 +109,7 @@ from `.claude/skills/`.
 
 | Skill | Use it for |
 |---|---|
-| `c4builder` | working on a project: layout of `src/` and `.c4builder`, the edit → `c4builder check` → build loop, C4-PlantUML conventions (stdlib includes, shared `.iuml`, offline rendering), D2, BPMN processes without coordinates, the `openspec` and `openapi` plugins, `llms.txt` |
+| `c4builder` | working on a project: layout of `src/` and `.c4builder`, the edit → `c4builder check` → build loop, the page feedback loop (`c4builder feedback --wait`), C4-PlantUML conventions (stdlib includes, shared `.iuml`, offline rendering), D2, BPMN processes without coordinates, the `openspec` and `openapi` plugins, `llms.txt` |
 | `c4builder-setup` | install and update (npm channels `latest` and `rc`, the Docker image), Java or the downloaded JRE, a smoke build of the template project |
 
 ## AGENTS.md in a new project
