@@ -14,13 +14,14 @@ import cmdSite from './commands/site.ts';
 import { cmdUpdate, pendingUpdate, startUpdateCheck } from './update.ts';
 import cmdCollect from './wizard/collect.ts';
 import { build } from '../core/build.ts';
+import type { PageSources } from '../core/compose/markdown.ts';
 import { loadPlugins, pluginWatchPaths } from '../core/plugins/load.ts';
 import fs from 'node:fs';
 import watch from 'node-watch';
 import { EventEmitter } from 'node:events';
 
 import { clearConsole } from '../util/utils.ts';
-import { acquireBuildLock, BuildLockHeldError } from '../util/lock.ts';
+import { acquireBuildLock, BuildLockHeldError, waitBuildLock } from '../util/lock.ts';
 // teardownD2 живёт здесь, а не в finally build(): в watch-режиме D2-воркер должен
 // переживать ребилды (его пересоздание — секунды), гасим его только когда сборок
 // больше не будет (одиночный запуск).
@@ -137,6 +138,7 @@ function getOptions(c: Partial<C4ConfigFile>): BuildOptions | Partial<BuildOptio
         EXECUTE_SCRIPT: c.executeScript,
         EXCLUDE_OTHER_FILES: c.excludeOtherFiles,
         USE_SYSTEM_FONTS: c.useSystemFonts,
+        QUESTIONS_HEADING: c.questionsHeading,
         PLUGINS: c.plugins
     };
 }
@@ -300,6 +302,9 @@ export default async () => {
         });
         const reloadEmitter = new EventEmitter();
         reloadEmitter.setMaxListeners(0);
+        // Карта «страница сайта → исходники» последней удачной сборки: dev-сервер читает её
+        // геттером, поэтому после ребилда в watch видит свежую без рестарта.
+        let pages: PageSources = new Map();
         if (opts.watch) {
             // node-watch: CJS-рантайм при ESM-.d.ts (export default) — дефолт-импорт
             // типизируется как namespace. Каст к реальной сигнатуре, рантайм не меняется.
@@ -341,13 +346,17 @@ export default async () => {
                 let buildOk = true;
                 try {
                     // Лок на всю серию ребилдов: параллельная ручная сборка в этом же
-                    // каталоге не потопчет dist_bk и не потеряет чексуммы кеша.
-                    const release = acquireBuildLock(lockPath);
+                    // каталоге не потопчет dist_bk и не потеряет чексуммы кеша. Занят другим
+                    // живым процессом (второй `site -w` на той же папке) — ждём до минуты и
+                    // собираем сами: иначе ребилд пропадает и браузер не получает reload.
+                    const release = await waitBuildLock(lockPath, 60_000, (e) =>
+                        console.log(chalk.gray(`waiting for another build: ${e.message}`))
+                    );
                     try {
-                        await build(options, cacheConf, plugins);
+                        ({ pages } = await build(options, cacheConf, plugins));
                         while (attemptedWatchBuild) {
                             attemptedWatchBuild = false;
-                            await build(options, cacheConf, plugins);
+                            ({ pages } = await build(options, cacheConf, plugins));
                         }
                     } finally {
                         release();
@@ -379,7 +388,7 @@ export default async () => {
             process.exit(1);
         }
         try {
-            await build(options, cacheConf, plugins);
+            ({ pages } = await build(options, cacheConf, plugins));
         } finally {
             release();
             // Одиночная сборка: D2-воркер больше не нужен, без teardown он держал бы
@@ -391,7 +400,7 @@ export default async () => {
         }
         isBuilding = false;
 
-        if (opts.site) return await cmdSite(options, opts, reloadEmitter);
+        if (opts.site) return await cmdSite(options, opts, reloadEmitter, () => pages);
 
         if (options.GENERATE_WEBSITE && !opts.watch) {
             console.log(chalk.gray('\nto view the generated website run'));

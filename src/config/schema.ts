@@ -65,6 +65,9 @@ export const configSchema = z.object({
     d2Layout: str(defaultConfig.d2Layout),
     charset: str(defaultConfig.charset),
     useSystemFonts: bool(defaultConfig.useSystemFonts),
+    // Заголовок раздела, куда `site -w` дописывает комментарии к странице (в коде кириллицы
+    // быть не может — русский заголовок задаёт сам проект).
+    questionsHeading: str(defaultConfig.questionsHeading),
 
     // Задаются явно (флаг/промпт) либо тонкой правкой файла — в defaultConfig не входят.
     projectName: optStr(),

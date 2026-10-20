@@ -47,6 +47,7 @@ export interface BuildOptions {
     DIAGRAM_FORMAT: string;
     D2_LAYOUT: string;
     MD_FILE_NAME: string;
+    QUESTIONS_HEADING: string;
     // Сырой список плагинов из конфига; загружаются и валидируются в cli/dispatch
     // (core/plugins/load) и передаются в build() отдельным аргументом.
     PLUGINS: PluginEntry[];

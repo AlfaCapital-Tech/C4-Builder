@@ -31,7 +31,8 @@ const defaultConfig = {
     diagramFormat: 'svg',
     d2Layout: 'dagre',
     charset: 'UTF-8',
-    useSystemFonts: false
+    useSystemFonts: false,
+    questionsHeading: 'Open questions'
 };
 
 export { defaultConfig };

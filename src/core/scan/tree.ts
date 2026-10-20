@@ -26,6 +26,8 @@ export interface TreeItem {
     level: number;
     parent?: string;
     mdFiles: (string | Buffer)[];
+    /** Абсолютные пути `.md`, из которых собрана страница (порядок — как mdFiles); у индексов пусто. */
+    sources: string[];
     diagrams: Diagram[];
     descendants: string[];
 }
@@ -82,7 +84,8 @@ export const generateTree = async (dir: string, options: BuildOptions): Promise<
                 parent: parent,
                 mdFiles: [],
                 diagrams: [],
-                descendants: []
+                descendants: [],
+                sources: []
             };
             tree.push(item);
         }
@@ -133,6 +136,7 @@ export const generateTree = async (dir: string, options: BuildOptions): Promise<
                 path.relative(process.cwd(), mdPath).split(path.sep).join('/')
             );
             item.mdFiles.push(markdown);
+            item.sources.push(path.resolve(mdPath));
             for (const d of diagrams)
                 item.diagrams.push({
                     dir: d.file,

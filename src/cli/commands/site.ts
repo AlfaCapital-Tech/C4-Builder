@@ -5,8 +5,13 @@ import express from 'express';
 import open from 'open';
 import type { EventEmitter } from 'node:events';
 import type { BuildOptions } from '../../config/options.ts';
+import type { PageSources } from '../../core/compose/markdown.ts';
+import { deleteQuestion, formatQuestion, pickSource, writeQuestion } from '../../core/questions.ts';
 import { packageJson as pkg } from '../../util/paths.ts';
 import { pendingUpdate } from '../update.ts';
+import { COMMENTS_PATH, commentsSnippet } from './site.comments.ts';
+
+const COMMENT_MAX = 2000;
 
 const LIVERELOAD_PATH = '/__livereload';
 // Восстановление скролла после reload: docsify рендерит контент асинхронно после fetch md,
@@ -84,7 +89,9 @@ c4builder ${next} is available (current ${pkg.version}). Run: <code>c4builder up
 export default (
     currentConfiguration: BuildOptions,
     program: { port?: number; watch?: boolean; open?: boolean },
-    reloadEmitter?: EventEmitter
+    reloadEmitter?: EventEmitter,
+    // Карта «страница → исходники» текущей сборки — геттером, чтобы видеть результат ребилдов watch.
+    pages: () => PageSources = () => new Map()
 ) => {
     if (!currentConfiguration.DIST_FOLDER) return console.log(chalk.red('No destination folder configured'));
 
@@ -133,10 +140,105 @@ export default (
         // запущенной этим же `site -w`, виден со следующей перезагрузки без рестарта сервера.
         const inject = (html: string): string => {
             const next = pendingUpdate();
-            const snippet = next ? LIVERELOAD_SNIPPET + updateBanner(next) : LIVERELOAD_SNIPPET;
+            const snippet =
+                LIVERELOAD_SNIPPET +
+                commentsSnippet(currentConfiguration.QUESTIONS_HEADING) +
+                (next ? updateBanner(next) : '');
             if (html.includes('</body>')) return html.replace('</body>', `${snippet}</body>`);
             return html + snippet;
         };
+
+        // Комментарий к выделенному тексту → раздел вопросов исходного файла страницы
+        // (change site-comments, design D3). Сервер слушает только 127.0.0.1, но страница
+        // любого сайта в браузере может слать POST на localhost — требуем Origin самого сайта.
+        const str = (v: unknown): string => (typeof v === 'string' ? v : '');
+        const heading = currentConfiguration.QUESTIONS_HEADING;
+        // Общая часть POST/DELETE: проверка Origin и исходный файл страницы из тела запроса.
+        // Ошибка уже отправлена клиенту, когда возвращается undefined.
+        const resolveTarget = (
+            req: express.Request,
+            res: express.Response
+        ): { file: string; rel: string; body: Record<string, unknown> } | undefined => {
+            const origin = req.get('origin');
+            const host = req.get('host');
+            if (!origin || !host || origin !== `http://${host}`) {
+                res.status(403).json({ error: 'comments are accepted only from the site itself' });
+                return undefined;
+            }
+            const body = (req.body ?? {}) as Record<string, unknown>;
+            const page = path.posix.normalize(str(body.page).replace(/^\/+/, ''));
+            const sources = page.startsWith('..') ? undefined : pages().get(page);
+            if (!sources) {
+                res.status(404).json({ error: `unknown page: ${page}` });
+                return undefined;
+            }
+            const cwd = process.cwd();
+            const file = pickSource(
+                sources.filter((s) => s.startsWith(cwd + path.sep)),
+                heading
+            );
+            if (!file) {
+                res.status(404).json({ error: 'this page has no source file to write to' });
+                return undefined;
+            }
+            return { file, rel: path.relative(cwd, file).split(path.sep).join('/'), body };
+        };
+
+        app.post(COMMENTS_PATH, express.json({ limit: '64kb' }), (req, res) => {
+            const target = resolveTarget(req, res);
+            if (!target) return;
+            const { file, rel, body } = target;
+            const comment = str(body.comment).trim();
+            const quote = str(body.quote);
+            const section = str(body.section);
+            if (!comment) {
+                res.status(400).json({ error: 'comment is empty' });
+                return;
+            }
+            if (comment.length > COMMENT_MAX || quote.length > COMMENT_MAX) {
+                res.status(400).json({
+                    error: `comment and quote must be at most ${COMMENT_MAX} characters`
+                });
+                return;
+            }
+            try {
+                const number = writeQuestion(file, heading, formatQuestion({ comment, quote, section }));
+                console.log(chalk.gray(`comment added to ${rel}${number ? ` as #${number}` : ''}`));
+                res.json({ file: rel, number });
+            } catch (e) {
+                res.status(500).json({ error: `could not write the comment: ${(e as Error).message}` });
+            }
+        });
+
+        // Удаление вопроса: по номеру (числовая таблица) и тексту, как он виден на странице.
+        app.delete(COMMENTS_PATH, express.json({ limit: '64kb' }), (req, res) => {
+            const target = resolveTarget(req, res);
+            if (!target) return;
+            const { file, rel, body } = target;
+            const text = str(body.text).trim();
+            if (!text) {
+                res.status(400).json({ error: 'question text is empty' });
+                return;
+            }
+            const number = typeof body.number === 'number' ? body.number : Number(str(body.number)) || null;
+            try {
+                const result = deleteQuestion(file, heading, { number, text });
+                if ('error' in result) {
+                    const messages = {
+                        'not-found': `question not found in ${rel} — the page may be stale, reload it`,
+                        ambiguous: `several identical questions in ${rel} — remove it by hand`
+                    };
+                    res.status(result.error === 'not-found' ? 404 : 409).json({
+                        error: messages[result.error]
+                    });
+                    return;
+                }
+                console.log(chalk.gray(`comment removed from ${rel}`));
+                res.json({ file: rel });
+            } catch (e) {
+                res.status(500).json({ error: `could not remove the comment: ${(e as Error).message}` });
+            }
+        });
 
         app.use((req, res, next) => {
             if (req.method !== 'GET') return next();

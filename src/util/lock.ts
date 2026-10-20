@@ -58,3 +58,30 @@ export const acquireBuildLock = (lockPath: string): (() => void) => {
     }
     throw new BuildLockHeldError(`failed to acquire the build lock: ${lockPath}`);
 };
+
+/**
+ * Захват лока с ожиданием: пока сборку держит другой живой процесс (второй `site -w` в той же
+ * папке), пробуем каждые `stepMs`, не дольше `timeoutMs`; затем — исходная BuildLockHeldError.
+ * `onWait` зовётся один раз при первом отказе — для сообщения в терминал.
+ */
+export const waitBuildLock = async (
+    lockPath: string,
+    timeoutMs: number,
+    onWait?: (error: BuildLockHeldError) => void,
+    stepMs = 500
+): Promise<() => void> => {
+    const deadline = Date.now() + timeoutMs;
+    let waited = false;
+    for (;;) {
+        try {
+            return acquireBuildLock(lockPath);
+        } catch (e) {
+            if (!(e instanceof BuildLockHeldError) || Date.now() >= deadline) throw e;
+            if (!waited) {
+                waited = true;
+                onWait?.(e);
+            }
+            await new Promise((r) => setTimeout(r, stepMs));
+        }
+    }
+};
