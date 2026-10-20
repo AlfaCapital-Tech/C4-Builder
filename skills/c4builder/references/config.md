@@ -56,7 +56,7 @@ Validation rules:
 | Key | Default | Meaning |
 |---|---|---|
 | `webPort` | `3000` | port of `c4builder --site` (`-p <n>` overrides) |
-| `questionsHeading` | `Open questions` | heading of the section in the source `.md` where `site -w` appends comments left on the page |
+| `questionsHeading` | `Open questions` | heading of the section in the source `.md` where `site -w` appends questions left on the page |
 | `webTheme` | `vendor/vue.css` | docsify theme stylesheet |
 | `supportSearch` | `true` | search box in the sidebar |
 | `repoUrl` | `""` | repository link in the site corner |

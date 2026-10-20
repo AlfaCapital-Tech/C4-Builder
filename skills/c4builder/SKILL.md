@@ -1,6 +1,6 @@
 ---
 name: c4builder
-description: Work on a c4builder architecture-docs project - C4 model diagrams in PlantUML (C4-PlantUML stdlib) or D2, BPMN process diagrams, plus markdown, built into a docsify site or markdown files. Use when creating or editing .puml, .iuml, .d2, .bpmn or .md files in a project that has a .c4builder config, when changing .c4builder settings or plugins (openspec, openapi), or when building, validating or previewing the docs. Teaches the edit, c4builder check, build loop and the C4-PlantUML conventions.
+description: Work on a c4builder architecture-docs project - C4 model diagrams in PlantUML (C4-PlantUML stdlib) or D2, BPMN process diagrams, plus markdown, built into a docsify site or markdown files. Use when creating or editing .puml, .iuml, .d2, .bpmn or .md files in a project that has a .c4builder config, when changing .c4builder settings or plugins (openspec, openapi), or when building, validating or previewing the docs, or taking a human's comments from the preview page. Teaches the edit, c4builder check, build loop, the page feedback loop and the C4-PlantUML conventions.
 ---
 
 # c4builder
@@ -84,6 +84,51 @@ How the source tree becomes pages:
    human can select text on a page and add a question: it lands in the source `.md` under the
    `questionsHeading` section (`Open questions` by default) — read it there, not in `docs/`.
 
+## Feedback from the page
+
+When the user wants to look at the pages and tell you what to fix, run the feedback loop. Under
+an agent (`CLAUDECODE`, `CODEX_THREAD_ID`, `GEMINI_CLI`, `OPENCODE`, `COPILOT_CLI`, `AI_AGENT`, or
+`--agent`) `c4builder --site -w` adds a **Feedback** button to text selected on a page; the
+comments come to you in batches, not into the files.
+
+1. Start both in the background (in Claude Code: Bash with `run_in_background`):
+
+   ```bash
+   c4builder --site -w
+   c4builder feedback --wait
+   ```
+
+   Pass the same `-p <n>` to both when the port is not `webPort`. If the user already runs
+   `site -w` (a second one fails with `port … is already in use`), start only
+   `c4builder feedback --wait`: connecting turns the agent mode on.
+2. When `c4builder feedback --wait` exits, its stdout is one batch:
+
+   ```text
+   # Page feedback (c4builder)
+
+   Decision: submitted
+   Comments: 1 on 1 page
+
+   ## 1. Arch/Flow/Flow.md (§ Flow)
+   Sources: src/Arch/Flow/README.md
+   Quote: "foo bar"
+
+   > Rename to baz
+   ```
+
+   Every comment names the site page, its source files (`Sources`, missing for pages without a
+   source), the page section and the quoted selection; `## General` is an overall comment.
+3. Apply the comments to the sources in `src/` (never `docs/`); the page reloads by itself.
+   Do not write the comments into the `questionsHeading` section — feedback is an instruction to
+   you, questions are for people and stay in the file.
+4. Run `c4builder feedback --wait` in the background again and wait for the next batch.
+5. `Decision: approved` means the user has nothing more to change: apply the comments of that
+   batch, if any, and stop waiting.
+
+A batch sent while nothing was listening waits in the `site -w` queue and comes on the next run.
+`c4builder feedback` exits with code 1 when no `site -w` runs on the port or it was started with
+`--no-agent`.
+
 ## Writing C4 diagrams (PlantUML)
 
 ```plantuml
@@ -152,7 +197,8 @@ for it: it reinstalls the global CLI. The notice changes neither stdout nor the 
 
 - Editing generated files in `docs/` instead of `src/`.
 - Remote `!include` URLs instead of `<C4/...>` stdlib includes.
-- Running `c4builder --site -w` in the foreground — the agent hangs.
+- Running `c4builder --site -w` or `c4builder feedback --wait` in the foreground — the agent hangs.
+- Not restarting `c4builder feedback --wait` after a batch — the next comments wait unseen.
 - Forgetting `c4builder check` and reading a Java stack trace from the full build instead.
 - A page "missing" from the output because its file or folder starts with `_`.
 - `generateLocalImages: false` in a project with `.d2` or `.bpmn` files — they have no online

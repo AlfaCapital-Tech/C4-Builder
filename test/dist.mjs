@@ -19,6 +19,9 @@ export { foldIncludes, clearIncludeCache } from '../dist/core/scan/tree.js';
 export { foldD2Imports, d2LocalImports, clearD2FileCache } from '../dist/core/render/d2renderer.js';
 export { generateLlmsFull } from '../dist/core/compose/markdown.js';
 export { compareVersions, newestVersion } from '../dist/cli/update.js';
+export { detectAgent } from '../dist/cli/agent.js';
+export { default as cmdSite } from '../dist/cli/commands/site.js';
+export { batchSchema, formatBatch } from '../dist/core/feedback.js';
 export {
     BpmnError,
     BPMN_CACHE_PACKAGES,

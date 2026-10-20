@@ -22,7 +22,7 @@ const references = (name) => {
 const INPUTS = [...SKILLS.flatMap((name) => [skillFile(name), ...references(name)]), AGENTS_MD];
 const rel = (file) => path.relative(REPO_ROOT, file);
 
-const COMMANDS = ['check', 'jre', 'site', 'new', 'config', 'update'];
+const COMMANDS = ['check', 'jre', 'site', 'new', 'config', 'update', 'feedback'];
 const FLAG = /(?<![\w-])--?[a-zA-Z][\w-]*/g;
 const help = spawnSync(process.execPath, [CLI, '--help'], { encoding: 'utf8' }).stdout;
 const KNOWN_FLAGS = new Set(help.match(FLAG));

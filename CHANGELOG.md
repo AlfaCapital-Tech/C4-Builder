@@ -5,7 +5,18 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
 
 ## Unreleased
 
-- `site -w`: comments on the page. Select text, press **Comment**, type a question — it is appended to
+- `site -w`: feedback to a coding agent from the page. In the agent mode (`--agent`, or run by an agent:
+  `CLAUDECODE`, `CODEX_THREAD_ID`, `GEMINI_CLI`, `OPENCODE`, `COPILOT_CLI`, `AI_AGENT`, or
+  `C4BUILDER_AGENT`; `--no-agent` or `C4BUILDER_AGENT=0` turn it off) a selection gets a **Feedback**
+  button next to **Question**: **Send now** sends one comment, **Add to review** collects comments from
+  several pages into a review sent by **Submit review** (with an optional overall comment) or
+  **Approve** (nothing more to change). Comments are not written to the files. The review draft survives
+  reloads, its quotes are highlighted in blue, the page shows whether the agent listens and when a batch
+  is delivered. The new `c4builder feedback --wait` waits for the next batch and prints it as markdown
+  (page, source files, section, quote, comment, `Decision: submitted|approved`); the agent runs it in the
+  background and again after each batch. The selection button of questions is now **Question** with
+  **Add question** (was **Comment** / **Add** in 0.9.0-rc.1)
+- `site -w`: comments on the page. Select text, press **Question**, type a question — it is appended to
   the source `.md` of the page under the `questionsHeading` section (`Open questions` by default; the
   new `.c4builder` key): a table row with the next number when the section is a table, a list item
   otherwise, a new section at the end of the file when there is none. Watch rebuilds and the page

@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -32,6 +32,54 @@ export const updateCheckEnv = (xdg, extra = {}) => ({
     XDG_CONFIG_HOME: xdg,
     ...extra
 });
+// env спавна CLI без переменных агентов: тесты гоняют и из-под Claude Code (CLAUDECODE=1),
+// а агентский режим site -w (change site-agent-feedback) включается по ним.
+const AGENT_VARS = [
+    'CLAUDECODE',
+    'CODEX_THREAD_ID',
+    'GEMINI_CLI',
+    'OPENCODE',
+    'COPILOT_CLI',
+    'AI_AGENT',
+    'C4BUILDER_AGENT'
+];
+export const agentEnv = (extra = {}) => ({
+    ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !AGENT_VARS.includes(k))),
+    ...extra
+});
+
+// `c4builder site …` в cwd: onReady выполняется, пока сервер жив; после него процесс гасится.
+// Резолвится выводом сервера.
+export const serveSite = (cwd, args, { env = process.env, onReady = async () => {} } = {}) =>
+    new Promise((resolve, reject) => {
+        const child = spawn(process.execPath, [path.join(REPO_ROOT, 'dist', 'index.js'), ...args], {
+            cwd,
+            encoding: 'utf8',
+            env
+        });
+        let out = '';
+        let ready = false;
+        const done = setTimeout(() => {
+            child.kill('SIGKILL');
+            reject(new Error(`сервер не поднялся за 30 с:\n${out}`));
+        }, 30_000);
+        child.stdout.on('data', (d) => {
+            out += d;
+            if (ready || !out.includes('serving your docsify site')) return;
+            ready = true;
+            clearTimeout(done);
+            onReady()
+                .then(() => resolve(out), reject)
+                .finally(() => child.kill('SIGTERM'));
+        });
+        child.stderr.on('data', (d) => (out += d));
+        child.on('exit', (code) => {
+            clearTimeout(done);
+            if (!ready)
+                reject(new Error(`процесс завершился (exit=${code}) вместо запуска сервера:\n${out}`));
+        });
+    });
+
 const ACTUAL_ROOT = path.join(TMP_ROOT, 'actual');
 export const actualDir = (variant) => path.join(ACTUAL_ROOT, variant);
 

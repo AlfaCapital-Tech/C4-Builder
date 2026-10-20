@@ -11,6 +11,8 @@ import cmdJre from './commands/jre.ts';
 import cmdCheck from './commands/check.ts';
 import cmdList from './commands/list.ts';
 import cmdSite from './commands/site.ts';
+import cmdFeedback from './commands/feedback.ts';
+import { detectAgent } from './agent.ts';
 import { cmdUpdate, pendingUpdate, startUpdateCheck } from './update.ts';
 import cmdCollect from './wizard/collect.ts';
 import { build } from '../core/build.ts';
@@ -46,7 +48,7 @@ interface ConfStore {
 }
 
 // Позиционные подкоманды: allowExcessArguments пропускает любые, список — единственный фильтр.
-const COMMANDS = ['check', 'jre', 'site', 'new', 'config', 'update'];
+const COMMANDS = ['check', 'jre', 'site', 'new', 'config', 'update', 'feedback'];
 
 const intro = () => {
     console.log(chalk.blue(figlet.textSync('c4builder')));
@@ -157,6 +159,9 @@ export default async () => {
         .option('--site', 'serve the generated site')
         .option('-w, --watch', 'watch for changes and rebuild')
         .option('-o, --open', 'open the generated site in the browser (with --site)')
+        .option('--agent', 'with --site -w: accept page feedback for a coding agent (c4builder feedback)')
+        .option('--no-agent', 'with --site -w: no agent feedback even when run by a coding agent')
+        .option('--wait', 'for `feedback`: wait for the next batch of page feedback')
         .option('--docs', 'a brief explanation for the available configuration options')
         .option('--system-fonts', 'render with system fonts instead of the bundled one (not deterministic)')
         .option('-p, --port <n>', 'port used for serving the generated site', (v) => {
@@ -178,8 +183,8 @@ export default async () => {
         process.exit(1);
     }
     // --version/--help уже вышли в parse. Уведомление — по кэшу прошлой проверки, до её
-    // перезапуска; exit покрывает и выходы через process.exit.
-    if (cmd !== 'update') {
+    // перезапуска; exit покрывает и выходы через process.exit. Вывод `feedback` читает агент.
+    if (cmd !== 'update' && cmd !== 'feedback') {
         const next = pendingUpdate();
         if (next)
             process.once('exit', () =>
@@ -195,6 +200,9 @@ export default async () => {
     if (cmd === 'check') return cmdCheck(cmdArgs);
     // Обновление CLI — до Configstore, чтобы не создавать .c4builder в любом каталоге.
     if (cmd === 'update') return cmdUpdate();
+    // Замечания со страницы `site -w` — тоже до Configstore: команду запускают в любом каталоге.
+    if (cmd === 'feedback')
+        return cmdFeedback(path.join(process.cwd(), opts.configFile ?? '.c4builder'), opts);
     // `site`/`new`/`config` — позиционные синонимы одноимённых флагов: эту форму печатают
     // подсказки CLI и учат README, шаблон и скиллы.
     if (cmd) opts[cmd] = true;
@@ -400,7 +408,13 @@ export default async () => {
         }
         isBuilding = false;
 
-        if (opts.site) return await cmdSite(options, opts, reloadEmitter, () => pages);
+        if (opts.site)
+            return await cmdSite(
+                options,
+                { ...opts, agent: detectAgent(process.env, opts) },
+                reloadEmitter,
+                () => pages
+            );
 
         if (options.GENERATE_WEBSITE && !opts.watch) {
             console.log(chalk.gray('\nto view the generated website run'));

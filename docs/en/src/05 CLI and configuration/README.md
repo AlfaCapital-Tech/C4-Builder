@@ -10,6 +10,7 @@
 | `c4builder --config` | setup wizard with the current values; since 0.5.0 also `c4builder config` |
 | `c4builder site` | builds and serves the site locally (same as `--site`) |
 | `c4builder --site -w` | the same, rebuilding on every save and reloading the browser |
+| `c4builder feedback --wait` | waits for the next batch of page feedback for an agent from `site -w` and prints it, see "Feedback to the agent" below |
 | `c4builder check <files...>` | checks `.puml`, `.iuml`, `.d2`, `.bpmn` diagrams without a build, exit code 0 or 1 |
 | `c4builder jre info` | which Java will be used (JSON) |
 | `c4builder jre install [--force]` | download a JRE into the cache in advance; `--force` — even if system Java exists |
@@ -18,7 +19,7 @@
 | `c4builder --docs` | short reference of config keys and the address of this documentation |
 | `c4builder update` | updates a global npm install to the newest version, otherwise prints how to update, see "Updating" below |
 
-Positional commands are `check`, `jre`, `site`, `update`, and since 0.5.0 also `new` and `config`. Since
+Positional commands are `check`, `jre`, `site`, `update`, `feedback`, and since 0.5.0 also `new` and `config`. Since
 0.5.0 any other positional argument is an `unknown command` error with exit code 1: a typo
 (`c4builder nwe`) no longer starts a build.
 
@@ -29,7 +30,9 @@ Flags:
 | `-c, --config-file <path>` | a different config file instead of `.c4builder` |
 | `-w, --watch` | rebuild on changes in the sources and plugin folders |
 | `-o, --open` | open the site in the browser (with `--site`) |
-| `-p, --port <n>` | port for `--site` (defaults to `webPort` from the config, 3000) |
+| `-p, --port <n>` | port for `--site` and `feedback` (defaults to `webPort` from the config, 3000) |
+| `--agent`, `--no-agent` | turn the agent mode of `site -w` on or off regardless of the environment |
+| `--wait` | for `feedback`: wait for the next batch instead of only checking the queue |
 | `--system-fonts` | render with system fonts for one run |
 | `-V, --version` | version |
 
@@ -62,7 +65,7 @@ machine: `NO_UPDATE_NOTIFIER=1`.
 ## Comments on the site
 
 In `c4builder site -w` you can leave a question about any place on a page: select text, press the
-**Comment** button next to the selection, write the question and press **Add** (`Ctrl+Enter`). The
+**Question** button next to the selection, write the question and press **Add question** (`Ctrl+Enter`). The
 question is appended to the page's source `.md`, into the section titled by the `questionsHeading`
 key (`Open questions` by default): as a table row when the section is a table (with the next number
 if the first column is numeric), otherwise as a list item; a missing section is created at the end of
@@ -72,6 +75,43 @@ highlighted in yellow with the question number above it linking to its row. A «
 question row (shown on hover) removes it from the file; the other numbers
 stay as they are. Pages without a source file
 (summaries, indexes) do not accept questions. Without `-w` and on static hosting there is no button.
+
+A question stays in the file, for people. When a coding agent edits the docs, the agent mode adds a
+second button next to the selection — **Feedback**: the comment goes to the agent and is never
+written to the files.
+
+## Feedback to the agent
+
+The agent mode of `site -w` is on when any of these holds:
+
+- the `--agent` flag is passed;
+- `C4BUILDER_AGENT` is set to anything but `0` (the value is the agent name in the hint);
+- a variable of a known agent is set: `CLAUDECODE` (Claude Code), `CODEX_THREAD_ID` (Codex),
+  `GEMINI_CLI`, `OPENCODE`, `COPILOT_CLI` or `AI_AGENT`;
+- the `c4builder feedback` command has connected to the server — the mode turns on at once, and the
+  page shows the **Feedback** button without a reload.
+
+`--no-agent` or `C4BUILDER_AGENT=0` turn the mode off whatever else holds; flags win over
+variables. Started in the agent mode by a flag or a variable, `site -w` prints a hint on how to
+receive the feedback.
+
+On the page the selection gets two buttons: **Feedback** (to the agent) and **Question** (a question
+in the file). The Feedback popover sends the comment right away (**Send now**) or keeps it in a review
+(**Add to review**), as in a GitLab merge request: once a review is started, the main button and
+`Ctrl+Enter` are **Add to review**. The review bar at the bottom of the page shows the number of
+pending comments and pages, whether the agent listens (`agent: listening ●` / `not listening ○`)
+and the buttons **Submit review** (with an optional overall comment), **Approve** (nothing more to
+change; pending comments go along) and **Discard**. A click on the counter opens the list with a
+«×» on every comment. The draft is kept in the browser's `localStorage` per project, survives a
+reload and a closed tab, and its quotes are highlighted in blue.
+
+`c4builder feedback --wait` connects to `site -w` on the port from `-p` or `webPort`, waits for the
+next batch with no time limit, prints it to stdout as markdown and exits with code 0. Without
+`--wait` the command prints a batch if one is already queued, otherwise nothing, and exits at once.
+No server, or the mode is off — exit code 1 and a message with the server address. Batches sent
+with nobody listening wait in the queue of the `site -w` process and go to the next command; the
+page says "queued", and "delivered" only once a command got the batch. The batch format and the
+agent loop are on the [Agents](08%20Agents/08%20Agents.md) page.
 
 ## How the config is read
 
@@ -115,7 +155,7 @@ in older versions produce a warning listing them, and the build continues.
 | `executeScript` | `false` | run `<script>` in pages and load swagger-ui |
 | `docsifyTemplate` | empty | path to a module with a custom `index.html` template |
 | `webPort` | `3000` | port of `c4builder site` |
-| `questionsHeading` | `Open questions` | heading of the section where `site -w` appends page comments |
+| `questionsHeading` | `Open questions` | heading of the section where `site -w` appends questions left on the page |
 | `webFileName` | — | one `.md` name for all site pages instead of the folder name |
 | `excludeSidebarFolderByPath` | — | list of paths (from the project folder, e.g. `src/Archive`) hidden from the sidebar |
 | `plugins` | `[]` | build plugins, see [Plugins](06%20Plugins/06%20Plugins.md) |
