@@ -59,7 +59,12 @@ export default definePlugin<Opts>({
         // complete-markdown; excludeOtherFiles действует и здесь.
         const addPages = (pages: RenderedPage[], srcRoot: string): void => {
             for (const page of pages) {
-                ctx.addPage({ path: page.path, markdown: page.markdown, diagrams: page.diagrams });
+                ctx.addPage({
+                    path: page.path,
+                    markdown: page.markdown,
+                    diagrams: page.diagrams,
+                    sources: page.sources
+                });
                 if (options.EXCLUDE_OTHER_FILES) continue;
                 for (const { from, to } of page.files) {
                     const src = path.join(srcRoot, from);

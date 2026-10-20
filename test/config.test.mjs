@@ -79,3 +79,12 @@ describe('generateLLMS', () => {
         expect(configSchema.safeParse({ generateLLMS: 'yes' }).success).toBe(false);
     });
 });
+
+describe('questionsHeading', () => {
+    it('по умолчанию Open questions, своё значение сохраняется', () => {
+        expect(configSchema.parse({}).questionsHeading).toBe('Open questions');
+        expect(configSchema.parse({ questionsHeading: 'Открытые вопросы' }).questionsHeading).toBe(
+            'Открытые вопросы'
+        );
+    });
+});

@@ -165,6 +165,8 @@ export interface RenderedPage {
     markdown: string;
     diagrams: PageDiagram[];
     files: PageFile[];
+    /** Исходные файлы страницы от cwd (артефакт/спека и её `:include`); у индексов пусто. */
+    sources: string[];
 }
 
 // Ссылки markdown: `[text](href "title")` и `![alt](src)`. Текст ссылки может содержать
@@ -223,6 +225,7 @@ export const renderMarkdown = (
 ): RenderedPage => {
     const { markdown, diagrams } = createFenceExtractor(FENCE_LANGS).extract(content, base, source);
     const files: PageFile[] = [];
+    const sources: string[] = source ? [source] : [];
     const rewrite = (t: string): string =>
         t.replace(LINK_RE, (whole, bang: string, text: string, href: string, title = '') => {
             const inner = text.includes('![') ? rewrite(text) : text;
@@ -255,6 +258,7 @@ export const renderMarkdown = (
                 });
                 diagrams.push(...sub.diagrams);
                 files.push(...sub.files);
+                sources.push(...sub.sources);
                 return sub.markdown;
             }
             const sameDir = fromDir === pageDir;
@@ -264,7 +268,7 @@ export const renderMarkdown = (
                 ? `${bang}[${inner}](${sameDir ? href : encodeURIPath(to)}${title})`
                 : `[${inner}](${encodeURIPath(path.posix.join(...pagePath, to))}${ignoreTitle(title)})`;
         });
-    return { path: pagePath, markdown: mapOutsideFences(markdown, rewrite).trim(), diagrams, files };
+    return { path: pagePath, markdown: mapOutsideFences(markdown, rewrite).trim(), diagrams, files, sources };
 };
 
 /**
@@ -286,7 +290,7 @@ export const renderSpecTree = (
         const spec = byKey.get(key);
         const page = spec
             ? render(pagePath, spec)
-            : { path: pagePath, markdown: '', diagrams: [], files: [] };
+            : { path: pagePath, markdown: '', diagrams: [], files: [], sources: [] };
         const nested = specs.some(
             (s) => s.path.length > prefix.length && prefix.every((p, i) => s.path[i] === p)
         );
@@ -388,7 +392,8 @@ export const renderChange = (
             path: segments,
             markdown: [head, family, links.join(' · '), main?.markdown].filter(Boolean).join('\n\n'),
             diagrams: main?.diagrams ?? [],
-            files: main?.files ?? []
+            files: main?.files ?? [],
+            sources: main?.sources ?? []
         },
         ...subpages
     ];

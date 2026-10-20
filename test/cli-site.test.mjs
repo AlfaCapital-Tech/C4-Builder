@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
+import http from 'node:http';
 import path from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 
@@ -87,5 +88,120 @@ describe('плашка о новой версии в site -w', () => {
         const html = await page(38323, { NO_UPDATE_NOTIFIER: '1' });
         expect(html).toContain('</body>');
         expect(html).not.toContain('c4builder-update');
+    }, 60_000);
+});
+
+// Комментарии к выделенному тексту (change site-comments): запись в исходник страницы,
+// защита по Origin, неизвестная страница, без -w ни скрипта, ни маршрута.
+describe('комментарии в site -w', () => {
+    const post = (port, body, headers = {}) =>
+        fetch(`http://127.0.0.1:${port}/__c4builder/comments`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...headers },
+            body: JSON.stringify(body)
+        });
+    const readme = path.join(dir, 'src', 'README.md');
+
+    it('POST с Origin сайта дописывает раздел в исходник; чужой Origin, пустой комментарий и неизвестная страница отклоняются', async () => {
+        const port = 38324;
+        const before = fs.readFileSync(readme, 'utf8');
+        try {
+            await serve(['site', '-w', '-p', String(port)], {
+                onReady: async () => {
+                    const html = await (await fetch(`http://127.0.0.1:${port}/`)).text();
+                    expect(html).toContain('__c4builderComments');
+                    expect(fs.readFileSync(path.join(dir, 'docs', 'index.html'), 'utf8')).not.toContain(
+                        '__c4builderComments'
+                    );
+
+                    expect((await post(port, { page: 'Overview.md', comment: 'x' })).status).toBe(403);
+                    expect(
+                        (
+                            await post(
+                                port,
+                                { page: 'Overview.md', comment: 'x' },
+                                { Origin: 'http://evil.test' }
+                            )
+                        ).status
+                    ).toBe(403);
+                    // DNS rebinding: Host и Origin согласованы, но домен чужой. fetch Host не
+                    // подменяет — нужен голый http.request.
+                    const rebound = await new Promise((resolve, reject) => {
+                        const body = JSON.stringify({ page: 'Overview.md', comment: 'x' });
+                        http.request(
+                            {
+                                host: '127.0.0.1',
+                                port,
+                                method: 'POST',
+                                path: '/__c4builder/comments',
+                                headers: {
+                                    Host: `evil.test:${port}`,
+                                    Origin: `http://evil.test:${port}`,
+                                    'Content-Type': 'application/json',
+                                    'Content-Length': Buffer.byteLength(body)
+                                }
+                            },
+                            (res) => resolve(res.resume().statusCode)
+                        )
+                            .on('error', reject)
+                            .end(body);
+                    });
+                    expect(rebound).toBe(403);
+                    const origin = { Origin: `http://127.0.0.1:${port}` };
+                    expect((await post(port, { page: 'Nope.md', comment: 'x' }, origin)).status).toBe(404);
+                    expect((await post(port, { page: 'Overview.md', comment: '  ' }, origin)).status).toBe(
+                        400
+                    );
+                    expect(fs.readFileSync(readme, 'utf8')).toBe(before);
+
+                    const ok = await post(
+                        port,
+                        { page: '/Overview.md', quote: 'root', section: 'root', comment: 'Why?' },
+                        origin
+                    );
+                    expect(ok.status).toBe(200);
+                    expect(await ok.json()).toEqual({ file: 'src/README.md', number: null });
+                    expect(fs.readFileSync(readme, 'utf8')).toBe(
+                        '# root\n\n## Open questions\n\n- Why? — «root» (§ root)\n'
+                    );
+
+                    const del = await fetch(`http://127.0.0.1:${port}/__c4builder/comments`, {
+                        method: 'DELETE',
+                        headers: { 'Content-Type': 'application/json', ...origin },
+                        body: JSON.stringify({ page: 'Overview.md', text: 'Why? — «root» (§ root)' })
+                    });
+                    expect(del.status).toBe(200);
+                    expect(fs.readFileSync(readme, 'utf8')).toBe('# root\n\n## Open questions\n\n');
+                    expect(
+                        (
+                            await fetch(`http://127.0.0.1:${port}/__c4builder/comments`, {
+                                method: 'DELETE',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ page: 'Overview.md', text: 'x' })
+                            })
+                        ).status
+                    ).toBe(403);
+                }
+            });
+        } finally {
+            fs.writeFileSync(readme, before);
+        }
+    }, 60_000);
+
+    it('без -w нет ни скрипта, ни маршрута', async () => {
+        const port = 38325;
+        await serve(['site', '-p', String(port)], {
+            onReady: async () => {
+                expect(await (await fetch(`http://127.0.0.1:${port}/`)).text()).not.toContain(
+                    '__c4builderComments'
+                );
+                const res = await post(
+                    port,
+                    { page: 'Overview.md', comment: 'x' },
+                    { Origin: `http://127.0.0.1:${port}` }
+                );
+                expect(res.status).toBe(404);
+            }
+        });
     }, 60_000);
 });

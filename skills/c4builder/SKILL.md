@@ -80,7 +80,9 @@ How the source tree becomes pages:
 5. **Live preview for a human:** `c4builder --site -w` builds, serves on
    `http://localhost:3000` (`webPort`, or `-p <n>`), rebuilds on save and reloads the
    browser; `-o` opens it. It never exits — start it in the background or leave it to the
-   user. `c4builder site` builds and serves without watching (also never exits).
+   user. `c4builder site` builds and serves without watching (also never exits). In `-w` a
+   human can select text on a page and add a question: it lands in the source `.md` under the
+   `questionsHeading` section (`Open questions` by default) — read it there, not in `docs/`.
 
 ## Writing C4 diagrams (PlantUML)
 

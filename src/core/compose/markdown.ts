@@ -414,9 +414,13 @@ export const generateMD = async (
     await Promise.all(filePromises);
 };
 
-export const generateWebMD = async (tree: TreeItem[], options: BuildOptions): Promise<void> => {
+/** Страница сайта (posix-путь `.md` от корня dist, как его грузит docsify) → исходные файлы. */
+export type PageSources = Map<string, string[]>;
+
+export const generateWebMD = async (tree: TreeItem[], options: BuildOptions): Promise<PageSources> => {
     const filePromises: Promise<void>[] = [];
     let docsifySideBar = '';
+    const pages: PageSources = new Map();
 
     const getWebFileName = (originalFileName: string): string => options.WEB_FILE_NAME || originalFileName;
 
@@ -430,16 +434,12 @@ export const generateWebMD = async (tree: TreeItem[], options: BuildOptions): Pr
         const MD = await compilePage(item, options);
 
         //write to disk
-        filePromises.push(
-            writeFile(
-                path.join(
-                    options.DIST_FOLDER,
-                    item.dir.replace(options.ROOT_FOLDER, ''),
-                    `${getWebFileName(item.name)}.md`
-                ),
-                MD
-            )
+        const pageRel = path.join(
+            item.dir.replace(options.ROOT_FOLDER, ''),
+            `${getWebFileName(item.name)}.md`
         );
+        pages.set(pageRel.split(path.sep).filter(Boolean).join('/'), item.sources);
+        filePromises.push(writeFile(path.join(options.DIST_FOLDER, pageRel), MD));
     }
 
     if (options.DOCSIFY_TEMPLATE && options.DOCSIFY_TEMPLATE !== '') {
@@ -509,4 +509,5 @@ export const generateWebMD = async (tree: TreeItem[], options: BuildOptions): Pr
     filePromises.push(writeFile(path.join(options.DIST_FOLDER, '_sidebar.md'), docsifySideBar));
 
     await Promise.all(filePromises);
+    return pages;
 };

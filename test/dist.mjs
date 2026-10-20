@@ -7,7 +7,7 @@ export { parseConfig } from '../dist/config/options.js';
 export { defaultConfig } from '../dist/config/defaults.js';
 export { rasterizeSvgToPng, resvgFontOptions } from '../dist/core/render/pngraster.js';
 export { renderArgv, fontCacheTag, renderKey } from '../dist/core/render/diagrams.js';
-export { acquireBuildLock, BuildLockHeldError } from '../dist/util/lock.js';
+export { acquireBuildLock, BuildLockHeldError, waitBuildLock } from '../dist/util/lock.js';
 export { loadPlugins, expandEnv, pluginWatchPaths } from '../dist/core/plugins/load.js';
 export { addPage, isVirtual } from '../dist/core/plugins/tree.js';
 export { injectHtml, injectPluginAssets } from '../dist/core/plugins/assets.js';
@@ -28,3 +28,11 @@ export {
     renderBpmn,
     teardownBpmn
 } from '../dist/core/render/bpmnrenderer.js';
+export {
+    appendQuestion,
+    formatQuestion,
+    pickSource,
+    removeQuestion,
+    writeQuestion
+} from '../dist/core/questions.js';
+export { renderChange, renderMarkdown } from '../dist/plugins/openspec/render.js';

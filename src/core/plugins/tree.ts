@@ -58,7 +58,8 @@ export const addPage = (tree: TreeItem[], options: BuildOptions, page: PageSpec)
                 parent: parent.dir,
                 mdFiles: [],
                 diagrams: [],
-                descendants: []
+                descendants: [],
+                sources: []
             };
             VIRTUAL.add(item);
             parent.descendants.push(seg);
@@ -74,6 +75,7 @@ export const addPage = (tree: TreeItem[], options: BuildOptions, page: PageSpec)
     const md =
         page.markdown === undefined ? [] : Array.isArray(page.markdown) ? page.markdown : [page.markdown];
     item.mdFiles.push(...md);
+    item.sources.push(...(page.sources ?? []).map((s) => path.resolve(s)));
     for (const d of page.diagrams ?? []) {
         const ext = path.extname(d.file).toLowerCase();
         const engine = engineForExt(ext);

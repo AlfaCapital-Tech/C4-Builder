@@ -32,6 +32,8 @@ export interface PageSpec {
     path: string[];
     markdown?: string | string[];
     diagrams?: PageDiagram[];
+    /** Файлы, из которых собрана страница (абсолютные или от cwd) — для комментариев в `site -w`. */
+    sources?: string[];
 }
 
 export interface ScanCtx {

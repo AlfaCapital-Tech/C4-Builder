@@ -59,6 +59,20 @@ The check and the notices are off when the `CI` variable is set (GitLab CI, GitH
 CI systems set it) or `NO_UPDATE_NOTIFIER` is set, and in the Docker image. To turn them off on your
 machine: `NO_UPDATE_NOTIFIER=1`.
 
+## Comments on the site
+
+In `c4builder site -w` you can leave a question about any place on a page: select text, press the
+**Comment** button next to the selection, write the question and press **Add** (`Ctrl+Enter`). The
+question is appended to the page's source `.md`, into the section titled by the `questionsHeading`
+key (`Open questions` by default): as a table row when the section is a table (with the next number
+if the first column is numeric), otherwise as a list item; a missing section is created at the end of
+the file. The text is the comment, the quoted selection and the heading of the page section. Watch
+rebuilds the site and the page reloads with the question in place. The quoted text on the page is
+highlighted in yellow with the question number above it linking to its row. A «×» button on the
+question row (shown on hover) removes it from the file; the other numbers
+stay as they are. Pages without a source file
+(summaries, indexes) do not accept questions. Without `-w` and on static hosting there is no button.
+
 ## How the config is read
 
 `.c4builder` is JSON in the project folder. The first build asks for missing keys through the
@@ -101,6 +115,7 @@ in older versions produce a warning listing them, and the build continues.
 | `executeScript` | `false` | run `<script>` in pages and load swagger-ui |
 | `docsifyTemplate` | empty | path to a module with a custom `index.html` template |
 | `webPort` | `3000` | port of `c4builder site` |
+| `questionsHeading` | `Open questions` | heading of the section where `site -w` appends page comments |
 | `webFileName` | — | one `.md` name for all site pages instead of the folder name |
 | `excludeSidebarFolderByPath` | — | list of paths (from the project folder, e.g. `src/Archive`) hidden from the sidebar |
 | `plugins` | `[]` | build plugins, see [Plugins](06%20Plugins/06%20Plugins.md) |

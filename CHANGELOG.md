@@ -3,6 +3,19 @@
 User-facing changes of C4-Builder. Every pull request that changes behaviour adds a line to
 `## Unreleased`; the release commit renames it to `## vX.Y.Z`.
 
+## Unreleased
+
+- `site -w`: comments on the page. Select text, press **Comment**, type a question — it is appended to
+  the source `.md` of the page under the `questionsHeading` section (`Open questions` by default; the
+  new `.c4builder` key): a table row with the next number when the section is a table, a list item
+  otherwise, a new section at the end of the file when there is none. Watch rebuilds and the page
+  reloads with the question; quoted text is highlighted on the page with the question number linking
+  to its row. A × button on a question row removes it from the file. Dev-server only: nothing is added to
+  the build output
+- `site -w`: when another c4builder process holds the build lock of the same folder (a second
+  `site -w`), the watch rebuild now waits for it (up to a minute) instead of skipping, so the browser
+  still gets its reload
+
 ## v0.8.0
 
 - `openspec` plugin: the new `groupKey` option splits top-level changes into groups, e.g. by team.
