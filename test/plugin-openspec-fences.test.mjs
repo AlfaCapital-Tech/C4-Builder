@@ -1,10 +1,11 @@
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { createFenceExtractor, mapOutsideFences } from './dist.mjs';
 
 // Экстрактор fenced-диаграмм (ядро) с набором языков плагина openspec: CommonMark-границы
 // блоков и имена по хешу.
-const OPENSPEC = ['plantuml', 'puml', 'd2'];
+const OPENSPEC = ['plantuml', 'puml', 'd2', 'mermaid'];
 
 describe('createFenceExtractor', () => {
     it('пустой ```plantuml закрывается сам, не глотая следующий блок', () => {
@@ -49,7 +50,7 @@ describe('createFenceExtractor', () => {
         expect(diagrams[0].soft).toBe(true);
     });
 
-    it('языки plantuml/puml/d2 (регистр не важен) извлекаются, прочие остаются кодом', () => {
+    it('языки plantuml/puml/d2/mermaid (регистр не важен) извлекаются, прочие остаются кодом', () => {
         const md =
             '```PlantUML title\nA -> B\n```\n\n```puml\n@startuml\nC -> D\n@enduml\n```\n\n```text\nE\n```\n';
         const { markdown, diagrams } = createFenceExtractor(OPENSPEC).extract(md, 'p');
@@ -59,6 +60,17 @@ describe('createFenceExtractor', () => {
         ]);
         expect(markdown).toMatch(/^!\[p-[0-9a-f]{8}\.puml\]\(p-[0-9a-f]{8}\.puml\)\n\n!\[p-/);
         expect(markdown).toContain('```text\nE\n```');
+    });
+
+    it('```mermaid извлекается в .mmd как есть, без обёртки @startuml', () => {
+        const { markdown, diagrams } = createFenceExtractor(OPENSPEC).extract(
+            '```mermaid\nflowchart LR\n  A --> B\n```\n',
+            'design'
+        );
+        expect(diagrams.map((d) => [path.extname(d.file), d.content])).toEqual([
+            ['.mmd', 'flowchart LR\n  A --> B']
+        ]);
+        expect(markdown).toMatch(/^!\[design-[0-9a-f]{8}\.mmd\]/);
     });
 
     it('mapOutsideFences не трогает текст внутри блоков', () => {

@@ -11,7 +11,7 @@ import type { PageDiagram } from '../plugins/types.ts';
 // открывающей. Тело захватывается вместе с завершающим переводом строки.
 const FENCE_RE = /^([ \t]*)(`{3,}|~{3,})[ \t]*([^\n]*)\n([\s\S]*?)^[ \t]*\2[`~]*[ \t]*$/gm;
 
-const ENGINE_EXT: Record<string, string> = { plantuml: '.puml', puml: '.puml', d2: '.d2' };
+const ENGINE_EXT: Record<string, string> = { plantuml: '.puml', puml: '.puml', d2: '.d2', mermaid: '.mmd' };
 
 /** Применить fn к тексту вне fenced-блоков (сами блоки — без изменений). */
 export const mapOutsideFences = (md: string, fn: (text: string) => string): string => {
@@ -26,7 +26,7 @@ export const mapOutsideFences = (md: string, fn: (text: string) => string): stri
 
 /**
  * Экстрактор диаграмм одной страницы; извлекаются только блоки языков `langs` (из
- * plantuml/puml/d2), остальные остаются кодом. Имя файла — `<base>-<sha1 контента>`: не
+ * plantuml/puml/d2/mermaid), остальные остаются кодом. Имя файла — `<base>-<sha1 контента>`: не
  * зависит от позиции fence, поэтому вставка/удаление соседнего блока не сдвигает имена и
  * не подсовывает картинку соседа из кэша; одинаковые блоки дают одну диаграмму.
  */

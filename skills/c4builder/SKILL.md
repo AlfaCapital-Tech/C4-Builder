@@ -1,6 +1,6 @@
 ---
 name: c4builder
-description: Work on a c4builder architecture-docs project - C4 model diagrams in PlantUML (C4-PlantUML stdlib) or D2, BPMN process diagrams, plus markdown, built into a docsify site or markdown files. Use when creating or editing .puml, .iuml, .d2, .bpmn or .md files in a project that has a .c4builder config, when changing .c4builder settings or plugins (openspec, openapi), or when building, validating or previewing the docs, or taking a human's comments from the preview page. Teaches the edit, c4builder check, build loop, the page feedback loop and the C4-PlantUML conventions.
+description: Work on a c4builder architecture-docs project - C4 model diagrams in PlantUML (C4-PlantUML stdlib) or D2, BPMN process diagrams, Mermaid diagrams, plus markdown, built into a docsify site or markdown files. Use when creating or editing .puml, .iuml, .d2, .bpmn, .mmd or .md files in a project that has a .c4builder config, when changing .c4builder settings or plugins (openspec, openapi), or when building, validating or previewing the docs, or taking a human's comments from the preview page. Teaches the edit, c4builder check, build loop, the page feedback loop and the C4-PlantUML conventions.
 ---
 
 # c4builder
@@ -37,13 +37,13 @@ How the source tree becomes pages:
   name (the root page is `homepageName`). Siblings are sorted by name — prefix folders with
   numbers (`1 …`, `2 …`) to order them.
 - All `.md` files of a folder are concatenated into its page.
-- Every `.puml` / `.d2` / `.bpmn` in a folder is rendered and attached to the page (on top by
+- Every `.puml` / `.d2` / `.bpmn` / `.mmd` in a folder is rendered and attached to the page (on top by
   default, `diagramsOnTop`), unless the markdown places it explicitly with
   `![name](container.puml)` — then it appears exactly there.
 - Files and folders starting with `_` are skipped (use it for shared libraries and drafts);
   `CLAUDE.md` is skipped too. Other files (images, `.iuml`) are copied next to the page —
   keep their names unique across the project.
-- `foo.puml`, `foo.d2` and `foo.bpmn` in one folder render to the same image name → build error.
+- `foo.puml`, `foo.d2`, `foo.bpmn` and `foo.mmd` in one folder render to the same image name → build error.
 - Never edit `docs/` (or whatever `distFolder` is): every build regenerates it.
 
 ## The loop: edit → check → build
@@ -58,10 +58,11 @@ How the source tree becomes pages:
    Exit code 0 means every file compiles. Otherwise each broken file is reported as
    `✗ <file>: line <N>: <message>` (PlantUML lines count from the top of the file). Errors
    in a `.iuml` carry no line number; D2 errors end with `<file>:<line>:<col>: <message>`;
-   BPMN problems are `✗ <file>: <element id> [<rule>] <description>`, one line each.
+   BPMN problems are `✗ <file>: <element id> [<rule>] <description>`, one line each;
+   mermaid errors are `✗ <file>: line <N>: <message>`.
    Fix and re-run until the exit code is 0. A changed `.iuml` is checked directly too: a
    styles file calling C4 macros (`UpdateElementStyle`) is checked with the C4 stdlib
-   included. Same engines as the build (bundled PlantUML jar, bundled D2, BPMN pipeline), no
+   included. Same engines as the build (bundled PlantUML jar, bundled D2, BPMN pipeline, mermaid), no
    `.c4builder` needed.
 3. **Build** the whole project:
 
@@ -166,6 +167,14 @@ the build validates the model and lays it out with horizontal pools and lanes. R
 [references/bpmn.md](references/bpmn.md) before creating or editing any `.bpmn` file: source
 format, pool/lane conventions and how to fix every `c4builder check` message.
 
+## Mermaid
+
+`.mmd` files and ```` ```mermaid ```` blocks in pages and OpenSpec artifacts are rendered at
+build time into images (real mermaid, no browser). Use them for flows, sequences, states and
+ER inside the docs; keep the C4 model in PlantUML. Read
+[references/mermaid.md](references/mermaid.md) before writing mermaid: supported types,
+fixed config keys and the `c4builder check` loop.
+
 ## Config and plugins
 
 - Read [references/config.md](references/config.md) before editing `.c4builder`: unknown
@@ -177,7 +186,7 @@ format, pool/lane conventions and how to fix every `c4builder check` message.
 ## Reading an existing architecture
 
 With `generateLLMS: true` the built site has `llms.txt` (every page in sidebar order, links
-to its `.md`) and `llms-full.txt` (all pages in one file, diagrams inlined as PlantUML/D2/BPMN
+to its `.md`) and `llms-full.txt` (all pages in one file, diagrams inlined as PlantUML/D2/BPMN/Mermaid
 source, shared local includes once in an appendix). To answer questions about a documented
 system, read `llms-full.txt` from the site or `distFolder` instead of crawling pages or
 images: the C4 source (`Person`, `System`, `Rel`) is the model itself.
@@ -201,6 +210,6 @@ for it: it reinstalls the global CLI. The notice changes neither stdout nor the 
 - Not restarting `c4builder feedback --wait` after a batch — the next comments wait unseen.
 - Forgetting `c4builder check` and reading a Java stack trace from the full build instead.
 - A page "missing" from the output because its file or folder starts with `_`.
-- `generateLocalImages: false` in a project with `.d2` or `.bpmn` files — they have no online
+- `generateLocalImages: false` in a project with `.d2`, `.bpmn` or `.mmd` files — they have no online
   renderer, the build stops with an error.
 - Writing `bpmndi` coordinates into a `.bpmn` — they are ignored; the layout is always automatic.

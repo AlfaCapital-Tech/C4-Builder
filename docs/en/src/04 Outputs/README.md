@@ -10,8 +10,8 @@ the first build, and in `.c4builder` they are `generateMD`, `generateCompleteMD`
 and one `.md` per page. The site is static and does not go to the internet: docsify, the theme
 and the plugins sit in `vendor/` next to `index.html`, diagrams are ready-made SVG or PNG files.
 Theme fonts are system fonts (no Google Fonts), emoji such as `:smile:` are shown as characters
-rather than images from GitHub, and ```` ```plantuml ```` blocks are rendered at build time, not
-in the browser via plantuml.com. External addresses appear only by explicit choice:
+rather than images from GitHub, and ```` ```plantuml ```` and ```` ```mermaid ```` blocks are
+rendered at build time, not in the browser (plantuml.com, client-side mermaid). External addresses appear only by explicit choice:
 `generateLocalImages: false` (diagram images link to `plantumlServerUrl`), a custom `webTheme`
 or `docsifyTemplate` that uses them, external images in page text.
 
@@ -36,7 +36,8 @@ root. Details are on the [Agents](08%20Agents/08%20Agents.md) page.
 
 `generateMD: true` (default). Each output folder gets a `README.md` with all the text and
 diagrams of the page. This output is convenient to commit: GitHub and GitLab render it as regular
-repository documentation.
+repository documentation. A ```` ```mermaid ```` block from a page is an image here too, as on the
+site — before mermaid support it stayed code and GitLab drew it by itself.
 
 Navigation at the top of each file:
 

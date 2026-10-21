@@ -9,6 +9,7 @@ import {
     clearIncludeCache,
     defaultConfig,
     foldD2Imports,
+    MERMAID_PACKAGE,
     foldIncludes,
     renderKey
 } from './dist.mjs';
@@ -130,6 +131,54 @@ describe('ленивая загрузка BPMN-зависимостей', () => 
         );
         expect(renderKey({ engine: 'plantuml', isDitaa: true }, options, 'png')).toMatch(
             /^puml\0[\d.]+\0charset=UTF-8\0fmt=png\0ditaa=true\0font=Nimbus Sans$/
+        );
+    });
+});
+
+// Mermaid-движок — тоже optionalDependency с ленивой загрузкой (change mermaid-diagrams).
+describe('ленивая загрузка mermaid-движка', () => {
+    const CLI = path.join(REPO_ROOT, 'dist', 'index.js');
+    const HOOK = path.join(REPO_ROOT, 'test', 'fixtures', 'hide-mermaid.mjs');
+    const run = (cwd, ...args) =>
+        spawnSync(process.execPath, ['--import', HOOK, CLI, ...args], {
+            cwd,
+            encoding: 'utf8',
+            input: '',
+            timeout: 120_000
+        });
+    const project = (name, readme) => {
+        write(`${name}/src/README.md`, readme);
+        write(`${name}/.c4builder`, JSON.stringify({ ...defaultConfig, projectName: name, hasRun: true }));
+        return path.join(dir, name);
+    };
+
+    it('проект без mermaid собирается без пакета движка', () => {
+        const res = run(project('nomermaid', '# Home\n\n```text\nmermaid-like text\n```\n'));
+        expect(res.status, `${res.stdout}${res.stderr}`).toBe(0);
+    });
+
+    it('блок mermaid без пакета: код 0, заглушка, предупреждение с пакетом и способом установки', () => {
+        const res = run(project('mblock', '# Home\n\n```mermaid\nflowchart LR\n  A --> B\n```\n'));
+        expect(res.status, `${res.stdout}${res.stderr}`).toBe(0);
+        expect(res.stdout).toMatch(/⚠ .*requires the optional packages @mermaid-js\/tiny and jsdom/);
+        expect(res.stdout).toMatch(/without --omit=optional: npm i -g @alfacapital-tech\/c4builder/);
+    });
+
+    it('.mmd без пакета → понятная ошибка check с подсказкой установки', () => {
+        write('m/p.mmd', 'flowchart LR\n  A --> B\n');
+        const res = run(path.join(dir, 'm'), 'check', 'p.mmd');
+        expect(res.status).toBe(1);
+        expect(res.stderr).toMatch(/✗ p\.mmd: Rendering mermaid diagrams requires the optional packages/);
+    });
+
+    it('ключ кэша mermaid несёт версию пакета движка', () => {
+        const version = JSON.parse(
+            fs.readFileSync(path.join(REPO_ROOT, 'node_modules', MERMAID_PACKAGE, 'package.json'), 'utf8')
+        ).version;
+        const options = { D2_LAYOUT: 'dagre', CHARSET: 'UTF-8', USE_SYSTEM_FONTS: false };
+        // Смена версии меняет ключ → чексумму → диаграмма перерисовывается.
+        expect(renderKey({ engine: 'mermaid', isDitaa: false }, options, 'svg')).toBe(
+            `mermaid\0${version}\0fmt=svg\0font=Nimbus Sans`
         );
     });
 });

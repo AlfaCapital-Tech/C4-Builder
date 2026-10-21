@@ -4,13 +4,14 @@ import { describe, expect, it } from 'vitest';
 
 import { goldenDir } from './helpers.mjs';
 
-// Сайт шаблонного проекта не ходит на внешние домены. Сканируем эталон default — golden-тест
-// гарантирует, что он равен фактическому выходу сборки. Вендорные .js не сканируются: их
+// Сайт шаблонного проекта не ходит на внешние домены. Сканируем эталон default (страницы,
+// тему и SVG диаграмм) — golden-тест гарантирует, что он равен фактическому выходу сборки. Вендорные .js не сканируются: их
 // внешние адреса выключены конфигурацией (nativeEmoji, без docsify-plantuml).
 const ROOT = path.join(goldenDir('default'), 'tree');
 
 // index.html и CSS: любой абсолютный или protocol-relative адрес загрузки.
 const ANY_URL = /https?:\/\/[^\s"'()<>]+|(?:url\(\s*["']?|(?:src|href)=["'])\/\/[^\s"'()<>]+/gi;
+const XMLNS = /<!DOCTYPE[^>]*>|\s(?:xmlns(?::\w+)?|\w+:\w+)="https?:\/\/[^"]*"/g;
 // Страницы: только изображения — гиперссылки из текста автора браузер сам не грузит.
 const MD_IMAGE =
     /!\[[^\]]*\]\(\s*<?((?:https?:)?\/\/[^\s)>]+)|<img\b[^>]*\bsrc=["']?((?:https?:)?\/\/[^\s"'>]+)/gi;
@@ -18,13 +19,20 @@ const MD_IMAGE =
 const files = fs
     .readdirSync(ROOT, { recursive: true })
     .map((f) => String(f).split(path.sep).join('/'))
-    .filter((f) => /^index\.html$|\.css$|\.md$/.test(f));
+    .filter((f) => /^index\.html$|\.css$|\.md$|\.svg$/.test(f));
 
 describe('офлайн-сайт: эталон default без внешних адресов', () => {
     it('сканируются index.html, тема и страницы', () => {
         expect(files).toContain('index.html');
         expect(files).toContain('vendor/vue.css');
         expect(files.some((f) => f.endsWith('.md'))).toBe(true);
+        // SVG диаграмм, включая mermaid (CSS движка в <style> не должен тянуть шрифты и @import)
+        expect(files).toContain('6 Mermaid Example/flow.svg');
+    });
+
+    it('клиентского рендера mermaid нет: ни скрипта в index.html, ни вендорного бандла', () => {
+        expect(fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8')).not.toMatch(/mermaid/i);
+        expect(fs.readdirSync(path.join(ROOT, 'vendor')).filter((f) => /mermaid/i.test(f))).toEqual([]);
     });
 
     it('нет адресов внешних доменов', () => {
@@ -32,6 +40,9 @@ describe('офлайн-сайт: эталон default без внешних ад
             const text = fs.readFileSync(path.join(ROOT, rel), 'utf8');
             if (rel.endsWith('.md'))
                 return [...text.matchAll(MD_IMAGE)].map((m) => `${rel}: ${m[1] ?? m[2]}`);
+            // Пространства имён и DTD — идентификаторы, браузер по ним ничего не грузит.
+            if (rel.endsWith('.svg'))
+                return [...text.replace(XMLNS, '').matchAll(ANY_URL)].map((m) => `${rel}: ${m[0]}`);
             // repo — ссылка-уголок на репозиторий, а не загрузка ресурса.
             return [...text.replace(/"repo":\s*"[^"]*"/, '').matchAll(ANY_URL)].map((m) => `${rel}: ${m[0]}`);
         });

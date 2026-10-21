@@ -1,13 +1,14 @@
 # AGENTS.md
 
 Architecture documentation built with [c4builder](https://github.com/AlfaCapital-Tech/C4-Builder):
-C4 diagrams (PlantUML, D2), BPMN processes and markdown in `src/` are compiled into `docs/`.
+C4 diagrams (PlantUML, D2), BPMN processes, Mermaid diagrams and markdown in `src/` are compiled
+into `docs/`.
 
 ## Commands
 
 ```bash
 c4builder                    # build docs/ (non-interactive with a complete .c4builder)
-c4builder check <file...>    # validate .puml / .iuml / .d2 / .bpmn files, exit code 0 = OK
+c4builder check <file...>    # validate .puml / .iuml / .d2 / .bpmn / .mmd files, exit code 0 = OK
 c4builder --site -w          # live preview on http://localhost:3000 - never exits
 c4builder feedback --wait    # wait for the next batch of comments from the preview page
 ```
@@ -35,7 +36,7 @@ updates it.
 ## Layout
 
 - One folder = one page. All `.md` files of a folder form its text; every `.puml` / `.d2` /
-  `.bpmn` in it is rendered onto the page, or placed inline with `![title](diagram.puml)`.
+  `.bpmn` / `.mmd` in it is rendered onto the page, or placed inline with `![title](diagram.puml)`.
 - Files and folders starting with `_` are not published (shared libraries, drafts).
 - `.c4builder` is the config (JSON); unknown keys are silently ignored.
 
@@ -50,6 +51,10 @@ updates it.
 - BPMN: write only the semantic BPMN 2.0 XML, never `bpmndi` coordinates — the build lays the
   diagram out. Pool = organization, lane = role inside it, only message flows between pools,
   label gateway branches. Example: `src/5 BPMN Example/account-opening.bpmn`.
+- Mermaid: a `.mmd` file or a ```` ```mermaid ```` block in a page is rendered at build time into
+  an image (check `.mmd` files like any diagram). `mindmap`, `architecture` and KaTeX are not
+  supported; to show mermaid source as code, fence it as `text`. Example:
+  `src/6 Mermaid Example/flow.mmd`.
 
 ## Agent skills
 

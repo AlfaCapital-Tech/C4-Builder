@@ -187,7 +187,7 @@ export const relSource = (root: string, rel: string): string =>
 
 // В артефактах OpenSpec любой блок диаграммы — иллюстрация, а не пример исходника
 // (в отличие от страниц проекта, где извлекается только ```plantuml).
-const FENCE_LANGS = ['plantuml', 'puml', 'd2'];
+const FENCE_LANGS = ['plantuml', 'puml', 'd2', 'mermaid'];
 
 /**
  * Markdown одного исходного файла → страница сайта: fenced-диаграммы вырезаются, ссылки

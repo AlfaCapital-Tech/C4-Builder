@@ -14,6 +14,8 @@ import { httpGetBuffer } from '../../util/http.ts';
 import { renderD2, foldD2Imports } from './d2renderer.ts';
 // BPMN-бэкенд: пакеты движка грузятся лениво внутри renderBpmn.
 import { renderBpmn, BPMN_CACHE_PACKAGES } from './bpmnrenderer.ts';
+// Mermaid-бэкенд: пакет движка грузится лениво внутри renderMermaid.
+import { renderMermaid, MERMAID_PACKAGE } from './mermaidrenderer.ts';
 import { resolveJava } from './jre.ts';
 // PNG-выход: SVG обоих движков растеризуется resvg (ленивая загрузка внутри модуля).
 import { rasterizeSvgToPng } from './pngraster.ts';
@@ -87,7 +89,7 @@ const runPool = async (tasks: Array<() => Promise<void>>, concurrency: number): 
     if (firstError !== undefined) throw firstError;
 };
 
-// Версии пакетов движков (D2, BPMN) для чексуммы кэша (апгрейд движка → перерендер).
+// Версии пакетов движков (D2, BPMN, mermaid) для чексуммы кэша (апгрейд движка → перерендер).
 // Читаем package.json лениво и один раз: pure-PlantUML сборки их не трогают.
 const versionCache = new Map<string, string>();
 const pkgVersion = (name: string): string => {
@@ -132,7 +134,9 @@ export const renderKey = (
         ? `d2\0${pkgVersion('@terrastruct/d2')}\0layout=${options.D2_LAYOUT}\0fmt=${outFormat}`
         : diagram.engine === 'bpmn'
           ? `bpmn\0${BPMN_CACHE_PACKAGES.map(pkgVersion).join('\0')}\0fmt=${outFormat}`
-          : `puml\0${VENDORED_JAR.version}\0charset=${options.CHARSET}\0fmt=${outFormat}\0ditaa=${diagram.isDitaa}`) +
+          : diagram.engine === 'mermaid'
+            ? `mermaid\0${pkgVersion(MERMAID_PACKAGE)}\0fmt=${outFormat}`
+            : `puml\0${VENDORED_JAR.version}\0charset=${options.CHARSET}\0fmt=${outFormat}\0ditaa=${diagram.isDitaa}`) +
     `\0font=${fontCacheTag(options)}`;
 
 export const getMime = (format: string): string => {
@@ -349,20 +353,23 @@ export const generateImages = async (
     // BPMN рендерится в общем окне jsdom главного потока — параллельность ничего не даёт,
     // а последовательная очередь исключает гонки на общем состоянии бандла bpmn-js.
     const bpmnTasks: Array<() => Promise<void>> = [];
+    // Mermaid — так же: своё окно jsdom, глобальный конфиг и подмены на время рендера.
+    const mermaidTasks: Array<() => Promise<void>> = [];
     const otherTasks: Array<() => Promise<void>> = [];
 
     for (const item of tree) {
         for (const diagram of item.diagrams) {
             // Чексумма = контент диаграммы + свёрнутый граф её зависимостей, чтобы
             // правка включаемого/импортируемого файла инвалидировала кэш: PlantUML —
-            // !include-граф (.iuml и пр.), D2 — граф @/...@-импортов. У BPMN зависимостей нет.
+            // !include-граф (.iuml и пр.), D2 — граф @/...@-импортов. У BPMN и mermaid их нет.
             const body = `${diagram.content || ''}`;
             const entryPath = path.join(item.dir, diagram.dir);
             const isD2 = diagram.engine === 'd2';
             const isBpmn = diagram.engine === 'bpmn';
+            const isMermaid = diagram.engine === 'mermaid';
             const includes = isD2
                 ? foldD2Imports(entryPath, body)
-                : isBpmn
+                : isBpmn || isMermaid
                   ? ''
                   : foldIncludes(body, item.dir, item.dir, new Set());
             const outFormat = diagramOutputFormat(diagram, options);
@@ -422,14 +429,14 @@ export const generateImages = async (
                 // Для растеризации PlantUML не-ditaa рендерим в svg (не -tpng), затем resvg.
                 let rendered: Buffer;
                 try {
+                    // Путь для сообщений движка; у блоков в markdown — их страница.
+                    const file = source ?? path.relative(process.cwd(), entryPath).split(path.sep).join('/');
                     if (isD2) {
                         rendered = await renderD2(entryPath, { layout: options.D2_LAYOUT, seed: body });
                     } else if (isBpmn) {
-                        // Путь для сообщений валидации; у виртуальных страниц — их источник.
-                        rendered = await renderBpmn(
-                            body,
-                            source ?? path.relative(process.cwd(), entryPath).split(path.sep).join('/')
-                        );
+                        rendered = await renderBpmn(body, file);
+                    } else if (isMermaid) {
+                        rendered = await renderMermaid(body, file);
                     } else {
                         // Резолв JRE отложен до первого реального PlantUML-рендера (эта
                         // ветка исполняется лишь при промахе кэша). getJava мемоизирует.
@@ -465,19 +472,20 @@ export const generateImages = async (
                 }
             });
 
-            (isD2 ? d2Tasks : isBpmn ? bpmnTasks : otherTasks).push(task);
+            (isD2 ? d2Tasks : isBpmn ? bpmnTasks : isMermaid ? mermaidTasks : otherTasks).push(task);
         }
     }
 
-    // PlantUML-пул, D2- и BPMN-очереди работают независимо (процессы java, WASM-worker,
-    // главный поток) и параллельно друг другу. allSettled — чтобы падение одной очереди не
+    // PlantUML-пул, D2-, BPMN- и mermaid-очереди работают независимо (процессы java,
+    // WASM-worker, главный поток) и параллельно друг другу. allSettled — чтобы падение одной очереди не
     // оставляло другие как floating promise с висящими JVM: все доосушаются, затем бросаем первую
     // ошибку (приоритет — PlantUML-пул, порядок между очередями не значим).
     try {
         const results = await Promise.allSettled([
             runPool(otherTasks, renderConcurrency()),
             runPool(d2Tasks, 1),
-            runPool(bpmnTasks, 1)
+            runPool(bpmnTasks, 1),
+            runPool(mermaidTasks, 1)
         ]);
         const failed = results.find((r) => r.status === 'rejected');
         if (failed && failed.status === 'rejected') throw failed.reason;

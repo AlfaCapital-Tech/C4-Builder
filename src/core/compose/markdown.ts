@@ -287,7 +287,7 @@ export const generateLlmsTxt = (tree: TreeItem[], options: BuildOptions): string
     return (
         `# ${options.PROJECT_NAME}\n\n` +
         '> Architecture documentation built with c4builder. Pages are markdown; full text with ' +
-        'diagram sources (PlantUML/D2/BPMN): [llms-full.txt](llms-full.txt).\n\n' +
+        'diagram sources (PlantUML/D2/BPMN/Mermaid): [llms-full.txt](llms-full.txt).\n\n' +
         `## Pages\n\n${pages.join('')}`
     );
 };
@@ -302,7 +302,8 @@ const FENCE_LANG: Record<string, string> = {
     '.puml': 'plantuml',
     '.iuml': 'plantuml',
     '.d2': 'd2',
-    '.bpmn': 'xml'
+    '.bpmn': 'xml',
+    '.mmd': 'mermaid'
 };
 
 // llms-full.txt: состав complete-документа, но диаграмма — исходником (C4-PlantUML/D2-текст

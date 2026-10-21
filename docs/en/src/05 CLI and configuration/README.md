@@ -11,7 +11,7 @@
 | `c4builder site` | builds and serves the site locally (same as `--site`) |
 | `c4builder --site -w` | the same, rebuilding on every save and reloading the browser |
 | `c4builder feedback --wait` | waits for the next batch of page feedback for an agent from `site -w` and prints it, see "Feedback to the agent" below |
-| `c4builder check <files...>` | checks `.puml`, `.iuml`, `.d2`, `.bpmn` diagrams without a build, exit code 0 or 1 |
+| `c4builder check <files...>` | checks `.puml`, `.iuml`, `.d2`, `.bpmn`, `.mmd` diagrams without a build, exit code 0 or 1 |
 | `c4builder jre info` | which Java will be used (JSON) |
 | `c4builder jre install [--force]` | download a JRE into the cache in advance; `--force` — even if system Java exists |
 | `c4builder --list` | print the current config; since 0.5.0 outside a project — an error with exit code 1, no files created |

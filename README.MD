@@ -5,7 +5,7 @@
 **Architecture as code that an agent writes, checks and reads.**
 
 C4-Builder is a CLI that builds a folder of markdown files and [PlantUML](https://plantuml.com/),
-[D2](https://d2lang.com/) or [BPMN](https://www.bpmn.org/) diagrams into documentation: a [docsify](https://docsify.js.org/)
+[D2](https://d2lang.com/), [BPMN](https://www.bpmn.org/) or [Mermaid](https://mermaid.js.org/) diagrams into documentation: a [docsify](https://docsify.js.org/)
 site, a markdown file per folder, or a single file. Folders follow the
 [C4 model](https://c4model.com/) (system → container → component), and git keeps the history of
 architecture decisions next to the code.
@@ -19,7 +19,7 @@ than a hundred diagrams, so we continue it as a maintained fork, adapted to work
 - **Deterministic offline rendering.** The PlantUML jar, the diagram font and the engines ship
   with the package; layout is computed by PlantUML's built-in Smetana engine, no Graphviz. The
   same sources produce the same SVG on a laptop, in CI and in Docker, with no network access.
-- **`c4builder check`** validates individual `.puml`/`.iuml`/`.d2`/`.bpmn` files with the build's own
+- **`c4builder check`** validates individual `.puml`/`.iuml`/`.d2`/`.bpmn`/`.mmd` files with the build's own
   engine and returns an exit code and the error line — fast feedback for agents, pre-commit
   hooks and CI.
 - **Plugins.** `openspec` publishes an [OpenSpec](https://github.com/Fission-AI/OpenSpec) store
@@ -29,6 +29,8 @@ than a hundred diagrams, so we continue it as a maintained fork, adapted to work
   without a system Java, c4builder downloads a private JRE.
 - **BPMN** processes written as BPMN 2.0 XML without coordinates: the build validates the model
   and lays it out with horizontal pools and lanes.
+- **Mermaid** `.mmd` files and ```` ```mermaid ```` blocks are rendered at build time by real mermaid,
+  without a browser: images in every output instead of client-side rendering.
 - **Maintained.** TypeScript, golden rendering snapshots, CI on every pull request, releases to
   npm and GHCR. The PDF output of the original was removed.
 

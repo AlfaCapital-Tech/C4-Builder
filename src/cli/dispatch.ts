@@ -29,6 +29,7 @@ import { acquireBuildLock, BuildLockHeldError, waitBuildLock } from '../util/loc
 // больше не будет (одиночный запуск).
 import { teardownD2 } from '../core/render/d2renderer.ts';
 import { teardownBpmn } from '../core/render/bpmnrenderer.ts';
+import { teardownMermaid } from '../core/render/mermaidrenderer.ts';
 import { packageJson as pkg } from '../util/paths.ts';
 import type { BuildOptions, C4ConfigFile, ConfigIssue } from '../config/options.ts';
 import { outputDirs, parseConfig } from '../config/options.ts';
@@ -404,6 +405,7 @@ export default async () => {
             if (!opts.watch) {
                 await teardownD2();
                 await teardownBpmn();
+                await teardownMermaid();
             }
         }
         isBuilding = false;

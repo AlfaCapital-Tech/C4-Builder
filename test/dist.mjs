@@ -6,6 +6,7 @@ export { configSchema, isValidPort } from '../dist/config/schema.js';
 export { parseConfig } from '../dist/config/options.js';
 export { defaultConfig } from '../dist/config/defaults.js';
 export { rasterizeSvgToPng, resvgFontOptions } from '../dist/core/render/pngraster.js';
+export { textWidth } from '../dist/core/render/textmetrics.js';
 export { renderArgv, fontCacheTag, renderKey } from '../dist/core/render/diagrams.js';
 export { acquireBuildLock, BuildLockHeldError, waitBuildLock } from '../dist/util/lock.js';
 export { loadPlugins, expandEnv, pluginWatchPaths } from '../dist/core/plugins/load.js';
@@ -38,4 +39,10 @@ export {
     removeQuestion,
     writeQuestion
 } from '../dist/core/questions.js';
+export {
+    MermaidError,
+    MERMAID_PACKAGE,
+    renderMermaid,
+    teardownMermaid
+} from '../dist/core/render/mermaidrenderer.js';
 export { renderChange, renderMarkdown } from '../dist/plugins/openspec/render.js';

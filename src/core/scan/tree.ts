@@ -11,7 +11,7 @@ import { createFenceExtractor } from './fences.ts';
 export interface Diagram {
     dir: string; // имя файла диаграммы (историческое поле)
     ext: string;
-    engine: string; // 'plantuml' | 'd2' | 'bpmn'
+    engine: string; // 'plantuml' | 'd2' | 'bpmn' | 'mermaid'
     content: string | Buffer;
     isDitaa: boolean;
     /** Виртуальные страницы: исходный файл (у файловых диаграмм это сам `dir`). */
@@ -40,7 +40,8 @@ export interface TreeItem {
 export const DIAGRAM_ENGINES = [
     { ext: '.puml', engine: 'plantuml', remoteRender: true },
     { ext: '.d2', engine: 'd2', remoteRender: false },
-    { ext: '.bpmn', engine: 'bpmn', remoteRender: false }
+    { ext: '.bpmn', engine: 'bpmn', remoteRender: false },
+    { ext: '.mmd', engine: 'mermaid', remoteRender: false }
 ] as const satisfies ReadonlyArray<{ ext: string; engine: string; remoteRender: boolean }>;
 
 export type DiagramEngine = (typeof DIAGRAM_ENGINES)[number]['engine'];
@@ -123,10 +124,11 @@ export const generateTree = async (dir: string, options: BuildOptions): Promise<
             }
         }
 
-        // Блоки ```plantuml в страницах рендерим при сборке: иначе текст диаграммы доезжал
-        // до браузера и клиентский docsify-plantuml (в т.ч. в пользовательских шаблонах)
-        // отправлял его на plantuml.com. puml/d2 остаются кодом — так показывают исходник.
-        const fences = createFenceExtractor(['plantuml']);
+        // Блоки ```plantuml и ```mermaid в страницах рендерим при сборке: иначе текст
+        // диаграммы доезжал до браузера и клиентский рендер (docsify-plantuml, в т.ч. в
+        // пользовательских шаблонах) отправлял его наружу. puml/d2 остаются кодом — так
+        // показывают исходник.
+        const fences = createFenceExtractor(['plantuml', 'mermaid']);
         const mdFiles = files.filter((x) => path.extname(x).toLowerCase() === '.md');
         for (const mdFile of mdFiles) {
             const mdPath = path.join(dir, mdFile);
@@ -137,16 +139,19 @@ export const generateTree = async (dir: string, options: BuildOptions): Promise<
             );
             item.mdFiles.push(markdown);
             item.sources.push(path.resolve(mdPath));
-            for (const d of diagrams)
+            for (const d of diagrams) {
+                const ext = path.extname(d.file);
+                const engine = engineForExt(ext) ?? 'plantuml';
                 item.diagrams.push({
                     dir: d.file,
-                    ext: '.puml',
-                    engine: 'plantuml',
+                    ext,
+                    engine,
                     content: d.content,
-                    isDitaa: /@startditaa/i.test(d.content),
+                    isDitaa: engine === 'plantuml' && /@startditaa/i.test(d.content),
                     source: d.source,
                     soft: d.soft
                 });
+            }
         }
         // Диаграммы: расширение → движок берём из DIAGRAM_ENGINES. Поле dir — имя файла
         // (историческое), engine выбирает рендерер, isDitaa — только для PlantUML.
