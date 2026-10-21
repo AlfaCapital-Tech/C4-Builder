@@ -38,7 +38,9 @@ It is easier for a human to point the agent at a place on the page than to retel
 In `c4builder site -w` under an agent (see "Feedback to the agent" on the
 [CLI & configuration](05%20CLI%20and%20configuration/05%20CLI%20and%20configuration.md) page) the
 selection gets a **Feedback** button: the comment goes to the agent right away (**Send now**) or in a
-review batch (**Submit review**, **Approve**). The agent loop:
+review batch (**Submit review**, **Approve**). With nothing to change, the empty review bar has one
+button, **Done — no changes**: it sends an `approved` batch with no comments. **Discard** only clears
+the draft and sends nothing to the agent. The agent loop:
 
 1. Start `c4builder --site -w` and `c4builder feedback --wait` in the background. In Claude Code —
    both through Bash with `run_in_background`: the agent is notified when `feedback --wait` exits.
@@ -81,6 +83,23 @@ A feedback comment is an instruction to the agent, not a question: it is never w
 Questions for people (the **Question** button) go to the `questionsHeading` section of the source
 `.md` and stay in the documentation — the agent should not move feedback there or answer it by
 editing the questions section.
+
+### Interface language
+
+The page interface — buttons, hints, the review bar, toasts — comes in English and Russian. The
+language follows the browser settings: the first language in the preference list that the dictionary
+has (`en` or `ru`), otherwise English. To pin the language for a project, set the `.c4builder` key:
+
+```json
+{ "uiLanguage": "en" }
+```
+
+`auto` (the default) follows the browser, `en` and `ru` always use that language. This page names
+the English buttons; the Russian interface shows **Замечание** (Feedback), **Вопрос** (Question),
+**Отправить** (Send now), **В ревью** (Add to review), **Отправить ревью** (Submit review),
+**Одобрить** (Approve), **Очистить** (Discard), **Готово, правок нет** (Done — no changes). The
+interface language does not change the CLI output, the `c4builder feedback` batch, server error
+texts or the questions section heading (`questionsHeading`).
 
 ## Why offline rendering matters for agents
 

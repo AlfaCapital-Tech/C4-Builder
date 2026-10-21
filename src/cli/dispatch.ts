@@ -142,6 +142,7 @@ function getOptions(c: Partial<C4ConfigFile>): BuildOptions | Partial<BuildOptio
         EXCLUDE_OTHER_FILES: c.excludeOtherFiles,
         USE_SYSTEM_FONTS: c.useSystemFonts,
         QUESTIONS_HEADING: c.questionsHeading,
+        UI_LANGUAGE: c.uiLanguage,
         PLUGINS: c.plugins
     };
 }

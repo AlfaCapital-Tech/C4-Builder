@@ -1,3 +1,5 @@
+import { UI_STRINGS } from './site.i18n.ts';
+
 export const COMMENTS_PATH = '/__c4builder/comments';
 export const FEEDBACK_PATH = '/__c4builder/feedback';
 export const FEEDBACK_HEADER = 'X-C4builder-Feedback';
@@ -11,6 +13,9 @@ const CSS = [
     '.c4b-cpop textarea,.c4b-review textarea{width:100%;box-sizing:border-box;min-height:70px;padding:6px;border:1px solid #ccc;border-radius:4px;font:13px/1.4 sans-serif;resize:vertical}',
     '.c4b-cpop .c4b-row{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:8px}',
     '.c4b-cpop small{color:#888;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    // Кнопки поповера не сжимаются: длинную подсказку обрезает многоточие, а не кнопки уходят
+    // на вторую строку (русские подписи и длинные названия разделов).
+    '.c4b-cpop .c4b-row>span{flex:none}',
     '.c4b-cpop button,.c4b-review button{padding:4px 12px;border:1px solid #ccc;border-radius:4px;background:#fff;color:#2c3e50;cursor:pointer;font:13px sans-serif}',
     '.c4b-cpop button.c4b-primary,.c4b-review button.c4b-primary{border-color:#42b983;background:#42b983;color:#fff}',
     '.c4b-cpop button:disabled,.c4b-review button:disabled{opacity:.6;cursor:default}',
@@ -19,6 +24,9 @@ const CSS = [
     '.c4b-review{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:1000;width:520px;max-width:calc(100vw - 32px);box-sizing:border-box;padding:8px 12px;border:1px solid #3b82f6;border-radius:6px;background:#fff;color:#2c3e50;font:13px/1.4 sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.2)}',
     '.c4b-review .c4b-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px}',
     '.c4b-review .c4b-row small{flex:1;color:#888;white-space:nowrap}',
+    // Кнопки панели переносятся одной группой: иначе при нехватке места часть уезжает на
+    // вторую строку, а Discard остаётся один в первой.
+    '.c4b-review .c4b-acts{display:flex;gap:6px;margin-left:auto}',
     '.c4b-review button.c4b-link{padding:0;border:0;background:none;color:#2c3e50;font-weight:700;text-decoration:underline dotted}',
     '.c4b-review ul{margin:6px 0;padding:0;list-style:none;max-height:40vh;overflow:auto}',
     '.c4b-review li{padding:3px 0;border-top:1px solid #eee;overflow-wrap:anywhere}',
@@ -38,16 +46,17 @@ const CSS = [
     '.c4b-del:disabled{opacity:.5;cursor:default}'
 ].join('');
 
-const jsString = (s: string): string =>
-    JSON.stringify(s)
+const jsValue = (v: unknown): string =>
+    JSON.stringify(v)
         .replace(/</g, '\\u003c')
         .replace(/[\u0080-￿]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`);
 
 // Начальное состояние агентского режима и ключ проекта вставляет сервер, дальше его обновляют
 // события `c4builder:agent` от сниппета livereload (change site-agent-feedback, design D4, D8).
+// Язык выбирает сам скрипт: при `auto` — по navigator.languages (change site-ui-language, D1).
 export const commentsSnippet = (
     heading: string,
-    { agent = false, listening = false, project = '' } = {}
+    { agent = false, listening = false, project = '', language = 'auto' } = {}
 ): string => `
 <script>
 (function () {
@@ -55,14 +64,33 @@ export const commentsSnippet = (
     window.__c4builderComments = true;
     var ENDPOINT = '${COMMENTS_PATH}';
     var FEEDBACK = '${FEEDBACK_PATH}';
-    var HEADING = ${jsString(heading)};
+    var HEADING = ${jsValue(heading)};
     var TOAST_KEY = '__c4builderCommentToast';
-    var DRAFT_KEY = '__c4builderReview:' + ${jsString(project)};
+    var DRAFT_KEY = '__c4builderReview:' + ${jsValue(project)};
     var AGENT = { on: ${agent}, listening: ${listening} };
     var BLOCKS = 'p,li,td,th,h1,h2,h3,h4,h5,h6,pre,blockquote,dd,dt,div,section,details,summary';
     var style = document.createElement('style');
-    style.textContent = ${jsString(CSS)};
+    style.textContent = ${jsValue(CSS)};
     document.head.appendChild(style);
+
+    var STRINGS = ${jsValue(UI_STRINGS)};
+    var has = function (lang) { return Object.prototype.hasOwnProperty.call(STRINGS, lang); };
+    var LANG = (function (pref) {
+        if (has(pref)) return pref;
+        var prefs = [].concat(navigator.languages || [], navigator.language || []);
+        for (var i = 0; i < prefs.length; i++) {
+            var tag = String(prefs[i]).toLowerCase().split('-')[0];
+            if (has(tag)) return tag;
+        }
+        return 'en';
+    })(${jsValue(language)});
+    var plural = new Intl.PluralRules(LANG);
+    var t = function (key, vars) {
+        vars = vars || {};
+        var s = STRINGS[LANG][key];
+        if (typeof s === 'object') s = s[plural.select(vars.n)];
+        return s.replace(/\\{(\\w+)\\}/g, function (m, k) { return k in vars ? String(vars[k]) : m; });
+    };
 
     var collapse = function (s) { return String(s).replace(/\\s+/g, ' ').trim(); };
     var same = function (a, b) { return collapse(a).toLowerCase() === collapse(b).toLowerCase(); };
@@ -210,18 +238,18 @@ export const commentsSnippet = (
             del.type = 'button';
             del.className = 'c4b-del';
             del.textContent = '\\u00d7';
-            del.title = 'Remove this question';
+            del.title = t('removeQuestion');
             del.addEventListener('click', function (e) {
                 e.preventDefault();
                 e.stopPropagation();
                 del.disabled = true;
                 send({ page: pageFile(), number: Number(item.number) || null, text: collapse(item.text) }, 'DELETE').then(function (r) {
-                    var msg = 'Removed from ' + r.file;
+                    var msg = t('removed', { file: r.file });
                     try { sessionStorage.setItem(TOAST_KEY, msg); } catch (e) {}
                     toast(msg);
                 }, function (err) {
                     del.disabled = false;
-                    toast('Remove failed: ' + (err && err.message ? err.message : err), true);
+                    failure('removeFailed')(err);
                 });
             });
             item.cell.appendChild(del);
@@ -279,10 +307,10 @@ export const commentsSnippet = (
     var btns = document.createElement('div');
     btns.className = 'c4b-cbtns';
     btns.hidden = true;
-    var fbBtn = button('Feedback', null, 'c4b-fb');
-    fbBtn.title = 'Tell the agent what to change';
-    var qBtn = button('Question');
-    qBtn.title = 'Add a question to the ' + HEADING + ' section of the source file';
+    var fbBtn = button(t('feedback'), null, 'c4b-fb');
+    fbBtn.title = t('feedbackTitle');
+    var qBtn = button(t('question'));
+    qBtn.title = t('questionTitle', { heading: HEADING });
     btns.appendChild(fbBtn);
     btns.appendChild(qBtn);
     document.body.appendChild(btns);
@@ -354,8 +382,8 @@ export const commentsSnippet = (
             });
         });
     };
-    var failure = function (what) {
-        return function (err) { toast(what + ' failed: ' + (err && err.message ? err.message : err), true); };
+    var failure = function (key) {
+        return function (err) { toast(t(key, { error: err && err.message ? err.message : err }), true); };
     };
 
     // Feedback to the agent: "Delivered" only after the server handed the batch to
@@ -363,15 +391,15 @@ export const commentsSnippet = (
     var delivered = {}, pending = {};
     var sendBatch = function (decision, comments, general) {
         return send({ decision: decision, comments: comments, general: general }, 'POST', FEEDBACK).then(function (r) {
-            if (delivered[r.id]) return toast('Delivered to the agent');
+            if (delivered[r.id]) return toast(t('delivered'));
             pending[r.id] = true;
-            toast(r.queued ? 'Queued \\u2014 agent is not listening' : 'Sent to the agent');
+            toast(t(r.queued ? 'queued' : 'sent'));
         });
     };
     window.addEventListener('c4builder:delivered', function (e) {
         var id = e.detail && e.detail.id;
         delivered[id] = true;
-        if (pending[id]) { delete pending[id]; toast('Delivered to the agent'); }
+        if (pending[id]) { delete pending[id]; toast(t('delivered')); }
     });
 
     // Review draft lives in localStorage per project: it survives livereload and a closed tab;
@@ -418,7 +446,7 @@ export const commentsSnippet = (
     listen.className = 'c4b-listen';
     var list = document.createElement('ul');
     var general = document.createElement('textarea');
-    general.placeholder = 'Overall comment (optional, Ctrl+Enter to submit, Esc to hide)';
+    general.placeholder = t('generalPlaceholder');
     general.hidden = true;
     var finish = function (decision) {
         var items = draft(), ids = items.map(function (it) { return it.id; });
@@ -429,18 +457,18 @@ export const commentsSnippet = (
             general.hidden = true;
             expanded = false;
             saveDraft(draft().filter(function (it) { return ids.indexOf(it.id) < 0; }));
-        }, failure('Review')).then(function () { busy = false; renderPanel(); });
+        }, failure('reviewFailed')).then(function () { busy = false; renderPanel(); });
     };
-    var discard = button('Discard', function () {
+    var discard = button(t('discard'), function () {
         var n = draft().length;
-        if (n && !window.confirm('Discard ' + n + ' pending comment' + (n === 1 ? '' : 's') + '?')) return;
+        if (n && !window.confirm(t('discardConfirm', { n: n }))) return;
         general.value = '';
         general.hidden = true;
         saveDraft([]);
     });
-    var approve = button('Approve', function () { finish('approved'); });
-    approve.title = 'Tell the agent there is nothing more to change (pending comments go along)';
-    var submit = button('Submit review', function () {
+    // One finishing action, two labels: on an empty draft "Approve" does not read as "finish".
+    var approve = button('', function () { finish('approved'); });
+    var submit = button(t('submitReview'), function () {
         if (!general.hidden) return finish('submitted');
         general.hidden = false;
         general.focus();
@@ -451,20 +479,23 @@ export const commentsSnippet = (
     });
     var head = document.createElement('div');
     head.className = 'c4b-row';
-    [count, listen, discard, approve, submit].forEach(function (el) { head.appendChild(el); });
+    var acts = document.createElement('span');
+    acts.className = 'c4b-acts';
+    [discard, approve, submit].forEach(function (el) { acts.appendChild(el); });
+    [count, listen, acts].forEach(function (el) { head.appendChild(el); });
     panel.appendChild(head);
     panel.appendChild(list);
     panel.appendChild(general);
     document.body.appendChild(panel);
     var renderPanel = function () {
         panel.hidden = !AGENT.on;
-        var items = draft(), pages = {};
+        var items = draft(), pages = {}, empty = !items.length;
         items.forEach(function (it) { pages[it.page] = true; });
         var n = Object.keys(pages).length;
-        count.textContent = items.length
-            ? 'Review: ' + items.length + ' pending (' + n + (n === 1 ? ' page)' : ' pages)')
-            : 'Review: nothing pending';
-        count.disabled = !items.length;
+        count.textContent = empty
+            ? t('reviewEmpty')
+            : t('reviewCount', { comments: t('comments', { n: items.length }), pages: t('pages', { n: n }) });
+        count.disabled = empty;
         list.textContent = '';
         items.forEach(function (it) {
             var li = document.createElement('li');
@@ -473,19 +504,23 @@ export const commentsSnippet = (
             var del = button('\\u00d7', function () {
                 saveDraft(draft().filter(function (x) { return x.id !== it.id; }));
             }, 'c4b-del');
-            del.title = 'Remove from the review';
+            del.title = t('removeFromReview');
             li.appendChild(del);
             list.appendChild(li);
         });
-        list.hidden = !expanded || !items.length;
+        list.hidden = !expanded || empty;
+        approve.textContent = t(empty ? 'done' : 'approve');
+        approve.title = t(empty ? 'doneTitle' : 'approveTitle');
+        approve.className = empty ? 'c4b-primary' : '';
+        discard.hidden = submit.hidden = empty;
         discard.disabled = busy;
         approve.disabled = busy;
-        submit.disabled = busy || !items.length;
+        submit.disabled = busy || empty;
     };
     var renderAgent = function () {
         fbBtn.hidden = !AGENT.on;
         renderPanel();
-        var text = 'agent: ' + (AGENT.listening ? 'listening \\u25cf' : 'not listening \\u25cb');
+        var text = t(AGENT.listening ? 'listening' : 'notListening');
         var els = document.querySelectorAll('.c4b-listen');
         for (var i = 0; i < els.length; i++) { els[i].textContent = text; els[i].title = text; }
     };
@@ -510,14 +545,14 @@ export const commentsSnippet = (
         var quote = document.createElement('blockquote');
         quote.textContent = data.quote;
         var ta = document.createElement('textarea');
-        ta.placeholder = (feedback ? 'What should the agent change?' : 'Your question') + ' (Ctrl+Enter to send, Esc to cancel)';
+        ta.placeholder = t(feedback ? 'feedbackPlaceholder' : 'questionPlaceholder');
         var row = document.createElement('div');
         row.className = 'c4b-row';
         var hint = document.createElement('small');
         if (feedback) hint.className = 'c4b-listen';
-        else hint.textContent = hint.title = 'To: ' + HEADING + (data.section ? ' / ' + data.section : '');
+        else hint.textContent = hint.title = t('questionTo', { target: HEADING + (data.section ? ' / ' + data.section : '') });
         var actions = document.createElement('span');
-        var buttons = [button('Cancel', close)];
+        var buttons = [button(t('cancel'), close)];
         var run = function (action) {
             return function () {
                 var comment = ta.value.trim();
@@ -525,7 +560,7 @@ export const commentsSnippet = (
                 buttons.forEach(function (b) { b.disabled = true; });
                 action(comment).then(close, function (err) {
                     buttons.forEach(function (b) { b.disabled = false; });
-                    failure(feedback ? 'Feedback' : 'Question')(err);
+                    failure(feedback ? 'feedbackFailed' : 'questionFailed')(err);
                 });
             };
         };
@@ -534,20 +569,20 @@ export const commentsSnippet = (
         };
         var primary;
         if (feedback) {
-            var add = button('Add to review', run(function (c) {
+            var add = button(t('addToReview'), run(function (c) {
                 var it = item(c);
                 it.id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
                 saveDraft(draft().concat([it]));
                 return Promise.resolve();
             }));
-            var now = button('Send now', run(function (c) { return sendBatch('submitted', [item(c)], ''); }));
+            var now = button(t('sendNow'), run(function (c) { return sendBatch('submitted', [item(c)], ''); }));
             buttons.push(add, now);
             // As in a GitLab merge request: once a review is started, comments go into it.
             primary = draft().length ? add : now;
         } else {
-            primary = button('Add question', run(function (c) {
+            primary = button(t('addQuestion'), run(function (c) {
                 return send(item(c)).then(function (r) {
-                    var msg = 'Added to ' + r.file + (r.number ? ' as #' + r.number : '');
+                    var msg = t(r.number ? 'addedNumber' : 'added', { file: r.file, number: r.number });
                     try { sessionStorage.setItem(TOAST_KEY, msg); } catch (e) {}
                     toast(msg);
                 });

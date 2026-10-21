@@ -48,6 +48,7 @@ export interface BuildOptions {
     D2_LAYOUT: string;
     MD_FILE_NAME: string;
     QUESTIONS_HEADING: string;
+    UI_LANGUAGE: 'auto' | 'en' | 'ru';
     // Сырой список плагинов из конфига; загружаются и валидируются в cli/dispatch
     // (core/plugins/load) и передаются в build() отдельным аргументом.
     PLUGINS: PluginEntry[];

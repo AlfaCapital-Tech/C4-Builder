@@ -22,6 +22,7 @@ export { generateLlmsFull } from '../dist/core/compose/markdown.js';
 export { compareVersions, newestVersion } from '../dist/cli/update.js';
 export { detectAgent } from '../dist/cli/agent.js';
 export { default as cmdSite } from '../dist/cli/commands/site.js';
+export { UI_STRINGS } from '../dist/cli/commands/site.i18n.js';
 export { batchSchema, formatBatch } from '../dist/core/feedback.js';
 export {
     BpmnError,

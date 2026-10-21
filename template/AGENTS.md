@@ -29,7 +29,8 @@ updates it.
    (page, `Sources`, quote, text) — apply them to `src/`, run it again, and stop on
    `Decision: approved`. Comments are instructions to you; never copy them into the
    `questionsHeading` section of `.c4builder` (`Open questions` by default), which holds
-   questions for people.
+   questions for people. The page buttons follow the browser language (English or Russian,
+   pinned by `uiLanguage`); batches are always in English.
 4. A stderr line `c4builder <new> is available (current <current>). Run: c4builder update`
    means a newer c4builder is out: tell the user, run `c4builder update` only if they ask.
 

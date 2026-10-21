@@ -188,7 +188,8 @@ export default (
                 commentsSnippet(currentConfiguration.QUESTIONS_HEADING, {
                     agent: agent.on,
                     listening,
-                    project: projectKey
+                    project: projectKey,
+                    language: currentConfiguration.UI_LANGUAGE
                 }) +
                 (next ? updateBanner(next) : '');
             if (html.includes('</body>')) return html.replace('</body>', `${snippet}</body>`);

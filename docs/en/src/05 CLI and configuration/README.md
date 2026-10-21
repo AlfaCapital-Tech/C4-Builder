@@ -76,6 +76,10 @@ question row (shown on hover) removes it from the file; the other numbers
 stay as they are. Pages without a source file
 (summaries, indexes) do not accept questions. Without `-w` and on static hosting there is no button.
 
+The page interface is in English or Russian, following the browser language; the `uiLanguage` key
+pins it. The button names here are the English ones; the Russian labels are on the
+[Agents](08%20Agents/08%20Agents.md) page.
+
 A question stays in the file, for people. When a coding agent edits the docs, the agent mode adds a
 second button next to the selection — **Feedback**: the comment goes to the agent and is never
 written to the files.
@@ -100,8 +104,11 @@ in the file). The Feedback popover sends the comment right away (**Send now**) o
 (**Add to review**), as in a GitLab merge request: once a review is started, the main button and
 `Ctrl+Enter` are **Add to review**. The review bar at the bottom of the page shows the number of
 pending comments and pages, whether the agent listens (`agent: listening ●` / `not listening ○`)
-and the buttons **Submit review** (with an optional overall comment), **Approve** (nothing more to
-change; pending comments go along) and **Discard**. A click on the counter opens the list with a
+and the buttons. While the draft is empty, there is one button, **Done — no changes**: nothing to
+change, the agent gets an `approved` batch with no comments. Once the draft has comments, the
+buttons are **Submit review** (with an optional overall comment), **Approve** (nothing more to
+change; pending comments go along) and **Discard** (clear the draft, nothing goes to the agent).
+A click on the counter opens the list with a
 «×» on every comment. The draft is kept in the browser's `localStorage` per project, survives a
 reload and a closed tab, and its quotes are highlighted in blue.
 
@@ -156,6 +163,7 @@ in older versions produce a warning listing them, and the build continues.
 | `docsifyTemplate` | empty | path to a module with a custom `index.html` template |
 | `webPort` | `3000` | port of `c4builder site` |
 | `questionsHeading` | `Open questions` | heading of the section where `site -w` appends questions left on the page |
+| `uiLanguage` | `auto` | language of the `site -w` page interface: `auto` (from the browser), `en` or `ru` |
 | `webFileName` | — | one `.md` name for all site pages instead of the folder name |
 | `excludeSidebarFolderByPath` | — | list of paths (from the project folder, e.g. `src/Archive`) hidden from the sidebar |
 | `plugins` | `[]` | build plugins, see [Plugins](06%20Plugins/06%20Plugins.md) |

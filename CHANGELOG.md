@@ -27,6 +27,13 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
   (page, source files, section, quote, comment, `Decision: submitted|approved`); the agent runs it in the
   background and again after each batch. The selection button of questions is now **Question** with
   **Add question** (was **Comment** / **Add** in 0.9.0-rc.1)
+- `site -w`: the empty review bar finishes the review with one button, **Done — no changes** (an
+  `approved` batch with no comments); **Discard** and **Submit review** appear once the draft has
+  comments. **Discard** still only clears the draft and sends nothing to the agent
+- `site -w`: the page interface (selection buttons, popovers, review bar, toasts) is in English or
+  Russian, following the browser language; the new `.c4builder` key `uiLanguage` (`auto` by default,
+  `en`, `ru`) pins it. Russian counts are declined («1 замечание», «5 замечаний»). CLI output, feedback
+  batches, server error texts and `questionsHeading` stay as they were
 - `site -w`: comments on the page. Select text, press **Question**, type a question — it is appended to
   the source `.md` of the page under the `questionsHeading` section (`Open questions` by default; the
   new `.c4builder` key): a table row with the next number when the section is a table, a list item

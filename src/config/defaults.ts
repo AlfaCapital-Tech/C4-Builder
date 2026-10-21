@@ -32,7 +32,8 @@ const defaultConfig = {
     d2Layout: 'dagre',
     charset: 'UTF-8',
     useSystemFonts: false,
-    questionsHeading: 'Open questions'
+    questionsHeading: 'Open questions',
+    uiLanguage: 'auto' as const
 };
 
 export { defaultConfig };
