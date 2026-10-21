@@ -147,6 +147,22 @@ describe('контентные проверки: default', () => {
             if (i) expect(lane.y).toBe(lanes[i - 1].y + lanes[i - 1].h);
         }
     });
+    it('Mermaid: .mmd и блок в странице отрендерены, кириллица сохранена, блока в md нет', () => {
+        const tree = runs.default.tree;
+        // .mmd рендерится четвёртым бэкендом (mermaid в jsdom) → SVG по имени исходника
+        const flow = decodeXmlEntities(tree['6 Mermaid Example/flow.svg'].text);
+        expect(flow).toContain('API-шлюз');
+        expect(flow).toContain('уведомление');
+        // блок ```mermaid страницы → картинка <страница>-<хеш>.svg, исходника блока в md нет
+        const block = Object.keys(tree).find((f) => /^6 Mermaid Example\/mermaid-[0-9a-f]{8}\.svg$/.test(f));
+        expect(block).toBeTruthy();
+        const seq = decodeXmlEntities(tree[block].text);
+        expect(seq).toContain('проверка анкеты');
+        expect(seq).toContain('Счёт открыт');
+        const page = tree['6 Mermaid Example/README.md'].text;
+        expect(page).not.toContain('```mermaid');
+        expect(page).toContain(`![diagram](${path.posix.basename(block)})`);
+    });
 });
 
 describe('контентные проверки: links-top', () => {
@@ -187,6 +203,9 @@ describe('контентные проверки: embed-png', () => {
         // BPMN → PNG (растеризация SVG)
         expect(files).toContain('5 BPMN Example/account-opening.png');
         expect(files).not.toContain('5 BPMN Example/account-opening.svg');
+        // Mermaid → PNG (растеризация SVG): и файл .mmd, и блок страницы
+        expect(files).toContain('6 Mermaid Example/flow.png');
+        expect(files.some((f) => /^6 Mermaid Example\/mermaid-[0-9a-f]{8}\.png$/.test(f))).toBe(true);
         // ditaa — нативный PNG
         expect(files).toContain('1 Internet Banking System/Single Page Application/Extended Docs/ditaa.png');
         // ни одного .svg-выхода не осталось (vendor svg в шаблоне нет)

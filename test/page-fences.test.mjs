@@ -5,8 +5,9 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { REPO_ROOT, TMP_ROOT } from './helpers.mjs';
 
-// Блоки ```plantuml в страницах проекта рендерятся при сборке (системной java, как в
-// check.test.mjs) во всех выходах; ```puml/```d2 — показ исходника, остаются кодом.
+// Блоки ```plantuml и ```mermaid в страницах проекта рендерятся при сборке (PlantUML —
+// системной java, как в check.test.mjs) во всех выходах; ```puml/```d2 — показ исходника,
+// остаются кодом.
 // Шаблон — пользовательский с клиентским docsify-plantuml (как у арх-репо).
 const CLI = path.join(REPO_ROOT, 'dist', 'index.js');
 const CONFIG = {
@@ -24,10 +25,12 @@ const CONFIG = {
 const FILES = {
     'src/README.md':
         '# Home\n\n```plantuml\n!include <C4/C4_Context>\nPerson(u, "PageFenceUser")\n```\n\n' +
-        '```puml\n@startuml\nAlice -> Bob : puml-source\n@enduml\n```\n\n```d2\na -> d2-source\n```\n',
+        '```puml\n@startuml\nAlice -> Bob : puml-source\n@enduml\n```\n\n```d2\na -> d2-source\n```\n\n' +
+        '```mermaid\nflowchart LR\n  M[MmdFence] --> N\n```\n',
     'src/shared.iuml': 'Alice -> Bob : from-include\n',
     'src/A/README.md': '# A\n\n```plantuml\n!include ../shared.iuml\n```\n',
     'src/B/README.md': '# B\n\n```plantuml\n[a[b] --> [c]\n```\n',
+    'src/C/README.md': '# C\n\n```mermaid\nflowchart LR\n  A -->> ((B\n```\n',
     'tpl.mjs':
         "export default (o) => '<script>window.$docsify = ' + JSON.stringify(o) + ';</script>' +\n" +
         '  \'<script src="vendor/docsify-plantuml.min.js"></script>\';\n'
@@ -70,6 +73,24 @@ describe('блоки ```plantuml в страницах', () => {
         }
     });
 
+    it('```mermaid: картинка во всех выходах, текста блока нет', () => {
+        for (const rel of ['Overview.md', 'README.md', 'pf.md']) {
+            const md = read(rel);
+            expect(md, rel).not.toContain('```mermaid');
+            expect(md, rel).not.toContain('MmdFence');
+            const names = [...md.matchAll(/!\[diagram\]\((README-[0-9a-f]{8}\.svg)\)/g)].map((m) => m[1]);
+            expect(
+                names.some((n) => read(n).includes('MmdFence')),
+                rel
+            ).toBe(true);
+        }
+    });
+
+    it('битый ```mermaid: сборка жива, заглушка, предупреждение с путём .md', () => {
+        expect(out).toMatch(/src[/\\]C[/\\]README\.md.*line 2: /);
+        expect(image('C/C.md')).toContain('diagram not rendered');
+    });
+
     it('```puml и ```d2 остаются кодом', () => {
         const md = read('Overview.md');
         expect(md).toContain('```puml\n@startuml\nAlice -> Bob : puml-source\n@enduml\n```');
@@ -98,5 +119,6 @@ describe('блоки ```plantuml в страницах', () => {
             '```plantuml\n@startuml\n!include <C4/C4_Context>\nPerson(u, "PageFenceUser")\n@enduml\n```'
         );
         expect(full).toContain('### src/shared.iuml');
+        expect(full).toContain('```mermaid\nflowchart LR\n  M[MmdFence] --> N\n```');
     });
 });

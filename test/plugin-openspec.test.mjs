@@ -291,6 +291,24 @@ describe('плагин openspec: крайние случаи', () => {
         expect(fs.readFileSync(path.join(beta, String(svg)), 'utf8')).toContain('diagram not rendered');
         fs.rmSync(d, { recursive: true, force: true });
     });
+    it('```mermaid в design.md (flowchart и sequence) — картинки вместо кода', () => {
+        const d = makeFixture('mermaid', ['openspec']);
+        write(
+            path.join(d, 'openspec'),
+            'changes/dig-2-beta/design.md',
+            '# D\n\n```mermaid\nflowchart LR\n  A[Клиент] --> B[Шлюз]\n```\n\n' +
+                '```mermaid\nsequenceDiagram\n  Клиент->>Шлюз: Запрос\n```\n'
+        );
+        runBuild(d);
+        const page = path.join(d, 'docs/OpenSpec/Changes/dig-2-beta/design');
+        const md = fs.readFileSync(path.join(page, 'design.md'), 'utf8');
+        expect(md).not.toContain('```mermaid');
+        const images = [...md.matchAll(/!\[diagram\]\((design-[0-9a-f]{8}\.svg)\)/g)].map((m) => m[1]);
+        expect(images).toHaveLength(2);
+        expect(fs.readFileSync(path.join(page, images[0]), 'utf8')).toContain('Шлюз');
+        expect(fs.readFileSync(path.join(page, images[1]), 'utf8')).toContain('Запрос');
+        fs.rmSync(d, { recursive: true, force: true });
+    });
     it('битый plugins при первом запуске (щадящий путь) — exit 1, конфиг не переписан', () => {
         const d = makeFixture('badplugins', [['openspec', 'openspec']]);
         fs.writeFileSync(

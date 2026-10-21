@@ -39,8 +39,8 @@ folder.
   artifact from `artifacts` — `proposal` by default, so the "why" is visible without an extra
   click. The remaining artifacts (`design`, `tasks`, then other `*.md` alphabetically) are
   subpages; spec deltas live under `specs/…` with the same folder layout.
-- ```` ```plantuml ````, ```` ```puml ```` and ```` ```d2 ```` blocks inside artifacts are
-  rendered by the **local** engines; nothing is sent to plantuml.com. The image name is derived
+- ```` ```plantuml ````, ```` ```puml ````, ```` ```d2 ```` and ```` ```mermaid ```` blocks inside
+  artifacts are rendered by the **local** engines; nothing is sent to plantuml.com. The image name is derived
   from the block content, so inserting or reordering blocks never picks up a neighbour's cached
   image.
 - A block that fails to render does not fail the build: the page gets a placeholder and the

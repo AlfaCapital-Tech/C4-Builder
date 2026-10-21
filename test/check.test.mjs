@@ -34,6 +34,9 @@ beforeAll(() => {
     write('ok.d2', 'a -> b\n');
     write('bad.d2', 'a -> \n');
     write('what.txt', 'x');
+    write('ok.mmd', 'flowchart LR\n  A[Клиент] --> B\n');
+    write('bad.mmd', 'flowchart LR\n  A -->> ((B\n');
+    write('mind.mmd', 'mindmap\n  root\n');
     // Потоки заданы только sourceRef/targetRef — incoming/outgoing восстанавливает сборка.
     const chain =
         '<bpmn:startEvent id="S" name="s"/><bpmn:task id="T" name="t"/><bpmn:endEvent id="E" name="e"/>' +
@@ -93,12 +96,12 @@ describe('c4builder check', () => {
         const res = check('what.txt', 'missing.puml');
         expect(res.status).toBe(1);
         expect(res.stderr).toMatch(
-            /✗ what\.txt: unsupported extension \(expected \.puml, \.iuml, \.d2 or \.bpmn\)/
+            /✗ what\.txt: unsupported extension \(expected \.puml, \.iuml, \.d2, \.bpmn or \.mmd\)/
         );
         expect(res.stderr).toMatch(/✗ missing\.puml: ENOENT/);
         const usage = check();
         expect(usage.status).toBe(1);
-        expect(usage.stdout).toMatch(/usage: c4builder check/);
+        expect(usage.stdout).toMatch(/usage: c4builder check .*\| \.mmd\)/);
     });
 
     it('корректный .bpmn → код 0, процесс завершается (окно jsdom закрыто)', () => {
@@ -119,5 +122,19 @@ describe('c4builder check', () => {
         expect(res.status, res.stderr).toBe(0);
         expect(res.stdout).toMatch(/⚠ warn\.bpmn: F3 \[c4builder\/gateway-flow-labels\]/);
         expect(res.stdout).toMatch(/✓ warn\.bpmn/);
+    });
+
+    it('корректный .mmd → ✓ и код 0, процесс завершается (окно jsdom закрыто)', () => {
+        const res = check('ok.mmd');
+        expect(res.error, 'check завис — окно jsdom не закрыто?').toBeUndefined();
+        expect(res.status, res.stderr).toBe(0);
+        expect(res.stdout).toMatch(/✓ ok\.mmd/);
+    });
+
+    it('ошибка в строке 2 .mmd → `✗ bad.mmd: line 2: …`, код 1; mindmap — тип в сообщении', () => {
+        const res = check('bad.mmd', 'mind.mmd');
+        expect(res.status).toBe(1);
+        expect(res.stderr).toMatch(/^✗ bad\.mmd: line 2: .*Expecting /m);
+        expect(res.stderr).toMatch(/^✗ mind\.mmd: line 1: unsupported mermaid diagram type 'mindmap'$/m);
     });
 });

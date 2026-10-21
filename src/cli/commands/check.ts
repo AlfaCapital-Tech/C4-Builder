@@ -8,9 +8,10 @@ import { resolveJava } from '../../core/render/jre.ts';
 import { renderDiagram } from '../../core/render/diagrams.ts';
 import { renderD2, teardownD2 } from '../../core/render/d2renderer.ts';
 import { BpmnError, renderBpmn, teardownBpmn } from '../../core/render/bpmnrenderer.ts';
+import { MermaidError, renderMermaid, teardownMermaid } from '../../core/render/mermaidrenderer.ts';
 
 // `c4builder check <file...>` — валидация отдельных диаграмм ТЕМ ЖЕ движком, что и
-// сборка (вендорный PlantUML jar + системная/managed java, бандл D2, конвейер BPMN), без проекта и
+// сборка (вендорный PlantUML jar + системная/managed java, бандл D2, конвейер BPMN, mermaid), без проекта и
 // `.c4builder`. Рендер идёт в память и выбрасывается: проверяем ровно то, что упало бы
 // в сборке (системный `plantuml` может отличаться версией). Код выхода 0 — все файлы ок,
 // 1 — есть ошибка (движка, неизвестного расширения или чтения файла).
@@ -69,12 +70,13 @@ const CHECKERS: Record<string, (abs: string) => Promise<unknown>> = {
     '.puml': checkPlantUml,
     '.iuml': checkPlantUml,
     '.d2': (abs) => renderD2(abs),
-    '.bpmn': async (abs) => renderBpmn(await readFile(abs, 'utf8'), path.relative(process.cwd(), abs))
+    '.bpmn': async (abs) => renderBpmn(await readFile(abs, 'utf8'), path.relative(process.cwd(), abs)),
+    '.mmd': async (abs) => renderMermaid(await readFile(abs, 'utf8'), path.relative(process.cwd(), abs))
 };
 
 export default async (files: string[]): Promise<void> => {
     if (files.length === 0) {
-        console.log(chalk.red('usage: c4builder check <file...>  (.puml | .iuml | .d2 | .bpmn)'));
+        console.log(chalk.red('usage: c4builder check <file...>  (.puml | .iuml | .d2 | .bpmn | .mmd)'));
         process.exit(1);
     }
     let failed = 0;
@@ -83,17 +85,19 @@ export default async (files: string[]): Promise<void> => {
         const abs = path.resolve(file);
         const check = CHECKERS[path.extname(abs).toLowerCase()];
         try {
-            if (!check) throw new Error('unsupported extension (expected .puml, .iuml, .d2 or .bpmn)');
+            if (!check) throw new Error('unsupported extension (expected .puml, .iuml, .d2, .bpmn or .mmd)');
             await check(abs);
             console.log(chalk.green(`✓ ${file}`));
         } catch (e) {
             failed++;
-            // BPMN: по строке на нарушение — агент правит их по id элемента.
-            const problems = e instanceof BpmnError ? e.problems : [(e as Error).message];
+            // BPMN: по строке на нарушение — агент правит их по id элемента; mermaid — `line N: …`.
+            const problems =
+                e instanceof BpmnError || e instanceof MermaidError ? e.problems : [(e as Error).message];
             for (const p of problems) console.error(chalk.red(`✗ ${file}: ${p}`));
         }
     }
     await teardownD2();
     await teardownBpmn();
+    await teardownMermaid();
     if (failed) process.exit(1);
 };

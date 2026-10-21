@@ -5,6 +5,17 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
 
 ## Unreleased
 
+- Mermaid diagrams are rendered at build time, the fourth engine next to PlantUML, D2 and BPMN:
+  `.mmd` files and ```` ```mermaid ```` blocks in project pages and OpenSpec artifacts become SVG or PNG
+  images in every output. Real mermaid runs without a browser or network (`@mermaid-js/tiny` in jsdom,
+  text metrics from the vendored font), in the classic look with the `default` theme; the output is
+  deterministic. `c4builder check` accepts `.mmd` and reports `line N: …`. `llms-full.txt` keeps mermaid
+  diagrams as `mermaid` blocks. `mindmap`, `architecture` and KaTeX math are not supported and fail
+  with an explicit error. An error in a `.mmd` file fails the build; an error in a block gives a
+  placeholder and a warning. The engine is an optional dependency loaded only for projects with mermaid
+- `--md` output: a ```` ```mermaid ```` block in a page is now an image, like ```` ```plantuml ````; GitLab
+  used to draw such blocks itself
+
 - `site -w`: feedback to a coding agent from the page. In the agent mode (`--agent`, or run by an agent:
   `CLAUDECODE`, `CODEX_THREAD_ID`, `GEMINI_CLI`, `OPENCODE`, `COPILOT_CLI`, `AI_AGENT`, or
   `C4BUILDER_AGENT`; `--no-agent` or `C4BUILDER_AGENT=0` turn it off) a selection gets a **Feedback**

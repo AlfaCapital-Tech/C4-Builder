@@ -3,7 +3,7 @@ import { createRequire } from 'node:module';
 import chalk from 'chalk';
 
 import { DEFAULT_FONT_NAME } from './fonts.ts';
-import { getResvg, resvgFontOptions } from './pngraster.ts';
+import { ASCENT, DESCENT, clearTextWidths, textWidth } from './textmetrics.ts';
 
 // Третий бэкенд рендера: BPMN 2.0 XML без координат → валидация (bpmnlint) → раскладка
 // (bpmn-auto-layout) → рендер bpmn-js в jsdom → SVG. Все пакеты — optionalDependencies,
@@ -196,34 +196,7 @@ const C4BUILDER_RULES: Record<string, Rule> = {
 };
 
 // Ширины строк для переноса подписей: diagram-js меряет текст только через
-// canvas.measureText, а jsdom канваса не умеет. Меряем вендорный Nimbus Sans тем же
-// resvg, что растрирует PNG: ширина = bbox «|текст|» минус bbox «||» — так получается
-// advance-ширина с пробелами по краям, а не ширина чернил. Режим системных шрифтов на
-// BPMN не влияет (как и на D2): детерминизм важнее.
-const widthMemo = new Map<string, number>();
-const escapeXml = (s: string): string =>
-    s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c] as string);
-const inkWidth = (text: string, size: number): number => {
-    const { Resvg } = getResvg();
-    const svg =
-        `<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"><text y="${size}" ` +
-        `font-family="${DEFAULT_FONT_NAME}" font-size="${size}" xml:space="preserve">${escapeXml(text)}</text></svg>`;
-    return new Resvg(svg, { font: resvgFontOptions(false) }).getBBox()?.width ?? 0;
-};
-const textWidth = (text: string, size: number): number => {
-    const key = `${size}\0${text}`;
-    let width = widthMemo.get(key);
-    if (width === undefined) {
-        // Округление гасит f32-шум resvg между платформами: координаты текста в SVG
-        // считаются из этой ширины и должны совпадать побайтно.
-        width = Math.round((inkWidth(`|${text}|`, size) - inkWidth('||', size)) * 100) / 100;
-        widthMemo.set(key, width);
-    }
-    return width;
-};
-// hhea Nimbus Sans Regular: ascender 729, descender −271 на 1000 единиц (vendor/fonts).
-const ASCENT = 0.729;
-const DESCENT = 0.271;
+// canvas.measureText, а jsdom канваса не умеет — меряем вендорный шрифт (textmetrics).
 
 // Полифилы окна jsdom: ровно то, что bpmn-js зовёт при импорте и saveSVG. Трансформации
 // пишутся в атрибут сразу — сериализатор берёт атрибуты, а не baseVal.
@@ -426,7 +399,7 @@ export const teardownBpmn = async (): Promise<void> => {
     if (!enginePromise) return;
     const pending = enginePromise;
     enginePromise = null;
-    widthMemo.clear();
+    clearTextWidths();
     try {
         (await pending).window.close();
     } catch {

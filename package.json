@@ -80,6 +80,7 @@
     "vitest": "^4.1.9"
   },
   "optionalDependencies": {
+    "@mermaid-js/tiny": "12.2.0",
     "@terrastruct/d2": "0.1.33",
     "bpmn-auto-layout": "2.0.0-alpha.2",
     "bpmn-js": "18.31.0",

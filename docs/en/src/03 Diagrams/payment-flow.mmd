@@ -1,0 +1,6 @@
+flowchart LR
+    subgraph bank [Bank]
+        app[Mobile app] -->|payment| api[API gateway]
+        api --> db[(Database)]
+    end
+    api -.->|notify| mail[Mail service]

@@ -1,7 +1,7 @@
 # Diagrams
 
 The engine is chosen by file extension: `.puml` is rendered by PlantUML, `.d2` by D2, `.bpmn`
-by the BPMN engine. The formats can live in one project and even in one folder, as long as the
+by the BPMN engine, `.mmd` by mermaid. The formats can live in one project and even in one folder, as long as the
 file names differ.
 
 ## PlantUML
@@ -40,8 +40,9 @@ not the block text. `@startuml`/`@enduml` may be omitted, `!include` paths are r
 page's folder. A broken block does not fail the build: the image is replaced by a placeholder
 and the log shows a warning with the `.md` file path.
 
-To show diagram source as code, mark the block `puml` or `text`: such blocks stay code, and
-so do ```` ```d2 ```` blocks.
+`mermaid` blocks are rendered the same way — see the Mermaid section below. To show diagram
+source as code, mark the block `puml` or `text`: such blocks stay code, and so
+do ```` ```d2 ```` blocks.
 
 ## Determinism and the font
 
@@ -56,7 +57,7 @@ fonts. The look becomes more familiar, but the result depends on the machine.
 
 Unchanged diagrams are not rendered again: c4builder keeps checksums in `.c4builder.cache`. A
 checksum covers the source, all local `!include`s and D2 imports, the output path and the render
-settings, plus the engine package versions for D2 and BPMN. Editing a shared `styles.iuml` re-renders every diagram that includes it, and only
+settings, plus the engine package versions for D2, BPMN and mermaid. Editing a shared `styles.iuml` re-renders every diagram that includes it, and only
 those.
 
 ## D2
@@ -145,17 +146,63 @@ files for the details.
 the project contains a `.bpmn`. Installing with `--omit=optional` keeps only the core — building
 a project with `.bpmn` then stops with a hint to reinstall c4builder without that flag.
 
+## Mermaid
+
+[Mermaid](https://mermaid.js.org) is a text diagram notation that agents often write and GitLab
+draws by itself. There are two sources: an `.mmd` file (a markdown reference is the usual one:
+`![flow](flow.mmd)`) and a block with the `mermaid` language right in a page — it is
+rendered the same way as a `plantuml` block. This build rendered both examples below:
+
+![Payment](payment-flow.mmd)
+
+```mermaid
+sequenceDiagram
+    participant C as Customer
+    participant G as API gateway
+    C->>G: Payment
+    Note right of G: limit check
+    G-->>C: Payment accepted
+```
+
+**Rendering** uses real mermaid (the single-file `@mermaid-js/tiny` build) in jsdom, without a
+browser or network. Text is measured with the bundled Nimbus Sans, so the SVG is the same on any
+machine (`useSystemFonts` does not affect mermaid); PNG comes from the regular rasterization. The
+look is classic with the `default` theme; it is not pixel-identical to GitLab, which uses another
+font. `%%{init: …}%%` and frontmatter `config:` work, except for the pinned keys `look`,
+`htmlLabels`, `fontFamily`, `securityLevel` and `themeCSS`: they would break offline rendering.
+
+**Types.** `flowchart`/`graph` (with `subgraph`), `sequenceDiagram`, `stateDiagram-v2`,
+`erDiagram`, `classDiagram`, `gantt` and `pie` are guaranteed; `gitGraph`, `timeline`,
+`quadrantChart`, `xychart`, `sankey`, `block`, `packet`, `kanban`, `radar` and `journey` render
+too. `mindmap`, `architecture` and KaTeX math are not supported — the build names the type in an
+explicit error instead of publishing an empty image.
+
+**Errors.** An error in an `.mmd` stops the build, as in any diagram file. An error in a block
+does not: the image is replaced by a placeholder and the log shows a warning with the `.md` file
+path. The message carries the line number: `✗ src/flow.mmd: line 3: …`. To show mermaid source as
+code, mark the block `text`.
+
+**Limits.** `stateDiagram` labels are left-aligned — mermaid draws them that way without HTML
+labels in a browser too. Mermaid C4 diagrams are laid out differently than in a browser: write C4
+in PlantUML. A word without spaces wider than its node is wrapped by mermaid character by
+character.
+
+**Dependencies.** The engine package `@mermaid-js/tiny` (~3 MB) and `jsdom` are optional: they are
+loaded only when the project contains an `.mmd` or a `mermaid` block. With `--omit=optional`, a
+project with an `.mmd` stops and a block becomes a placeholder — with a hint to reinstall
+c4builder without that flag.
+
 ## PNG
 
 With `diagramFormat: png`, c4builder renders SVG and rasterizes it with
 [resvg](https://github.com/thx/resvg-js) using the same bundled font. The PNG is consistent for
-PlantUML, D2 and BPMN and needs no browser. ditaa stays a native PlantUML PNG.
+PlantUML, D2, BPMN and mermaid and needs no browser. ditaa stays a native PlantUML PNG.
 
 ## Online PlantUML server
 
 With `generateLocalImages: false`, diagrams are not rendered locally: the output links to the
 server from `plantumlServerUrl` (default `https://www.plantuml.com/plantuml`). This means diagram
-sources go to an external server, and D2 and BPMN do not work in this mode — the build stops
+sources go to an external server, and D2, BPMN and mermaid do not work in this mode — the build stops
 with an error. The mode is kept for compatibility; local rendering is the main one.
 
 ## Checking individual diagrams
@@ -164,9 +211,9 @@ with an error. The mode is kept for compatibility; local rendering is the main o
 c4builder check src/context.puml "src/4 D2 Example/landscape.d2"
 ```
 
-`check` validates `.puml`, `.iuml`, `.d2` and `.bpmn` files with the same engine as the build
-(for `.bpmn`: parsing, rules, layout and rendering), but writes nothing and needs no project or
-`.c4builder`. Exit code 0 means every file compiles, 1 means there is an error (warnings do not
+`check` validates `.puml`, `.iuml`, `.d2`, `.bpmn` and `.mmd` files with the same engine as the
+build (for `.bpmn`: parsing, rules, layout and rendering), but writes nothing and needs no project
+or `.c4builder`. Exit code 0 means every file compiles, 1 means there is an error (warnings do not
 affect the code):
 
 ```text
@@ -184,5 +231,5 @@ fine):
 
 ```bash
 #!/bin/sh
-git diff --cached --name-only -z --diff-filter=ACM -- '*.puml' '*.iuml' '*.d2' '*.bpmn' | xargs -0 -r c4builder check
+git diff --cached --name-only -z --diff-filter=ACM -- '*.puml' '*.iuml' '*.d2' '*.bpmn' '*.mmd' | xargs -0 -r c4builder check
 ```

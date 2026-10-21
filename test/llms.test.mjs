@@ -187,6 +187,7 @@ describe('generateLlmsFull: независимость от настроек к�
     const LIB = 'classes: {person: {style.fill: "#0b4884"}}\n';
     const DITAA = '@startditaa\n+--+\n|A |\n+--+\n@endditaa\n';
     // Строка-ловушка: PlantUML-скан include'ов принял бы её за директиву и затащил bait.iuml.
+    const MMD = 'flowchart LR\n  A[Клиент] --> B\n';
     const BPMN = '<?xml version="1.0"?>\n<!--\n!include bait.iuml\n-->\n<bpmn:definitions/>\n';
     let dir;
     let full;
@@ -206,6 +207,13 @@ describe('generateLlmsFull: независимость от настроек к�
                 diagrams: [
                     { dir: 'a.d2', ext: '.d2', engine: 'd2', content: Buffer.from(D2), isDitaa: false },
                     { dir: 'b.puml', ext: '.puml', engine: 'plantuml', content: DITAA, isDitaa: true },
+                    {
+                        dir: 'd.mmd',
+                        ext: '.mmd',
+                        engine: 'mermaid',
+                        content: Buffer.from(MMD),
+                        isDitaa: false
+                    },
                     {
                         dir: 'c.bpmn',
                         ext: '.bpmn',
@@ -240,6 +248,11 @@ describe('generateLlmsFull: независимость от настроек к�
     it('BPMN — исходник в блоке xml, include-скан PlantUML к нему не применяется', () => {
         expect(full).toContain(`\`\`\`xml\n${BPMN}\`\`\``);
         expect(full).not.toContain('bait.iuml\n\n```');
+    });
+
+    it('mermaid — исходник в блоке mermaid, ссылки на картинку нет', () => {
+        expect(full).toContain(`\`\`\`mermaid\n${MMD}\`\`\``);
+        expect(full).not.toMatch(/d\.(svg|png)/);
     });
 
     it('D2-импорт — в приложении блоком d2', () => {
