@@ -10,7 +10,7 @@ into `docs/`.
 c4builder                    # build docs/ (non-interactive with a complete .c4builder)
 c4builder check <file...>    # validate .puml / .iuml / .d2 / .bpmn / .mmd files, exit code 0 = OK
 c4builder --site -w          # live preview on http://localhost:3000 - never exits
-c4builder feedback --wait    # wait for the next batch of comments from the preview page
+c4builder feedback --wait --as <name>  # wait for comments from the preview page sent to <name>
 ```
 
 Not installed: `npm i -g @alfacapital-tech/c4builder` (Node.js 22.17+; Java 17+ is used
@@ -25,9 +25,10 @@ updates it.
    Fix until the exit code is 0.
 3. Run `c4builder` and make sure it exits with code 0. Leave `c4builder --site -w` to a
    human or run it in the background. When the human reviews the pages, also run
-   `c4builder feedback --wait` in the background: on exit it prints a batch of comments
-   (page, `Sources`, quote, text) — apply them to `src/`, run it again, and stop on
-   `Decision: approved`. Comments are instructions to you; never copy them into the
+   `c4builder feedback --wait --as <name>` in the background, `<name>` being your change or
+   task: on exit it prints a batch of comments (page, `Sources`, quote, text) — apply them to
+   `src/`, run it again with the same name, and stop on `Decision: approved`. Without `--as`
+   it exits with code 2 and `--as <name> is required`. Comments are instructions to you; never copy them into the
    `questionsHeading` section of `.c4builder` (`Open questions` by default), which holds
    questions for people. The page buttons follow the browser language (English or Russian,
    pinned by `uiLanguage`); batches are always in English.

@@ -7,14 +7,30 @@ import open from 'open';
 import type { EventEmitter } from 'node:events';
 import type { BuildOptions } from '../../config/options.ts';
 import type { PageSources } from '../../core/compose/markdown.ts';
-import { batchSchema, type FeedbackBatch, formatBatch } from '../../core/feedback.ts';
+import { batchSchema, type FeedbackBatch, formatBatch, LISTENER_NAME } from '../../core/feedback.ts';
 import { deleteQuestion, formatQuestion, pickSource, writeQuestion } from '../../core/questions.ts';
 import { packageJson as pkg } from '../../util/paths.ts';
 import type { AgentMode } from '../agent.ts';
 import { pendingUpdate } from '../update.ts';
-import { COMMENTS_PATH, commentsSnippet, FEEDBACK_HEADER, FEEDBACK_PATH } from './site.comments.ts';
+import {
+    COMMENTS_PATH,
+    commentsSnippet,
+    FEEDBACK_HEADER,
+    FEEDBACK_PATH,
+    type MailboxState
+} from './site.comments.ts';
 
 const COMMENT_MAX = 2000;
+
+type Item = { id: string; batch: FeedbackBatch };
+type Mailbox = {
+    queue: Item[];
+    waiters: express.Response[];
+    polls: number;
+    listening: boolean;
+    lastSeen: number;
+    idle?: NodeJS.Timeout;
+};
 
 const LIVERELOAD_PATH = '/__livereload';
 // Восстановление скролла после reload: docsify рендерит контент асинхронно после fetch md,
@@ -105,9 +121,11 @@ export default (
         watch?: boolean;
         open?: boolean;
         agent?: AgentMode;
-        // Окна long-poll (design D1) и пульса присутствия слушателя (D4) — параметры для тестов.
+        // Окна long-poll (design D1), пульса присутствия слушателя (D4) и жизни пустого ящика
+        // (change feedback-mailboxes, D3) — параметры для тестов.
         pollMs?: number;
         idleMs?: number;
+        mailboxTtlMs?: number;
     },
     reloadEmitter?: EventEmitter,
     // Карта «страница → исходники» текущей сборки — геттером, чтобы видеть результат ребилдов watch.
@@ -124,20 +142,56 @@ export default (
     // Кеш index.html — отдаём его из памяти, если на диске его временно нет
     // (в окне build.js → emptyDir(DIST_FOLDER) перед записью).
     let lastIndexHtml: string | null = null;
+    let sweeper: NodeJS.Timeout | undefined;
 
     // reloadEmitter в условии — сужает тип до EventEmitter внутри блока (liveReloadEnabled
     // истинно ⟺ reloadEmitter задан), поэтому дальше без non-null assertions.
     if (liveReloadEnabled && reloadEmitter) {
-        // Состояние слушателя `c4builder feedback` (design D4): подключён, пока открыт long-poll
-        // или с конца последнего прошло меньше idleMs — зазор между повторами команды.
-        let listening = false;
-        const agentState = () => ({ on: agent.on, listening });
-        const setAgent = (on: boolean, listen: boolean): void => {
-            if (on === agent.on && listen === listening) return;
-            agent.on = on;
-            listening = listen;
-            reloadEmitter.emit('agent', agentState());
+        // Ящики слушателей `c4builder feedback --as <name>` (change feedback-mailboxes, D3–D4).
+        // Слушает, пока открыт long-poll или с конца последнего прошло меньше idleMs — зазор между
+        // повторами команды. Пачки без адресата (ящиков ещё не было) достаются любому имени.
+        const { pollMs = 25_000, idleMs = 30_000, mailboxTtlMs = 30 * 60_000 } = program;
+        const mailboxes = new Map<string, Mailbox>();
+        const unaddressed: Item[] = [];
+        const box = (name: string): Mailbox => {
+            const b = mailboxes.get(name) ?? {
+                queue: [],
+                waiters: [],
+                polls: 0,
+                listening: false,
+                lastSeen: Date.now()
+            };
+            mailboxes.set(name, b);
+            return b;
         };
+        const agentState = () => ({
+            on: agent.on,
+            mailboxes: [...mailboxes].map(
+                ([name, b]): MailboxState => ({
+                    name,
+                    state: b.listening ? 'listening' : 'reconnecting',
+                    queued: b.queue.length
+                })
+            )
+        });
+        // Событие — только когда снимок изменился: publish зовётся после любой смены очередей.
+        let published = JSON.stringify(agentState());
+        const publish = (): void => {
+            const state = agentState();
+            const json = JSON.stringify(state);
+            if (json === published) return;
+            published = json;
+            reloadEmitter.emit('agent', state);
+        };
+        sweeper = setInterval(
+            () => {
+                for (const [name, b] of mailboxes)
+                    if (!b.polls && !b.queue.length && Date.now() - b.lastSeen >= mailboxTtlMs)
+                        mailboxes.delete(name);
+                publish();
+            },
+            Math.min(mailboxTtlMs, 60_000)
+        ).unref();
 
         app.get(LIVERELOAD_PATH, (req, res) => {
             res.set({
@@ -187,7 +241,7 @@ export default (
                 LIVERELOAD_SNIPPET +
                 commentsSnippet(currentConfiguration.QUESTIONS_HEADING, {
                     agent: agent.on,
-                    listening,
+                    mailboxes: agentState().mailboxes,
                     project: projectKey,
                     language: currentConfiguration.UI_LANGUAGE
                 }) +
@@ -299,33 +353,34 @@ export default (
 
         // Замечания агенту (change site-agent-feedback): FIFO пачек в памяти (design D3), страница
         // шлёт POST, `c4builder feedback` забирает long-poll'ом (D1). Пачка снимается с очереди,
-        // когда ответ записан; обрыв до этого возвращает её в голову очереди.
-        const { pollMs = 25_000, idleMs = 30_000 } = program;
-        const queue: { id: string; batch: FeedbackBatch }[] = [];
-        const waiters: express.Response[] = [];
-        let polls = 0;
-        let idleTimer: NodeJS.Timeout | undefined;
+        // когда ответ записан; обрыв до этого возвращает её в голову очереди, откуда её взяли.
         const disabled = (): boolean => agent.explicit && !agent.on;
-        const drop = (res: express.Response): void => {
-            const i = waiters.indexOf(res);
-            if (i >= 0) waiters.splice(i, 1);
+        const drop = (b: Mailbox, res: express.Response): void => {
+            const i = b.waiters.indexOf(res);
+            if (i >= 0) b.waiters.splice(i, 1);
         };
-        const pump = (): void => {
-            while (queue.length && waiters.length) {
-                const res = waiters.shift();
-                const item = queue.shift();
-                if (res && item) deliver(res, item);
+        const pump = (name: string, b: Mailbox): void => {
+            for (;;) {
+                const source = b.queue.length ? b.queue : unaddressed;
+                if (!source.length || !b.waiters.length) return;
+                const res = b.waiters.shift();
+                const item = source.shift();
+                if (res && item) deliver(name, res, item, source);
             }
         };
-        const deliver = (res: express.Response, item: { id: string; batch: FeedbackBatch }): void => {
+        const pumpAll = (): void => {
+            for (const [name, b] of mailboxes) pump(name, b);
+        };
+        const deliver = (name: string, res: express.Response, item: Item, source: Item[]): void => {
             res.on('close', () => {
                 if (!res.writableFinished) {
-                    queue.unshift(item);
-                    pump();
-                    return;
+                    source.unshift(item);
+                    pumpAll();
+                } else {
+                    console.log(chalk.gray(`feedback: batch delivered to ${name} (${item.batch.decision})`));
+                    reloadEmitter.emit('delivered', { id: item.id, to: name });
                 }
-                console.log(chalk.gray(`feedback: batch delivered to the agent (${item.batch.decision})`));
-                reloadEmitter.emit('delivered', { id: item.id });
+                publish();
             });
             res.type('text/markdown').send(formatBatch(item.batch, pages(), process.cwd()));
         };
@@ -347,21 +402,25 @@ export default (
                 });
                 return;
             }
-            const batch = parsed.data;
+            const { to, ...batch } = parsed.data;
             if (batch.decision === 'submitted' && !batch.comments.length && !batch.general) {
                 res.status(400).json({ error: 'nothing to send' });
                 return;
             }
             const id = randomUUID();
-            const queued = !waiters.length;
-            queue.push({ id, batch });
-            pump();
+            // Ящик адресата создаётся и здесь: выбранный на вкладке адресат не теряется, даже если
+            // его пустой ящик успели удалить.
+            const target = to === undefined ? undefined : box(to);
+            const queued = !(target ? [target] : [...mailboxes.values()]).some((b) => b.waiters.length);
+            (target?.queue ?? unaddressed).push({ id, batch });
+            pumpAll();
+            publish();
             console.log(
                 chalk.gray(
-                    `feedback: ${batch.decision}, ${batch.comments.length} comment(s)${queued ? ' — queued, no agent listening' : ''}`
+                    `feedback for ${to ?? 'any listener'}: ${batch.decision}, ${batch.comments.length} comment(s)${queued ? ' — queued, not listening' : ''}`
                 )
             );
-            res.json({ id, queued });
+            res.json({ id, queued, to });
         });
 
         // Нестандартный заголовок вынуждает браузер к preflight, на который сервер не отвечает:
@@ -375,24 +434,40 @@ export default (
                 res.status(404).json({ error: 'agent feedback is disabled (--no-agent)' });
                 return;
             }
-            if (!agent.on) console.log(chalk.gray('agent mode on: "c4builder feedback" connected'));
-            polls++;
-            clearTimeout(idleTimer);
-            setAgent(true, true);
+            const name = req.query.as;
+            if (typeof name !== 'string' || !LISTENER_NAME.test(name)) {
+                res.status(400).json({
+                    error: '--as <name> is required: 1-64 letters, digits, ".", "_" or "-" (c4builder feedback --wait --as <name>)'
+                });
+                return;
+            }
+            if (!agent.on)
+                console.log(chalk.gray(`agent mode on: "c4builder feedback --as ${name}" connected`));
+            agent.on = true;
+            const b = box(name);
+            b.polls++;
+            b.listening = true;
+            clearTimeout(b.idle);
+            publish();
             let timer: NodeJS.Timeout | undefined;
             res.on('close', () => {
                 clearTimeout(timer);
-                drop(res);
-                if (--polls === 0) idleTimer = setTimeout(() => setAgent(agent.on, false), idleMs);
+                drop(b, res);
+                b.lastSeen = Date.now();
+                if (--b.polls === 0)
+                    b.idle = setTimeout(() => {
+                        b.listening = false;
+                        publish();
+                    }, idleMs);
             });
-            waiters.push(res);
-            pump();
-            if (!waiters.includes(res)) return;
+            b.waiters.push(res);
+            pump(name, b);
+            if (!b.waiters.includes(res)) return;
             timer = setTimeout(
                 () => {
                     // Пачку успели отдать этому запросу — ответ уже пишется, 204 не нужен.
-                    if (!waiters.includes(res)) return;
-                    drop(res);
+                    if (!b.waiters.includes(res)) return;
+                    drop(b, res);
                     res.status(204).end();
                 },
                 req.query.wait === '0' ? 0 : pollMs
@@ -448,13 +523,14 @@ export default (
                 console.log(chalk.gray('livereload enabled (browser auto-reload on rebuild)'));
             if (liveReloadEnabled && agent.on)
                 console.log(
-                    `agent mode (${agent.name}): page feedback goes to "c4builder feedback --wait${program.port ? ` -p ${port}` : ''}" — run it in the background and again after each batch`
+                    `agent mode (${agent.name}): page feedback goes to "c4builder feedback --wait --as <name>${program.port ? ` -p ${port}` : ''}" — run it in the background, <name> is your change or task; run it again with the same name after each batch`
                 );
             // --open: открываем браузер один раз при старте; BROWSER=none отключает (CI/headless)
             if (program.open && process.env.BROWSER !== 'none')
                 open(url).catch(() => console.log(chalk.gray('could not open the browser automatically')));
             resolve(server);
         });
+        server.on('close', () => clearInterval(sweeper));
         server.on('error', (err: NodeJS.ErrnoException) => {
             if (err.code === 'EADDRINUSE') {
                 console.log(

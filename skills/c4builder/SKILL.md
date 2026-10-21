@@ -96,13 +96,15 @@ comments come to you in batches, not into the files.
 
    ```bash
    c4builder --site -w
-   c4builder feedback --wait
+   c4builder feedback --wait --as <name>
    ```
 
-   Pass the same `-p <n>` to both when the port is not `webPort`. If the user already runs
-   `site -w` (a second one fails with `port … is already in use`), start only
-   `c4builder feedback --wait`: connecting turns the agent mode on.
-2. When `c4builder feedback --wait` exits, its stdout is one batch:
+   `<name>` is the name of your change or task (1-64 letters, digits, `.`, `_`, `-`), e.g.
+   `--as add-dark-mode`: the page sends each batch to one name, so several agents can share one
+   `site -w`. Pass the same `-p <n>` to both when the port is not `webPort`. If the user already
+   runs `site -w` (a second one fails with `port … is already in use`), start only
+   `c4builder feedback --wait --as <name>`: connecting turns the agent mode on.
+2. When `c4builder feedback --wait --as <name>` exits, its stdout is one batch:
 
    ```text
    # Page feedback (c4builder)
@@ -122,13 +124,16 @@ comments come to you in batches, not into the files.
 3. Apply the comments to the sources in `src/` (never `docs/`); the page reloads by itself.
    Do not write the comments into the `questionsHeading` section — feedback is an instruction to
    you, questions are for people and stay in the file.
-4. Run `c4builder feedback --wait` in the background again and wait for the next batch.
+4. Run `c4builder feedback --wait --as <name>` in the background again, with the same name, and
+   wait for the next batch.
 5. `Decision: approved` means the user has nothing more to change: apply the comments of that
    batch, if any, and stop waiting.
 
-A batch sent while nothing was listening waits in the `site -w` queue and comes on the next run.
+A batch sent to your name while you were not listening waits in its `site -w` mailbox and comes
+on the next run with that name; a batch sent before any agent connected goes to the first one.
+With several agents the page shows **Send to**, and the user picks the recipient per tab.
 `c4builder feedback` exits with code 1 when no `site -w` runs on the port or it was started with
-`--no-agent`.
+`--no-agent`, and with code 2 and `--as <name> is required` when `--as` is missing or invalid.
 
 ## Writing C4 diagrams (PlantUML)
 
@@ -206,8 +211,12 @@ for it: it reinstalls the global CLI. The notice changes neither stdout nor the 
 
 - Editing generated files in `docs/` instead of `src/`.
 - Remote `!include` URLs instead of `<C4/...>` stdlib includes.
-- Running `c4builder --site -w` or `c4builder feedback --wait` in the foreground — the agent hangs.
-- Not restarting `c4builder feedback --wait` after a batch — the next comments wait unseen.
+- Running `c4builder --site -w` or `c4builder feedback --wait --as <name>` in the foreground — the
+  agent hangs.
+- Not restarting `c4builder feedback --wait --as <name>` after a batch, or restarting it with
+  another name — the next comments wait unseen in the old mailbox.
+- `c4builder feedback --wait` without `--as` — exits with code 2 and `--as <name> is required`;
+  run it again with `--as <your change or task>`.
 - Forgetting `c4builder check` and reading a Java stack trace from the full build instead.
 - A page "missing" from the output because its file or folder starts with `_`.
 - `generateLocalImages: false` in a project with `.d2`, `.bpmn` or `.mmd` files — they have no online

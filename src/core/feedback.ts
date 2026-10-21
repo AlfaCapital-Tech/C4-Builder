@@ -12,7 +12,11 @@ const clip = (s: string): string => {
     return q.length > TEXT_MAX ? `${q.slice(0, TEXT_MAX - 1).trimEnd()}…` : q;
 };
 
+// Имя слушателя `c4builder feedback --as` и адресат пачки (change feedback-mailboxes, D1).
+export const LISTENER_NAME = /^[A-Za-z0-9._-]{1,64}$/;
+
 export const batchSchema = z.object({
+    to: z.string().regex(LISTENER_NAME).optional(),
     decision: z.enum(['submitted', 'approved']),
     comments: z
         .array(

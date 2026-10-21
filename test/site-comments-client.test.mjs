@@ -159,16 +159,21 @@ const DONE = 'Done — no changes';
 
 const agentPage = async ({
     agent = true,
-    listening = false,
+    mailboxes = [],
     project = 'p1',
     storage = {},
+    session = {},
     body = FLOW,
     language,
     languages
 } = {}) => {
     const { JSDOM } = await import('jsdom');
-    const seed = Object.entries(storage)
-        .map(([k, v]) => `localStorage.setItem(${JSON.stringify(k)}, ${JSON.stringify(v)});`)
+    const fill = (store, entries) =>
+        Object.entries(entries).map(
+            ([k, v]) => `${store}.setItem(${JSON.stringify(k)}, ${JSON.stringify(v)});`
+        );
+    const seed = fill('localStorage', storage)
+        .concat(fill('sessionStorage', session))
         .concat(
             languages
                 ? [`Object.defineProperty(navigator, 'languages', { value: ${JSON.stringify(languages)} });`]
@@ -191,7 +196,7 @@ Range.prototype.getBoundingClientRect = function () { return { top: 0, bottom: 1
 ${seed}
 </script>
 <section class="markdown-section">${body}</section>
-${commentsSnippet(H, { agent, listening, project, language })}
+${commentsSnippet(H, { agent, mailboxes, project, language })}
 </body></html>`;
     const { window } = new JSDOM(html, {
         runScripts: 'dangerously',
@@ -226,8 +231,25 @@ ${commentsSnippet(H, { agent, listening, project, language })}
     const panelButtons = () =>
         [...panel.querySelectorAll('.c4b-acts > button')].filter((b) => !b.hidden).map((b) => b.textContent);
     const toast = () => doc.querySelector('.c4b-ctoast')?.textContent;
-    const stored = () => JSON.parse(window.localStorage.getItem('__c4builderReview:p1') || '[]');
-    return { window, doc, buttons, byText, openFor, write, panel, panelButtons, toast, stored };
+    const stored = (key = '__c4builderReview:p1') => JSON.parse(window.localStorage.getItem(key) || '[]');
+    // Хранилище вкладки — для «перезагрузки» и второй вкладки с общим localStorage.
+    const dump = (store) => Object.fromEntries(Object.entries(window[store]));
+    const agentEvent = (detail) =>
+        window.dispatchEvent(new window.CustomEvent('c4builder:agent', { detail }));
+    return {
+        window,
+        doc,
+        buttons,
+        byText,
+        openFor,
+        write,
+        panel,
+        panelButtons,
+        toast,
+        stored,
+        dump,
+        agentEvent
+    };
 };
 
 describe('кнопки у выделения', () => {
@@ -249,11 +271,9 @@ describe('кнопки у выделения', () => {
 
     it('событие agent { on: true } добавляет Feedback без перезагрузки', async () => {
         const p = await agentPage({ agent: false });
-        p.window.dispatchEvent(
-            new p.window.CustomEvent('c4builder:agent', { detail: { on: true, listening: true } })
-        );
+        p.agentEvent({ on: true, mailboxes: [{ name: 'foo', state: 'listening', queued: 0 }] });
         expect(p.buttons()).toEqual(['Feedback', 'Question']);
-        expect(p.panel.textContent).toContain('agent: listening');
+        expect(p.panel.textContent).toContain('foo: listening ●');
     });
 
     it('Question → Add question шлёт вопрос в раздел вопросов, как раньше', async () => {
@@ -296,7 +316,7 @@ describe('поповер Feedback', () => {
     });
 
     it('delivered раньше ответа на POST — сразу «доставлено»', async () => {
-        const p = await agentPage({ listening: true });
+        const p = await agentPage();
         p.window.__reply = { id: 'b2', queued: false };
         p.window.dispatchEvent(new p.window.CustomEvent('c4builder:delivered', { detail: { id: 'b2' } }));
         await p.write('t', 'Feedback', 'x', 'Send now');
@@ -433,6 +453,125 @@ describe('черновик review', () => {
         expect(p.panelButtons()).toEqual([DONE]);
         await sleep(20);
         expect(p.window.__calls).toEqual([]);
+    });
+});
+
+// Адресат вкладки и черновик по адресату (change feedback-mailboxes, D5–D6).
+describe('адресат вкладки', () => {
+    const box = (name, state = 'listening', queued = 0) => ({ name, state, queued });
+    const TWO = [box('foo'), box('bar', 'reconnecting', 2)];
+    const sendTo = (p) => p.panel.querySelector('.c4b-to');
+    const pick = (p, name) => {
+        const select = p.panel.querySelector('select');
+        select.value = name;
+        select.dispatchEvent(new p.window.Event('change'));
+    };
+
+    it('один ящик: без Send to, имя в статусе, to в POST; тосты с именем', async () => {
+        const p = await agentPage({ mailboxes: [box('foo')] });
+        expect(sendTo(p).hidden).toBe(true);
+        expect(p.panel.querySelector('.c4b-listen').textContent).toBe('foo: listening ●');
+        expect(p.window.sessionStorage.getItem('__c4builderTarget:p1')).toBe('foo');
+        p.window.__reply = { id: 'b1', queued: true, to: 'foo' };
+        await p.write('t', 'Feedback', 'x', 'Send now');
+        expect(p.window.__calls[0].body.to).toBe('foo');
+        expect(p.toast()).toBe('Queued for foo — not listening');
+        p.window.dispatchEvent(
+            new p.window.CustomEvent('c4builder:delivered', { detail: { id: 'b1', to: 'foo' } })
+        );
+        expect(p.toast()).toBe('Delivered to foo');
+    });
+
+    it('два ящика без выбора: Send to со состоянием, отправка недоступна', async () => {
+        const p = await agentPage({ mailboxes: TWO });
+        expect(sendTo(p).hidden).toBe(false);
+        expect([...p.panel.querySelectorAll('option')].map((o) => o.textContent)).toEqual([
+            'choose an agent',
+            'foo: listening ●',
+            'bar: reconnecting ○, 2 queued'
+        ]);
+        expect(p.byText(p.panel, DONE).disabled).toBe(true);
+        const pop = await p.openFor('t', 'Feedback');
+        expect(p.byText(pop, 'Send now').disabled).toBe(true);
+        expect(p.byText(pop, 'Add to review').disabled).toBe(false);
+        expect(pop.querySelector('.c4b-listen').textContent).toBe('choose an agent');
+        p.byText(pop, 'Send now').click();
+        p.byText(p.panel, DONE).click();
+        await sleep(20);
+        expect(p.window.__calls).toEqual([]);
+    });
+
+    it('выбор bar переживает перезагрузку и уходит в to', async () => {
+        const first = await agentPage({ mailboxes: TWO });
+        pick(first, 'bar');
+        expect(first.byText(first.panel, DONE).disabled).toBe(false);
+        const p = await agentPage({ mailboxes: TWO, session: first.dump('sessionStorage') });
+        expect(p.panel.querySelector('select').value).toBe('bar');
+        expect([...p.panel.querySelectorAll('option')].map((o) => o.value)).toEqual(['foo', 'bar']);
+        p.byText(p.panel, DONE).click();
+        await sleep(20);
+        expect(p.window.__calls[0].body).toEqual({
+            decision: 'approved',
+            comments: [],
+            general: '',
+            to: 'bar'
+        });
+    });
+
+    it('две вкладки с foo и bar: черновики не смешиваются', async () => {
+        const a = await agentPage({ mailboxes: TWO, session: { '__c4builderTarget:p1': 'foo' } });
+        await a.write('t', 'Feedback', 'one', 'Add to review');
+        await a.write('u', 'Feedback', 'two', 'Add to review');
+        const b = await agentPage({
+            mailboxes: TWO,
+            storage: a.dump('localStorage'),
+            session: { '__c4builderTarget:p1': 'bar' }
+        });
+        expect(b.panel.textContent).toContain('Review: nothing pending');
+        expect(b.doc.querySelector('mark.c4b-dhl')).toBeNull();
+        await b.write('t', 'Feedback', 'three', 'Add to review');
+        b.byText(b.panel, 'Submit review').click();
+        b.byText(b.panel, 'Submit review').click();
+        await sleep(20);
+        expect(b.window.__calls.map((c) => [c.body.to, c.body.comments.map((i) => i.comment)])).toEqual([
+            ['bar', ['three']]
+        ]);
+        expect(b.stored('__c4builderReview:p1:foo').map((i) => i.comment)).toEqual(['one', 'two']);
+        expect(b.stored('__c4builderReview:p1:bar')).toEqual([]);
+    });
+
+    it('черновик без адресата переезжает к первому адресату', async () => {
+        const p = await agentPage();
+        await p.write('t', 'Feedback', 'early', 'Add to review');
+        p.agentEvent({ on: true, mailboxes: [box('foo')] });
+        expect(p.stored()).toEqual([]);
+        expect(p.stored('__c4builderReview:p1:foo').map((i) => i.comment)).toEqual(['early']);
+        expect(p.panel.textContent).toContain('Review: 1 pending (1 page)');
+        // второй агент не забирает вкладку у первого
+        p.agentEvent({ on: true, mailboxes: [box('foo'), box('bar')] });
+        expect(p.panel.querySelector('select').value).toBe('foo');
+    });
+
+    it('смена адресата перерисовывает панель и подсветку; ящик адресата удалён — он остаётся', async () => {
+        const p = await agentPage({
+            mailboxes: TWO,
+            storage: {
+                '__c4builderReview:p1:foo': JSON.stringify([
+                    { id: 'a', page: 'A.md', quote: 'foo bar', section: 'Flow', comment: 'x' }
+                ])
+            },
+            session: { '__c4builderTarget:p1': 'bar' }
+        });
+        expect(p.doc.querySelector('mark.c4b-dhl')).toBeNull();
+        pick(p, 'foo');
+        expect(p.panel.textContent).toContain('Review: 1 pending (1 page)');
+        expect(p.doc.querySelector('mark.c4b-dhl').textContent).toBe('foo bar');
+        p.agentEvent({ on: true, mailboxes: [box('bar')] });
+        expect([...p.panel.querySelectorAll('option')].map((o) => o.textContent)).toEqual([
+            'bar: listening ●',
+            'foo: reconnecting ○'
+        ]);
+        expect(p.panel.querySelector('select').value).toBe('foo');
     });
 });
 
