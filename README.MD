@@ -31,6 +31,9 @@ than a hundred diagrams, so we continue it as a maintained fork, adapted to work
   and lays it out with horizontal pools and lanes.
 - **Mermaid** `.mmd` files and ```` ```mermaid ```` blocks are rendered at build time by real mermaid,
   without a browser: images in every output instead of client-side rendering.
+- **Review from the page.** In `c4builder --site -w` a selection becomes a question in the source
+  `.md` or feedback for the agent; `c4builder feedback --wait --as <name>` hands the batch to the
+  agent, and the page reloads with its edits.
 - **Maintained.** TypeScript, golden rendering snapshots, CI on every pull request, releases to
   npm and GHCR. The PDF output of the original was removed.
 

@@ -3,7 +3,7 @@
 User-facing changes of C4-Builder. Every pull request that changes behaviour adds a line to
 `## Unreleased`; the release commit renames it to `## vX.Y.Z`.
 
-## Unreleased
+## v0.9.0
 
 - Mermaid diagrams are rendered at build time, the fourth engine next to PlantUML, D2 and BPMN:
   `.mmd` files and ```` ```mermaid ```` blocks in project pages and OpenSpec artifacts become SVG or PNG
@@ -15,45 +15,42 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
   placeholder and a warning. The engine is an optional dependency loaded only for projects with mermaid
 - `--md` output: a ```` ```mermaid ```` block in a page is now an image, like ```` ```plantuml ````; GitLab
   used to draw such blocks itself
-
+- `site -w`: questions on the page. Select text, press **Question**, type a question and press
+  **Add question** — it is appended to the source `.md` of the page under the `questionsHeading` section
+  (`Open questions` by default; the new `.c4builder` key): a table row with the next number when the
+  section is a table, a list item otherwise, a new section at the end of the file when there is none.
+  Watch rebuilds and the page reloads with the question; quoted text is highlighted on the page with
+  the question number linking to its row. A × button on a question row removes it from the file.
+  Dev-server only: nothing is added to the build output
 - `site -w`: feedback to a coding agent from the page. In the agent mode (`--agent`, or run by an agent:
   `CLAUDECODE`, `CODEX_THREAD_ID`, `GEMINI_CLI`, `OPENCODE`, `COPILOT_CLI`, `AI_AGENT`, or
   `C4BUILDER_AGENT`; `--no-agent` or `C4BUILDER_AGENT=0` turn it off) a selection gets a **Feedback**
   button next to **Question**: **Send now** sends one comment, **Add to review** collects comments from
   several pages into a review sent by **Submit review** (with an optional overall comment) or
-  **Approve** (nothing more to change). Comments are not written to the files. The review draft survives
-  reloads, its quotes are highlighted in blue, the page shows whether the agent listens and when a batch
-  is delivered. The new `c4builder feedback --wait` waits for the next batch and prints it as markdown
-  (page, source files, section, quote, comment, `Decision: submitted|approved`); the agent runs it in the
-  background and again after each batch. The selection button of questions is now **Question** with
-  **Add question** (was **Comment** / **Add** in 0.9.0-rc.1)
-- **BREAKING** (for 0.9.0 release candidates): `c4builder feedback` requires `--as <name>`, the
-  listener's name — the agent's change or task. Without it, or with an invalid name, the command exits
-  with code 2 and `--as <name> is required` with an example, without contacting the server. `site -w`
-  keeps a mailbox per name: a batch goes only to the agent it was sent to and waits for it between
-  runs; a batch sent before any agent came goes to the first one. With several agents the review bar
-  shows **Send to** with their names and state (`listening` / `reconnecting`, queued batches); the
-  choice is per tab, so three tabs can work with three agents, and each recipient has its own review
-  draft. With one agent nothing changes on the page except its name in the status. Toasts name the
-  recipient («Queued for foo», «Delivered to foo»). An empty mailbox leaves the list after 30 minutes.
-  An rc `feedback` against the new `site -w` fails with `unexpected response 400` — update both
-- `site -w`: the empty review bar finishes the review with one button, **Done — no changes** (an
-  `approved` batch with no comments); **Discard** and **Submit review** appear once the draft has
-  comments. **Discard** still only clears the draft and sends nothing to the agent
+  **Approve** (nothing more to change). An empty review bar has one button, **Done — no changes** (an
+  `approved` batch with no comments); **Discard** only clears the draft. Comments are not written to
+  the files. The review draft survives reloads, its quotes are highlighted in blue, the page shows
+  whether the agent listens and when a batch is delivered. The new `c4builder feedback --wait --as <name>`
+  waits for the next batch for the listener `<name>` (the agent's change or task) and prints it as
+  markdown (page, source files, section, quote, comment, `Decision: submitted|approved`); the agent runs
+  it in the background and again after each batch with the same name. Without `--as`, or with an
+  invalid name, it exits with code 2 and an example, without contacting the server
+- `site -w`: several agents on one server. Every listener name gets a mailbox: a batch goes only to the
+  agent it was sent to and waits for it between runs; a batch sent before any agent came goes to the
+  first one. With several agents the review bar shows **Send to** with their names and state
+  (`listening` / `reconnecting`, queued batches); the choice is per tab, so three tabs can work with
+  three agents, and each recipient has its own review draft. Toasts name the recipient («Queued for
+  foo», «Delivered to foo»). An empty mailbox leaves the list after 30 minutes
 - `site -w`: the page interface (selection buttons, popovers, review bar, toasts) is in English or
   Russian, following the browser language; the new `.c4builder` key `uiLanguage` (`auto` by default,
   `en`, `ru`) pins it. Russian counts are declined («1 замечание», «5 замечаний»). CLI output, feedback
   batches, server error texts and `questionsHeading` stay as they were
-- `site -w`: comments on the page. Select text, press **Question**, type a question — it is appended to
-  the source `.md` of the page under the `questionsHeading` section (`Open questions` by default; the
-  new `.c4builder` key): a table row with the next number when the section is a table, a list item
-  otherwise, a new section at the end of the file when there is none. Watch rebuilds and the page
-  reloads with the question; quoted text is highlighted on the page with the question number linking
-  to its row. A × button on a question row removes it from the file. Dev-server only: nothing is added to
-  the build output
 - `site -w`: when another c4builder process holds the build lock of the same folder (a second
   `site -w`), the watch rebuild now waits for it (up to a minute) instead of skipping, so the browser
   still gets its reload
+- Coming from 0.9.0-rc.1…rc.3: `c4builder feedback` requires `--as <name>` since rc.4, and an older
+  `feedback` against a newer `site -w` fails with `unexpected response 400` — update both. The question
+  buttons were **Comment** / **Add** in rc.1
 
 ## v0.8.0
 

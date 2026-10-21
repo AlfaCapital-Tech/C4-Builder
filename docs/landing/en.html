@@ -151,6 +151,10 @@ c4builder --site -w</code></pre>
             <dd><code>.mmd</code> files and <code>```mermaid</code> blocks in pages and OpenSpec
                 artifacts become images at build time: real mermaid with no browser or network, in
                 SVG and PNG.</dd>
+            <dt>Review from the page</dt>
+            <dd>In <code>c4builder --site -w</code> a selection becomes a question in the source
+                <code>.md</code> or feedback for the agent: <code>c4builder feedback --wait</code>
+                hands the batch to the agent, the page reloads with its edits.</dd>
             <dt>Maintenance</dt>
             <dd>TypeScript, golden rendering tests, CI on every pull request, releases to npm and GHCR.</dd>
         </dl>

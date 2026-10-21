@@ -150,6 +150,10 @@ c4builder --site -w</code></pre>
             <dd>Файлы <code>.mmd</code> и блоки <code>```mermaid</code> в страницах и артефактах
                 OpenSpec становятся картинками при сборке: настоящий mermaid без браузера и сети,
                 в SVG и PNG.</dd>
+            <dt>Ревью со страницы</dt>
+            <dd>В <code>c4builder --site -w</code> выделенный текст становится вопросом в исходном
+                <code>.md</code> или замечанием агенту: <code>c4builder feedback --wait</code> отдаёт
+                пачку агенту, страница обновляется с его правками.</dd>
             <dt>Поддержка</dt>
             <dd>TypeScript, golden-тесты рендера, CI на каждый pull request, релизы в npm и GHCR.</dd>
         </dl>

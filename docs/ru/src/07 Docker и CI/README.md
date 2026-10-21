@@ -42,12 +42,12 @@ GitLab CI, проверка диаграмм и публикация в GitLab P
 
 ```yaml
 check:
-  image: ghcr.io/alfacapital-tech/c4builder:0.4.0
+  image: ghcr.io/alfacapital-tech/c4builder:0.9.0
   script:
     - find src \( -name '*.puml' -o -name '*.d2' -o -name '*.bpmn' -o -name '*.mmd' \) -exec c4builder check {} +
 
 pages:
-  image: ghcr.io/alfacapital-tech/c4builder:0.4.0
+  image: ghcr.io/alfacapital-tech/c4builder:0.9.0
   script:
     - c4builder
   artifacts:
