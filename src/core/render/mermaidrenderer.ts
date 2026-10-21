@@ -1,6 +1,5 @@
 import crypto from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import vm from 'node:vm';
 
 import { DEFAULT_FONT_NAME } from './fonts.ts';
@@ -11,8 +10,6 @@ import { ASCENT, DESCENT, X_HEIGHT, clearTextWidths, textWidth } from './textmet
 // @mermaid-js/tiny) в окне jsdom → SVG. Геометрию, которой у jsdom нет (getBBox), считает
 // resvg по вендорному шрифту. Пакет — optionalDependency, грузится лениво при первой
 // mermaid-диаграмме: проекты без mermaid его не трогают (как D2 и BPMN).
-
-const require = createRequire(import.meta.url);
 
 // Версия пакета идёт в ключ кэша (render/diagrams): апгрейд mermaid обязан перерисовать.
 export const MERMAID_PACKAGE = '@mermaid-js/tiny';
@@ -355,7 +352,9 @@ const getEngine = (): Promise<Engine> => {
                 JSDOM: typeof JSDOM;
                 VirtualConsole: typeof VirtualConsole;
             }>('jsdom'));
-            bundle = readFileSync(require.resolve(MERMAID_PACKAGE), 'utf8');
+            // import.meta.resolve, а не require.resolve: на Node 22 только он проходит через
+            // хуки резолва module.registerHooks (тесты «пакет не установлен»).
+            bundle = readFileSync(new URL(import.meta.resolve(MERMAID_PACKAGE)), 'utf8');
         } catch (err) {
             enginePromise = null; // провал импорта не кешируем — даём повторить
             throw new Error(
