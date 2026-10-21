@@ -155,33 +155,43 @@ ${commentsSnippet(H)}
 // черновик review в localStorage и панель review.
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const FLOW = '<h2>Flow</h2><p id="t">foo bar</p><h2>Other</h2><p id="u">baz qux</p>';
+const DONE = 'Done — no changes';
 
 const agentPage = async ({
     agent = true,
     listening = false,
     project = 'p1',
     storage = {},
-    body = FLOW
+    body = FLOW,
+    language,
+    languages
 } = {}) => {
     const { JSDOM } = await import('jsdom');
     const seed = Object.entries(storage)
         .map(([k, v]) => `localStorage.setItem(${JSON.stringify(k)}, ${JSON.stringify(v)});`)
+        .concat(
+            languages
+                ? [`Object.defineProperty(navigator, 'languages', { value: ${JSON.stringify(languages)} });`]
+                : []
+        )
         .join('\n');
     const html = `<!DOCTYPE html><html><head></head><body>
 <script>
 window.$docsify = { plugins: [] };
 window.__calls = [];
 window.__reply = { id: 'b1', queued: true };
+window.__error = '';
 window.fetch = function (url, init) {
     window.__calls.push({ url: url, method: init.method, body: JSON.parse(init.body) });
-    return Promise.resolve({ ok: true, json: function () { return Promise.resolve(window.__reply); } });
+    var reply = window.__error ? { error: window.__error } : window.__reply;
+    return Promise.resolve({ ok: !window.__error, status: 400, json: function () { return Promise.resolve(reply); } });
 };
 Range.prototype.getClientRects = function () { return []; };
 Range.prototype.getBoundingClientRect = function () { return { top: 0, bottom: 10, left: 0, right: 10 }; };
 ${seed}
 </script>
 <section class="markdown-section">${body}</section>
-${commentsSnippet(H, { agent, listening, project })}
+${commentsSnippet(H, { agent, listening, project, language })}
 </body></html>`;
     const { window } = new JSDOM(html, {
         runScripts: 'dangerously',
@@ -213,9 +223,11 @@ ${commentsSnippet(H, { agent, listening, project })}
         await sleep(20);
     };
     const panel = doc.querySelector('.c4b-review');
+    const panelButtons = () =>
+        [...panel.querySelectorAll('.c4b-acts > button')].filter((b) => !b.hidden).map((b) => b.textContent);
     const toast = () => doc.querySelector('.c4b-ctoast')?.textContent;
     const stored = () => JSON.parse(window.localStorage.getItem('__c4builderReview:p1') || '[]');
-    return { window, doc, buttons, byText, openFor, write, panel, toast, stored };
+    return { window, doc, buttons, byText, openFor, write, panel, panelButtons, toast, stored };
 };
 
 describe('кнопки у выделения', () => {
@@ -370,12 +382,15 @@ describe('черновик review', () => {
         expect(p.window.localStorage.getItem('__c4builderReview:p1')).toBeNull();
         expect(p.panel.textContent).toContain('Review: nothing pending');
         expect(p.doc.querySelector('mark.c4b-dhl')).toBeNull();
+        expect(p.panelButtons()).toEqual([DONE]);
     });
 
-    it('Approve при пустом черновике шлёт approved без замечаний', async () => {
+    it('пустой черновик: одна основная Done — no changes, она шлёт approved без замечаний', async () => {
         const p = await agentPage();
-        expect(p.byText(p.panel, 'Submit review').disabled).toBe(true);
-        p.byText(p.panel, 'Approve').click();
+        expect(p.panelButtons()).toEqual([DONE]);
+        const done = p.byText(p.panel, DONE);
+        expect(done.className).toBe('c4b-primary');
+        done.click();
         await sleep(20);
         expect(p.window.__calls).toEqual([
             {
@@ -384,6 +399,20 @@ describe('черновик review', () => {
                 body: { decision: 'approved', comments: [], general: '' }
             }
         ]);
+    });
+
+    it('с замечаниями — Discard, Approve и основная Submit review; Approve шлёт замечание с approved', async () => {
+        const p = await agentPage();
+        await p.write('t', 'Feedback', 'first', 'Add to review');
+        expect(p.panelButtons()).toEqual(['Discard', 'Approve', 'Submit review']);
+        expect(p.panel.querySelector('.c4b-primary').textContent).toBe('Submit review');
+        p.byText(p.panel, 'Approve').click();
+        await sleep(20);
+        expect(p.window.__calls.map((c) => [c.body.decision, c.body.comments.map((i) => i.comment)])).toEqual(
+            [['approved', ['first']]]
+        );
+        expect(p.stored()).toEqual([]);
+        expect(p.panelButtons()).toEqual([DONE]);
     });
 
     it('× удаляет одно замечание, Discard — весь черновик после подтверждения', async () => {
@@ -400,6 +429,81 @@ describe('черновик review', () => {
         p.window.confirm = () => true;
         p.byText(p.panel, 'Discard').click();
         expect(p.stored()).toEqual([]);
+        expect(p.doc.querySelector('mark.c4b-dhl')).toBeNull();
+        expect(p.panelButtons()).toEqual([DONE]);
+        await sleep(20);
         expect(p.window.__calls).toEqual([]);
+    });
+});
+
+// Язык интерфейса страницы (change site-ui-language): по navigator.languages или по uiLanguage.
+describe('язык интерфейса', () => {
+    const RU = ['Замечание', 'Вопрос'];
+    const EN = ['Feedback', 'Question'];
+    const items = (pages) =>
+        JSON.stringify(
+            pages.map((page, i) => ({ id: `i${i}`, page, quote: 'foo', section: '', comment: 'x' }))
+        );
+
+    it('ru-RU, en при auto — русские подписи у выделения, в поповере и в панели', async () => {
+        const p = await agentPage({ languages: ['ru-RU', 'en'] });
+        expect(p.buttons()).toEqual(RU);
+        expect(p.panel.textContent).toContain('Ревью: замечаний нет');
+        expect(p.panel.textContent).toContain('агент: не слушает ○');
+        expect(p.panelButtons()).toEqual(['Готово, правок нет']);
+        const pop = await p.openFor('t', 'Замечание');
+        expect([...pop.querySelectorAll('button')].map((b) => b.textContent)).toEqual([
+            'Отмена',
+            'В ревью',
+            'Отправить'
+        ]);
+        expect(pop.querySelector('.c4b-primary').textContent).toBe('Отправить');
+        // пачка агенту — в том же формате, что с английского интерфейса
+        await p.write('t', 'Замечание', 'Rename', 'Отправить');
+        expect(p.window.__calls[0].body).toEqual({
+            decision: 'submitted',
+            comments: [{ page: 'A.md', quote: 'foo bar', section: 'Flow', comment: 'Rename' }],
+            general: ''
+        });
+        expect(p.toast()).toBe('В очереди: агент не слушает');
+        await p.write('t', 'Замечание', 'first', 'В ревью');
+        expect(p.panelButtons()).toEqual(['Очистить', 'Одобрить', 'Отправить ревью']);
+    });
+
+    it('de-DE, fr — английские; de-DE, ru, en — русские', async () => {
+        expect((await agentPage({ languages: ['de-DE', 'fr'] })).buttons()).toEqual(EN);
+        expect((await agentPage({ languages: ['de-DE', 'ru', 'en'] })).buttons()).toEqual(RU);
+    });
+
+    it('uiLanguage: en при русском браузере — английские', async () => {
+        const p = await agentPage({ language: 'en', languages: ['ru-RU'] });
+        expect(p.buttons()).toEqual(EN);
+        expect(p.panel.textContent).toContain('Review: nothing pending');
+    });
+
+    it('uiLanguage: ru при английском браузере — русские', async () => {
+        const p = await agentPage({ language: 'ru', languages: ['en-US'] });
+        expect(p.buttons()).toEqual(RU);
+        expect(p.panel.textContent).toContain('Ревью: замечаний нет');
+    });
+
+    it('счётчик панели склоняется по обоим числам', async () => {
+        const counter = async (pages) =>
+            (
+                await agentPage({ languages: ['ru'], storage: { '__c4builderReview:p1': items(pages) } })
+            ).panel.querySelector('.c4b-link').textContent;
+        expect(await counter(['A.md'])).toBe('Ревью: 1 замечание на 1 странице');
+        expect(await counter(['A.md', 'B.md'])).toBe('Ревью: 2 замечания на 2 страницах');
+        expect(await counter(['A.md', 'A.md', 'B.md', 'C.md', 'D.md'])).toBe(
+            'Ревью: 5 замечаний на 4 страницах'
+        );
+    });
+
+    it('ошибка сервера в тосте — русский префикс и текст ошибки как есть', async () => {
+        const p = await agentPage({ languages: ['ru'] });
+        p.window.__error = 'Comment is too long';
+        await p.write('t', 'Вопрос', 'Why?', 'Добавить вопрос');
+        expect(p.toast()).toBe('Не удалось добавить вопрос: Comment is too long');
+        expect(p.window.__calls[0].body.comment).toBe('Why?');
     });
 });

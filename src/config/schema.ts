@@ -68,6 +68,11 @@ export const configSchema = z.object({
     // Заголовок раздела, куда `site -w` дописывает комментарии к странице (в коде кириллицы
     // быть не может — русский заголовок задаёт сам проект).
     questionsHeading: str(defaultConfig.questionsHeading),
+    // Язык интерфейса страницы `site -w`; `auto` — по языку браузера (change site-ui-language).
+    uiLanguage: z.preprocess(
+        strPre,
+        z.enum(['auto', 'en', 'ru'], 'expected auto, en or ru').default(defaultConfig.uiLanguage)
+    ),
 
     // Задаются явно (флаг/промпт) либо тонкой правкой файла — в defaultConfig не входят.
     projectName: optStr(),

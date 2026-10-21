@@ -88,3 +88,17 @@ describe('questionsHeading', () => {
         );
     });
 });
+
+describe('uiLanguage', () => {
+    it('по умолчанию auto, en и ru принимаются', () => {
+        expect(configSchema.parse({}).uiLanguage).toBe('auto');
+        expect(configSchema.parse({ uiLanguage: 'en' }).uiLanguage).toBe('en');
+        expect(configSchema.parse({ uiLanguage: 'ru' }).uiLanguage).toBe('ru');
+    });
+
+    it('другое значение — ошибка с ключом и допустимыми значениями', () => {
+        const r = parseConfig({ uiLanguage: 'de' });
+        expect(r.ok).toBe(false);
+        expect(r.issues).toEqual([{ key: 'uiLanguage', value: 'de', message: 'expected auto, en or ru' }]);
+    });
+});
