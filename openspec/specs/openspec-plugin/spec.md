@@ -100,7 +100,7 @@ MUST стоять изображение. Онлайн-сервисы ренде
 подраздела архива MUST перечислять архивные change'ы со ссылками.
 
 #### Scenario: Архивный change
-- **WHEN** в `changes/archive/2026-08-13-dig-33841-ai-answer-disclaimer/` есть артефакты
+- **WHEN** в `changes/archive/2026-08-13-dig-7-disclaimer/` есть артефакты
 - **THEN** страница доступна в подразделе архива и не учитывается в счётчике активных change'ов
 
 ### Requirement: Watch-режим отслеживает store
