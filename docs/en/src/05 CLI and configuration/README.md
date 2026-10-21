@@ -10,7 +10,7 @@
 | `c4builder --config` | setup wizard with the current values; since 0.5.0 also `c4builder config` |
 | `c4builder site` | builds and serves the site locally (same as `--site`) |
 | `c4builder --site -w` | the same, rebuilding on every save and reloading the browser |
-| `c4builder feedback --wait` | waits for the next batch of page feedback for an agent from `site -w` and prints it, see "Feedback to the agent" below |
+| `c4builder feedback --wait --as <name>` | waits for the next batch of page feedback for the agent `<name>` from `site -w` and prints it, see "Feedback to the agent" below |
 | `c4builder check <files...>` | checks `.puml`, `.iuml`, `.d2`, `.bpmn`, `.mmd` diagrams without a build, exit code 0 or 1 |
 | `c4builder jre info` | which Java will be used (JSON) |
 | `c4builder jre install [--force]` | download a JRE into the cache in advance; `--force` — even if system Java exists |
@@ -33,6 +33,7 @@ Flags:
 | `-p, --port <n>` | port for `--site` and `feedback` (defaults to `webPort` from the config, 3000) |
 | `--agent`, `--no-agent` | turn the agent mode of `site -w` on or off regardless of the environment |
 | `--wait` | for `feedback`: wait for the next batch instead of only checking the queue |
+| `--as <name>` | for `feedback`, required: listener name — the agent's change or task (1–64 characters: Latin letters, digits, `.`, `_`, `-`) |
 | `--system-fonts` | render with system fonts for one run |
 | `-V, --version` | version |
 
@@ -103,21 +104,34 @@ On the page the selection gets two buttons: **Feedback** (to the agent) and **Qu
 in the file). The Feedback popover sends the comment right away (**Send now**) or keeps it in a review
 (**Add to review**), as in a GitLab merge request: once a review is started, the main button and
 `Ctrl+Enter` are **Add to review**. The review bar at the bottom of the page shows the number of
-pending comments and pages, whether the agent listens (`agent: listening ●` / `not listening ○`)
-and the buttons. While the draft is empty, there is one button, **Done — no changes**: nothing to
+pending comments and pages, the recipient and its state (`foo: listening ●` / `foo: reconnecting ○`,
+with no agents `agent: not listening ○`) and the buttons. While the draft is empty, there is one button, **Done — no changes**: nothing to
 change, the agent gets an `approved` batch with no comments. Once the draft has comments, the
 buttons are **Submit review** (with an optional overall comment), **Approve** (nothing more to
 change; pending comments go along) and **Discard** (clear the draft, nothing goes to the agent).
 A click on the counter opens the list with a
-«×» on every comment. The draft is kept in the browser's `localStorage` per project, survives a
-reload and a closed tab, and its quotes are highlighted in blue.
+«×» on every comment. The draft is kept in the browser's `localStorage` per project and recipient,
+survives a reload and a closed tab, and its quotes are highlighted in blue.
 
-`c4builder feedback --wait` connects to `site -w` on the port from `-p` or `webPort`, waits for the
-next batch with no time limit, prints it to stdout as markdown and exits with code 0. Without
-`--wait` the command prints a batch if one is already queued, otherwise nothing, and exits at once.
-No server, or the mode is off — exit code 1 and a message with the server address. Batches sent
-with nobody listening wait in the queue of the `site -w` process and go to the next command; the
-page says "queued", and "delivered" only once a command got the batch. The batch format and the
+Several agents can work with one `site -w`: each listens under its own name (`--as <name>`), and
+the server keeps a mailbox per name. With more than one recipient the bar shows **Send to** with
+the names and their state (`listening`, `reconnecting`, the number of queued batches). The choice
+is remembered per tab and survives a reload, so three tabs can work with three agents. Until the
+tab picks a recipient, the send buttons are disabled. With one agent there is no choice: it becomes
+the tab's recipient by itself. A draft started before any agent came goes to the tab's first
+recipient.
+
+`c4builder feedback --wait --as <name>` connects to `site -w` on the port from `-p` or `webPort`,
+waits for the next batch for `<name>` with no time limit, prints it to stdout as markdown and exits
+with code 0. Without `--wait` the command prints a batch if one is already in the mailbox, otherwise
+nothing, and exits at once. Without `--as` or with an invalid name — exit code 2 and
+`--as <name> is required` with an example, the server is not contacted. No server, or the mode is
+off — exit code 1 and a message with the server address. A batch sent to a recipient that is not
+listening (say, the agent is editing files between batches) waits in its mailbox and goes to the
+next command with the same name; a batch sent before any agent came goes to the first command that
+connects. The page says "queued for `<name>`", and "delivered to `<name>`" only once a command got
+the batch. An empty mailbox nobody connected to for 30 minutes leaves the list; a mailbox with
+batches stays. Mailboxes live in the memory of the `site -w` process. The batch format and the
 agent loop are on the [Agents](08%20Agents/08%20Agents.md) page.
 
 ## How the config is read

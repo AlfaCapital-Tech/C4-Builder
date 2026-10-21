@@ -24,6 +24,10 @@ const CSS = [
     '.c4b-review{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:1000;width:520px;max-width:calc(100vw - 32px);box-sizing:border-box;padding:8px 12px;border:1px solid #3b82f6;border-radius:6px;background:#fff;color:#2c3e50;font:13px/1.4 sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.2)}',
     '.c4b-review .c4b-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px}',
     '.c4b-review .c4b-row small{flex:1;color:#888;white-space:nowrap}',
+    // Выбор адресата сжимается вместе с select: длинные имена не выталкивают кнопки из строки.
+    '.c4b-review .c4b-to{flex:1;min-width:0;display:flex;align-items:center;gap:4px;color:#888;white-space:nowrap}',
+    '.c4b-review .c4b-to[hidden]{display:none}',
+    '.c4b-review select{min-width:0;max-width:100%;padding:2px;border:1px solid #ccc;border-radius:4px;background:#fff;color:#2c3e50;font:13px sans-serif}',
     // Кнопки панели переносятся одной группой: иначе при нехватке места часть уезжает на
     // вторую строку, а Discard остаётся один в первой.
     '.c4b-review .c4b-acts{display:flex;gap:6px;margin-left:auto}',
@@ -51,12 +55,20 @@ const jsValue = (v: unknown): string =>
         .replace(/</g, '\\u003c')
         .replace(/[\u0080-￿]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`);
 
+// Ящик слушателя `c4builder feedback --as <name>` в событии `agent` (change feedback-mailboxes, D4).
+export type MailboxState = { name: string; state: 'listening' | 'reconnecting'; queued: number };
+
 // Начальное состояние агентского режима и ключ проекта вставляет сервер, дальше его обновляют
 // события `c4builder:agent` от сниппета livereload (change site-agent-feedback, design D4, D8).
 // Язык выбирает сам скрипт: при `auto` — по navigator.languages (change site-ui-language, D1).
 export const commentsSnippet = (
     heading: string,
-    { agent = false, listening = false, project = '', language = 'auto' } = {}
+    {
+        agent = false,
+        mailboxes = [],
+        project = '',
+        language = 'auto'
+    }: { agent?: boolean; mailboxes?: MailboxState[]; project?: string; language?: string } = {}
 ): string => `
 <script>
 (function () {
@@ -67,7 +79,8 @@ export const commentsSnippet = (
     var HEADING = ${jsValue(heading)};
     var TOAST_KEY = '__c4builderCommentToast';
     var DRAFT_KEY = '__c4builderReview:' + ${jsValue(project)};
-    var AGENT = { on: ${agent}, listening: ${listening} };
+    var TARGET_KEY = '__c4builderTarget:' + ${jsValue(project)};
+    var AGENT = { on: ${agent}, mailboxes: ${jsValue(mailboxes)} };
     var BLOCKS = 'p,li,td,th,h1,h2,h3,h4,h5,h6,pre,blockquote,dd,dt,div,section,details,summary';
     var style = document.createElement('style');
     style.textContent = ${jsValue(CSS)};
@@ -386,39 +399,64 @@ export const commentsSnippet = (
         return function (err) { toast(t(key, { error: err && err.message ? err.message : err }), true); };
     };
 
+    // The tab's recipient lives in sessionStorage: it survives livereload, is per tab and is
+    // copied with a duplicated tab. Recipients are the server's mailboxes plus the tab's own.
+    var target = '';
+    try { target = sessionStorage.getItem(TARGET_KEY) || ''; } catch (e) {}
+    var recipients = function () {
+        var all = AGENT.mailboxes.slice();
+        var known = all.some(function (m) { return m.name === target; });
+        if (target && !known) all.push({ name: target, state: 'reconnecting', queued: 0 });
+        return all;
+    };
+    // Without mailboxes a batch goes to whoever connects first; with several, only to a chosen one.
+    var canSend = function () { return !!target || !AGENT.mailboxes.length; };
+    var named = function (key, name) { return name ? t(key + 'To', { name: name }) : t(key); };
+
     // Feedback to the agent: "Delivered" only after the server handed the batch to
     // "c4builder feedback"; the event may outrun the POST response, hence both maps.
     var delivered = {}, pending = {};
     var sendBatch = function (decision, comments, general) {
-        return send({ decision: decision, comments: comments, general: general }, 'POST', FEEDBACK).then(function (r) {
-            if (delivered[r.id]) return toast(t('delivered'));
+        var body = { decision: decision, comments: comments, general: general, to: target || undefined };
+        return send(body, 'POST', FEEDBACK).then(function (r) {
+            if (r.id in delivered) return toast(named('delivered', delivered[r.id]));
             pending[r.id] = true;
-            toast(t(r.queued ? 'queued' : 'sent'));
+            toast(named(r.queued ? 'queued' : 'sent', r.to));
         });
     };
     window.addEventListener('c4builder:delivered', function (e) {
-        var id = e.detail && e.detail.id;
-        delivered[id] = true;
-        if (pending[id]) { delete pending[id]; toast(t('delivered')); }
+        var d = e.detail || {};
+        delivered[d.id] = d.to || '';
+        if (pending[d.id]) { delete pending[d.id]; toast(named('delivered', d.to)); }
     });
 
-    // Review draft lives in localStorage per project: it survives livereload and a closed tab;
-    // without storage it lives until the page reloads.
-    var memDraft = [];
+    // Review draft lives in localStorage per project and recipient: it survives livereload and a
+    // closed tab, and a tab never sends comments typed for another agent. Without storage it lives
+    // until the page reloads. Without a recipient the rc key is used, so earlier drafts survive.
+    var memDraft = {};
+    var draftKey = function () { return DRAFT_KEY + (target ? ':' + target : ''); };
     var draft = function () {
         try {
-            var v = JSON.parse(localStorage.getItem(DRAFT_KEY) || '[]');
+            var v = JSON.parse(localStorage.getItem(draftKey()) || '[]');
             return Array.isArray(v) ? v : [];
-        } catch (e) { return memDraft; }
+        } catch (e) { return memDraft[draftKey()] || []; }
     };
     var saveDraft = function (items) {
-        memDraft = items;
+        memDraft[draftKey()] = items;
         try {
-            if (items.length) localStorage.setItem(DRAFT_KEY, JSON.stringify(items));
-            else localStorage.removeItem(DRAFT_KEY);
+            if (items.length) localStorage.setItem(draftKey(), JSON.stringify(items));
+            else localStorage.removeItem(draftKey());
         } catch (e) {}
         renderPanel();
         highlightDraft();
+    };
+    // A draft started before the tab had a recipient goes to its first recipient.
+    var setTarget = function (name) {
+        var orphan = target ? [] : draft();
+        if (orphan.length) saveDraft([]);
+        target = name;
+        try { sessionStorage.setItem(TARGET_KEY, name); } catch (e) {}
+        saveDraft(draft().concat(orphan));
     };
     var highlightDraft = function () {
         var root = content();
@@ -444,6 +482,12 @@ export const commentsSnippet = (
     var count = button('', function () { expanded = !expanded; renderPanel(); }, 'c4b-link');
     var listen = document.createElement('small');
     listen.className = 'c4b-listen';
+    var sendTo = document.createElement('label');
+    sendTo.className = 'c4b-to';
+    sendTo.textContent = t('sendTo');
+    var select = document.createElement('select');
+    select.addEventListener('change', function () { setTarget(select.value); renderAgent(); });
+    sendTo.appendChild(select);
     var list = document.createElement('ul');
     var general = document.createElement('textarea');
     general.placeholder = t('generalPlaceholder');
@@ -482,7 +526,7 @@ export const commentsSnippet = (
     var acts = document.createElement('span');
     acts.className = 'c4b-acts';
     [discard, approve, submit].forEach(function (el) { acts.appendChild(el); });
-    [count, listen, acts].forEach(function (el) { head.appendChild(el); });
+    [count, listen, sendTo, acts].forEach(function (el) { head.appendChild(el); });
     panel.appendChild(head);
     panel.appendChild(list);
     panel.appendChild(general);
@@ -514,28 +558,51 @@ export const commentsSnippet = (
         approve.className = empty ? 'c4b-primary' : '';
         discard.hidden = submit.hidden = empty;
         discard.disabled = busy;
-        approve.disabled = busy;
-        submit.disabled = busy || empty;
+        approve.disabled = busy || !canSend();
+        submit.disabled = busy || empty || !canSend();
     };
+    var label = function (m) {
+        return t(m.state === 'listening' ? 'stateListening' : 'stateReconnecting', { name: m.name }) +
+            (m.queued ? ', ' + t('inQueue', { n: m.queued }) : '');
+    };
+    // The popover's send button follows the recipient too; set while the popover is open.
+    var syncPop = null;
     var renderAgent = function () {
+        // A lone mailbox is chosen and remembered: the tab stays with it when a second agent comes.
+        if (!target && AGENT.mailboxes.length === 1) setTarget(AGENT.mailboxes[0].name);
         fbBtn.hidden = !AGENT.on;
-        renderPanel();
-        var text = t(AGENT.listening ? 'listening' : 'notListening');
+        var all = recipients(), current = null;
+        all.forEach(function (m) { if (m.name === target) current = m; });
+        var text = current ? label(current) : t(all.length ? 'chooseAgent' : 'notListening');
         var els = document.querySelectorAll('.c4b-listen');
         for (var i = 0; i < els.length; i++) { els[i].textContent = text; els[i].title = text; }
+        listen.hidden = all.length > 1;
+        sendTo.hidden = !listen.hidden;
+        select.textContent = '';
+        if (!target) all.unshift({ name: '', label: t('chooseAgent') });
+        all.forEach(function (m) {
+            var o = document.createElement('option');
+            o.value = m.name;
+            o.textContent = m.label || label(m);
+            select.appendChild(o);
+        });
+        select.value = target;
+        renderPanel();
+        if (syncPop) syncPop();
     };
     window.addEventListener('c4builder:agent', function (e) {
         var d = e.detail || {};
         AGENT.on = !!d.on;
-        AGENT.listening = !!d.listening;
+        AGENT.mailboxes = Array.isArray(d.mailboxes) ? d.mailboxes : [];
         renderAgent();
     });
     window.addEventListener('storage', function (e) {
-        if (e.key === DRAFT_KEY) { renderPanel(); highlightDraft(); }
+        if (e.key === draftKey()) { renderPanel(); highlightDraft(); }
     });
 
     var close = function () {
         if (pop) { pop.remove(); pop = null; }
+        syncPop = null;
         btns.hidden = true;
     };
     var open = function (data, rect, feedback) {
@@ -553,13 +620,19 @@ export const commentsSnippet = (
         else hint.textContent = hint.title = t('questionTo', { target: HEADING + (data.section ? ' / ' + data.section : '') });
         var actions = document.createElement('span');
         var buttons = [button(t('cancel'), close)];
+        var sending = false, now = null;
+        var sync = function () {
+            buttons.forEach(function (b) { b.disabled = sending || (b === now && !canSend()); });
+        };
         var run = function (action) {
             return function () {
                 var comment = ta.value.trim();
                 if (!comment) { ta.focus(); return; }
-                buttons.forEach(function (b) { b.disabled = true; });
+                sending = true;
+                sync();
                 action(comment).then(close, function (err) {
-                    buttons.forEach(function (b) { b.disabled = false; });
+                    sending = false;
+                    sync();
                     failure(feedback ? 'feedbackFailed' : 'questionFailed')(err);
                 });
             };
@@ -575,7 +648,7 @@ export const commentsSnippet = (
                 saveDraft(draft().concat([it]));
                 return Promise.resolve();
             }));
-            var now = button(t('sendNow'), run(function (c) { return sendBatch('submitted', [item(c)], ''); }));
+            now = button(t('sendNow'), run(function (c) { return sendBatch('submitted', [item(c)], ''); }));
             buttons.push(add, now);
             // As in a GitLab merge request: once a review is started, comments go into it.
             primary = draft().length ? add : now;
@@ -600,6 +673,7 @@ export const commentsSnippet = (
         pop.appendChild(ta);
         pop.appendChild(row);
         document.body.appendChild(pop);
+        syncPop = sync;
         renderAgent();
         place(pop, rect);
         ta.focus();

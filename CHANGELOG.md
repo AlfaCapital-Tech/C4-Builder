@@ -27,6 +27,16 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
   (page, source files, section, quote, comment, `Decision: submitted|approved`); the agent runs it in the
   background and again after each batch. The selection button of questions is now **Question** with
   **Add question** (was **Comment** / **Add** in 0.9.0-rc.1)
+- **BREAKING** (for 0.9.0 release candidates): `c4builder feedback` requires `--as <name>`, the
+  listener's name — the agent's change or task. Without it, or with an invalid name, the command exits
+  with code 2 and `--as <name> is required` with an example, without contacting the server. `site -w`
+  keeps a mailbox per name: a batch goes only to the agent it was sent to and waits for it between
+  runs; a batch sent before any agent came goes to the first one. With several agents the review bar
+  shows **Send to** with their names and state (`listening` / `reconnecting`, queued batches); the
+  choice is per tab, so three tabs can work with three agents, and each recipient has its own review
+  draft. With one agent nothing changes on the page except its name in the status. Toasts name the
+  recipient («Queued for foo», «Delivered to foo»). An empty mailbox leaves the list after 30 minutes.
+  An rc `feedback` against the new `site -w` fails with `unexpected response 400` — update both
 - `site -w`: the empty review bar finishes the review with one button, **Done — no changes** (an
   `approved` batch with no comments); **Discard** and **Submit review** appear once the draft has
   comments. **Discard** still only clears the draft and sends nothing to the agent

@@ -164,6 +164,10 @@ export default async () => {
         .option('--agent', 'with --site -w: accept page feedback for a coding agent (c4builder feedback)')
         .option('--no-agent', 'with --site -w: no agent feedback even when run by a coding agent')
         .option('--wait', 'for `feedback`: wait for the next batch of page feedback')
+        .option(
+            '--as <name>',
+            'for `feedback`: listener name (your change or task) — the page sends batches to it'
+        )
         .option('--docs', 'a brief explanation for the available configuration options')
         .option('--system-fonts', 'render with system fonts instead of the bundled one (not deterministic)')
         .option('-p, --port <n>', 'port used for serving the generated site', (v) => {

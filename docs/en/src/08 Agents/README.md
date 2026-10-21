@@ -42,11 +42,12 @@ review batch (**Submit review**, **Approve**). With nothing to change, the empty
 button, **Done — no changes**: it sends an `approved` batch with no comments. **Discard** only clears
 the draft and sends nothing to the agent. The agent loop:
 
-1. Start `c4builder --site -w` and `c4builder feedback --wait` in the background. In Claude Code —
-   both through Bash with `run_in_background`: the agent is notified when `feedback --wait` exits.
+1. Start `c4builder --site -w` and `c4builder feedback --wait --as <name>` in the background,
+   `<name>` being the agent's change or task, e.g. `--as add-dark-mode`. In Claude Code — both
+   through Bash with `run_in_background`: the agent is notified when `feedback --wait` exits.
 2. `feedback --wait` prints a batch and exits. The agent edits the sources in `src/` — the page
    reloads through livereload and the human sees the result.
-3. Run `c4builder feedback --wait` again and wait for the next batch.
+3. Run `c4builder feedback --wait --as <name>` again with the same name and wait for the next batch.
 4. A batch with `Decision: approved` means nothing more to change: finish its comments, if any, and
    stop waiting.
 
@@ -77,12 +78,27 @@ Quote: "deploy step"
 
 `Sources` are the source files of the page (missing for pages without a source), `§` is the page
 section where the text was selected, `General` is the overall review comment. A batch sent while the
-agent was not listening waits in the `site -w` queue and arrives on the next run of the command.
+agent was not listening waits in its `site -w` mailbox and arrives on the next run of the command
+with the same name.
+
+Without `--as` the command exits at once with code 2 and
+`--as <name> is required: name this listener after your change or task …` — an agent with an older
+instruction restarts the listener with a name from that message. Code 2, not 1: code 1 means no
+`site -w` is running.
 
 A feedback comment is an instruction to the agent, not a question: it is never written to the files.
 Questions for people (the **Question** button) go to the `questionsHeading` section of the source
 `.md` and stay in the documentation — the agent should not move feedback there or answer it by
 editing the questions section.
+
+### Several agents
+
+Several agents, each with its own change, can work with one `site -w`: each listens under its own
+name, and a batch goes only to the agent with that name. The page shows **Send to** with the agents
+and their state; the recipient is picked per tab, and every recipient has its own review draft. So
+a human reviews change A in one tab and change B in another, and no comment reaches the wrong
+agent. Keep the name the same on every run of the command: with another name the batches stay in
+the old mailbox.
 
 ### Interface language
 
@@ -97,7 +113,8 @@ has (`en` or `ru`), otherwise English. To pin the language for a project, set th
 `auto` (the default) follows the browser, `en` and `ru` always use that language. This page names
 the English buttons; the Russian interface shows **Замечание** (Feedback), **Вопрос** (Question),
 **Отправить** (Send now), **В ревью** (Add to review), **Отправить ревью** (Submit review),
-**Одобрить** (Approve), **Очистить** (Discard), **Готово, правок нет** (Done — no changes). The
+**Одобрить** (Approve), **Очистить** (Discard), **Готово, правок нет** (Done — no changes),
+**Кому** (Send to). The
 interface language does not change the CLI output, the `c4builder feedback` batch, server error
 texts or the questions section heading (`questionsHeading`).
 
@@ -129,7 +146,7 @@ from `.claude/skills/`.
 
 | Skill | Use it for |
 |---|---|
-| `c4builder` | working on a project: layout of `src/` and `.c4builder`, the edit → `c4builder check` → build loop, the page feedback loop (`c4builder feedback --wait`), C4-PlantUML conventions (stdlib includes, shared `.iuml`, offline rendering), D2, BPMN processes without coordinates, mermaid (`.mmd` and blocks, unsupported types), the `openspec` and `openapi` plugins, `llms.txt` |
+| `c4builder` | working on a project: layout of `src/` and `.c4builder`, the edit → `c4builder check` → build loop, the page feedback loop (`c4builder feedback --wait --as <name>`), C4-PlantUML conventions (stdlib includes, shared `.iuml`, offline rendering), D2, BPMN processes without coordinates, mermaid (`.mmd` and blocks, unsupported types), the `openspec` and `openapi` plugins, `llms.txt` |
 | `c4builder-setup` | install and update (npm channels `latest` and `rc`, the Docker image), Java or the downloaded JRE, a smoke build of the template project |
 
 ## AGENTS.md in a new project

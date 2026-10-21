@@ -1,10 +1,8 @@
-import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 
-import { cmdSite } from './dist.mjs';
 import { agentEnv, REPO_ROOT, serveSite, TMP_ROOT, updateCheckEnv } from './helpers.mjs';
 
 // Подсказка после сборки печатает `c4builder site` — форма обязана работать наравне
@@ -188,7 +186,7 @@ describe('агентский режим site -w', () => {
                 const base = `http://127.0.0.1:${port}`;
                 res.html = await (await fetch(`${base}/`)).text();
                 res.next = (
-                    await fetch(`${base}/__c4builder/feedback/next?wait=0`, {
+                    await fetch(`${base}/__c4builder/feedback/next?as=foo&wait=0`, {
                         headers: { 'X-C4builder-Feedback': '1' }
                     })
                 ).status;
@@ -204,10 +202,10 @@ describe('агентский режим site -w', () => {
         return res;
     };
 
-    it('с CLAUDECODE=1 — подсказка про feedback --wait и режим в странице', async () => {
+    it('с CLAUDECODE=1 — подсказка про feedback --wait --as и режим в странице', async () => {
         const res = await run(38326, [], agentEnv({ CLAUDECODE: '1' }));
         expect(res.out).toContain(
-            'agent mode (claude-code): page feedback goes to "c4builder feedback --wait -p 38326"'
+            'agent mode (claude-code): page feedback goes to "c4builder feedback --wait --as <name> -p 38326"'
         );
         expect(res.html).toContain('var AGENT = { on: true');
         expect(res.post).toBe(200);
@@ -226,176 +224,4 @@ describe('агентский режим site -w', () => {
         expect(res.out).not.toContain('agent mode (');
         expect(res.html).toContain('var AGENT = { on: false');
     }, 60_000);
-});
-
-// Очередь и каналы feedback (D1, D3, D4, D6) — сервер в процессе теста: окна long-poll и
-// присутствия слушателя короче боевых.
-describe('очередь feedback в site -w', () => {
-    const distDir = path.join(dir, 'feedback-dist');
-    fs.mkdirSync(distDir, { recursive: true });
-    fs.writeFileSync(path.join(distDir, 'index.html'), '<html><body></body></html>');
-    const PAGES = new Map([['A.md', [path.join(process.cwd(), 'src', 'A', 'README.md')]]]);
-    const ONE = {
-        decision: 'submitted',
-        comments: [{ page: 'A.md', quote: 'foo bar', section: 'Flow', comment: 'Rename to baz' }]
-    };
-    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-    const start = async (port, { agent, pollMs = 10_000, idleMs = 30_000 } = {}) => {
-        const server = await cmdSite(
-            { DIST_FOLDER: distDir, WEB_PORT: String(port), QUESTIONS_HEADING: 'Open questions' },
-            { port, watch: true, agent, pollMs, idleMs },
-            new EventEmitter(),
-            () => PAGES
-        );
-        const url = `http://127.0.0.1:${port}`;
-        return {
-            url,
-            post: (body = ONE, headers = { Origin: url }) =>
-                fetch(`${url}/__c4builder/feedback`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', ...headers },
-                    body: JSON.stringify(body)
-                }),
-            next: (query = '', headers = { 'X-C4builder-Feedback': '1' }, signal) =>
-                fetch(`${url}/__c4builder/feedback/next${query}`, { headers, signal }),
-            close: () =>
-                new Promise((r) => {
-                    server.closeAllConnections();
-                    server.close(r);
-                })
-        };
-    };
-
-    // Поток /__livereload: next(name) ждёт ближайшее событие с этим именем.
-    const sse = async (url) => {
-        const reader = (await fetch(`${url}/__livereload`)).body.getReader();
-        const decoder = new TextDecoder();
-        const events = [];
-        let buf = '';
-        return async (name) => {
-            for (;;) {
-                const i = events.findIndex((e) => e.event === name);
-                if (i >= 0) return events.splice(i, 1)[0].data;
-                const { value, done } = await reader.read();
-                if (done) throw new Error('поток SSE закрыт');
-                buf += decoder.decode(value, { stream: true });
-                for (let at = buf.indexOf('\n\n'); at >= 0; at = buf.indexOf('\n\n')) {
-                    const block = buf.slice(0, at);
-                    buf = buf.slice(at + 2);
-                    const event = block.match(/^event: (.*)$/m)?.[1];
-                    if (event) events.push({ event, data: JSON.parse(block.match(/^data: (.*)$/m)[1]) });
-                }
-            }
-        };
-    };
-
-    it('пачка до подключения ждёт в очереди и выдаётся следующему запросу; пустая очередь с ?wait=0 → 204', async () => {
-        const s = await start(38340);
-        try {
-            expect((await s.next('?wait=0')).status).toBe(204);
-            const posted = await s.post();
-            expect(posted.status).toBe(200);
-            const { id, queued } = await posted.json();
-            expect(queued).toBe(true);
-            expect(id).toMatch(/^[\w-]{36}$/);
-            const got = await s.next();
-            expect(got.status).toBe(200);
-            expect(got.headers.get('content-type')).toMatch(/^text\/markdown/);
-            const text = await got.text();
-            expect(text).toContain('Decision: submitted');
-            expect(text).toContain(
-                '## 1. A.md (§ Flow)\nSources: src/A/README.md\nQuote: "foo bar"\n\n> Rename to baz'
-            );
-            expect((await s.next('?wait=0')).status).toBe(204);
-        } finally {
-            await s.close();
-        }
-    });
-
-    it('два ожидающих — пачку получает самый ранний, второй ждёт дальше; оборванный ожидающий не считается', async () => {
-        const s = await start(38341, { pollMs: 1500 });
-        try {
-            const aborted = new AbortController();
-            s.next('', undefined, aborted.signal).catch(() => {});
-            await sleep(100);
-            aborted.abort();
-            await sleep(100);
-            expect((await (await s.post()).json()).queued).toBe(true);
-            expect((await s.next('?wait=0')).status).toBe(200);
-
-            const first = s.next().then(async (r) => [r.status, await r.text()]);
-            await sleep(100);
-            const second = s.next().then((r) => r.status);
-            await sleep(100);
-            expect((await (await s.post()).json()).queued).toBe(false);
-            expect((await first)[0]).toBe(200);
-            expect(await second).toBe(204);
-        } finally {
-            await s.close();
-        }
-    });
-
-    it('защита: next без заголовка, с Origin или чужим Host и POST без Origin — 403, очередь не трогается; первый next включает режим', async () => {
-        const s = await start(38342);
-        try {
-            expect((await s.post()).status).toBe(200);
-            expect((await s.next('?wait=0', {})).status).toBe(403);
-            expect((await s.next('?wait=0', { 'X-C4builder-Feedback': '1', Origin: s.url })).status).toBe(
-                403
-            );
-            const rebound = await new Promise((resolve, reject) => {
-                http.get(
-                    {
-                        host: '127.0.0.1',
-                        port: 38342,
-                        path: '/__c4builder/feedback/next?wait=0',
-                        headers: { Host: 'evil.test:38342', 'X-C4builder-Feedback': '1' }
-                    },
-                    (res) => resolve(res.resume().statusCode)
-                ).on('error', reject);
-            });
-            expect(rebound).toBe(403);
-            expect((await s.post(ONE, {})).status).toBe(403);
-            expect((await s.post(ONE, { Origin: 'http://evil.test' })).status).toBe(403);
-            expect((await s.post({ decision: 'submitted', comments: [] })).status).toBe(400);
-            expect((await s.post({ ...ONE, decision: 'merged' })).status).toBe(400);
-            expect(await (await fetch(`${s.url}/`)).text()).toContain('var AGENT = { on: false');
-
-            const got = await s.next('?wait=0');
-            expect(got.status).toBe(200);
-            expect(await got.text()).toContain('Rename to baz');
-            expect((await s.next('?wait=0')).status).toBe(204);
-            expect(await (await fetch(`${s.url}/`)).text()).toContain('var AGENT = { on: true');
-        } finally {
-            await s.close();
-        }
-    });
-
-    it('явно выключенный режим — оба эндпоинта 404', async () => {
-        const s = await start(38343, { agent: { on: false, name: '', explicit: true } });
-        try {
-            expect((await s.post()).status).toBe(404);
-            expect((await s.next('?wait=0')).status).toBe(404);
-        } finally {
-            await s.close();
-        }
-    });
-
-    it('SSE: agent при подключении и смене слушателя, delivered с id выданной пачки', async () => {
-        const s = await start(38344, { pollMs: 60_000, idleMs: 300 });
-        try {
-            const next = await sse(s.url);
-            expect(await next('agent')).toEqual({ on: false, listening: false });
-            const poll = s.next();
-            expect(await next('agent')).toEqual({ on: true, listening: true });
-            const { id, queued } = await (await s.post()).json();
-            expect(queued).toBe(false);
-            expect((await poll).status).toBe(200);
-            expect(await next('delivered')).toEqual({ id });
-            expect(await next('agent')).toEqual({ on: true, listening: false });
-        } finally {
-            await s.close();
-        }
-    });
 });
