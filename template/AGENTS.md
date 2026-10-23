@@ -34,6 +34,9 @@ updates it.
    pinned by `uiLanguage`); batches are always in English.
 4. A stderr line `c4builder <new> is available (current <current>). Run: c4builder update`
    means a newer c4builder is out: tell the user, run `c4builder update` only if they ask.
+5. A stderr line ending with `Ask the user, then run: c4builder skills` means the c4builder skills
+   here are missing, outdated or shadowed by a personal copy: tell the user, run `c4builder skills`
+   (or remove the personal copy) only if they agree.
 
 ## Layout
 
@@ -60,8 +63,16 @@ updates it.
 
 ## Agent skills
 
-Detailed guidance (project layout, config keys, plugins, installation) as skills for
-Claude Code, Codex, Cursor and other agents:
+Detailed guidance (project layout, config keys, plugins, page review, installation) as skills for
+Claude Code, Codex, Cursor and other agents. A project created with `c4builder --new` already has
+them in `.agents/skills/` (and `.claude/skills/` under Claude Code). Install or update them to the
+installed CLI version:
+
+```bash
+c4builder skills
+```
+
+Alternative, also for a personal install (`-g`) and other agents' folders:
 
 ```bash
 npx skills add AlfaCapital-Tech/C4-Builder/skills

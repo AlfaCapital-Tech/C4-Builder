@@ -20,7 +20,7 @@
 
 ## 4. Актуализация
 
-- [ ] 4.1 `template/AGENTS.md`: раздел «Agent skills» — `c4builder skills` (новый проект уже получает их через `--new`), `npx skills add` — альтернатива. Проверка: тест `skills` зелёный.
-- [ ] 4.2 Страницы «08 Агенты» (RU/EN): раздел скиллов — `c4builder skills`, каталоги `.agents`/`.claude`, отметка версии, уведомление под агентом и личная копия, три скилла в таблице, `npx skills add` — альтернатива для личной установки и других агентов; цикл замечаний — упоминание `/c4builder-review`. «05 CLI и конфигурация» (RU/EN): подкоманда `skills`. README — только если там команда установки скиллов. Проверка: тест `docs-parity` зелёный.
-- [ ] 4.3 CHANGELOG `## Unreleased`: скиллы в пакете, `c4builder skills`, уведомление под агентом, скиллы в `--new`, скилл `c4builder-review`. Проверка: `npm test` и `npm run check` зелёные.
-- [ ] 4.4 Публичность: `grep -rniE "alfacapital\.ru|artifactory|harbor" openspec/changes/skills-install skills template docs/ru/src docs/en/src README.MD CHANGELOG.md` — пусто. Проверка: вывод команды пуст.
+- [x] 4.1 `template/AGENTS.md`: раздел «Agent skills» — `c4builder skills` (новый проект уже получает их через `--new`), `npx skills add` — альтернатива. Проверка: тест `skills` зелёный.
+- [x] 4.2 Страницы «08 Агенты» (RU/EN): раздел скиллов — `c4builder skills`, каталоги `.agents`/`.claude`, отметка версии, уведомление под агентом и личная копия, три скилла в таблице, `npx skills add` — альтернатива для личной установки и других агентов; цикл замечаний — упоминание `/c4builder-review`. «05 CLI и конфигурация» (RU/EN): подкоманда `skills`. README — только если там команда установки скиллов. Проверка: тест `docs-parity` зелёный.
+- [x] 4.3 CHANGELOG `## Unreleased`: скиллы в пакете, `c4builder skills`, уведомление под агентом, скиллы в `--new`, скилл `c4builder-review`. Проверка: `npm test` и `npm run check` зелёные.
+- [x] 4.4 Публичность: `grep -rniE "alfacapital\.ru|artifactory|harbor" openspec/changes/skills-install skills template docs/ru/src docs/en/src README.MD CHANGELOG.md` — пусто. Проверка: вывод команды пуст.

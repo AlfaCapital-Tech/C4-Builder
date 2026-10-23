@@ -51,6 +51,10 @@ the draft and sends nothing to the agent. The agent loop:
 4. A batch with `Decision: approved` means nothing more to change: finish its comments, if any, and
    stop waiting.
 
+The `c4builder-review` skill (see "Agent skills" below) runs this whole loop: on
+`/c4builder-review [change-id|page]` the agent checks that `site -w` responds, gives the link to the
+change or section page, waits for the batches and reports in the chat by comment number.
+
 A batch looks like this:
 
 ```markdown
@@ -130,29 +134,89 @@ texts or the questions section heading (`questionsHeading`).
 
 ## Agent skills
 
-c4builder ships [Agent Skills](https://agentskills.io) for Claude Code, Codex, Cursor and the other
-agents supported by the [`skills`](https://github.com/vercel-labs/skills) CLI. The skills live in
-the `skills/` folder of the repository (they are not part of the npm package) and describe the
-latest stable release, so their commands use the flags: `--new`, `--config`.
+c4builder ships [Agent Skills](https://agentskills.io) for Claude Code, Codex, Cursor and other
+agents. Since version 0.10.0 the skills are part of the npm package and describe exactly the installed
+CLI version. This command installs them into the project:
 
 ```bash
-npx skills add AlfaCapital-Tech/C4-Builder/skills                    # both skills into the current project
-npx skills add AlfaCapital-Tech/C4-Builder/skills --skill c4builder  # just one
+c4builder skills
 ```
 
-`-g` installs the skills for the user instead of the project. The `/skills` path in the command
-matters: without it the CLI also picks up the internal development skills of c4builder itself
-from `.claude/skills/`.
+It works offline and copies every skill of the package into the current folder:
+
+- `.agents/skills/` — always: the shared Agent Skills folder read by Codex and other agents;
+- `.claude/skills/` — when the command runs from Claude Code (`CLAUDECODE`) or the folder already has
+  `.claude/`: Claude Code reads only that one.
+
+The folder of every package skill is replaced as a whole: files of older versions are removed, other
+skills next to them are left alone. There is no separate update command — just run it again. The
+installed `SKILL.md` gets the version of the CLI that installed it:
+
+```yaml
+metadata:
+  generatedBy: "0.10.0"
+```
+
+`c4builder --new` installs the skills into a new project by the same rules. The folders sit next to
+`src/` and do not end up in the documentation. Installed skills are generated files, like those of
+`openspec update`: the next run overwrites local edits.
 
 | Skill | Use it for |
 |---|---|
-| `c4builder` | working on a project: layout of `src/` and `.c4builder`, the edit → `c4builder check` → build loop, the page feedback loop (`c4builder feedback --wait --as <name>`), C4-PlantUML conventions (stdlib includes, shared `.iuml`, offline rendering), D2, BPMN processes without coordinates, mermaid (`.mmd` and blocks, unsupported types), the `openspec` and `openapi` plugins, `llms.txt` |
-| `c4builder-setup` | install and update (npm channels `latest` and `rc`, the Docker image), Java or the downloaded JRE, a smoke build of the template project |
+| `c4builder` | working on a project: layout of `src/` and `.c4builder`, the edit → `c4builder check` → build loop, C4-PlantUML conventions (stdlib includes, shared `.iuml`, offline rendering), D2, BPMN processes without coordinates, mermaid (`.mmd` and blocks, unsupported types), the `openspec` and `openapi` plugins, `llms.txt`, the new version and skills notices |
+| `c4builder-review` | reviewing pages on `c4builder --site -w`: checking the server, the link to the change or section page, the `c4builder feedback --wait --as <name>` loop, a report in the chat; invoked as `/c4builder-review [change-id\|page]` |
+| `c4builder-setup` | install and update (npm channels `latest` and `rc`, a registry mirror through npmrc or `--registry`, the Docker image), Java or the downloaded JRE, a smoke build of the template project, installing the skills into the project |
+
+### Skills notice
+
+A build and `c4builder site` (`-w` included) run by an agent check at start the `c4builder` skill this
+agent will load, and print one line to stderr when it is missing, older than the CLI or shadowed by a
+stale personal copy:
+
+```text
+c4builder agent skills are not installed here. Ask the user, then run: c4builder skills
+c4builder agent skills here are from 0.9.0 (current 0.10.0). Ask the user, then run: c4builder skills
+~/.claude/skills/c4builder (no version) overrides project skills. Ask the user to remove it, then run: c4builder skills
+```
+
+Which copy counts: the agent's folder is `.claude/skills` for Claude Code and `.agents/skills` for
+the others. A personal copy (`~/.claude/skills/c4builder`, `~/.agents/skills/…` for other agents)
+wins over the project one; without it the nearest project copy counts — in the current folder or
+above, up to the root of the git repository. A copy without a version stamp or with an older one is
+outdated. A copy newer than the CLI prints nothing: in a shared repository with committed skills a
+colleague with an older CLI needs no advice to roll them back — the new version notice tells them
+about the CLI.
+
+"Ask the user" is there because an agent reads the line: without it the agent would silently put
+files into the repository. The `c4builder` skill teaches the agent to tell the human and to run
+`c4builder skills` or remove the personal copy only with their consent. The line changes neither
+stdout nor the exit code. It is not printed without an agent, in `c4builder check` (an agent calls
+it dozens of times per loop), where the new version check is off (`CI`, `NO_UPDATE_NOTIFIER`, the
+Docker image) and with `C4BUILDER_AGENT=0`. The `--agent`/`--no-agent` flags do not affect it.
+
+A personal copy is usually left by `npx skills add -g`. `c4builder skills` does not remove it but
+warns about it on stderr.
+
+### Alternative: npx skills
+
+The [`skills`](https://github.com/vercel-labs/skills) CLI installs the skills from the repository —
+for a personal install (`-g`) and for other agents' folders (`.cursor/` and so on) that
+`c4builder skills` does not fill:
+
+```bash
+npx skills add AlfaCapital-Tech/C4-Builder/skills                    # all skills into the current project
+npx skills add AlfaCapital-Tech/C4-Builder/skills --skill c4builder  # just one
+```
+
+This installs the state of the default branch without a version stamp: it may describe flags of a
+CLI version that is not out yet. The `/skills` path in the command matters: without it the CLI also
+picks up the internal development skills of c4builder itself from `.claude/skills/`.
 
 ## AGENTS.md in a new project
 
 Since version 0.5.0, `c4builder --new` puts an `AGENTS.md` into the project: build and check
-commands, the workflow, the project layout, diagram conventions and the skills install command.
+commands, the workflow, the project layout, diagram conventions and the skills install command;
+since 0.10.0 it also installs the skills themselves (see above).
 Codex, Cursor and Claude Code read it. The file sits next to `src/`, not inside it, and does not
 end up in the documentation.
 
