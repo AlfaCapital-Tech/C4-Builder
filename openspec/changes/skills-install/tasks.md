@@ -14,9 +14,9 @@
 
 ## 3. Скиллы
 
-- [ ] 3.1 `skills/c4builder-review/SKILL.md` по D7 (английский, вызов `/c4builder-review [change-id|page]`, без внутренних адресов и названий). Тест «набор скиллов — ровно поставляемый» — три скилла. Проверка: `npx vitest run test/skills.test.mjs` зелёный.
-- [ ] 3.2 `skills/c4builder/SKILL.md`: цикл замечаний — коротко со ссылкой на `c4builder-review`; раздел «Skills notice» по образцу «New version notice» (три строки из D5, сообщить пользователю, `c4builder skills` и удаление личной копии — только с согласия); `description` без дублирования триггеров ревью. Проверка: тест `skills` зелёный.
-- [ ] 3.3 `skills/c4builder-setup/SKILL.md`: зеркало реестра — через `--registry`/npmrc пользователя без адресов; последний шаг — `c4builder skills` в рабочем проекте; в отчёте — скиллы. Проверка: тест `skills` зелёный.
+- [x] 3.1 `skills/c4builder-review/SKILL.md` по D7 (английский, вызов `/c4builder-review [change-id|page]`, без внутренних адресов и названий). Тест «набор скиллов — ровно поставляемый» — три скилла. Проверка: `npx vitest run test/skills.test.mjs` зелёный.
+- [x] 3.2 `skills/c4builder/SKILL.md`: цикл замечаний — коротко со ссылкой на `c4builder-review`; раздел «Skills notice» по образцу «New version notice» (три строки из D5, сообщить пользователю, `c4builder skills` и удаление личной копии — только с согласия); `description` без дублирования триггеров ревью. Проверка: тест `skills` зелёный.
+- [x] 3.3 `skills/c4builder-setup/SKILL.md`: зеркало реестра — через `--registry`/npmrc пользователя без адресов; последний шаг — `c4builder skills` в рабочем проекте; в отчёте — скиллы. Проверка: тест `skills` зелёный.
 
 ## 4. Актуализация
 

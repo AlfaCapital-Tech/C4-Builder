@@ -1,12 +1,12 @@
 ---
 name: c4builder-setup
-description: Install, update and diagnose c4builder (npm package @alfacapital-tech/c4builder), the CLI that builds C4 / PlantUML / D2 architecture docs into a docsify site or markdown. Use when asked to install or upgrade c4builder, when the c4builder command is missing or fails to render diagrams, when switching between the stable and release-candidate channels, or when onboarding onto a repository documented with c4builder. Optional argument - channel rc; default is the stable latest. Idempotent - a re-run only verifies.
+description: Install, update and diagnose c4builder (npm package @alfacapital-tech/c4builder), the CLI that builds C4 / PlantUML / D2 architecture docs into a docsify site or markdown, and install its agent skills into a project. Use when asked to install or upgrade c4builder, when the c4builder command is missing or fails to render diagrams, when switching between the stable and release-candidate channels, or when onboarding onto a repository documented with c4builder. Optional argument - channel rc; default is the stable latest. Idempotent - a re-run only verifies.
 ---
 
 # c4builder setup
 
-Goal: a `c4builder` that really renders diagrams. `c4builder --version` alone proves
-nothing — finish with the smoke build (step 5).
+Goal: a `c4builder` that really renders diagrams, and its skills in the working project.
+`c4builder --version` alone proves nothing — the smoke build (step 5) does.
 
 **Channel.** `latest` — stable (default); `rc` — release candidates (`X.Y.Z-rc.N`). npm
 dist-tags and Docker image tags carry the same names.
@@ -28,6 +28,12 @@ manager, official installer); do not pick a method silently. Docker users skip t
 c4builder --version
 npm view @alfacapital-tech/c4builder dist-tags
 ```
+
+`npm view` fails with a network or certificate error → the public registry may be closed in
+this network. An organization mirror is configured in the user's npmrc (`npm config get
+registry` shows the current one) or passed per command with `--registry <url>`; ask the user for
+the address, never guess one. The update check of c4builder and `c4builder update` use the same
+npmrc.
 
 Installed version equals the channel's tag → skip step 3.
 Installed version is **newer** than the requested channel (an `rc` while `latest` was
@@ -101,8 +107,24 @@ temporary folder afterwards.
 With Docker, run the same two commands through the image: `c4builder --new --name smoke -y`
 in the temporary folder, then the plain build with `smoke` mounted as `/pwd`.
 
+## 6. Skills in the working project
+
+In the root of the user's project (not the temporary one):
+
+```bash
+c4builder skills
+```
+
+It installs the skills of the installed CLI version into `.agents/skills/` (and `.claude/skills/`
+under Claude Code or when `.claude/` exists), replacing only the c4builder skills there; each
+installed `SKILL.md` carries `metadata.generatedBy: <version>`. These are files in the user's
+repository — run it when the user asked for the setup of this project, otherwise ask first. A
+stderr line `~/.claude/skills/c4builder (…) overrides project skills` means a stale personal copy
+(for example from `npx skills add -g`) shadows them: tell the user, remove it only with their
+consent. A project created with `c4builder --new` already has the skills.
+
 ## Report
 
 One short summary: Node version / c4builder version and channel / Java (system or managed
-JRE) / smoke build — each OK or fixed. For working on the diagrams themselves, use the
-`c4builder` skill.
+JRE) / smoke build / skills in the project — each OK or fixed. For working on the diagrams
+themselves, use the `c4builder` skill.

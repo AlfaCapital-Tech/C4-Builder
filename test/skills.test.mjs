@@ -46,17 +46,17 @@ const frontmatter = (text) => {
 const cliCommands = (text) => {
     const fenced = [...text.matchAll(/^```[^\n]*\n([\s\S]*?)^```/gm)].flatMap((m) => m[1].split('\n'));
     const inline = [...text.replace(/^```[\s\S]*?^```/gm, '').matchAll(/`([^`\n]+)`/g)].map((m) => m[1]);
-    // Строка уведомления о новой версии тоже начинается с `c4builder`, но это вывод CLI, не команда.
+    // Строки уведомлений о новой версии и о скиллах тоже начинаются с `c4builder`, но это вывод CLI.
     return [...fenced, ...inline]
         .map((s) => s.replace(/\s#.*$/, '').trim())
-        .filter((s) => /^c4builder(\s|$)/.test(s) && !s.includes(' is available (current '));
+        .filter((s) => /^c4builder(\s|$)/.test(s) && !/ is available \(current |\. Ask the user/.test(s));
 };
 
 describe('скиллы', () => {
     it('help CLI разобран', () => expect(KNOWN_FLAGS.has('--site')).toBe(true));
 
     it('набор скиллов — ровно поставляемый (README, AGENTS.md ссылаются на него)', () =>
-        expect(SKILLS).toEqual(['c4builder', 'c4builder-setup']));
+        expect(SKILLS).toEqual(['c4builder', 'c4builder-review', 'c4builder-setup']));
 
     it.each(SKILLS)('%s: frontmatter по спеке Agent Skills', (name) => {
         const file = rel(skillFile(name));
