@@ -24,6 +24,7 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
   `c4builder feedback --wait --as <name>` loop and reports in the chat. The page feedback loop moved
   there from the `c4builder` skill, which now explains the skills notice. `c4builder-setup` describes
   an npm mirror as the user's npmrc or `--registry` and ends with `c4builder skills` in the project
+- Security: zod bumped to 4.6.7 to fix an npm audit advisory (GHSA-mrhx-c7xc-m3w5)
 
 ## v0.9.0
 
