@@ -19,10 +19,11 @@ const references = (name) => {
     const dir = path.join(SKILLS_DIR, name, 'references');
     return fs.existsSync(dir) ? fs.readdirSync(dir).map((f) => path.join(dir, f)) : [];
 };
-const INPUTS = [...SKILLS.flatMap((name) => [skillFile(name), ...references(name)]), AGENTS_MD];
+const SKILL_FILES = SKILLS.flatMap((name) => [skillFile(name), ...references(name)]);
+const INPUTS = [...SKILL_FILES, AGENTS_MD];
 const rel = (file) => path.relative(REPO_ROOT, file);
 
-const COMMANDS = ['check', 'jre', 'site', 'new', 'config', 'update', 'feedback'];
+const COMMANDS = ['check', 'jre', 'site', 'new', 'config', 'update', 'feedback', 'skills'];
 const FLAG = /(?<![\w-])--?[a-zA-Z][\w-]*/g;
 const help = spawnSync(process.execPath, [CLI, '--help'], { encoding: 'utf8' }).stdout;
 const KNOWN_FLAGS = new Set(help.match(FLAG));
@@ -75,6 +76,18 @@ describe('скиллы', () => {
             return sub && !sub.startsWith('-') && !COMMANDS.includes(sub) ? [sub, ...flags] : flags;
         });
         expect(unknown, `${file}: неизвестные CLI-флаги/подкоманды`).toEqual([]);
+    });
+
+    // Скиллы входят в пакет (change skills-install, D1): `c4builder skills` ставит их офлайн той же
+    // версии, что и CLI. --ignore-scripts — без prepack-сборки; npm 12 отдаёт объект, npm ≤ 11 — массив.
+    it('скиллы входят в npm-пакет', () => {
+        const res = spawnSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], {
+            cwd: REPO_ROOT,
+            encoding: 'utf8'
+        });
+        expect(res.status, res.stderr).toBe(0);
+        const packed = Object.values(JSON.parse(res.stdout))[0].files.map((f) => f.path);
+        expect(packed).toEqual(expect.arrayContaining(SKILL_FILES.map(rel)));
     });
 
     it.each(INPUTS.map(rel))('%s: нет внутренних хостов', (file) => {

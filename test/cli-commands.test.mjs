@@ -34,7 +34,7 @@ describe('позиционные подкоманды CLI', () => {
         const res = run('nwe');
         expect(res.status).toBe(1);
         expect(res.stderr).toContain('unknown command: nwe');
-        expect(res.stderr).toContain('check, jre, site, new, config, update, feedback');
+        expect(res.stderr).toContain('check, jre, site, new, config, update, feedback, skills');
         expect(listTree(dir)).toEqual(before); // ни .c4builder, ни docs
     });
 

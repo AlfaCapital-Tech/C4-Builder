@@ -13,6 +13,7 @@
     "!template/docs",
     "!template/.c4builder",
     "vendor/",
+    "skills/",
     "README.MD",
     "license"
   ],

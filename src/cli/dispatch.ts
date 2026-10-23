@@ -12,6 +12,7 @@ import cmdCheck from './commands/check.ts';
 import cmdList from './commands/list.ts';
 import cmdSite from './commands/site.ts';
 import cmdFeedback from './commands/feedback.ts';
+import cmdSkills, { skillsNotice } from './commands/skills.ts';
 import { detectAgent } from './agent.ts';
 import { cmdUpdate, pendingUpdate, startUpdateCheck } from './update.ts';
 import cmdCollect from './wizard/collect.ts';
@@ -49,7 +50,7 @@ interface ConfStore {
 }
 
 // Позиционные подкоманды: allowExcessArguments пропускает любые, список — единственный фильтр.
-const COMMANDS = ['check', 'jre', 'site', 'new', 'config', 'update', 'feedback'];
+const COMMANDS = ['check', 'jre', 'site', 'new', 'config', 'update', 'feedback', 'skills'];
 
 const intro = () => {
     console.log(chalk.blue(figlet.textSync('c4builder')));
@@ -209,6 +210,8 @@ export default async () => {
     // Замечания со страницы `site -w` — тоже до Configstore: команду запускают в любом каталоге.
     if (cmd === 'feedback')
         return cmdFeedback(path.join(process.cwd(), opts.configFile ?? '.c4builder'), opts);
+    // Установка скиллов — до Configstore: ставит их и в каталог без проекта.
+    if (cmd === 'skills') return cmdSkills();
     // `site`/`new`/`config` — позиционные синонимы одноимённых флагов: эту форму печатают
     // подсказки CLI и учат README, шаблон и скиллы.
     if (cmd) opts[cmd] = true;
@@ -297,6 +300,9 @@ export default async () => {
 
     await cmdCollect(currentConfig, conf, opts);
     if (!opts.config) {
+        // При старте, а не при выходе, как уведомление о версии: `site -w` живёт до остановки.
+        const skills = skillsNotice();
+        if (skills) process.stderr.write(`${skills}\n`);
         let isBuilding = false;
         let attemptedWatchBuild = false;
         // Опции сборки после визарда: строгий разбор итогового конфига. Штатно валиден
