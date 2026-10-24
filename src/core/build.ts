@@ -9,7 +9,7 @@ import { clearD2FileCache } from './render/d2renderer.ts';
 import { type BuildOptions, DIST_BACKUP_FOLDER_SUFFIX } from '../config/options.ts';
 // Фазы сборки: scan (дерево исходников) → render (диаграммы) → compose (markdown/сайт).
 import { generateTree, engineSupportsRemote, clearIncludeCache } from './scan/tree.ts';
-import { generateImages, type CacheConf } from './render/diagrams.ts';
+import { generateImages, type CacheConf, type DiagramQueue } from './render/diagrams.ts';
 import {
     generateMD,
     generateWebMD,
@@ -36,15 +36,29 @@ import type { LoadedPlugin } from './plugins/types.ts';
 export interface BuildResult {
     pages: PageSources;
     redirects: Redirects;
+    /** deferImages: очередь диаграмм, которых нет в кэше (на их месте заглушки); нет — всё из кэша. */
+    pending?: DiagramQueue;
+}
+
+export interface BuildFlags {
+    /**
+     * Отложенный рендер для dev-сервера: сборка не ждёт диаграмм без кэша — пишет заглушки
+     * `rendering…`, компонует страницы поверх них и возвращает очередь в `pending`.
+     */
+    deferImages?: boolean;
+    /** Ошибка рендера — заглушка с ошибкой и `✗`, а не падение сборки (см. render/diagrams). */
+    softErrors?: boolean;
 }
 
 const build = async (
     options: BuildOptions,
     cacheConf: CacheConf,
-    plugins: LoadedPlugin[] = []
+    plugins: LoadedPlugin[] = [],
+    { deferImages = false, softErrors = deferImages }: BuildFlags = {}
 ): Promise<BuildResult> => {
     const start_date = new Date();
     let pages: PageSources = new Map();
+    let pending: DiagramQueue | undefined;
     const redirects: Redirects = new Map();
     const bkFolderName = options.DIST_FOLDER + DIST_BACKUP_FOLDER_SUFFIX;
 
@@ -96,12 +110,13 @@ const build = async (
 
         if (options.GENERATE_LOCAL_IMAGES) {
             console.log(chalk.blue('generating images'));
-            await generateImages(
+            pending = await generateImages(
                 tree,
                 options,
                 (count, total) => writeProgress(count, total, 'images'),
                 cacheConf,
-                bkFolderName
+                bkFolderName,
+                { deferImages, softErrors }
             );
             console.log('');
         }
@@ -149,7 +164,7 @@ const build = async (
 
         console.log(chalk.green(`built in ${(Date.now() - start_date.getTime()) / 1000} seconds`));
         ok = true;
-        return { pages, redirects };
+        return { pages, redirects, pending };
     } finally {
         // Бэкап dist сносим ТОЛЬКО при успехе: при падении фазы dist_bk — единственная
         // полная копия прошлого удачного билда, её нельзя терять (иначе первый же

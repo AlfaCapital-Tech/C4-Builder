@@ -31,6 +31,12 @@ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:<port>/
 `c4builder --site -w`, or ask whether you may start it yourself in the background — many teams
 keep the preview server in the human's hands.
 
+The server answers right after `serving your docsify site`, before the diagrams are rendered: on
+a cold cache the pages show `rendering…` placeholders that turn into images by themselves, the
+open page first. That is normal — give the link without waiting. The background rendering ends
+with `rendered N diagrams in T s` in the server output; `✗ Diagram "<file>": <reason>` there is a
+broken diagram worth fixing before the human reaches it.
+
 ## 2. Link
 
 - Argument is an OpenSpec change id: the address is `http://localhost:<port>/#/change/<change-id>`

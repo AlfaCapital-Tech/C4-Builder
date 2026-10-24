@@ -39,6 +39,37 @@ Flags:
 | `-V, --version` | version |
 | `-h, --help` | flags and positional commands |
 
+## The `--site -w` dev server
+
+`c4builder --site -w` serves the site as soon as the pages are composed, without waiting for the
+diagrams. Diagrams missing from the cache (a fresh clone, the first build in a CI preview) get a
+`rendering…` placeholder image in their place, and the rendering goes on in the background after
+the `serving your docsify site` line:
+
+```text
+serving your docsify site
+go to http://localhost:3000
+rendering 179 diagrams in background…
+rendered 179 diagrams in 118.4 s
+```
+
+- The diagrams of the page open in the browser are rendered first: the server sees the page
+  request and moves them to the head of the queue.
+- Every finished image replaces its placeholder on the open page without a reload and without
+  losing the scroll position. When the queue is done, the server runs a regular rebuild
+  (everything is cached now — a fraction of a second) and reloads the pages: that is how inlined
+  diagrams (`embedDiagram`), the complete document and `llms-full.txt` get the real images, and
+  source edits made during the rendering land on the site.
+- A render error in the background does not stop the server: the diagram shows an error
+  placeholder, the log gets `✗ Diagram "<file>": <reason>`. Fixing the file triggers a regular
+  rebuild.
+- A warm start (everything cached) creates no placeholders and renders nothing in the background.
+
+The `-w` output is for viewing, not for publishing: stopping the server before the background queue
+is done leaves placeholders in `distFolder` (they have no checksums, the next build re-renders
+them). A build without `-w` — `c4builder site` included — still waits for every diagram and fails
+if any of them does not render.
+
 ## Updating
 
 Once a day c4builder asks the npm registry in the background whether a new version is out. The
