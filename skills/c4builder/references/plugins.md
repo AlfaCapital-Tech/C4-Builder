@@ -42,9 +42,20 @@ placeholder image and a warning naming the file instead of failing the build.
 
 ## `openapi` — swagger-ui pages for OpenAPI specs
 
-One page per spec found by `glob` (named after the spec's parent folder) plus an index;
-swagger-ui is bundled, readers need no network. Exactly one source — `dir` **or**
-`archive` — is required. It forces `executeScript: true`.
+One page per spec found by `glob` plus a summary; swagger-ui is bundled, readers need no
+network. Exactly one source — `dir` **or** `archive` — is required. It forces
+`executeScript: true`.
+
+- A matched file is a spec only with a top-level `openapi` or `swagger` key; other matched files
+  get no page and a `⚠ openapi: <path>: not an OpenAPI document` warning each, so
+  `glob: "*/*.{yaml,yml,json}"` is safe.
+- Pages follow the source folders: a folder with one spec is that spec's page (`billing`); a
+  folder with several specs is an index page (`billing`, links with `info.title`, `openapi.*`
+  first) plus `billing/<file-without-extension>` per spec; a root spec is named after its file.
+- `layout: "flat"` (default) names the folder page by the folder name wherever it sits —
+  existing addresses do not change; same-named folders in different places fail the build and
+  the message suggests `layout: "tree"`, which uses the folder path from the source root
+  (`billing/v2`, `ledger/v2`). Two pages with the same path fail the build naming both files.
 
 | Option | Default | Meaning |
 |---|---|---|
@@ -54,6 +65,7 @@ swagger-ui is bundled, readers need no network. Exactly one source — `dir` **o
 | `subdir` | — | folder inside the archive or `dir` |
 | `headers` | — | HTTP headers for the archive request, e.g. `{"PRIVATE-TOKEN": "${GITLAB_TOKEN}"}` |
 | `glob` | `**/openapi.{yaml,yml,json}` | spec pattern (`**`, `*`, `?`, `{a,b}`); directories starting with a dot are skipped |
+| `layout` | `flat` | folder page path: `flat` — folder name, `tree` — folder path relative to the source |
 
 All `yaml`/`yml`/`json` files of the source are published under `<mount>/_specs/…` with
 their relative layout, so relative `$ref`s keep working. Archive download fails with

@@ -83,9 +83,25 @@ folder.
 
 Finds specs by `glob` in a local folder (`dir`) **or** in a `tar.gz`/`zip` archive downloaded
 over HTTP (`archive` — for example, a GitLab or GitHub repository archive URL). One page per
-spec, named after the spec's parent folder (after the file name for specs in the source root),
-plus an index.
+spec, plus a section summary linking every spec page.
 
+- Only a file matched by `glob` that has a top-level `openapi` or `swagger` key is a spec. Other
+  matched files (schema fragments, AsyncAPI, configs) get no page — the build prints a
+  `⚠ openapi: <path>: not an OpenAPI document` warning for each. So
+  `glob: "*/*.{yaml,yml,json}"` safely picks up every spec of a folder.
+- Pages follow the source folders. A folder with one spec is that spec's page (`billing`). A
+  folder with several specs (`billing/openapi.yaml`, `billing/openapi-admin.yaml`,
+  `billing/payouts.yaml`) becomes an index page `billing` with links (`openapi.*` first, the rest
+  by name, with the spec's `info.title`) plus one page per spec named after the file without the
+  extension: `billing/openapi`, `billing/openapi-admin`, `billing/payouts`. A spec in the source
+  root is a page named after the file.
+- `layout` sets the folder page path. `flat` (default) — the folder name wherever it sits
+  (`services/team/finch/openapi.yaml` → `finch`): existing sites keep their addresses, and
+  same-named folders in different places (`billing/v2` and `ledger/v2`) fail the build with a
+  hint. `tree` — the folder path from the source root: `billing`, `billing/v2`, `ledger/v2`, so
+  versions in nested folders become nested pages.
+- Two pages with the same path (`finch.yaml` and `finch/openapi.yaml`, `openapi.yaml` and
+  `openapi.json` in one folder) fail the build naming both files.
 - All `yaml`/`yml`/`json` files of the source are copied into `<mount>/_specs/…` keeping their
   layout, so relative `$ref`s (including shared schema files that do not match `glob`) keep
   resolving.
@@ -106,6 +122,18 @@ plus an index.
 | `subdir` | — | folder inside the archive or `dir` |
 | `headers` | — | HTTP headers for the archive request; empty values are dropped |
 | `glob` | `**/openapi.{yaml,yml,json}` | spec pattern (`**`, `*`, `?`, `{a,b}`); directories starting with a dot are skipped |
+| `layout` | `flat` | folder page path: `flat` — the folder name, `tree` — the folder path relative to the source |
+
+A contracts repository where a service API is split into several files per folder and versions
+live in nested folders:
+
+```json
+{
+  "plugins": [
+    ["openapi", { "dir": "../contracts", "glob": "**/*.{yaml,yml,json}", "layout": "tree" }]
+  ]
+}
+```
 
 Example: the OpenSpec store sits next to the C4 sources, and contracts come from another
 repository. An empty `GITLAB_TOKEN` drops the header, so the same config works with and without a
