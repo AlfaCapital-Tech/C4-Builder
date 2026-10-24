@@ -3,7 +3,7 @@
 ## 1. Вендор и конфиг
 
 - [x] 1.1 `vendor/docsify/docsify-sidebar-collapse.min.js`, `vendor/docsify/sidebar-collapse.css` (из `docsify-sidebar-collapse@1.3.5`, `dist/sidebar.min.css`), `vendor/docsify/LICENSES.md` с MIT-атрибуцией и версией. Проверка: в файлах нет `http://`, `https://`, `//cdn`; `npm pack --dry-run` включает их.
-- [x] 1.2 Ключ `sidebarCollapse` (`schema.ts`, `defaults.ts`, `options.ts` → `SIDEBAR_COLLAPSE`); `template/.c4builder`, `docs/ru/.c4builder`, `docs/en/.c4builder` получают явный `"sidebarCollapse": true`. Проверка: `test/config.test.mjs` — дефолт `true`, `false` принимается, неверный тип — ошибка с именем ключа.
+- [x] 1.2 Ключ `sidebarCollapse` (`schema.ts`, `defaults.ts`, `options.ts` → `SIDEBAR_COLLAPSE`); `docs/ru/.c4builder`, `docs/en/.c4builder` получают явный `"sidebarCollapse": true` (файла `template/.c4builder` в репо нет — `--new` пишет конфиг из `defaultConfig`, ключ попадает в новые проекты сам). Проверка: `test/config.test.mjs` — дефолт `true`, `false` принимается, неверный тип — ошибка с именем ключа.
 
 ## 2. Подключение в сайт
 
