@@ -180,6 +180,7 @@ in older versions produce a warning listing them, and the build continues.
 | `charset` | `UTF-8` | encoding of PlantUML sources |
 | `webTheme` | `vendor/vue.css` | docsify CSS theme |
 | `supportSearch` | `true` | search in the sidebar |
+| `sidebarCollapse` | `true` | collapsible sidebar sections: the first level and the path to the current page are open; `false` — the whole tree expanded |
 | `repoUrl` | empty | repository link in the corner of the site |
 | `executeScript` | `false` | run `<script>` in pages and load swagger-ui |
 | `docsifyTemplate` | empty | path to a module with a custom `index.html` template |
@@ -198,3 +199,9 @@ The config of this documentation site is a live example: `docs/en/.c4builder` in
 receives the docsify settings object (name, sidebar, theme, search) and returns the HTML for
 `index.html`. Start from the built-in template in `src/core/compose/docsify.template.ts`; this
 site uses its own, `docs/docsify-template.mjs`.
+
+The template does not need to load the sidebar collapsing (`sidebarCollapse`): the build injects
+its script and style into the finished `index.html` as a post-processing step, like plugin assets,
+and the display level arrives in the settings object as `sidebarDisplayLevel` — just put the whole
+object into `window.$docsify`. If the template already loads
+`vendor/docsify-sidebar-collapse.min.js` itself, the file is not added a second time.

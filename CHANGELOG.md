@@ -5,6 +5,14 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
 
 ## Unreleased
 
+- The docsify site collapses sidebar sections by default (bundled `docsify-sidebar-collapse`
+  1.3.5, no external resources): the first level and the path to the current page are open, a
+  click on a section expands or collapses it. New `.c4builder` key `sidebarCollapse` (default
+  `true`); `false` restores the fully expanded sidebar. The script and style are injected into
+  `index.html` after the template and the display level travels in the docsify options, so a
+  custom `docsifyTemplate` that puts the options into `window.$docsify` gets collapsing without
+  changes — remove a manual `docsify-sidebar-collapse` include from your template (a file the
+  template already links is not added twice)
 - Agent skills are part of the npm package and match the installed CLI version. The new
   `c4builder skills` installs or updates them offline in the current folder: `.agents/skills/`
   always, `.claude/skills/` under Claude Code (`CLAUDECODE`) or when `.claude/` exists. The folder of

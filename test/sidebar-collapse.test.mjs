@@ -82,7 +82,9 @@ describe('sidebarCollapse по умолчанию', () => {
         expect(inDist('default', 'vendor/sidebar-collapse.css')).toBe(true);
         expect(inDist('default', 'vendor/docsify-sidebar-collapse.min.js')).toBe(true);
         for (const rel of ['vendor/sidebar-collapse.css', 'vendor/docsify-sidebar-collapse.min.js']) {
-            expect(fs.readFileSync(path.join(dirs.default, 'docs', rel), 'utf8')).not.toMatch(/https?:\/\/|\/\/cdn/);
+            expect(fs.readFileSync(path.join(dirs.default, 'docs', rel), 'utf8')).not.toMatch(
+                /https?:\/\/|\/\/cdn/
+            );
         }
     });
 
