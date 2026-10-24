@@ -72,10 +72,52 @@ describe('справочные команды без побочных эффек
         expect(fs.readdirSync(empty)).toEqual([]);
     });
 
+    it('`--help` — имя c4builder и все подкоманды', () => {
+        const res = run('--help');
+        expect(res.status, res.stderr).toBe(0);
+        expect(res.stdout).toContain('Usage: c4builder');
+        for (const cmd of ['check', 'jre', 'site', 'new', 'config', 'update', 'feedback', 'skills'])
+            expect(res.stdout).toMatch(new RegExp(`^  ${cmd}\\b`, 'm'));
+    });
+
     it('`--list` в каталоге проекта печатает конфиг', () => {
         expect(run('new', '--name', 'listed', '-y').status).toBe(0);
         const res = runIn(path.join(dir, 'listed'), '--list');
         expect(res.status, res.stderr).toBe(0);
         expect(res.stdout).toMatch(/Project Name: .*listed/);
+    });
+});
+
+// Без терминала мастер падал ExitPromptError со стектрейсом и кодом 0 — CI считал сборку
+// успешной. Битый JSON Configstore молча затирал, и запуск уходил в тот же мастер.
+describe('запуск без терминала', () => {
+    const noStack = (res) => expect(`${res.stdout}${res.stderr}`).not.toMatch(/^\s+at /m);
+
+    it('нет .c4builder → код 1 и подсказка, каталог пуст', () => {
+        const empty = fs.mkdtempSync(path.join(dir, 'empty-'));
+        const res = runIn(empty);
+        expect(res.status).toBe(1);
+        expect(res.stderr).toContain(`no .c4builder in ${empty} — run c4builder --new`);
+        noStack(res);
+        expect(fs.readdirSync(empty)).toEqual([]);
+    });
+
+    it('битый JSON в .c4builder → код 1 с причиной, файл не тронут', () => {
+        const broken = fs.mkdtempSync(path.join(dir, 'broken-'));
+        fs.writeFileSync(path.join(broken, '.c4builder'), '{bad');
+        const res = runIn(broken);
+        expect(res.status).toBe(1);
+        expect(res.stderr).toContain(`cannot read ${path.join(broken, '.c4builder')}: `);
+        noStack(res);
+        expect(fs.readFileSync(path.join(broken, '.c4builder'), 'utf8')).toBe('{bad');
+    });
+
+    it('неполный .c4builder → мастер закрыт, код 1 без стектрейса', () => {
+        const partial = fs.mkdtempSync(path.join(dir, 'partial-'));
+        fs.writeFileSync(path.join(partial, '.c4builder'), '{"projectName":"p"}');
+        const res = runIn(partial);
+        expect(res.status).toBe(1);
+        expect(res.stderr).toContain('aborted: the prompt was closed (no terminal for the wizard)');
+        noStack(res);
     });
 });
