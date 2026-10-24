@@ -81,9 +81,16 @@ How the source tree becomes pages:
 5. **Live preview for a human:** `c4builder --site -w` builds, serves on
    `http://localhost:3000` (`webPort`, or `-p <n>`), rebuilds on save and reloads the
    browser; `-o` opens it. It never exits — start it in the background or leave it to the
-   user. `c4builder site` builds and serves without watching (also never exits). In `-w` a
+   user. The server comes up right after `serving your docsify site`, before the diagrams are
+   rendered: on a cold cache they show a `rendering…` placeholder and are drawn in the
+   background (`rendering N diagrams in background…` → `rendered N diagrams in T s`), the page
+   open in the browser first; a render error shows an error placeholder and `✗` in the log,
+   the server stays up. Its output is for viewing, not for publishing — run `c4builder` for
+   that. `c4builder site` builds and serves without watching (also never exits). In `-w` a
    human can select text on a page and add a question: it lands in the source `.md` under the
    `questionsHeading` section (`Open questions` by default) — read it there, not in `docs/`.
+   `C4BUILDER_RENDER_CONCURRENCY=<n>` sets the number of parallel PlantUML processes (default
+   `min(4, CPU − 1)`); the output does not depend on it.
 
 ## Feedback from the page
 

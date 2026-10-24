@@ -46,7 +46,7 @@ The build walks the tree and merges all `.md` files and diagrams of a folder int
 | File | Purpose | In git |
 |---|---|---|
 | `.c4builder` | project config | yes |
-| `.c4builder.cache` | diagram checksums: unchanged diagrams are not rendered again | no |
+| `.c4builder.cache` | diagram checksums: unchanged diagrams are not rendered again; written as the rendering goes, so an interrupted build keeps what is done | no |
 | `.c4builder.lock` | build lock: two builds in one folder never write the output at the same time | no |
 | `docs_bk/` | copy of the previous output during a build; kept as a fallback if the build fails | no |
 

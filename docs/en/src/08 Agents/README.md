@@ -27,7 +27,9 @@ locally, without a network and without a human.
    line with the element id and the rule: `✗ <file>: <id> [<rule>] <description>`; for `.mmd`
    — the line number, as for PlantUML.
 3. **Build.** `c4builder` builds the whole project; `c4builder --site -w` keeps the site open for
-   the human and rebuilds it on every save the agent makes.
+   the human and rebuilds it on every save the agent makes. It comes up right away, without
+   waiting for the rendering: diagrams missing from the cache show a `rendering…` placeholder and
+   are drawn in the background (see "CLI and configuration").
 
 A full build also exits with a non-zero code if any diagram fails to render, so it can be the
 agent's last step or a CI step.
@@ -44,7 +46,10 @@ the draft and sends nothing to the agent. The agent loop:
 
 1. Start `c4builder --site -w` and `c4builder feedback --wait --as <name>` in the background,
    `<name>` being the agent's change or task, e.g. `--as add-dark-mode`. In Claude Code — both
-   through Bash with `run_in_background`: the agent is notified when `feedback --wait` exits.
+   through Bash with `run_in_background`: the agent is notified when `feedback --wait` exits. The
+   page link can be given right after the `serving your docsify site` line: on a fresh clone the
+   diagrams are still rendering in the background, and the `rendering…` placeholders on the page
+   turn into images by themselves.
 2. `feedback --wait` prints a batch and exits. The agent edits the sources in `src/` — the page
    reloads through livereload and the human sees the result.
 3. Run `c4builder feedback --wait --as <name>` again with the same name and wait for the next batch.

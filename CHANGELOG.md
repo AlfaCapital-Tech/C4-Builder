@@ -5,6 +5,22 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
 
 ## Unreleased
 
+- `c4builder --site -w` serves the site right after the pages are composed instead of waiting
+  for every diagram: diagrams missing from the cache show a `rendering…` placeholder and are
+  rendered in the background after `serving your docsify site` (`rendering N diagrams in
+  background…` → `rendered N diagrams in T s`), the page open in the browser first. A finished
+  image replaces its placeholder on the page without a reload; when the queue is done, a regular
+  rebuild and one reload bring `embedDiagram`, the complete document and `llms-full.txt` up to
+  date and pick up edits made meanwhile. A render error in the background shows an error
+  placeholder with `✗` in the log and keeps the server up. Builds without `-w` still wait for
+  every diagram and fail on a broken one
+- `.c4builder.cache` is written as the rendering goes (at most twice a second and at the end),
+  so a build interrupted with Ctrl+C or failed on one diagram keeps the finished diagrams in the
+  cache and the next build renders only the rest
+- Documentation: `C4BUILDER_RENDER_CONCURRENCY` (parallel PlantUML processes, default
+  `min(4, CPU − 1)`) and the warm start in CI (caching `distFolder` and `.c4builder.cache`
+  between jobs, GitLab CI and GitHub Actions examples); the documentation site workflow uses
+  such a cache
 - Agent skills are part of the npm package and match the installed CLI version. The new
   `c4builder skills` installs or updates them offline in the current folder: `.agents/skills/`
   always, `.claude/skills/` under Claude Code (`CLAUDECODE`) or when `.claude/` exists. The folder of
