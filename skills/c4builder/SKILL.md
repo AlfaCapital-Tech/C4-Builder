@@ -72,8 +72,8 @@ How the source tree becomes pages:
 
    With a complete `.c4builder` (written by `c4builder --new --name <name> -y` or by the
    first interactive run) this is a one-off, non-interactive build. A missing or partial
-   config starts an interactive wizard — do not drive it, ask the user or write the full
-   config (references/config.md). A diagram that fails here aborts the build with a long
+   config needs the interactive wizard; without a terminal the run stops with exit code 1.
+   Do not drive the wizard: ask the user or write the full config (references/config.md). A diagram that fails here aborts the build with a long
    Java stack trace and keeps the previous output in `docs_bk/`; run `c4builder check` on
    the changed files to get the short message.
 4. **Look at the result** in `docs/`: `docs/<folder>/README.md` (markdown collection),

@@ -19,6 +19,14 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
   no line without an agent, in `c4builder check`, with `CI`, `NO_UPDATE_NOTIFIER`, in the Docker
   image or with `C4BUILDER_AGENT=0`
 - `c4builder --new` installs the skills into the new project by the same rules
+- Exit codes: without a terminal, `c4builder` in a folder without `.c4builder` prints
+  `no .c4builder in <folder> — run c4builder --new, or c4builder --config in a terminal` and exits
+  with code 1 instead of a wizard stack trace with code 0; a closed wizard prompt (an incomplete
+  config without a terminal, `Ctrl+C`) is one `aborted: the prompt was closed` line and code 1. A
+  `.c4builder` that is not valid JSON is an error naming the file and exits with code 1 instead of
+  being silently replaced by an empty config. `--site` on a busy port exits with code 1 and no
+  longer prints `serving your docsify site` first
+- `c4builder --help` shows `Usage: c4builder` and lists the positional commands
 - New skill `c4builder-review`: reviewing pages on `c4builder --site -w` with comments to the agent
   (`/c4builder-review [change-id|page]`) — checks the server, links the change page, runs the
   `c4builder feedback --wait --as <name>` loop and reports in the chat. The page feedback loop moved

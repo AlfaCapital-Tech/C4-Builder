@@ -4,7 +4,7 @@
 
 | Command | What it does |
 |---|---|
-| `c4builder` | builds the project in the current folder; without a config it runs the wizard first |
+| `c4builder` | builds the project in the current folder; without a config it runs the wizard first, without a terminal — an error with exit code 1 |
 | `c4builder --new` | creates a project from the template in a new folder; since 0.5.0 also `c4builder new` |
 | `c4builder --new --name demo -y` | the same without questions: a full config with default values |
 | `c4builder --config` | setup wizard with the current values; since 0.5.0 also `c4builder config` |
@@ -37,6 +37,7 @@ Flags:
 | `--as <name>` | for `feedback`, required: listener name — the agent's change or task (1–64 characters: Latin letters, digits, `.`, `_`, `-`) |
 | `--system-fonts` | render with system fonts for one run |
 | `-V, --version` | version |
+| `-h, --help` | flags and positional commands |
 
 ## Updating
 
@@ -140,6 +141,12 @@ agent loop are on the [Agents](08%20Agents/08%20Agents.md) page.
 `.c4builder` is JSON in the project folder. The first build asks for missing keys through the
 wizard and sets `hasRun: true`; after that, `c4builder` builds without questions. `new -y` writes
 a full config right away, so there is no wizard at all.
+
+The wizard needs a terminal. Without one (CI, a background run, a coding agent) a missing config is
+an error with exit code 1 that creates no files, and an incomplete one stops at the first question
+with `aborted: the prompt was closed` and exit code 1. Closing the wizard with `Ctrl+C` also exits
+with code 1. A `.c4builder` that is not valid JSON is an error naming the file and the parse problem;
+the file is left as it is.
 
 Keys are validated against a schema. A value of the wrong type stops the build with an error
 naming the key, and `c4builder --config` lets you fix it. Unknown keys are silently dropped — this

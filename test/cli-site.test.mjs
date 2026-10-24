@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
@@ -20,10 +21,30 @@ fs.writeFileSync(path.join(dir, 'src', 'README.md'), '# root\n');
 fs.writeFileSync(path.join(dir, '.c4builder'), JSON.stringify({ ...CONFIG, webPort: '38321' }));
 
 const serve = (args, opts) => serveSite(dir, args, opts);
+const CLI = path.join(REPO_ROOT, 'dist', 'index.js');
 
 describe('c4builder site', () => {
     it('позиционная подкоманда поднимает сервер так же, как --site', async () => {
         expect(await serve(['site'])).toContain('serving your docsify site');
+    }, 60_000);
+
+    // Express 5 зовёт колбэк listen и с ошибкой: раньше печатались «serving»/«go to», а код был 0.
+    it('занятый порт → код 1, без «go to»', async () => {
+        const port = 38330;
+        const busy = http.createServer();
+        await new Promise((resolve) => busy.listen(port, '127.0.0.1', resolve));
+        try {
+            const res = spawnSync(process.execPath, [CLI, 'site', '-p', String(port)], {
+                cwd: dir,
+                encoding: 'utf8',
+                timeout: 60_000
+            });
+            expect(res.status, `${res.stdout}${res.stderr}`).toBe(1);
+            expect(res.stdout).toContain(`port ${port} is already in use`);
+            expect(res.stdout).not.toContain('go to');
+        } finally {
+            busy.close();
+        }
     }, 60_000);
 });
 

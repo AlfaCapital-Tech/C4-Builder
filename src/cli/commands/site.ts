@@ -515,7 +515,10 @@ export default (
     app.use(express.static(distFolder));
 
     return new Promise((resolve, reject) => {
-        const server = app.listen(port as number, '127.0.0.1', () => {
+        // Express 5 зовёт колбэк listen и с ошибкой (занятый порт) — её разбирает
+        // server.on('error') ниже, а «serving» печатаем только после настоящего listen.
+        const server = app.listen(port as number, '127.0.0.1', (err?: Error) => {
+            if (err) return;
             const url = `http://localhost:${port}`;
             console.log('serving your docsify site');
             console.log(`go to ${chalk.green(url)}`);

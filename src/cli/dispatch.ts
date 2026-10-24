@@ -50,7 +50,26 @@ interface ConfStore {
 }
 
 // Позиционные подкоманды: allowExcessArguments пропускает любые, список — единственный фильтр.
-const COMMANDS = ['check', 'jre', 'site', 'new', 'config', 'update', 'feedback', 'skills'];
+// Commander о них не знает — аргументы и описания здесь же, для блока команд в --help.
+const COMMANDS: Record<string, [args: string, about: string]> = {
+    check: ['<files...>', 'check diagrams without a build, exit code 0 or 1'],
+    jre: ['info|install', 'which Java will be used | download a JRE in advance'],
+    site: ['', 'build and serve the site locally (same as --site)'],
+    new: ['', 'create a project from the template (same as --new)'],
+    config: ['', 'setup wizard with the current values (same as --config)'],
+    update: ['', 'update a global npm install to the newest version'],
+    feedback: ['', 'wait for page feedback from site -w (--wait --as <name>)'],
+    skills: ['', 'install or update the agent skills in the current folder']
+};
+
+const commandsHelp = (): string => {
+    const rows = Object.entries(COMMANDS).map(([name, [args, about]]): [string, string] => [
+        `${name} ${args}`.trim(),
+        about
+    ]);
+    const width = Math.max(...rows.map(([usage]) => usage.length));
+    return `\nCommands:\n${rows.map(([usage, about]) => `  ${usage.padEnd(width)}  ${about}`).join('\n')}`;
+};
 
 const intro = () => {
     console.log(chalk.blue(figlet.textSync('c4builder')));
@@ -150,6 +169,8 @@ function getOptions(c: Partial<C4ConfigFile>): BuildOptions | Partial<BuildOptio
 
 export default async () => {
     program
+        .name('c4builder')
+        .usage('[command] [options]')
         .version(pkg.version)
         .option('--new', 'create a new project from template')
         .option('--name <name>', 'project name for --new (skips the name prompt)')
@@ -177,6 +198,7 @@ export default async () => {
             return Number(v);
         })
         .allowExcessArguments() // позиционные аргументы подкоманд `jre <action>` и `check <file...>`
+        .addHelpText('after', commandsHelp())
         .parse(process.argv);
 
     const opts = program.opts();
@@ -184,9 +206,11 @@ export default async () => {
 
     // allowExcessArguments глотает любой позиционный аргумент — без этой проверки
     // опечатка (`c4builder nwe`) молча превращалась бы в сборку.
-    if (cmd !== undefined && !COMMANDS.includes(cmd)) {
+    if (cmd !== undefined && !Object.hasOwn(COMMANDS, cmd)) {
         console.error(chalk.red(`unknown command: ${cmd}`));
-        console.error(`available commands: ${COMMANDS.join(', ')} (see c4builder --help for options)`);
+        console.error(
+            `available commands: ${Object.keys(COMMANDS).join(', ')} (see c4builder --help for options)`
+        );
         process.exit(1);
     }
     // --version/--help уже вышли в parse. Уведомление — по кэшу прошлой проверки, до её
@@ -227,6 +251,15 @@ export default async () => {
         );
         process.exit(1);
     }
+    // Без терминала мастеру неоткуда взять ответы: inquirer падал со стектрейсом и кодом 0.
+    if (!opts.new && !process.stdin.isTTY && !fs.existsSync(configPath)) {
+        console.error(
+            chalk.red(
+                `no ${opts.configFile ?? '.c4builder'} in ${process.cwd()} — run c4builder --new, or c4builder --config in a terminal`
+            )
+        );
+        process.exit(1);
+    }
 
     let conf: ConfStore = { get: () => {} } as unknown as ConfStore;
     let cacheConf: ConfStore = { get: () => {}, set: () => {}, clear: () => {} } as unknown as ConfStore;
@@ -235,7 +268,14 @@ export default async () => {
     if (!opts.new) {
         const projectKey = process.cwd().split(path.sep).splice(1).join('_');
         lockPath = `${configPath}.lock`;
-        conf = new Configstore(projectKey, {}, { configPath });
+        try {
+            // По умолчанию Configstore молча затирает битый JSON пустым конфигом — настройки
+            // терялись, а сборка уходила в мастер. --reset стирает конфиг и так.
+            conf = new Configstore(projectKey, {}, { configPath, clearInvalidConfig: !!opts.reset });
+        } catch (e) {
+            console.error(chalk.red(`.c4builder error — cannot read ${configPath}: ${(e as Error).message}`));
+            process.exit(1);
+        }
         cacheConf = new Configstore(`${projectKey}_cache`, {}, { configPath: `${configPath}.cache` });
 
         // Миграция: чексуммы раньше жили в .c4builder, переносим их в .c4builder.cache,
@@ -421,13 +461,19 @@ export default async () => {
         }
         isBuilding = false;
 
-        if (opts.site)
-            return await cmdSite(
-                options,
-                { ...opts, agent: detectAgent(process.env, opts) },
-                reloadEmitter,
-                () => pages
-            );
+        if (opts.site) {
+            try {
+                return await cmdSite(
+                    options,
+                    { ...opts, agent: detectAgent(process.env, opts) },
+                    reloadEmitter,
+                    () => pages
+                );
+            } catch {
+                // Ошибку запуска сервера (занятый порт) cmdSite уже напечатал — остаётся код выхода.
+                process.exit(1);
+            }
+        }
 
         if (options.GENERATE_WEBSITE && !opts.watch) {
             console.log(chalk.gray('\nto view the generated website run'));
