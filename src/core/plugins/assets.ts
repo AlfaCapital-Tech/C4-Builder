@@ -2,7 +2,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import type { BuildOptions } from '../../config/options.ts';
+import { VENDOR_DIR } from '../../util/paths.ts';
 import { encodeURIPath } from '../../util/utils.ts';
+import type { Redirects } from './tree.ts';
 import type { LoadedPlugin } from './types.ts';
 
 // Вставка тегов в готовый HTML: стили — перед последним `</head>`, скрипты — перед
@@ -25,21 +27,33 @@ export const injectHtml = (
     return before(before(html, /<\/head>/gi, styleTags), /<\/body>/gi, scriptTags);
 };
 
+// Ассеты сайта от самого ядра (не плагинов): уже лежат в `dist/vendor/` — туда целиком
+// копируется vendor/docsify (compose/markdown), поэтому их только подключают, не копируют.
+// Сворачивание sidebar — пост-обработкой, а не строкой шаблона, чтобы работало и с
+// пользовательским docsifyTemplate (включая копии старого встроенного шаблона).
+const coreSiteAssets = (options: BuildOptions): { styles: string[]; scripts: string[] } =>
+    options.SIDEBAR_COLLAPSE
+        ? { styles: ['vendor/sidebar-collapse.css'], scripts: ['vendor/docsify-sidebar-collapse.min.js'] }
+        : { styles: [], scripts: [] };
+
 /**
- * Копирует ассеты плагинов в `dist/vendor/plugins/<name>/` и подключает их в
- * `dist/index.html`. Зовётся после generateWebMD (index.html уже записан).
+ * Подключает в `dist/index.html` ассеты сайта: ядра (сворачивание sidebar при
+ * `sidebarCollapse`) и плагинов — последние копируются в `dist/vendor/plugins/<name>/`.
+ * Зовётся после generateWebMD (index.html уже записан).
  */
-export const injectPluginAssets = async (plugins: LoadedPlugin[], options: BuildOptions): Promise<void> => {
+export const injectSiteAssets = async (plugins: LoadedPlugin[], options: BuildOptions): Promise<void> => {
     const indexPath = path.join(options.DIST_FOLDER, 'index.html');
     const html = fs.readFileSync(indexPath, 'utf8');
     // Файл с тем же именем уже подключён шаблоном (дефолтный шаблон сам грузит
-    // vendor/swagger-ui-bundle.js) — второй раз не копируем и не подключаем.
+    // vendor/swagger-ui-bundle.js; шаблон команды мог подключать сворачивание руками) —
+    // второй раз не копируем и не подключаем.
     const linked = (file: string): boolean =>
         new RegExp(
             `(?:src|href)=["'][^"']*\\b${path.basename(file).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}["']`
         ).test(html);
-    const styles: string[] = [];
-    const scripts: string[] = [];
+    const core = coreSiteAssets(options);
+    const styles: string[] = core.styles.filter((f) => !linked(f));
+    const scripts: string[] = core.scripts.filter((f) => !linked(f));
     for (const { plugin } of plugins) {
         if (!plugin.assets) continue;
         const rel = path.posix.join('vendor', 'plugins', plugin.name);
@@ -57,4 +71,26 @@ export const injectPluginAssets = async (plugins: LoadedPlugin[], options: Build
     }
     if (!styles.length && !scripts.length) return;
     fs.writeFileSync(indexPath, injectHtml(html, { styles, scripts }));
+};
+
+// Скрипт переадресаций (change site-agent-review): вендорный файл копируется в `dist/vendor/` и
+// подключается в index.html только при непустой карте — сайт без переадресаций прежний.
+// Отдельно от injectSiteAssets: карта переадресаций известна только после скана.
+const REDIRECTS_SCRIPT = 'c4builder-redirects.js';
+
+/** Подключает скрипт переадресаций к `dist/index.html`. Зовётся после injectSiteAssets. */
+export const injectRedirects = (options: BuildOptions, redirects: Redirects): void => {
+    if (!redirects.size) return;
+    const vendorDist = path.join(options.DIST_FOLDER, 'vendor');
+    fs.mkdirSync(vendorDist, { recursive: true });
+    fs.copyFileSync(
+        path.join(VENDOR_DIR, 'docsify', REDIRECTS_SCRIPT),
+        path.join(vendorDist, REDIRECTS_SCRIPT)
+    );
+    const indexPath = path.join(options.DIST_FOLDER, 'index.html');
+    const html = fs.readFileSync(indexPath, 'utf8');
+    fs.writeFileSync(
+        indexPath,
+        injectHtml(html, { styles: [], scripts: [path.posix.join('vendor', REDIRECTS_SCRIPT)] })
+    );
 };

@@ -6,8 +6,10 @@ import express from 'express';
 import open from 'open';
 import type { EventEmitter } from 'node:events';
 import type { BuildOptions } from '../../config/options.ts';
+import type { BuildResult } from '../../core/build.ts';
 import type { PageSources } from '../../core/compose/markdown.ts';
 import { batchSchema, type FeedbackBatch, formatBatch, LISTENER_NAME } from '../../core/feedback.ts';
+import { redirectKey } from '../../core/plugins/tree.ts';
 import { deleteQuestion, formatQuestion, pickSource, writeQuestion } from '../../core/questions.ts';
 import { packageJson as pkg } from '../../util/paths.ts';
 import type { AgentMode } from '../agent.ts';
@@ -17,7 +19,8 @@ import {
     commentsSnippet,
     FEEDBACK_HEADER,
     FEEDBACK_PATH,
-    type MailboxState
+    type MailboxState,
+    PAGE_PATH
 } from './site.comments.ts';
 
 const COMMENT_MAX = 2000;
@@ -136,7 +139,8 @@ export default (
     program: {
         port?: number;
         watch?: boolean;
-        open?: boolean;
+        // `--open` — главная; `--open <id>` — короткий адрес `#/change/<id>` (change site-agent-review).
+        open?: boolean | string;
         agent?: AgentMode;
         // Окна long-poll (design D1), пульса присутствия слушателя (D4) и жизни пустого ящика
         // (change feedback-mailboxes, D3) — параметры для тестов.
@@ -145,13 +149,15 @@ export default (
         mailboxTtlMs?: number;
     },
     reloadEmitter?: EventEmitter,
-    // Карта «страница → исходники» текущей сборки — геттером, чтобы видеть результат ребилдов watch.
-    pages: () => PageSources = () => new Map(),
+    // Итог текущей сборки (страницы → исходники, переадресации) — геттером, чтобы видеть
+    // результат ребилдов watch.
+    result: () => BuildResult = () => ({ pages: new Map(), redirects: new Map() }),
     // Фоновый рендер холодного старта (change site-warm-start): запрос `.md` страницы поднимает
     // её диаграммы в голову очереди. Замыкание, а не очередь: она есть только у первой сборки.
     prioritize?: (pageMd: string) => void
 ) => {
     if (!currentConfiguration.DIST_FOLDER) return console.log(chalk.red('No destination folder configured'));
+    const pages = (): PageSources => result().pages;
 
     const app = express();
     const port = program.port || currentConfiguration.WEB_PORT;
@@ -513,6 +519,27 @@ export default (
                 next();
             });
 
+        // Адрес страницы change'а по имени слушателя (change site-agent-review, D6): `c4builder
+        // feedback --as <name>` печатает его в stderr. Защита — как у /next: чужой странице
+        // список change'ей ни к чему.
+        app.get(PAGE_PATH, (req, res) => {
+            if (!localHost(req) || req.get('origin') || req.get(FEEDBACK_HEADER) !== '1') {
+                res.status(403).json({ error: 'served only to the c4builder feedback command' });
+                return;
+            }
+            const name = req.query.as;
+            if (typeof name !== 'string' || !LISTENER_NAME.test(name)) {
+                res.status(400).json({ error: 'as=<name> is required' });
+                return;
+            }
+            const key = redirectKey(['change', name]);
+            if (!result().redirects.has(key)) {
+                res.status(404).json({ error: `no page for change/${name}` });
+                return;
+            }
+            res.json({ url: `/#${key}` });
+        });
+
         app.use((req, res, next) => {
             if (req.method !== 'GET') return next();
             let urlPath: string;
@@ -561,9 +588,19 @@ export default (
         // server.on('error') ниже, а «serving» печатаем только после настоящего listen.
         const server = app.listen(port as number, '127.0.0.1', (err?: Error) => {
             if (err) return;
-            const url = `http://localhost:${port}`;
+            const base = `http://localhost:${port}`;
+            // `--open <id>`: короткий адрес change'а. Ключа нет в карте — предупреждаем, но адрес
+            // всё равно открываем: в watch change могут собрать позже.
+            const route = typeof program.open === 'string' ? redirectKey(['change', program.open]) : '';
+            const url = route ? `${base}/#${route}` : base;
             console.log('serving your docsify site');
             console.log(`go to ${chalk.green(url)}`);
+            if (route && !result().redirects.has(route))
+                console.error(
+                    chalk.yellow(
+                        `warning: the site has no page change/${program.open} — ${url} shows "not found" until a change with this id is built`
+                    )
+                );
             if (liveReloadEnabled)
                 console.log(chalk.gray('livereload enabled (browser auto-reload on rebuild)'));
             if (liveReloadEnabled && agent.on)

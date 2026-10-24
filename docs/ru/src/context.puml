@@ -12,6 +12,7 @@ System(c4b, "C4-Builder", "CLI: собирает папку markdown + PlantUML/
 System_Ext(engines, "Движки диаграмм", "PlantUML (вендорный jar + Java, Smetana), D2 (WASM)")
 System_Ext(openspec, "OpenSpec-store", "Спеки и change'и проекта: proposal, design, tasks")
 System_Ext(openapi, "OpenAPI-контракты", "Спеки сервисов: папка или архив репозитория")
+System_Ext(figma, "Figma", "Макеты интерфейсов: фреймы, прототипы, доски — эмбед в браузере читателя")
 System_Ext(site, "Docsify-сайт", "Статика без CDN: GitHub Pages, GitLab Pages, любой веб-сервер")
 System_Ext(md, "Markdown", "README по папкам или один файл для репозитория")
 
@@ -20,6 +21,7 @@ Rel(agent, c4b, "Проверяет правки", "c4builder check")
 Rel(c4b, engines, "Рендерит диаграммы", "локально, без сети")
 Rel(c4b, openspec, "Публикует раздел", "плагин openspec")
 Rel(c4b, openapi, "Публикует swagger-ui", "плагин openapi")
+Rel(c4b, figma, "Публикует фреймы", "плагин figma")
 Rel(c4b, site, "Собирает")
 Rel(c4b, md, "Собирает")
 

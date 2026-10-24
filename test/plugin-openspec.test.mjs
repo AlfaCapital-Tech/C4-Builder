@@ -522,6 +522,9 @@ describe('плагин openspec: опция nameKey', () => {
         // `#` encodeURI не кодирует — ссылка оборвалась бы на якоре, поэтому id
         write(s, 'changes/dig-6-hash/.openspec.yaml', 'x-name: "Задача #6"\n');
         write(s, 'changes/dig-6-hash/proposal.md', '## Why\n\ndig-6-hash\n');
+        // короткие адреса: архивная копия активного change'а и два архива одного id
+        write(s, 'changes/archive/2026-07-01-dig-3-root/proposal.md', '## Why\n\nold root\n');
+        write(s, 'changes/archive/2026-07-01-dig-5-old/proposal.md', '## Why\n\nolder\n');
         runBuild(d);
     });
     afterAll(() => fs.rmSync(d, { recursive: true, force: true }));
@@ -555,6 +558,33 @@ describe('плагин openspec: опция nameKey', () => {
         expect(readD('OpenSpec/Changes/Service/Корень задачи/ios/ios.md')).toContain(
             `**Parent:** [Корень задачи](${page('OpenSpec', 'Changes', 'Service', 'Корень задачи')})`
         );
+    });
+
+    // Короткие адреса `#/change/<id>` (change site-agent-review): ключ — ASCII-id, значение —
+    // закодированный путь страницы; активный важнее архивного, из архивных — новейший.
+    it('карта переадресаций в index.html: группа и имя, вложенный, архив, активный+архивный', () => {
+        const html = readD('index.html');
+        const { redirects } = JSON.parse(
+            html.match(/window\.\$docsify = (\{[\s\S]*?\});\s*<\/script>/)[1]
+        ).c4builder;
+        expect(redirects).toMatchObject({
+            '/change/dig-3-root': `/${page('OpenSpec', 'Changes', 'Service', 'Корень задачи')}`,
+            '/change/dig-3-root-ios': `/${page('OpenSpec', 'Changes', 'Service', 'Корень задачи', 'ios')}`,
+            '/change/dig-3-root-design': `/${page('OpenSpec', 'Changes', 'Service', 'Корень задачи', 'dig-3-root-design')}`,
+            '/change/dig-1-alpha': `/${page('OpenSpec', 'Changes', 'Бета')}`,
+            '/change/dig-5-old': '/OpenSpec/Archive/2026-08-02-dig-5-old/2026-08-02-dig-5-old'
+        });
+        // Вложенный архивный: по полному id, на страницу под тем архивным родителем, куда его
+        // положила раскладка (при двух архивах одного id layoutChanges берёт последний в списке).
+        expect(redirects['/change/dig-5-old-web']).toMatch(
+            /^\/OpenSpec\/Archive\/\d{4}-\d{2}-\d{2}-dig-5-old\/web\/web$/
+        );
+        expect(Object.keys(redirects).filter((k) => /dig-3-root$|dig-5-old$/.test(k))).toEqual([
+            '/change/dig-3-root',
+            '/change/dig-5-old'
+        ]);
+        expect(Object.keys(redirects).every((k) => /^\/change\/[\w.-]+$/.test(k))).toBe(true);
+        expect(html).toContain('<script src="vendor/c4builder-redirects.js"></script>');
     });
 });
 

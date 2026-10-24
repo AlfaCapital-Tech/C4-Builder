@@ -173,7 +173,7 @@ describe('site -w: событие image и приоритет страницы',
             { DIST_FOLDER: distDir, WEB_PORT: String(port), QUESTIONS_HEADING: 'Open questions' },
             { port, watch: true },
             emitter,
-            () => new Map(),
+            () => ({ pages: new Map(), redirects: new Map() }),
             prioritize
         );
         return {

@@ -17,6 +17,7 @@ const defaultConfig = {
     includeTableOfContents: true,
     webTheme: 'vendor/vue.css',
     supportSearch: true,
+    sidebarCollapse: true,
     repoUrl: '',
     executeScript: false,
     docsifyTemplate: '',
