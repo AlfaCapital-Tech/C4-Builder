@@ -60,6 +60,7 @@ Validation rules:
 | `uiLanguage` | `auto` | language of the `site -w` page interface: `auto` (browser language), `en` or `ru`; CLI output and feedback batches stay English |
 | `webTheme` | `vendor/vue.css` | docsify theme stylesheet |
 | `supportSearch` | `true` | search box in the sidebar |
+| `sidebarCollapse` | `true` | collapsible sidebar sections (bundled `docsify-sidebar-collapse`): first level and the path to the current page open; `false` — whole tree expanded. Injected into `index.html` after the template, so a custom `docsifyTemplate` needs no changes |
 | `repoUrl` | `""` | repository link in the site corner |
 | `executeScript` | `false` | let docsify run `<script>` in pages (forced on by `openapi`) |
 | `docsifyTemplate` | `""` | path to a JS module exporting a function that returns `index.html` |
@@ -92,6 +93,7 @@ c4builder to an existing repository:
   "includeTableOfContents": true,
   "webTheme": "vendor/vue.css",
   "supportSearch": true,
+  "sidebarCollapse": true,
   "repoUrl": "",
   "executeScript": false,
   "docsifyTemplate": "",

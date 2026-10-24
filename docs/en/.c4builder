@@ -11,6 +11,7 @@
 	"includeTableOfContents": false,
 	"webTheme": "vendor/vue.css",
 	"supportSearch": true,
+	"sidebarCollapse": true,
 	"repoUrl": "https://github.com/AlfaCapital-Tech/C4-Builder",
 	"executeScript": false,
 	"docsifyTemplate": "../docsify-template.mjs",

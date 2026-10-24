@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { BUILTIN_PLUGINS, injectPluginAssets, loadPlugins } from './dist.mjs';
+import { BUILTIN_PLUGINS, injectSiteAssets, loadPlugins } from './dist.mjs';
 import { TMP_ROOT, ensureManagedJre, runBuild } from './helpers.mjs';
 
 // Встроенный плагин openapi: локальная папка с 3 спеками и относительным $ref →
@@ -90,7 +90,7 @@ describe('плагин openapi', () => {
         const dist = fs.mkdtempSync(path.join(TMP_ROOT, 'plugin-openapi-assets-'));
         fs.writeFileSync(path.join(dist, 'index.html'), '<html><head></head><body></body></html>');
         const plugin = await BUILTIN_PLUGINS.openapi();
-        await injectPluginAssets([{ plugin, opts: {} }], { DIST_FOLDER: dist });
+        await injectSiteAssets([{ plugin, opts: {} }], { DIST_FOLDER: dist });
         expect(fs.readFileSync(path.join(dist, 'index.html'), 'utf8')).toContain(
             '<script src="vendor/plugins/openapi/swagger-ui-bundle.js"></script>'
         );

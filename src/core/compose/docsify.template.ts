@@ -24,6 +24,12 @@ export interface DocsifyOptions {
     nativeEmoji: boolean;
     supportSearch: boolean;
     executeScript: boolean;
+    /**
+     * Уровень разделов sidebar, раскрытых по умолчанию (читает вендорный
+     * docsify-sidebar-collapse). Передаётся только при `sidebarCollapse: true` —
+     * без него index.html идентичен прежнему.
+     */
+    sidebarDisplayLevel?: number;
 }
 
 export default (options: DocsifyOptions): string => {

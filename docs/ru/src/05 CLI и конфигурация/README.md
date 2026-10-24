@@ -179,6 +179,7 @@ required` с примером, к серверу команда не обращ�
 | `charset` | `UTF-8` | кодировка исходников PlantUML |
 | `webTheme` | `vendor/vue.css` | CSS-тема docsify |
 | `supportSearch` | `true` | поиск в sidebar |
+| `sidebarCollapse` | `true` | сворачивание разделов sidebar: раскрыты первый уровень и путь к текущей странице; `false` — дерево развёрнуто целиком |
 | `repoUrl` | пусто | ссылка на репозиторий в углу сайта |
 | `executeScript` | `false` | выполнение `<script>` в страницах и подключение swagger-ui |
 | `docsifyTemplate` | пусто | путь к модулю со своим шаблоном `index.html` |
@@ -197,3 +198,9 @@ required` с примером, к серверу команда не обращ�
 Она получает объект настроек docsify (имя, sidebar, тема, поиск) и возвращает HTML для
 `index.html`. Отправная точка — встроенный шаблон в `src/core/compose/docsify.template.ts`;
 у этого сайта свой — `docs/docsify-template.mjs`.
+
+Сворачивание sidebar (`sidebarCollapse`) в шаблоне подключать не нужно: его скрипт и стиль
+сборка вставляет в готовый `index.html` пост-обработкой, как ассеты плагинов, а уровень
+раскрытия приходит в объекте настроек ключом `sidebarDisplayLevel` — достаточно вставить
+объект в `window.$docsify` целиком. Если шаблон уже подключает
+`vendor/docsify-sidebar-collapse.min.js` сам, второй раз файл не добавляется.

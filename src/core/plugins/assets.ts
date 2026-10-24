@@ -25,21 +25,33 @@ export const injectHtml = (
     return before(before(html, /<\/head>/gi, styleTags), /<\/body>/gi, scriptTags);
 };
 
+// Ассеты сайта от самого ядра (не плагинов): уже лежат в `dist/vendor/` — туда целиком
+// копируется vendor/docsify (compose/markdown), поэтому их только подключают, не копируют.
+// Сворачивание sidebar — пост-обработкой, а не строкой шаблона, чтобы работало и с
+// пользовательским docsifyTemplate (включая копии старого встроенного шаблона).
+const coreSiteAssets = (options: BuildOptions): { styles: string[]; scripts: string[] } =>
+    options.SIDEBAR_COLLAPSE
+        ? { styles: ['vendor/sidebar-collapse.css'], scripts: ['vendor/docsify-sidebar-collapse.min.js'] }
+        : { styles: [], scripts: [] };
+
 /**
- * Копирует ассеты плагинов в `dist/vendor/plugins/<name>/` и подключает их в
- * `dist/index.html`. Зовётся после generateWebMD (index.html уже записан).
+ * Подключает в `dist/index.html` ассеты сайта: ядра (сворачивание sidebar при
+ * `sidebarCollapse`) и плагинов — последние копируются в `dist/vendor/plugins/<name>/`.
+ * Зовётся после generateWebMD (index.html уже записан).
  */
-export const injectPluginAssets = async (plugins: LoadedPlugin[], options: BuildOptions): Promise<void> => {
+export const injectSiteAssets = async (plugins: LoadedPlugin[], options: BuildOptions): Promise<void> => {
     const indexPath = path.join(options.DIST_FOLDER, 'index.html');
     const html = fs.readFileSync(indexPath, 'utf8');
     // Файл с тем же именем уже подключён шаблоном (дефолтный шаблон сам грузит
-    // vendor/swagger-ui-bundle.js) — второй раз не копируем и не подключаем.
+    // vendor/swagger-ui-bundle.js; шаблон команды мог подключать сворачивание руками) —
+    // второй раз не копируем и не подключаем.
     const linked = (file: string): boolean =>
         new RegExp(
             `(?:src|href)=["'][^"']*\\b${path.basename(file).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}["']`
         ).test(html);
-    const styles: string[] = [];
-    const scripts: string[] = [];
+    const core = coreSiteAssets(options);
+    const styles: string[] = core.styles.filter((f) => !linked(f));
+    const scripts: string[] = core.scripts.filter((f) => !linked(f));
     for (const { plugin } of plugins) {
         if (!plugin.assets) continue;
         const rel = path.posix.join('vendor', 'plugins', plugin.name);
