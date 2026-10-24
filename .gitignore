@@ -23,5 +23,7 @@ test/.tmp/
 *.iml
 *.tgz
 
-# личные настройки Claude Code (общие commands/skills — в git)
+# Claude Code: личные настройки и генерат OpenSpec (openspec init --tools claude)
 .claude/settings.local.json
+.claude/skills/openspec-*/
+.claude/commands/opsx/
