@@ -38,6 +38,10 @@ const LIVERELOAD_PATH = '/__livereload';
 // Комментарии держим здесь, а не в сниппете: он уходит в браузер пользователя.
 // События агента (design D4) идут по тому же потоку и пересылаются сниппету комментариев
 // DOM-событиями `c4builder:*` — второй EventSource странице не нужен.
+// Событие `image` (change site-warm-start): диаграмма дорисована в фоне — у совпавших по
+// пути <img> меняем src на тот же путь с `?v=<ts>`, без перезагрузки и потери прокрутки.
+// Сравниваем декодированные pathname: docsify резолвит src относительно страницы и кодирует
+// пробелы, а сервер шлёт сырой путь относительно dist.
 const LIVERELOAD_SNIPPET = `
 <script>
 (function () {
@@ -80,6 +84,19 @@ const LIVERELOAD_SNIPPET = `
                     window.dispatchEvent(new CustomEvent('c4builder:' + name, { detail: JSON.parse(e.data) }));
                 } catch (err) {}
             });
+        });
+        es.addEventListener('image', function (e) {
+            try {
+                var target = '/' + JSON.parse(e.data).path;
+                var imgs = document.querySelectorAll('img[src]');
+                for (var i = 0; i < imgs.length; i++) {
+                    var url;
+                    try { url = new URL(imgs[i].getAttribute('src'), location.href); } catch (err) { continue; }
+                    if (url.origin !== location.origin || decodeURIComponent(url.pathname) !== target) continue;
+                    url.search = 'v=' + Date.now();
+                    imgs[i].setAttribute('src', url.pathname + url.search);
+                }
+            } catch (err) {}
         });
         es.onerror = function () {
             es.close();
@@ -129,7 +146,10 @@ export default (
     },
     reloadEmitter?: EventEmitter,
     // Карта «страница → исходники» текущей сборки — геттером, чтобы видеть результат ребилдов watch.
-    pages: () => PageSources = () => new Map()
+    pages: () => PageSources = () => new Map(),
+    // Фоновый рендер холодного старта (change site-warm-start): запрос `.md` страницы поднимает
+    // её диаграммы в голову очереди. Замыкание, а не очередь: она есть только у первой сборки.
+    prioritize?: (pageMd: string) => void
 ) => {
     if (!currentConfiguration.DIST_FOLDER) return console.log(chalk.red('No destination folder configured'));
 
@@ -207,11 +227,13 @@ export default (
             const onAgent = (data: unknown) => res.write(`event: agent\ndata: ${JSON.stringify(data)}\n\n`);
             const onDelivered = (data: unknown) =>
                 res.write(`event: delivered\ndata: ${JSON.stringify(data)}\n\n`);
+            const onImage = (data: unknown) => res.write(`event: image\ndata: ${JSON.stringify(data)}\n\n`);
             const heartbeat = setInterval(() => res.write(': ping\n\n'), 15000);
 
             reloadEmitter.on('reload', onReload); // liveReloadEnabled ⇒ reloadEmitter задан
             reloadEmitter.on('agent', onAgent);
             reloadEmitter.on('delivered', onDelivered);
+            reloadEmitter.on('image', onImage);
             onAgent(agentState());
             console.log(
                 chalk.gray(`livereload: client connected (${reloadEmitter.listenerCount('reload')} total)`)
@@ -222,6 +244,7 @@ export default (
                 reloadEmitter.off('reload', onReload);
                 reloadEmitter.off('agent', onAgent);
                 reloadEmitter.off('delivered', onDelivered);
+                reloadEmitter.off('image', onImage);
                 console.log(
                     chalk.gray(
                         `livereload: client disconnected (${reloadEmitter.listenerCount('reload')} left)`
@@ -473,6 +496,22 @@ export default (
                 req.query.wait === '0' ? 0 : pollMs
             );
         });
+
+        // Открытая страница — первая в очереди фонового рендера. Служебные `_sidebar.md`,
+        // `_navbar.md` и пр. docsify запрашивает при каждом переходе — диаграмм в них нет,
+        // а приоритет корневой папки они бы перебивали.
+        if (prioritize)
+            app.use((req, _res, next) => {
+                if (req.method === 'GET' && /\.md$/i.test(req.path)) {
+                    try {
+                        const page = decodeURIComponent(req.path).replace(/^\/+/, '');
+                        if (!path.posix.basename(page).startsWith('_')) prioritize(page);
+                    } catch (_e) {
+                        // битый percent-encoding — статика ответит сама
+                    }
+                }
+                next();
+            });
 
         app.use((req, res, next) => {
             if (req.method !== 'GET') return next();
