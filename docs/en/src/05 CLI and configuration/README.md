@@ -18,8 +18,9 @@
 | `c4builder --reset` | clear the project config; since 0.5.0 outside a project — an error with exit code 1 |
 | `c4builder --docs` | short reference of config keys and the address of this documentation |
 | `c4builder update` | updates a global npm install to the newest version, otherwise prints how to update, see "Updating" below |
+| `c4builder skills` | installs or updates the agent skills of the CLI's own version in the current folder: `.agents/skills/`, under Claude Code also `.claude/skills/`; needs no project config, see "Agent skills" on the [Agents](08%20Agents/08%20Agents.md) page |
 
-Positional commands are `check`, `jre`, `site`, `update`, `feedback`, and since 0.5.0 also `new` and `config`. Since
+Positional commands are `check`, `jre`, `site`, `update`, `feedback`, since 0.5.0 also `new` and `config`, since 0.10.0 `skills`. Since
 0.5.0 any other positional argument is an `unknown command` error with exit code 1: a typo
 (`c4builder nwe`) no longer starts a build.
 

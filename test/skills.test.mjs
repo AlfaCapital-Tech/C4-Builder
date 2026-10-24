@@ -19,10 +19,11 @@ const references = (name) => {
     const dir = path.join(SKILLS_DIR, name, 'references');
     return fs.existsSync(dir) ? fs.readdirSync(dir).map((f) => path.join(dir, f)) : [];
 };
-const INPUTS = [...SKILLS.flatMap((name) => [skillFile(name), ...references(name)]), AGENTS_MD];
+const SKILL_FILES = SKILLS.flatMap((name) => [skillFile(name), ...references(name)]);
+const INPUTS = [...SKILL_FILES, AGENTS_MD];
 const rel = (file) => path.relative(REPO_ROOT, file);
 
-const COMMANDS = ['check', 'jre', 'site', 'new', 'config', 'update', 'feedback'];
+const COMMANDS = ['check', 'jre', 'site', 'new', 'config', 'update', 'feedback', 'skills'];
 const FLAG = /(?<![\w-])--?[a-zA-Z][\w-]*/g;
 const help = spawnSync(process.execPath, [CLI, '--help'], { encoding: 'utf8' }).stdout;
 const KNOWN_FLAGS = new Set(help.match(FLAG));
@@ -45,17 +46,17 @@ const frontmatter = (text) => {
 const cliCommands = (text) => {
     const fenced = [...text.matchAll(/^```[^\n]*\n([\s\S]*?)^```/gm)].flatMap((m) => m[1].split('\n'));
     const inline = [...text.replace(/^```[\s\S]*?^```/gm, '').matchAll(/`([^`\n]+)`/g)].map((m) => m[1]);
-    // Строка уведомления о новой версии тоже начинается с `c4builder`, но это вывод CLI, не команда.
+    // Строки уведомлений о новой версии и о скиллах тоже начинаются с `c4builder`, но это вывод CLI.
     return [...fenced, ...inline]
         .map((s) => s.replace(/\s#.*$/, '').trim())
-        .filter((s) => /^c4builder(\s|$)/.test(s) && !s.includes(' is available (current '));
+        .filter((s) => /^c4builder(\s|$)/.test(s) && !/ is available \(current |\. Ask the user/.test(s));
 };
 
 describe('скиллы', () => {
     it('help CLI разобран', () => expect(KNOWN_FLAGS.has('--site')).toBe(true));
 
     it('набор скиллов — ровно поставляемый (README, AGENTS.md ссылаются на него)', () =>
-        expect(SKILLS).toEqual(['c4builder', 'c4builder-setup']));
+        expect(SKILLS).toEqual(['c4builder', 'c4builder-review', 'c4builder-setup']));
 
     it.each(SKILLS)('%s: frontmatter по спеке Agent Skills', (name) => {
         const file = rel(skillFile(name));
@@ -75,6 +76,18 @@ describe('скиллы', () => {
             return sub && !sub.startsWith('-') && !COMMANDS.includes(sub) ? [sub, ...flags] : flags;
         });
         expect(unknown, `${file}: неизвестные CLI-флаги/подкоманды`).toEqual([]);
+    });
+
+    // Скиллы входят в пакет (change skills-install, D1): `c4builder skills` ставит их офлайн той же
+    // версии, что и CLI. --ignore-scripts — без prepack-сборки; npm 12 отдаёт объект, npm ≤ 11 — массив.
+    it('скиллы входят в npm-пакет', () => {
+        const res = spawnSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], {
+            cwd: REPO_ROOT,
+            encoding: 'utf8'
+        });
+        expect(res.status, res.stderr).toBe(0);
+        const packed = Object.values(JSON.parse(res.stdout))[0].files.map((f) => f.path);
+        expect(packed).toEqual(expect.arrayContaining(SKILL_FILES.map(rel)));
     });
 
     it.each(INPUTS.map(rel))('%s: нет внутренних хостов', (file) => {

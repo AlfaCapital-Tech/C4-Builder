@@ -60,8 +60,9 @@ c4builder check src/context.puml   # exit code 0 or 1, "✗ file: line N: messag
 c4builder --site -w                # rebuilds and reloads the browser on every save
 ```
 
-For agents: `npx skills add AlfaCapital-Tech/C4-Builder/skills` installs the skills, and
-`"generateLLMS": true` adds `llms.txt` / `llms-full.txt` (diagram sources included) to the site.
+For agents: `c4builder skills` installs the agent skills of the installed version into the project
+(`c4builder --new` does it for a new one), and `"generateLLMS": true` adds `llms.txt` /
+`llms-full.txt` (diagram sources included) to the site.
 
 Or with Docker (Node, JRE, PlantUML, fonts and D2 included):
 

@@ -3,6 +3,30 @@
 User-facing changes of C4-Builder. Every pull request that changes behaviour adds a line to
 `## Unreleased`; the release commit renames it to `## vX.Y.Z`.
 
+## Unreleased
+
+- Agent skills are part of the npm package and match the installed CLI version. The new
+  `c4builder skills` installs or updates them offline in the current folder: `.agents/skills/`
+  always, `.claude/skills/` under Claude Code (`CLAUDECODE`) or when `.claude/` exists. The folder of
+  every package skill is replaced as a whole, other skills are left alone, and the installed
+  `SKILL.md` gets `metadata.generatedBy: "<version>"`. It needs no `.c4builder` and creates none. A
+  stale personal copy `~/.claude/skills/c4builder` (no version or older) is reported on stderr and
+  left alone. `npx skills add AlfaCapital-Tech/C4-Builder/skills` stays as the alternative for
+  personal installs and other agents
+- A build and `c4builder site` run by a coding agent print one stderr line at start when the
+  `c4builder` skill this agent loads is missing, older than the CLI, or shadowed by a stale personal
+  copy, with `c4builder skills` to run after asking the user. stdout and the exit code do not change;
+  no line without an agent, in `c4builder check`, with `CI`, `NO_UPDATE_NOTIFIER`, in the Docker
+  image or with `C4BUILDER_AGENT=0`
+- `c4builder --new` installs the skills into the new project by the same rules
+- New skill `c4builder-review`: reviewing pages on `c4builder --site -w` with comments to the agent
+  (`/c4builder-review [change-id|page]`) — checks the server, links the change page, runs the
+  `c4builder feedback --wait --as <name>` loop and reports in the chat. The page feedback loop moved
+  there from the `c4builder` skill, which now explains the skills notice. `c4builder-setup` describes
+  an npm mirror as the user's npmrc or `--registry` and ends with `c4builder skills` in the project
+- Security: zod 4.6.7, undici 7.30.1 and body-parser 2.4.0 to fix npm audit advisories
+  (GHSA-mrhx-c7xc-m3w5, GHSA-4qv8-2p9j-2685 and others)
+
 ## v0.9.0
 
 - Mermaid diagrams are rendered at build time, the fourth engine next to PlantUML, D2 and BPMN:

@@ -1,6 +1,6 @@
 ---
 name: c4builder
-description: Work on a c4builder architecture-docs project - C4 model diagrams in PlantUML (C4-PlantUML stdlib) or D2, BPMN process diagrams, Mermaid diagrams, plus markdown, built into a docsify site or markdown files. Use when creating or editing .puml, .iuml, .d2, .bpmn, .mmd or .md files in a project that has a .c4builder config, when changing .c4builder settings or plugins (openspec, openapi), or when building, validating or previewing the docs, or taking a human's comments from the preview page. Teaches the edit, c4builder check, build loop, the page feedback loop and the C4-PlantUML conventions.
+description: Work on a c4builder architecture-docs project - C4 model diagrams in PlantUML (C4-PlantUML stdlib) or D2, BPMN process diagrams, Mermaid diagrams, plus markdown, built into a docsify site or markdown files. Use when creating or editing .puml, .iuml, .d2, .bpmn, .mmd or .md files in a project that has a .c4builder config, when changing .c4builder settings or plugins (openspec, openapi), or when building, validating or previewing the docs. Teaches the edit, c4builder check, build loop and the C4-PlantUML conventions.
 ---
 
 # c4builder
@@ -87,53 +87,15 @@ How the source tree becomes pages:
 
 ## Feedback from the page
 
-When the user wants to look at the pages and tell you what to fix, run the feedback loop. Under
-an agent (`CLAUDECODE`, `CODEX_THREAD_ID`, `GEMINI_CLI`, `OPENCODE`, `COPILOT_CLI`, `AI_AGENT`, or
-`--agent`) `c4builder --site -w` adds a **Feedback** button to text selected on a page; the
-comments come to you in batches, not into the files.
+When the user wants to look at the pages and tell you what to fix, use the `c4builder-review`
+skill (`/c4builder-review [change-id|page]`): it checks the server, gives the link to the page and
+runs the batch loop.
 
-1. Start both in the background (in Claude Code: Bash with `run_in_background`):
-
-   ```bash
-   c4builder --site -w
-   c4builder feedback --wait --as <name>
-   ```
-
-   `<name>` is the name of your change or task (1-64 letters, digits, `.`, `_`, `-`), e.g.
-   `--as add-dark-mode`: the page sends each batch to one name, so several agents can share one
-   `site -w`. Pass the same `-p <n>` to both when the port is not `webPort`. If the user already
-   runs `site -w` (a second one fails with `port … is already in use`), start only
-   `c4builder feedback --wait --as <name>`: connecting turns the agent mode on.
-2. When `c4builder feedback --wait --as <name>` exits, its stdout is one batch:
-
-   ```text
-   # Page feedback (c4builder)
-
-   Decision: submitted
-   Comments: 1 on 1 page
-
-   ## 1. Arch/Flow/Flow.md (§ Flow)
-   Sources: src/Arch/Flow/README.md
-   Quote: "foo bar"
-
-   > Rename to baz
-   ```
-
-   Every comment names the site page, its source files (`Sources`, missing for pages without a
-   source), the page section and the quoted selection; `## General` is an overall comment.
-3. Apply the comments to the sources in `src/` (never `docs/`); the page reloads by itself.
-   Do not write the comments into the `questionsHeading` section — feedback is an instruction to
-   you, questions are for people and stay in the file.
-4. Run `c4builder feedback --wait --as <name>` in the background again, with the same name, and
-   wait for the next batch.
-5. `Decision: approved` means the user has nothing more to change: apply the comments of that
-   batch, if any, and stop waiting.
-
-A batch sent to your name while you were not listening waits in its `site -w` mailbox and comes
-on the next run with that name; a batch sent before any agent connected goes to the first one.
-With several agents the page shows **Send to**, and the user picks the recipient per tab.
-`c4builder feedback` exits with code 1 when no `site -w` runs on the port or it was started with
-`--no-agent`, and with code 2 and `--as <name> is required` when `--as` is missing or invalid.
+In short: under an agent (`CLAUDECODE`, `CODEX_THREAD_ID`, `GEMINI_CLI`, `OPENCODE`, `COPILOT_CLI`,
+`AI_AGENT`, or `--agent`) `c4builder --site -w` adds a **Feedback** button to text selected on a
+page. The comments do not go into the files: `c4builder feedback --wait --as <name>`, run in the
+background with your change or task as `<name>`, exits with one batch on stdout. Apply it to the
+sources, run the command again with the same name and stop on `Decision: approved`.
 
 ## Writing C4 diagrams (PlantUML)
 
@@ -207,16 +169,29 @@ c4builder <new> is available (current <current>). Run: c4builder update
 a newer c4builder is published. Tell the user. Run `c4builder update` only when the user asks
 for it: it reinstalls the global CLI. The notice changes neither stdout nor the exit code.
 
+## Skills notice
+
+When a build or `c4builder site` run by an agent starts with one of these stderr lines
+
+```text
+c4builder agent skills are not installed here. Ask the user, then run: c4builder skills
+c4builder agent skills here are from <stamp> (current <version>). Ask the user, then run: c4builder skills
+~/.claude/skills/c4builder (<stamp|no version>) overrides project skills. Ask the user to remove it, then run: c4builder skills
+```
+
+the c4builder skills you work with are missing, older than the CLI, or shadowed by a stale personal
+copy (`~/.agents/skills/c4builder` for agents other than Claude Code). Tell the user. Run
+`c4builder skills` only when the user agrees: it writes the skills of the installed CLI into
+`.agents/skills/` of the current folder (and `.claude/skills/` under Claude Code), replacing the
+c4builder skills there. Remove a personal copy only when the user agrees. The notice changes
+neither stdout nor the exit code.
+
 ## Common mistakes
 
 - Editing generated files in `docs/` instead of `src/`.
 - Remote `!include` URLs instead of `<C4/...>` stdlib includes.
 - Running `c4builder --site -w` or `c4builder feedback --wait --as <name>` in the foreground — the
   agent hangs.
-- Not restarting `c4builder feedback --wait --as <name>` after a batch, or restarting it with
-  another name — the next comments wait unseen in the old mailbox.
-- `c4builder feedback --wait` without `--as` — exits with code 2 and `--as <name> is required`;
-  run it again with `--as <your change or task>`.
 - Forgetting `c4builder check` and reading a Java stack trace from the full build instead.
 - A page "missing" from the output because its file or folder starts with `_`.
 - `generateLocalImages: false` in a project with `.d2`, `.bpmn` or `.mmd` files — they have no online

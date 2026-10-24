@@ -24,7 +24,7 @@ const npmSync = (args: string[], options: Pick<SpawnSyncOptions, 'stdio' | 'time
 
 // CI ставят GitLab CI, GitHub Actions и большинство CI; C4BUILDER_DOCKER — наш Dockerfile;
 // NO_UPDATE_NOTIFIER — общая конвенция с пакетом update-notifier.
-const disabled = (): boolean =>
+export const disabled = (): boolean =>
     !!(process.env.CI || process.env.NO_UPDATE_NOTIFIER || process.env.C4BUILDER_DOCKER);
 
 const cacheFile = (): string =>

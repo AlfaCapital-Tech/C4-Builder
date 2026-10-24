@@ -39,11 +39,12 @@ reference is stable.
 
 **Documentation site.** Sources are in `docs/ru/src` and `docs/en/src`, the landing page in
 `docs/landing`. The `test/docs-parity.test.mjs` test checks that RU and EN have the same set of
-pages: folders are matched by numeric prefix, files by name. Local preview:
+pages: folders are matched by numeric prefix, files by name. Local preview (`NO_UPDATE_NOTIFIER=1`
+silences the version and skills notices, which make no sense in the c4builder repo itself):
 
 ```bash
 npm run build
-cd docs/en && node ../../dist/index.js --site -w
+cd docs/en && NO_UPDATE_NOTIFIER=1 node ../../dist/index.js --site -w
 ```
 
 ## Process: OpenSpec

@@ -8,6 +8,7 @@ import Configstore from 'configstore';
 import { readFile, writeFile, makeDirectory } from '../../util/utils.ts';
 import { defaultConfig } from '../../config/defaults.ts';
 import { TEMPLATE_DIR } from '../../util/paths.ts';
+import cmdSkills from './skills.ts';
 
 // Общая проверка имени проекта: возвращает текст ошибки или null (валидно).
 // Интерактив показывает её и переспрашивает; --yes падает с ней (exit≠0), без ре-промпта.
@@ -57,6 +58,8 @@ export default async (opts: { yes?: boolean; name?: string } = {}): Promise<void
 
     await makeDirectory(projectName);
     await generateTemplate(TEMPLATE_DIR, projectName);
+    // Скиллы рядом с src/, как AGENTS.md: сборка их не видит (change skills-install, D6).
+    cmdSkills(path.join(process.cwd(), projectName));
 
     const conf = new Configstore(
         path.join(process.cwd(), projectName).split(path.sep).splice(1).join('_'),
