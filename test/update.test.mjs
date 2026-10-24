@@ -108,7 +108,8 @@ describe.skipIf(!POSIX)('фоновая проверка', () => {
         const started = Date.now();
         const res = run(sb, ['--docs'], { FAKE_SLEEP: '10' });
         expect(res.status, res.stderr).toBe(0);
-        expect(Date.now() - started).toBeLessThan(3000);
+        // Фейковый npm спит 10 с — порог ловит ожидание, а запас нужен раннеру CI под полным npm test.
+        expect(Date.now() - started).toBeLessThan(8000);
         await vi.waitFor(() =>
             expect(npmLog(sb)).toContain(
                 `view ${PKG} dist-tags --json --fetch-retries=0 --fetch-timeout=5000`
