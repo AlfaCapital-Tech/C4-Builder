@@ -130,10 +130,163 @@ describe('плагин openapi: ошибки', () => {
         );
         fs.rmSync(d, { recursive: true, force: true });
     });
-    it('коллизия имён страниц — ошибка', () => {
-        const d = makeFixture('dup', [['openapi', { dir: 'contracts', glob: '**/*.yaml' }]]);
-        write(d, 'contracts/other/finch/openapi.yaml', 'openapi: 3.0.0\n');
-        expect(() => runBuild(d)).toThrow(/same page name "finch"/);
+    it('ни один совпавший файл не содержит ключа openapi/swagger — прежняя ошибка', () => {
+        const d = makeFixture('nokey', [['openapi', { dir: 'contracts', glob: 'shared/*.yaml' }]]);
+        expect(() => runBuild(d)).toThrow(
+            /Plugin openapi \(afterScan\): no specs match "shared\/\*\.yaml" in contracts/
+        );
         fs.rmSync(d, { recursive: true, force: true });
+    });
+    it('одноимённые папки в flat — ошибка с обоими файлами и подсказкой layout: "tree"', () => {
+        const d = makeFixture('dup', [['openapi', { dir: 'contracts', glob: '**/openapi.yaml' }]]);
+        write(d, 'contracts/billing/v2/openapi.yaml', 'openapi: 3.0.0\n');
+        write(d, 'contracts/ledger/v2/openapi.yaml', 'openapi: 3.0.0\n');
+        expect(() => runBuild(d)).toThrow(
+            /same page "v2": billing\/v2\/openapi\.yaml and ledger\/v2\/openapi\.yaml — set layout: "tree"/
+        );
+        fs.rmSync(d, { recursive: true, force: true });
+    });
+    it('спека и папка с тем же именем — ошибка с обоими файлами и путём страницы', () => {
+        const d = makeFixture('clash-dir', [['openapi', { dir: 'contracts', glob: '**/*.yaml' }]]);
+        write(d, 'contracts/finch.yaml', 'openapi: 3.0.0\n');
+        expect(() => runBuild(d)).toThrow(/same page "finch": finch\.yaml and finch\/openapi\.yaml/);
+        fs.rmSync(d, { recursive: true, force: true });
+    });
+    it('спеки одной папки с одним именем без расширения — ошибка', () => {
+        const d = makeFixture('clash-ext', [['openapi', { dir: 'contracts' }]]);
+        write(d, 'contracts/finch/openapi.json', '{ "openapi": "3.0.0" }');
+        expect(() => runBuild(d)).toThrow(
+            /same page "finch\/openapi": finch\/openapi\.json and finch\/openapi\.yaml/
+        );
+        fs.rmSync(d, { recursive: true, force: true });
+    });
+    it('неизвестное значение layout — ошибка схемы', async () => {
+        await expect(loadPlugins([['openapi', { dir: 'a', layout: 'deep' }]], dir, opts())).rejects.toThrow(
+            /layout/
+        );
+    });
+});
+
+// Несколько спек в одной папке, глубокая раскладка и файлы без ключа openapi — одна сборка.
+describe('плагин openapi: раскладка страниц по папкам', () => {
+    let d;
+    let log;
+    const page = (rel) => fs.readFileSync(path.join(d, 'docs', rel), 'utf8');
+    beforeAll(() => {
+        d = makeFixture('multi', [['openapi', { dir: 'contracts', glob: '**/*.{yaml,json}' }]]);
+        write(
+            d,
+            'contracts/billing/openapi.yaml',
+            'openapi: 3.0.0\ninfo:\n  title: Billing API\n  version: "1"\n'
+        );
+        write(
+            d,
+            'contracts/billing/openapi-admin.yaml',
+            '---\nopenapi: 3.1.0\ninfo:\n  version: "1"\n  title: "Billing admin API"\npaths: {}\n'
+        );
+        write(d, 'contracts/billing/payouts.yaml', 'swagger: "2.0"\npaths: {}\n');
+        write(d, 'contracts/services/team/ledger/openapi.yaml', 'openapi: 3.0.0\n');
+        write(d, 'contracts/merge-config.json', '{ "info": { "title": "not a spec" } }');
+        write(d, 'contracts/events/asyncapi.yaml', 'asyncapi: 2.6.0\ninfo:\n  title: Events\n');
+        log = runBuild(d);
+    });
+    afterAll(() => fs.rmSync(d, { recursive: true, force: true }));
+
+    it('папка с несколькими спеками: оглавление без swagger-ui, страница на спеку', () => {
+        const index = page('API/billing/billing.md');
+        expect(index).toBe(
+            [
+                '# billing',
+                '',
+                '- [openapi.yaml](API/billing/openapi/openapi) — Billing API',
+                '- [openapi-admin.yaml](API/billing/openapi-admin/openapi-admin) — Billing admin API',
+                '- [payouts.yaml](API/billing/payouts/payouts)'
+            ].join('\n')
+        );
+        expect(index).not.toContain('SwaggerUIBundle');
+        for (const name of ['openapi', 'openapi-admin', 'payouts']) {
+            const p = page(`API/billing/${name}/${name}.md`);
+            const id = `swagger-billing_${name}`;
+            expect(p.match(/<div id="/g)).toHaveLength(1);
+            expect(p).toContain(`<div id="${id}"></div>`);
+            expect(p).toContain(
+                `SwaggerUIBundle({ url: 'API/_specs/billing/${name}.yaml', dom_id: '#${id}', validatorUrl: null });`
+            );
+        }
+        expect(page('_sidebar.md')).toContain(
+            '    * [billing](API/billing/billing)\n      * [openapi](API/billing/openapi/openapi)\n      * [openapi-admin](API/billing/openapi-admin/openapi-admin)\n      * [payouts](API/billing/payouts/payouts)\n    * [common](API/common/common)'
+        );
+    });
+
+    it('глубокая раскладка без опции: страница — имя папки, как раньше', () => {
+        expect(page('API/ledger/ledger.md')).toContain('<div id="swagger-ledger"></div>');
+        expect(fs.existsSync(path.join(d, 'docs/API/services'))).toBe(false);
+    });
+
+    it('сводка: все страницы спек с полным путём', () => {
+        expect(page('API/API.md')).toBe(
+            [
+                '# API',
+                '',
+                '- [billing/openapi](API/billing/openapi/openapi) — `billing/openapi.yaml`',
+                '- [billing/openapi-admin](API/billing/openapi-admin/openapi-admin) — `billing/openapi-admin.yaml`',
+                '- [billing/payouts](API/billing/payouts/payouts) — `billing/payouts.yaml`',
+                '- [common](API/common/common) — `common/openapi.yaml`',
+                '- [finch](API/finch/finch) — `finch/openapi.yaml`',
+                '- [ledger](API/ledger/ledger) — `services/team/ledger/openapi.yaml`',
+                '- [selling-agent](API/selling-agent/selling-agent) — `selling-agent/openapi.yaml`'
+            ].join('\n')
+        );
+    });
+
+    it('файлы без ключа openapi/swagger: нет страниц, в _specs есть, предупреждение на каждый', () => {
+        for (const rel of ['shared/schemas.yaml', 'merge-config.json', 'events/asyncapi.yaml']) {
+            expect(fs.existsSync(path.join(d, 'docs/API/_specs', rel))).toBe(true);
+            expect(log).toContain(
+                `openapi: ${rel}: not an OpenAPI document (no openapi/swagger key), skipped`
+            );
+        }
+        for (const name of ['shared', 'schemas', 'merge-config', 'events', 'asyncapi']) {
+            expect(page('_sidebar.md')).not.toContain(`[${name}]`);
+            expect(page('API/API.md')).not.toContain(name);
+        }
+    });
+});
+
+describe('плагин openapi: layout tree', () => {
+    let d;
+    const page = (rel) => fs.readFileSync(path.join(d, 'docs', rel), 'utf8');
+    beforeAll(() => {
+        d = makeFixture('tree', [['openapi', { dir: 'contracts', glob: '**/openapi.yaml', layout: 'tree' }]]);
+        write(d, 'contracts/billing/openapi.yaml', 'openapi: 3.0.0\n');
+        write(d, 'contracts/billing/v2/openapi.yaml', 'openapi: 3.0.0\n');
+        write(d, 'contracts/ledger/v2/openapi.yaml', 'openapi: 3.0.0\n');
+        runBuild(d);
+    });
+    afterAll(() => fs.rmSync(d, { recursive: true, force: true }));
+
+    it('версия во вложенной папке: вложенные страницы с разными dom_id', () => {
+        expect(page('API/billing/billing.md')).toContain('<div id="swagger-billing"></div>');
+        expect(page('API/billing/v2/v2.md')).toContain(
+            "SwaggerUIBundle({ url: 'API/_specs/billing/v2/openapi.yaml', dom_id: '#swagger-billing_v2', validatorUrl: null });"
+        );
+        expect(page('API/ledger/v2/v2.md')).toContain(
+            "SwaggerUIBundle({ url: 'API/_specs/ledger/v2/openapi.yaml', dom_id: '#swagger-ledger_v2', validatorUrl: null });"
+        );
+        expect(page('_sidebar.md')).toContain(
+            '    * [billing](API/billing/billing)\n      * [v2](API/billing/v2/v2)\n    * [common](API/common/common)'
+        );
+        expect(page('_sidebar.md')).toContain(
+            '    * [ledger](API/ledger/ledger)\n      * [v2](API/ledger/v2/v2)'
+        );
+    });
+
+    it('сводка перечисляет страницы с полным путём', () => {
+        const summary = page('API/API.md');
+        expect(summary).toContain('- [billing](API/billing/billing) — `billing/openapi.yaml`');
+        expect(summary).toContain('- [billing/v2](API/billing/v2/v2) — `billing/v2/openapi.yaml`');
+        expect(summary).toContain('- [ledger/v2](API/ledger/v2/v2) — `ledger/v2/openapi.yaml`');
+        // Папка без спек — промежуточный узел, не строка сводки.
+        expect(summary).not.toContain('- [ledger]');
     });
 });
