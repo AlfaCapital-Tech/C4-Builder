@@ -4,5 +4,6 @@ import type { Plugin } from '../core/plugins/types.ts';
 
 export const BUILTIN_PLUGINS: Record<string, () => Promise<Plugin>> = {
     openspec: async () => (await import('./openspec/index.ts')).default as Plugin,
-    openapi: async () => (await import('./openapi/index.ts')).default as Plugin
+    openapi: async () => (await import('./openapi/index.ts')).default as Plugin,
+    figma: async () => (await import('./figma/index.ts')).default as Plugin
 };
