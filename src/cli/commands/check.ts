@@ -9,9 +9,11 @@ import { renderDiagram } from '../../core/render/diagrams.ts';
 import { renderD2, teardownD2 } from '../../core/render/d2renderer.ts';
 import { BpmnError, renderBpmn, teardownBpmn } from '../../core/render/bpmnrenderer.ts';
 import { MermaidError, renderMermaid, teardownMermaid } from '../../core/render/mermaidrenderer.ts';
+import { WireflowError, renderWireflow } from '../../core/render/wireflowrenderer.ts';
 
 // `c4builder check <file...>` — валидация отдельных диаграмм ТЕМ ЖЕ движком, что и
-// сборка (вендорный PlantUML jar + системная/managed java, бандл D2, конвейер BPMN, mermaid), без проекта и
+// сборка (вендорный PlantUML jar + системная/managed java, бандл D2, конвейер BPMN, mermaid,
+// wireflow), без проекта и
 // `.c4builder`. Рендер идёт в память и выбрасывается: проверяем ровно то, что упало бы
 // в сборке (системный `plantuml` может отличаться версией). Код выхода 0 — все файлы ок,
 // 1 — есть ошибка (движка, неизвестного расширения или чтения файла).
@@ -66,33 +68,51 @@ const checkPlantUml = async (abs: string): Promise<void> => {
     }
 };
 
+const relative = (abs: string): string => path.relative(process.cwd(), abs);
+
+// Суффикс имени файла (с точкой) → проверка. Суффиксы из нескольких расширений
+// (`.wireflow.json`) совпадают и точным именем файла (`wireflow.json`), как в scan.
 const CHECKERS: Record<string, (abs: string) => Promise<unknown>> = {
     '.puml': checkPlantUml,
     '.iuml': checkPlantUml,
     '.d2': (abs) => renderD2(abs),
-    '.bpmn': async (abs) => renderBpmn(await readFile(abs, 'utf8'), path.relative(process.cwd(), abs)),
-    '.mmd': async (abs) => renderMermaid(await readFile(abs, 'utf8'), path.relative(process.cwd(), abs))
+    '.bpmn': async (abs) => renderBpmn(await readFile(abs, 'utf8'), relative(abs)),
+    '.mmd': async (abs) => renderMermaid(await readFile(abs, 'utf8'), relative(abs)),
+    '.wireflow.json': async (abs) => renderWireflow(await readFile(abs, 'utf8'), relative(abs))
+};
+const EXTENSIONS = Object.keys(CHECKERS);
+const EXPECTED = `${EXTENSIONS.slice(0, -1).join(', ')} or ${EXTENSIONS[EXTENSIONS.length - 1]}`;
+
+const checkerFor = (abs: string): ((abs: string) => Promise<unknown>) | undefined => {
+    const lower = path.basename(abs).toLowerCase();
+    const ext = EXTENSIONS.filter((e) => lower.endsWith(e) || lower === e.slice(1)).sort(
+        (a, b) => b.length - a.length
+    )[0];
+    return ext === undefined ? undefined : CHECKERS[ext];
 };
 
 export default async (files: string[]): Promise<void> => {
     if (files.length === 0) {
-        console.log(chalk.red('usage: c4builder check <file...>  (.puml | .iuml | .d2 | .bpmn | .mmd)'));
+        console.log(chalk.red(`usage: c4builder check <file...>  (${EXTENSIONS.join(' | ')})`));
         process.exit(1);
     }
     let failed = 0;
     // ponytail: последовательно — на сотнях файлов добавить пул как в generateImages.
     for (const file of files) {
         const abs = path.resolve(file);
-        const check = CHECKERS[path.extname(abs).toLowerCase()];
+        const check = checkerFor(abs);
         try {
-            if (!check) throw new Error('unsupported extension (expected .puml, .iuml, .d2, .bpmn or .mmd)');
+            if (!check) throw new Error(`unsupported extension (expected ${EXPECTED})`);
             await check(abs);
             console.log(chalk.green(`✓ ${file}`));
         } catch (e) {
             failed++;
-            // BPMN: по строке на нарушение — агент правит их по id элемента; mermaid — `line N: …`.
+            // BPMN и wireflow: по строке на нарушение — агент правит их по id элемента;
+            // mermaid — `line N: …`.
             const problems =
-                e instanceof BpmnError || e instanceof MermaidError ? e.problems : [(e as Error).message];
+                e instanceof BpmnError || e instanceof MermaidError || e instanceof WireflowError
+                    ? e.problems
+                    : [(e as Error).message];
             for (const p of problems) console.error(chalk.red(`✗ ${file}: ${p}`));
         }
     }

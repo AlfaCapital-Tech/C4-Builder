@@ -189,6 +189,30 @@ describe('generateLlmsFull: независимость от настроек к�
     // Строка-ловушка: PlantUML-скан include'ов принял бы её за директиву и затащил bait.iuml.
     const MMD = 'flowchart LR\n  A[Клиент] --> B\n';
     const BPMN = '<?xml version="1.0"?>\n<!--\n!include bait.iuml\n-->\n<bpmn:definitions/>\n';
+    // Wireflow: карточка со встроенной картинкой — base64 в llms-full.txt не место.
+    const WIREFLOW = JSON.stringify(
+        {
+            format: 'wireflow',
+            version: 4,
+            diagram: {
+                nodes: [
+                    {
+                        id: 'i',
+                        type: 'flow',
+                        position: { x: 0, y: 0 },
+                        data: {
+                            graphicId: 'own-image',
+                            src: 'data:image/png;base64,iVBORw0KGgo=',
+                            label: 'Экран'
+                        }
+                    }
+                ],
+                edges: []
+            }
+        },
+        null,
+        2
+    );
     let dir;
     let full;
 
@@ -219,6 +243,13 @@ describe('generateLlmsFull: независимость от настроек к�
                         ext: '.bpmn',
                         engine: 'bpmn',
                         content: Buffer.from(BPMN),
+                        isDitaa: false
+                    },
+                    {
+                        dir: 'checkout.wireflow.json',
+                        ext: '.wireflow.json',
+                        engine: 'wireflow',
+                        content: Buffer.from(WIREFLOW),
                         isDitaa: false
                     }
                 ],
@@ -253,6 +284,15 @@ describe('generateLlmsFull: независимость от настроек к�
     it('mermaid — исходник в блоке mermaid, ссылки на картинку нет', () => {
         expect(full).toContain(`\`\`\`mermaid\n${MMD}\`\`\``);
         expect(full).not.toMatch(/d\.(svg|png)/);
+    });
+
+    it('wireflow — исходник в блоке json, data:-картинка заменена пометкой, ссылки на картинку нет', () => {
+        expect(full).toContain(
+            `\`\`\`json\n${WIREFLOW.replace('data:image/png;base64,iVBORw0KGgo=', '<embedded image>')}\n\`\`\``
+        );
+        expect(full).not.toContain('base64,iVBOR');
+        expect(full).not.toMatch(/checkout\.(svg|png)/);
+        expect(full).toContain('"label": "Экран"');
     });
 
     it('D2-импорт — в приложении блоком d2', () => {

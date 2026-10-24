@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import type { BuildOptions } from '../../config/options.ts';
-import { engineForExt, type TreeItem } from '../scan/tree.ts';
+import { diagramExt, engineForFile, type TreeItem } from '../scan/tree.ts';
 import type { PageSpec } from './types.ts';
 
 // Виртуальные элементы дерева (добавлены плагинами, каталога на диске нет). Нужно
@@ -77,15 +77,14 @@ export const addPage = (tree: TreeItem[], options: BuildOptions, page: PageSpec)
     item.mdFiles.push(...md);
     item.sources.push(...(page.sources ?? []).map((s) => path.resolve(s)));
     for (const d of page.diagrams ?? []) {
-        const ext = path.extname(d.file).toLowerCase();
-        const engine = engineForExt(ext);
+        const engine = engineForFile(d.file);
         if (!engine)
             throw new Error(
                 `addPage: diagram "${d.file}" of page ${segments.join('/')} has an unknown extension`
             );
         item.diagrams.push({
             dir: d.file,
-            ext,
+            ext: diagramExt(d.file) as string,
             engine,
             content: d.content,
             isDitaa: engine === 'plantuml' && /@startditaa/i.test(d.content),

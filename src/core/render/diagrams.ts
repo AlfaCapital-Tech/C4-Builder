@@ -16,13 +16,21 @@ import { renderD2, foldD2Imports } from './d2renderer.ts';
 import { renderBpmn, BPMN_CACHE_PACKAGES } from './bpmnrenderer.ts';
 // Mermaid-бэкенд: пакет движка грузится лениво внутри renderMermaid.
 import { renderMermaid, MERMAID_PACKAGE } from './mermaidrenderer.ts';
+// Wireflow-бэкенд: прямая генерация SVG, зависимостей нет; версия каталога шаблонов — в ключ кэша.
+import { renderWireflow, wireflowCatalogVersion } from './wireflowrenderer.ts';
 import { resolveJava } from './jre.ts';
 // PNG-выход: SVG обоих движков растеризуется resvg (ленивая загрузка внутри модуля).
 import { rasterizeSvgToPng } from './pngraster.ts';
 // Шрифт-пин общий с resvg-растеризатором (одна точка правды, см. fonts.ts).
 import { FONTS_DIR, DEFAULT_FONT_NAME } from './fonts.ts';
 import { VENDOR_DIR } from '../../util/paths.ts';
-import { foldIncludes, diagramOutputFormat, type Diagram, type TreeItem } from '../scan/tree.ts';
+import {
+    foldIncludes,
+    diagramBaseName,
+    diagramOutputFormat,
+    type Diagram,
+    type TreeItem
+} from '../scan/tree.ts';
 import type { BuildOptions } from '../../config/options.ts';
 
 // cacheConf: Configstore-подобная заглушка чексумм картинок (см. cli/dispatch).
@@ -136,7 +144,9 @@ export const renderKey = (
           ? `bpmn\0${BPMN_CACHE_PACKAGES.map(pkgVersion).join('\0')}\0fmt=${outFormat}`
           : diagram.engine === 'mermaid'
             ? `mermaid\0${pkgVersion(MERMAID_PACKAGE)}\0fmt=${outFormat}`
-            : `puml\0${VENDORED_JAR.version}\0charset=${options.CHARSET}\0fmt=${outFormat}\0ditaa=${diagram.isDitaa}`) +
+            : diagram.engine === 'wireflow'
+              ? `wireflow\0${wireflowCatalogVersion()}\0fmt=${outFormat}`
+              : `puml\0${VENDORED_JAR.version}\0charset=${options.CHARSET}\0fmt=${outFormat}\0ditaa=${diagram.isDitaa}`) +
     `\0font=${fontCacheTag(options)}`;
 
 export const getMime = (format: string): string => {
@@ -355,6 +365,9 @@ export const generateImages = async (
     const bpmnTasks: Array<() => Promise<void>> = [];
     // Mermaid — так же: своё окно jsdom, глобальный конфиг и подмены на время рендера.
     const mermaidTasks: Array<() => Promise<void>> = [];
+    // Wireflow рендерится синхронно в главном потоке — очередь с параллелизмом 1 ради
+    // единообразия, выигрыша от конкурентности нет.
+    const wireflowTasks: Array<() => Promise<void>> = [];
     const otherTasks: Array<() => Promise<void>> = [];
 
     for (const item of tree) {
@@ -367,13 +380,14 @@ export const generateImages = async (
             const isD2 = diagram.engine === 'd2';
             const isBpmn = diagram.engine === 'bpmn';
             const isMermaid = diagram.engine === 'mermaid';
+            const isWireflow = diagram.engine === 'wireflow';
             const includes = isD2
                 ? foldD2Imports(entryPath, body)
-                : isBpmn || isMermaid
+                : isBpmn || isMermaid || isWireflow
                   ? ''
                   : foldIncludes(body, item.dir, item.dir, new Set());
             const outFormat = diagramOutputFormat(diagram, options);
-            const outName = `${path.parse(diagram.dir).name}.${outFormat}`;
+            const outName = `${diagramBaseName(diagram.dir)}.${outFormat}`;
             const relOut = path.join(item.dir.replace(options.ROOT_FOLDER, ''), outName);
             // Путь выхода — тоже в чексумме: восстановление из бэкапа идёт по паре
             // «чексумма встречалась» + «бэкап с этим именем есть», иначе диаграммы,
@@ -437,6 +451,9 @@ export const generateImages = async (
                         rendered = await renderBpmn(body, file);
                     } else if (isMermaid) {
                         rendered = await renderMermaid(body, file);
+                    } else if (isWireflow) {
+                        // В PNG WebP-картинки карточек не растеризуются (resvg) — рендер знает о цели.
+                        rendered = await renderWireflow(body, file, { raster: needsRaster });
                     } else {
                         // Резолв JRE отложен до первого реального PlantUML-рендера (эта
                         // ветка исполняется лишь при промахе кэша). getJava мемоизирует.
@@ -472,11 +489,20 @@ export const generateImages = async (
                 }
             });
 
-            (isD2 ? d2Tasks : isBpmn ? bpmnTasks : isMermaid ? mermaidTasks : otherTasks).push(task);
+            (isD2
+                ? d2Tasks
+                : isBpmn
+                  ? bpmnTasks
+                  : isMermaid
+                    ? mermaidTasks
+                    : isWireflow
+                      ? wireflowTasks
+                      : otherTasks
+            ).push(task);
         }
     }
 
-    // PlantUML-пул, D2-, BPMN- и mermaid-очереди работают независимо (процессы java,
+    // PlantUML-пул, D2-, BPMN-, mermaid- и wireflow-очереди работают независимо (процессы java,
     // WASM-worker, главный поток) и параллельно друг другу. allSettled — чтобы падение одной очереди не
     // оставляло другие как floating promise с висящими JVM: все доосушаются, затем бросаем первую
     // ошибку (приоритет — PlantUML-пул, порядок между очередями не значим).
@@ -485,7 +511,8 @@ export const generateImages = async (
             runPool(otherTasks, renderConcurrency()),
             runPool(d2Tasks, 1),
             runPool(bpmnTasks, 1),
-            runPool(mermaidTasks, 1)
+            runPool(mermaidTasks, 1),
+            runPool(wireflowTasks, 1)
         ]);
         const failed = results.find((r) => r.status === 'rejected');
         if (failed && failed.status === 'rejected') throw failed.reason;
