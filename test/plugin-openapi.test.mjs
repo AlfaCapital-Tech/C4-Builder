@@ -83,6 +83,10 @@ describe('плагин openapi', () => {
         expect(html).toContain('<link rel="stylesheet" href="vendor/plugins/openapi/swagger-ui.css">');
         expect(fs.existsSync(path.join(dir, 'docs/vendor/plugins/openapi/swagger-ui.css'))).toBe(true);
         expect(fs.existsSync(path.join(dir, 'docs/vendor/plugins/openapi/swagger-ui-bundle.js'))).toBe(false);
+        // Без AsyncAPI-спек компонента AsyncAPI в выходе нет.
+        expect(fs.existsSync(path.join(dir, 'docs/vendor/plugins/openapi/asyncapi-standalone.js'))).toBe(
+            false
+        );
         expect(html).not.toContain('unpkg.com');
     });
 
@@ -188,6 +192,7 @@ describe('плагин openapi: раскладка страниц по папк�
         write(d, 'contracts/services/team/ledger/openapi.yaml', 'openapi: 3.0.0\n');
         write(d, 'contracts/merge-config.json', '{ "info": { "title": "not a spec" } }');
         write(d, 'contracts/events/asyncapi.yaml', 'asyncapi: 2.6.0\ninfo:\n  title: Events\n');
+        write(d, 'contracts/events/openapi.yaml', 'openapi: 3.0.0\ninfo:\n  title: Events REST\n');
         log = runBuild(d);
     });
     afterAll(() => fs.rmSync(d, { recursive: true, force: true }));
@@ -232,6 +237,8 @@ describe('плагин openapi: раскладка страниц по папк�
                 '- [billing/openapi-admin](API/billing/openapi-admin/openapi-admin) — `billing/openapi-admin.yaml`',
                 '- [billing/payouts](API/billing/payouts/payouts) — `billing/payouts.yaml`',
                 '- [common](API/common/common) — `common/openapi.yaml`',
+                '- [events/asyncapi](API/events/asyncapi/asyncapi) — `events/asyncapi.yaml`',
+                '- [events/openapi](API/events/openapi/openapi) — `events/openapi.yaml`',
                 '- [finch](API/finch/finch) — `finch/openapi.yaml`',
                 '- [ledger](API/ledger/ledger) — `services/team/ledger/openapi.yaml`',
                 '- [selling-agent](API/selling-agent/selling-agent) — `selling-agent/openapi.yaml`'
@@ -239,17 +246,47 @@ describe('плагин openapi: раскладка страниц по папк�
         );
     });
 
-    it('файлы без ключа openapi/swagger: нет страниц, в _specs есть, предупреждение на каждый', () => {
-        for (const rel of ['shared/schemas.yaml', 'merge-config.json', 'events/asyncapi.yaml']) {
+    it('файлы без ключа openapi/swagger/asyncapi: нет страниц, в _specs есть, предупреждение на каждый', () => {
+        for (const rel of ['shared/schemas.yaml', 'merge-config.json']) {
             expect(fs.existsSync(path.join(d, 'docs/API/_specs', rel))).toBe(true);
             expect(log).toContain(
-                `openapi: ${rel}: not an OpenAPI document (no openapi/swagger key), skipped`
+                `openapi: ${rel}: not an OpenAPI or AsyncAPI document (no openapi/swagger/asyncapi key), skipped`
             );
         }
-        for (const name of ['shared', 'schemas', 'merge-config', 'events', 'asyncapi']) {
+        expect(log).not.toContain('events/asyncapi.yaml: not an');
+        for (const name of ['shared', 'schemas', 'merge-config']) {
             expect(page('_sidebar.md')).not.toContain(`[${name}]`);
             expect(page('API/API.md')).not.toContain(name);
         }
+    });
+
+    it('AsyncAPI рядом с OpenAPI: оглавление, страница компонента AsyncAPI со спекой по относительному пути', () => {
+        expect(page('API/events/events.md')).toBe(
+            [
+                '# events',
+                '',
+                '- [openapi.yaml](API/events/openapi/openapi) — Events REST',
+                '- [asyncapi.yaml](API/events/asyncapi/asyncapi) — Events'
+            ].join('\n')
+        );
+        const p = page('API/events/asyncapi/asyncapi.md');
+        expect(p).toContain('<div id="asyncapi-events_asyncapi"></div>');
+        expect(p).toContain(
+            "lib.render({ schema: { url: 'API/_specs/events/asyncapi.yaml' }, config: { show: { sidebar: false } } }, document.getElementById('asyncapi-events_asyncapi'));"
+        );
+        expect(p).not.toContain('SwaggerUIBundle');
+        // Один <script> без пустых строк: docsify выполняет только первый, пустая строка рвёт HTML-блок.
+        expect(p.match(/<script>/g)).toHaveLength(1);
+        expect(p.slice(p.indexOf('<div'))).not.toMatch(/\n\s*\n/);
+        expect(page('API/events/openapi/openapi.md')).toContain('SwaggerUIBundle');
+    });
+
+    it('компонент AsyncAPI копируется в выход, но в index.html не подключается', () => {
+        for (const f of ['asyncapi-standalone.js', 'asyncapi.css']) {
+            expect(fs.existsSync(path.join(d, 'docs/vendor/plugins/openapi', f))).toBe(true);
+        }
+        expect(page('index.html')).not.toContain('asyncapi');
+        expect(page('API/events/asyncapi/asyncapi.md')).toContain("var dir = 'vendor/plugins/openapi/';");
     });
 });
 

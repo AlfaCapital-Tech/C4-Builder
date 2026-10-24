@@ -168,7 +168,7 @@ messages.
   keys are **silently dropped**, so a typo does nothing. `c4builder --list` prints the
   current config.
 - Read [references/plugins.md](references/plugins.md) when the project has or needs
-  `plugins` — `openspec` (OpenSpec store as a site section), `openapi` (swagger-ui pages) or
+  `plugins` — `openspec` (OpenSpec store as a site section), `openapi` (swagger-ui and AsyncAPI pages) or
   `figma` (Figma frame embeds).
 
 ## Reading an existing architecture

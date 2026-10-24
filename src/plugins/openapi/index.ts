@@ -1,7 +1,7 @@
-// Встроенный плагин openapi: набор OpenAPI-спек (локальная папка или архив репозитория
-// контрактов) → раздел сайта со страницей swagger-ui на спеку. Полностью офлайн:
-// бандл swagger-ui и CSS — вендорные ассеты плагина, спеки копируются в dist статикой
-// с сохранением относительных путей ($ref).
+// Встроенный плагин openapi: набор OpenAPI- и AsyncAPI-спек (локальная папка или архив
+// репозитория контрактов) → раздел сайта со страницей на спеку: swagger-ui для OpenAPI,
+// компонент AsyncAPI для AsyncAPI. Полностью офлайн: бандлы и CSS вендорены, спеки
+// копируются в dist статикой с сохранением относительных путей ($ref).
 import fs from 'node:fs';
 import path from 'node:path';
 import chalk from 'chalk';
@@ -46,15 +46,16 @@ const findFiles = (root: string, pattern: string, skip: string[]): string[] =>
 
 const stem = (file: string): string => path.posix.basename(file).replace(/\.[^.]+$/, '');
 
-/** Спека, прошедшая отбор по содержимому: путь от источника и `info.title`, если он есть. */
+/** Спека, прошедшая отбор по содержимому: путь от источника, формат и `info.title`, если он есть. */
 interface Spec {
     rel: string;
+    kind: 'openapi' | 'asyncapi';
     title?: string;
 }
 
 // Отбор по содержимому без YAML-парсера: ключ верхнего уровня всегда стоит в начале строки.
 // Заголовок — первая `title:` внутри блока `info:` (отступные строки сразу за ним).
-const YAML_SPEC_KEY = /^(openapi|swagger)\s*:/m;
+const YAML_SPEC_KEY = /^(openapi|swagger|asyncapi)\s*:/m;
 const YAML_INFO_BLOCK = /^info\s*:[ \t]*\n((?:[ \t]+.*(?:\n|$))*)/m;
 const YAML_TITLE = /^[ \t]+title\s*:[ \t]*(.+?)[ \t]*$/m;
 
@@ -69,7 +70,8 @@ const readSpec = (file: string, rel: string): Spec | undefined => {
         }
         if (typeof doc !== 'object' || doc === null || Array.isArray(doc)) return undefined;
         const o = doc as Record<string, unknown>;
-        if (!('openapi' in o || 'swagger' in o)) return undefined;
+        const kind = 'asyncapi' in o ? 'asyncapi' : 'openapi' in o || 'swagger' in o ? 'openapi' : undefined;
+        if (!kind) return undefined;
         const info = o.info;
         const title =
             typeof info === 'object' &&
@@ -77,14 +79,48 @@ const readSpec = (file: string, rel: string): Spec | undefined => {
             typeof (info as Record<string, unknown>).title === 'string'
                 ? ((info as Record<string, unknown>).title as string)
                 : undefined;
-        return { rel, title: title?.trim() || undefined };
+        return { rel, kind, title: title?.trim() || undefined };
     }
-    if (!YAML_SPEC_KEY.test(text)) return undefined;
+    const key = YAML_SPEC_KEY.exec(text)?.[1];
+    if (!key) return undefined;
     const block = YAML_INFO_BLOCK.exec(text)?.[1] ?? '';
     const raw = YAML_TITLE.exec(block)?.[1];
     const title = raw?.replace(/^(['"])(.*)\1$/, '$2').trim();
-    return { rel, title: title || undefined };
+    return { rel, kind: key === 'asyncapi' ? 'asyncapi' : 'openapi', title: title || undefined };
 };
+
+// Компонент AsyncAPI (~3 МБ) — не ассет плагина: ассеты подключаются в index.html каждого сайта,
+// а этот нужен только страницам AsyncAPI-спек. Плагин сам кладёт его туда же, куда ядро кладёт
+// ассеты (vendor/plugins/openapi/), а страница грузит его при первом показе.
+const ASYNCAPI_DIR = path.join(VENDOR_DIR, 'asyncapi');
+const ASYNCAPI_FILES = ['asyncapi-standalone.js', 'asyncapi.css'];
+const ASYNCAPI_SITE_DIR = 'vendor/plugins/openapi';
+
+// Один <script> без пустых строк: docsify выполняет только первый скрипт страницы, а пустая строка
+// закончила бы HTML-блок markdown. Промис загрузки — один на окно: переходы между страницами
+// AsyncAPI не грузят бандл повторно. sidebar компонента выключен — у docsify свой.
+const asyncapiPage = (specUrl: string, domId: string): string =>
+    [
+        `<div id="${domId}"></div>`,
+        '<script>',
+        '(function () {',
+        `  var dir = '${ASYNCAPI_SITE_DIR}/';`,
+        '  window.c4builderAsyncApi = window.c4builderAsyncApi || new Promise(function (resolve, reject) {',
+        "    var css = document.createElement('link');",
+        "    css.rel = 'stylesheet'; css.href = dir + 'asyncapi.css';",
+        '    document.head.appendChild(css);',
+        "    var js = document.createElement('script');",
+        "    js.src = dir + 'asyncapi-standalone.js';",
+        '    js.onload = function () { resolve(window.AsyncApiStandalone); };',
+        '    js.onerror = reject;',
+        '    document.head.appendChild(js);',
+        '  });',
+        '  window.c4builderAsyncApi.then(function (lib) {',
+        `    lib.render({ schema: { url: '${specUrl}' }, config: { show: { sidebar: false } } }, document.getElementById('${domId}'));`,
+        '  });',
+        '})();',
+        '</script>'
+    ].join('\n');
 
 // Порядок спек в оглавлении папки: сначала openapi.{yaml,yml,json}, остальные по имени.
 const byIndexOrder = (a: Spec, b: Spec): number => {
@@ -123,7 +159,7 @@ export default definePlugin<Opts>({
             if (!spec)
                 console.log(
                     chalk.yellow(
-                        `⚠ openapi: ${rel}: not an OpenAPI document (no openapi/swagger key), skipped`
+                        `⚠ openapi: ${rel}: not an OpenAPI or AsyncAPI document (no openapi/swagger/asyncapi key), skipped`
                     )
                 );
             else specs.push(spec);
@@ -136,6 +172,11 @@ export default definePlugin<Opts>({
             const dest = path.join(ctx.options.DIST_FOLDER, mount, '_specs', rel);
             fs.mkdirSync(path.dirname(dest), { recursive: true });
             fs.copyFileSync(path.join(root, rel), dest);
+        }
+        if (specs.some((s) => s.kind === 'asyncapi')) {
+            const dest = path.join(ctx.options.DIST_FOLDER, ASYNCAPI_SITE_DIR);
+            fs.mkdirSync(dest, { recursive: true });
+            for (const f of ASYNCAPI_FILES) fs.copyFileSync(path.join(ASYNCAPI_DIR, f), path.join(dest, f));
         }
 
         // Группы по родительской папке источника.
@@ -226,7 +267,15 @@ export default definePlugin<Opts>({
             // dom_id — из пути страницы спеки от mount: он уникален на сайте, в отличие от
             // последнего сегмента (billing/v2 и ledger/v2), и для папки с одной спекой прежний.
             const specUrl = encodeURIPath(path.posix.join(mount, '_specs', page.spec.rel));
-            const domId = `swagger-${page.path.join('/').replace(/[^A-Za-z0-9_-]/g, '_')}`;
+            const idTail = page.path.join('/').replace(/[^A-Za-z0-9_-]/g, '_');
+            if (page.spec.kind === 'asyncapi') {
+                ctx.addPage({
+                    path: [mount, ...page.path],
+                    markdown: asyncapiPage(specUrl, `asyncapi-${idTail}`)
+                });
+                continue;
+            }
+            const domId = `swagger-${idTail}`;
             ctx.addPage({
                 path: [mount, ...page.path],
                 markdown: [

@@ -5,6 +5,13 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
 
 ## Unreleased
 
+- The `openapi` plugin shows AsyncAPI specs too: a matched file with a top-level `asyncapi` key
+  gets its own page under the same layout rules (folder index, summary, `info.title`), rendered
+  by the bundled official AsyncAPI component (`@asyncapi/react-component` 3.2.2, Apache-2.0) —
+  channels, operations, messages and schemas, no CDN and no external requests. The component
+  (~3 MB) is copied to the output only when there are AsyncAPI specs and loaded by the browser
+  only on their pages; the skip warning now names files without an `openapi`/`swagger`/`asyncapi`
+  key
 - `c4builder --site -w` serves the site right after the pages are composed instead of waiting
   for every diagram: diagrams missing from the cache show a `rendering…` placeholder and are
   rendered in the background after `serving your docsify site` (`rendering N diagrams in

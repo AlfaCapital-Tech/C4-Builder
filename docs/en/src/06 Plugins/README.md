@@ -94,16 +94,16 @@ folder.
 | `nameKey` | — | `.openspec.yaml` key with the change's name (e.g. `x-name`); when set, top-level changes are labelled and addressed by that name |
 | `columns` | — | extra Changes table columns: `[{ "key": "<.openspec.yaml key>", "title": "<header>" }]` |
 
-## `openapi` — swagger-ui for a set of specs
+## `openapi` — swagger-ui and AsyncAPI for a set of specs
 
 Finds specs by `glob` in a local folder (`dir`) **or** in a `tar.gz`/`zip` archive downloaded
 over HTTP (`archive` — for example, a GitLab or GitHub repository archive URL). One page per
 spec, plus a section summary linking every spec page.
 
-- Only a file matched by `glob` that has a top-level `openapi` or `swagger` key is a spec. Other
-  matched files (schema fragments, AsyncAPI, configs) get no page — the build prints a
-  `⚠ openapi: <path>: not an OpenAPI document` warning for each. So
-  `glob: "*/*.{yaml,yml,json}"` safely picks up every spec of a folder.
+- Only a file matched by `glob` that has a top-level `openapi` or `swagger` (OpenAPI) or
+  `asyncapi` (AsyncAPI) key is a spec. Other matched files (schema fragments, configs) get no
+  page — the build prints a `⚠ openapi: <path>: not an OpenAPI or AsyncAPI document` warning for
+  each. So `glob: "*/*.{yaml,yml,json}"` safely picks up every spec of a folder.
 - Pages follow the source folders. A folder with one spec is that spec's page (`billing`). A
   folder with several specs (`billing/openapi.yaml`, `billing/openapi-admin.yaml`,
   `billing/payouts.yaml`) becomes an index page `billing` with links (`openapi.*` first, the rest
@@ -122,6 +122,10 @@ spec, plus a section summary linking every spec page.
   resolving.
 - Pages load swagger-ui from the bundled files: no CDN, no external spec validator (the
   `validator.swagger.io` badge is off), and readers need no access to the source repository.
+- AsyncAPI specs (`asyncapi.yaml` — Kafka topics, messages) are shown by the official AsyncAPI
+  component (`@asyncapi/react-component`, bundled in the package): channels, operations, messages
+  and schemas, with no CDN and no external requests. The component (~3 MB) is copied to the
+  output only when there are AsyncAPI specs and the browser loads it only on their pages.
 - The plugin turns `executeScript` on (and logs it) and adds `swagger-ui.css` and
   `swagger-ui-bundle.js` to `index.html`, so a custom `docsifyTemplate` needs no change.
 - The archive is downloaded once per process and reused in `-w` mode.

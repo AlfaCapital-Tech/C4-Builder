@@ -50,14 +50,15 @@ published site too; a custom `docsifyTemplate` must write the received options i
 `window.$docsify` as a whole. `c4builder --site -w --open <id>` opens this address and
 `c4builder feedback --as <id>` prints it on stderr as `Change page: …`.
 
-## `openapi` — swagger-ui pages for OpenAPI specs
+## `openapi` — swagger-ui and AsyncAPI pages for API specs
 
 One page per spec found by `glob` plus a summary; swagger-ui is bundled, readers need no
 network. Exactly one source — `dir` **or** `archive` — is required. It forces
 `executeScript: true`.
 
-- A matched file is a spec only with a top-level `openapi` or `swagger` key; other matched files
-  get no page and a `⚠ openapi: <path>: not an OpenAPI document` warning each, so
+- A matched file is a spec only with a top-level `openapi`/`swagger` (OpenAPI, swagger-ui page) or
+  `asyncapi` (AsyncAPI, page rendered by the bundled AsyncAPI component) key; other matched files
+  get no page and a `⚠ openapi: <path>: not an OpenAPI or AsyncAPI document` warning each, so
   `glob: "*/*.{yaml,yml,json}"` is safe.
 - Pages follow the source folders: a folder with one spec is that spec's page (`billing`); a
   folder with several specs is an index page (`billing`, links with `info.title`, `openapi.*`
