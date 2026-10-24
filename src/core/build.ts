@@ -2,7 +2,7 @@ import chalk from 'chalk';
 import path from 'node:path';
 import fsextra from 'fs-extra';
 
-import { makeDirectory, writeFile, writeOnSameLine } from '../util/utils.ts';
+import { makeDirectory, writeFile, writeProgress } from '../util/utils.ts';
 // clearD2FileCache: сброс кеша графа D2-импортов на границах сборки (сам webworker
 // D2 гасит CLI после одиночной сборки — в watch-режиме он переживает ребилды).
 import { clearD2FileCache } from './render/d2renderer.ts';
@@ -93,9 +93,7 @@ const build = async (
             await generateImages(
                 tree,
                 options,
-                (count, total) => {
-                    writeOnSameLine(`processed ${count}/${total} images`);
-                },
+                (count, total) => writeProgress(count, total, 'images'),
                 cacheConf,
                 bkFolderName
             );
@@ -103,9 +101,7 @@ const build = async (
         }
         if (options.GENERATE_MD) {
             console.log(chalk.blue('generating markdown files'));
-            await generateMD(tree, options, (count, total) => {
-                writeOnSameLine(`processed ${count}/${total} files`);
-            });
+            await generateMD(tree, options, (count, total) => writeProgress(count, total, 'files'));
             console.log('');
         }
         if (options.GENERATE_WEBSITE) {

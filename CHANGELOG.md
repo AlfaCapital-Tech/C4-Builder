@@ -24,6 +24,11 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
   `c4builder feedback --wait --as <name>` loop and reports in the chat. The page feedback loop moved
   there from the `c4builder` skill, which now explains the skills notice. `c4builder-setup` describes
   an npm mirror as the user's npmrc or `--registry` and ends with `c4builder skills` in the project
+- Build progress outside a terminal (a background `c4builder --site -w` log, CI) is one line per
+  phase, `processed 179 images` / `processed 42 files`, instead of thousands of `\r` updates glued
+  into one huge line. The progress in a terminal does not change
+- The `--site -w` dev server answers 404 for unknown paths ending in `/` instead of serving the home
+  page with 200, so link checks with `curl` see broken links
 - Security: zod 4.6.7, undici 7.30.1 and body-parser 2.4.0 to fix npm audit advisories
   (GHSA-mrhx-c7xc-m3w5, GHSA-4qv8-2p9j-2685 and others)
 

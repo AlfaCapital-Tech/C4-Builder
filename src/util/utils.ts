@@ -14,8 +14,12 @@ const readFile = (path: string): Promise<Buffer> => fs.promises.readFile(path);
 const writeFile = (path: string, data: string | NodeJS.ArrayBufferView): Promise<void> =>
     fs.promises.writeFile(path, data);
 
-const writeOnSameLine = async (message: string): Promise<void> => {
-    process.stdout.write(`${message}\r`);
+// Вне терминала (лог фонового `--site -w`, CI) `\r` не перетирает строку, а склеивает
+// все обновления в одну гигантскую — там печатаем только итог фазы. Перевод строки
+// после прогресса ставит вызывающий.
+const writeProgress = (count: number, total: number, unit: string): void => {
+    if (process.stdout.isTTY) process.stdout.write(`processed ${count}/${total} ${unit}\r`);
+    else if (count === total) process.stdout.write(`processed ${total} ${unit}`);
 };
 
 const encodeURIPath = (path: string): string => {
@@ -126,7 +130,7 @@ export {
     readFile,
     writeFile,
     encodeURIPath,
-    writeOnSameLine,
+    writeProgress,
     clearConsole,
     plantUmlServerUrl,
     VENDORED_JAR
