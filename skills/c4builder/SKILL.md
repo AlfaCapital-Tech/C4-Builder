@@ -1,6 +1,6 @@
 ---
 name: c4builder
-description: Work on a c4builder architecture-docs project - C4 model diagrams in PlantUML (C4-PlantUML stdlib) or D2, BPMN process diagrams, Mermaid diagrams, plus markdown, built into a docsify site or markdown files. Use when creating or editing .puml, .iuml, .d2, .bpmn, .mmd or .md files in a project that has a .c4builder config, when changing .c4builder settings or plugins (openspec, openapi), or when building, validating or previewing the docs. Teaches the edit, c4builder check, build loop and the C4-PlantUML conventions.
+description: Work on a c4builder architecture-docs project - C4 model diagrams in PlantUML (C4-PlantUML stdlib) or D2, BPMN process diagrams, Mermaid diagrams, plus markdown, built into a docsify site or markdown files. Use when creating or editing .puml, .iuml, .d2, .bpmn, .mmd or .md files in a project that has a .c4builder config, when changing .c4builder settings or plugins (openspec, openapi, figma), or when building, validating or previewing the docs. Teaches the edit, c4builder check, build loop and the C4-PlantUML conventions.
 ---
 
 # c4builder
@@ -148,7 +148,8 @@ fixed config keys and the `c4builder check` loop.
   keys are **silently dropped**, so a typo does nothing. `c4builder --list` prints the
   current config.
 - Read [references/plugins.md](references/plugins.md) when the project has or needs
-  `plugins` — `openspec` (OpenSpec store as a site section) or `openapi` (swagger-ui pages).
+  `plugins` — `openspec` (OpenSpec store as a site section), `openapi` (swagger-ui pages) or
+  `figma` (Figma frame embeds).
 
 ## Reading an existing architecture
 

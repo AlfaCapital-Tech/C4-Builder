@@ -13,6 +13,13 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
   custom `docsifyTemplate` that puts the options into `window.$docsify` gets collapsing without
   changes — remove a manual `docsify-sidebar-collapse` include from your template (a file the
   template already links is not added twice)
+- New built-in plugin `figma`: the frames listed in its options (`name`, Figma "Share" `url`,
+  optional `description`) become a site section (`mount`, `Figma` by default) with a summary page and
+  one page per frame — a live `embed.figma.com` iframe (`height`, `embedHost`) with an `Open in Figma`
+  link above it. `/` in a name nests pages. Links are validated and normalised when the plugin loads
+  (`design`/`file`/`proto`/`board`/`slides`/`deck`, `node-id` kept; `file` → `design`); a non-Figma
+  link, a duplicate name or an empty list fails before the build. The build stays offline and prints
+  one line that readers need network access to Figma; `executeScript` and assets are not needed
 - Agent skills are part of the npm package and match the installed CLI version. The new
   `c4builder skills` installs or updates them offline in the current folder: `.agents/skills/`
   always, `.claude/skills/` under Claude Code (`CLAUDECODE`) or when `.claude/` exists. The folder of

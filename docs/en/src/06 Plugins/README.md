@@ -16,7 +16,7 @@ Plugins are listed in `.c4builder` under the `plugins` key — either as `"name"
 }
 ```
 
-A plugin identifier resolves in this order: a built-in name (`openspec`, `openapi`) → a local
+A plugin identifier resolves in this order: a built-in name (`openspec`, `openapi`, `figma`) → a local
 ESM module (`./plugins/my.mjs`, `../shared/plugin.mjs`, an absolute path) → an npm package
 resolved from the project folder.
 
@@ -147,6 +147,51 @@ token:
       "archive": "https://gitlab.example.com/api/v4/projects/123/repository/archive.tar.gz?sha=main",
       "glob": "*/openapi.yaml",
       "headers": { "PRIVATE-TOKEN": "${GITLAB_TOKEN}" }
+    }]
+  ]
+}
+```
+
+## `figma` — Figma frames on the site
+
+Publishes UI mockups next to the C4 model: the list of frames lives in the plugin options, and the
+output is a site section (`mount`, `Figma` by default) with a summary page and a page per frame. A
+frame page is a live Figma embed (Embed Kit 2.0, `embed.figma.com`) with an **Open in Figma** link
+above it, so a reader without network access or without access to the file still gets a working
+link.
+
+- `url` is the regular "Share" link from Figma: `https://www.figma.com/<type>/<key>/<name>?node-id=…`
+  with the type `design`, `file`, `proto`, `board`, `slides` or `deck` (`https://embed.figma.com/…`
+  is accepted too). When the plugin loads it is normalised to the embed address: `file` → `design`,
+  only `node-id` is kept from the query, tracking `t=`, `p=` are dropped. Any other link, a repeated
+  frame name or an empty `frames` is an error before the build starts, naming the frame index.
+- `/` in a name makes a nested subsection: `Mobile/Login` is the page `Login` under `Mobile`. The
+  summary lists pages in the order of `frames`.
+- `description` is markdown shown above the link; its first line goes to the summary.
+- The embed shows the file only to readers who have access to it: share the file as "Anyone with
+  the link can view", or expect the reader to sign in to Figma inside the iframe.
+- The plugin is a deliberate exception to the site's offline guarantee: the build itself never
+  touches the network and prints one log line (`figma: N frame page(s) embed embed.figma.com —
+  readers need network access to Figma`), but frame pages load `embed.figma.com` in the reader's
+  browser. All other pages, `index.html` and CSS stay free of external addresses; the plugin needs
+  neither `executeScript` nor bundled assets. Markdown hosts strip the iframe — the link remains.
+
+| Option | Default | Meaning |
+|---|---|---|
+| `mount` | `Figma` | section name |
+| `frames` | — | list of frames `[{ "name", "url", "description"? }]`, not empty |
+| `height` | `600` | iframe height in pixels |
+| `embedHost` | `c4builder` | the embed's `embed-host` parameter (your site's name in Figma statistics) |
+
+```json
+{
+  "plugins": [
+    ["figma", {
+      "frames": [
+        { "name": "Onboarding", "url": "https://www.figma.com/design/AbC123xyz/App?node-id=12-34",
+          "description": "First launch and sign-up." },
+        { "name": "Mobile/Login", "url": "https://www.figma.com/proto/PrO456/Flow?node-id=1-2" }
+      ]
     }]
   ]
 }
