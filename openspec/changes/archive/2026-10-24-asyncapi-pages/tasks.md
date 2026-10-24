@@ -10,4 +10,4 @@
 
 - [x] 2.1 «06 Плагины» RU/EN (раздел `openapi`), `skills/c4builder/references/plugins.md`, `CHANGELOG.md`. Проверка: `docs-parity`, `skills` зелёные.
 - [x] 2.2 `npm run build && npm test && npx biome ci src test` зелёные; `openspec validate asyncapi-pages --strict`; публичность: `grep -rniE --exclude=tasks.md "alfacapital\.ru|artifactory|harbor" openspec/changes/asyncapi-pages docs/ru/src docs/en/src skills CHANGELOG.md` пуст.
-- [ ] 2.3 Ручная проверка в браузере на рабочем проекте с AsyncAPI-спекой: страница отрисована, без сети работает.
+- [x] 2.3 Ручная проверка в браузере на рабочем проекте с AsyncAPI-спекой: страница отрисована, без сети работает.
