@@ -20,6 +20,20 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
   (`design`/`file`/`proto`/`board`/`slides`/`deck`, `node-id` kept; `file` → `design`); a non-Figma
   link, a duplicate name or an empty list fails before the build. The build stays offline and prints
   one line that readers need network access to Figma; `executeScript` and assets are not needed
+- Short permanent address of an OpenSpec change page: `#/change/<id>` (`<id>` — the change folder
+  name, without the archive date prefix; a nested change by its full id) opens the change page
+  whatever the `mount`, `groupKey` and `nameKey` of the `openspec` plugin are, and after archiving
+  leads to the newest archived change with that id; the browser swaps it for the real page path, so
+  relative links, images and the sidebar highlight work and "back" skips the short address. Plugins
+  declare such redirects with `ctx.addRedirect(from, to)` in `afterScan` (a repeated short path
+  fails the build naming the path and the plugin); the map goes to `$docsify.c4builder.redirects` in
+  `index.html` with the local script `vendor/c4builder-redirects.js`, so it works on a published
+  site and with a `docsifyTemplate` that outputs the options; a site without redirects is unchanged.
+  `--open <id>` (with `--site`) opens that address instead of the home page and warns on stderr when
+  the site has no such change; `c4builder feedback --as <id>` prints
+  `Change page: http://localhost:<port>/#/change/<id>` on stderr when `<id>` is a change of the
+  site (stdout stays the batch). The `c4builder-review` skill links the change page by this address
+  instead of searching the build output
 - Agent skills are part of the npm package and match the installed CLI version. The new
   `c4builder skills` installs or updates them offline in the current folder: `.agents/skills/`
   always, `.claude/skills/` under Claude Code (`CLAUDECODE`) or when `.claude/` exists. The folder of

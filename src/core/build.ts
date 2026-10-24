@@ -22,15 +22,20 @@ import {
 // Плагины: хуки afterScan (виртуальные страницы) / afterBuild и ассеты сайта.
 // Загружены заранее в cli/dispatch и приходят третьим аргументом (как cacheConf).
 import { runAfterScan, runAfterBuild } from './plugins/hooks.ts';
-import { injectSiteAssets } from './plugins/assets.ts';
+import { injectRedirects, injectSiteAssets } from './plugins/assets.ts';
+import type { Redirects } from './plugins/tree.ts';
 import type { LoadedPlugin } from './plugins/types.ts';
 
 // Оркестратор владеет lifecycle выходного каталога: dist бэкапится в dist_bk, откуда
 // generateImages восстанавливает неизменённые по чексумме картинки; в конце бэкап сносится.
 
-/** Итог сборки: карта страниц сайта → исходные файлы (пустая без website) — для комментариев `site -w`. */
+/**
+ * Итог сборки для `site -w`: карта страниц сайта → исходные файлы (пустая без website) — для
+ * комментариев; переадресации плагинов — для `--open <id>` и адреса страницы в `feedback`.
+ */
 export interface BuildResult {
     pages: PageSources;
+    redirects: Redirects;
 }
 
 const build = async (
@@ -40,6 +45,7 @@ const build = async (
 ): Promise<BuildResult> => {
     const start_date = new Date();
     let pages: PageSources = new Map();
+    const redirects: Redirects = new Map();
     const bkFolderName = options.DIST_FOLDER + DIST_BACKUP_FOLDER_SUFFIX;
 
     // Generating local images, remove old backup image folder, rename current dist folder to new backup
@@ -68,7 +74,7 @@ const build = async (
         console.log(chalk.blue(`parsed ${tree.length} folders`));
         // Виртуальные страницы плагинов встают в дерево до рендера — дальше они
         // неотличимы от реальных папок (диаграммы, sidebar, поиск, complete).
-        await runAfterScan(tree, options, plugins);
+        await runAfterScan(tree, options, plugins, redirects);
 
         // У движков без онлайн-рендера (D2, см. remoteRender в DIAGRAM_ENGINES) при
         // выключенной локальной генерации диаграммы не во что превратить — ссылки на
@@ -106,8 +112,9 @@ const build = async (
         }
         if (options.GENERATE_WEBSITE) {
             console.log(chalk.blue('generating docsify site'));
-            pages = await generateWebMD(tree, options);
+            pages = await generateWebMD(tree, options, redirects);
             await injectSiteAssets(plugins, options);
+            injectRedirects(options, redirects);
         }
         // llms.txt ссылается на .md страниц сайта — без website ссылаться не на что.
         if (options.GENERATE_LLMS && options.GENERATE_WEBSITE) {
@@ -142,7 +149,7 @@ const build = async (
 
         console.log(chalk.green(`built in ${(Date.now() - start_date.getTime()) / 1000} seconds`));
         ok = true;
-        return { pages };
+        return { pages, redirects };
     } finally {
         // Бэкап dist сносим ТОЛЬКО при успехе: при падении фазы dist_bk — единственная
         // полная копия прошлого удачного билда, её нельзя терять (иначе первый же

@@ -80,7 +80,8 @@ How the source tree becomes pages:
    `docs/index.html` + `docs/<folder>/<folder>.md` (site), `docs/<folder>/<diagram>.svg`.
 5. **Live preview for a human:** `c4builder --site -w` builds, serves on
    `http://localhost:3000` (`webPort`, or `-p <n>`), rebuilds on save and reloads the
-   browser; `-o` opens it. It never exits — start it in the background or leave it to the
+   browser; `-o` opens it, `-o <change-id>` opens the OpenSpec change page by its short
+   address `#/change/<change-id>` (a warning on stderr when the site has no such change). It never exits — start it in the background or leave it to the
    user. `c4builder site` builds and serves without watching (also never exits). In `-w` a
    human can select text on a page and add a question: it lands in the source `.md` under the
    `questionsHeading` section (`Open questions` by default) — read it there, not in `docs/`.
@@ -94,8 +95,10 @@ runs the batch loop.
 In short: under an agent (`CLAUDECODE`, `CODEX_THREAD_ID`, `GEMINI_CLI`, `OPENCODE`, `COPILOT_CLI`,
 `AI_AGENT`, or `--agent`) `c4builder --site -w` adds a **Feedback** button to text selected on a
 page. The comments do not go into the files: `c4builder feedback --wait --as <name>`, run in the
-background with your change or task as `<name>`, exits with one batch on stdout. Apply it to the
-sources, run the command again with the same name and stop on `Decision: approved`.
+background with your change or task as `<name>`, exits with one batch on stdout. When `<name>` is an
+OpenSpec change of the site, it first prints `Change page: http://localhost:<port>/#/change/<name>`
+on stderr — the link to give the human. Apply the batch to the sources, run the command again with
+the same name and stop on `Decision: approved`.
 
 ## Writing C4 diagrams (PlantUML)
 

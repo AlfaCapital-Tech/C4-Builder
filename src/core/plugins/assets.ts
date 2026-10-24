@@ -2,7 +2,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import type { BuildOptions } from '../../config/options.ts';
+import { VENDOR_DIR } from '../../util/paths.ts';
 import { encodeURIPath } from '../../util/utils.ts';
+import type { Redirects } from './tree.ts';
 import type { LoadedPlugin } from './types.ts';
 
 // Вставка тегов в готовый HTML: стили — перед последним `</head>`, скрипты — перед
@@ -69,4 +71,26 @@ export const injectSiteAssets = async (plugins: LoadedPlugin[], options: BuildOp
     }
     if (!styles.length && !scripts.length) return;
     fs.writeFileSync(indexPath, injectHtml(html, { styles, scripts }));
+};
+
+// Скрипт переадресаций (change site-agent-review): вендорный файл копируется в `dist/vendor/` и
+// подключается в index.html только при непустой карте — сайт без переадресаций прежний.
+// Отдельно от injectSiteAssets: карта переадресаций известна только после скана.
+const REDIRECTS_SCRIPT = 'c4builder-redirects.js';
+
+/** Подключает скрипт переадресаций к `dist/index.html`. Зовётся после injectSiteAssets. */
+export const injectRedirects = (options: BuildOptions, redirects: Redirects): void => {
+    if (!redirects.size) return;
+    const vendorDist = path.join(options.DIST_FOLDER, 'vendor');
+    fs.mkdirSync(vendorDist, { recursive: true });
+    fs.copyFileSync(
+        path.join(VENDOR_DIR, 'docsify', REDIRECTS_SCRIPT),
+        path.join(vendorDist, REDIRECTS_SCRIPT)
+    );
+    const indexPath = path.join(options.DIST_FOLDER, 'index.html');
+    const html = fs.readFileSync(indexPath, 'utf8');
+    fs.writeFileSync(
+        indexPath,
+        injectHtml(html, { styles: [], scripts: [path.posix.join('vendor', REDIRECTS_SCRIPT)] })
+    );
 };

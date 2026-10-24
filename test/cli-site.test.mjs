@@ -228,6 +228,9 @@ describe('агентский режим site -w', () => {
         expect(res.out).toContain(
             'agent mode (claude-code): page feedback goes to "c4builder feedback --wait --as <name> -p 38326"'
         );
+        // Лог фонового процесса (спека build-pipeline): подсказка — отдельной строкой, без `\r`-прогресса.
+        expect(res.out).toMatch(/^agent mode \(claude-code\): /m);
+        expect(res.out).not.toContain('\r');
         expect(res.html).toContain('var AGENT = { on: true');
         expect(res.post).toBe(200);
     }, 60_000);
@@ -262,5 +265,70 @@ describe('неизвестные пути в site -w', () => {
                 expect((await fetch(`${base}/nope/`)).status).toBe(404);
             }
         });
+    }, 60_000);
+});
+
+// `--open [id]` (change site-agent-review): без значения — главная, со значением — короткий
+// адрес change'а; ключа нет в карте — предупреждение в stderr, адрес всё равно печатается.
+describe('--open <id> в site', () => {
+    const env = agentEnv({ BROWSER: 'none' });
+    it('неизвестный id — предупреждение в stderr, сервер работает; без переадресаций index.html прежний', async () => {
+        const port = 38331;
+        const out = await serve(['site', '-w', '-p', String(port), '--open', 'nope'], {
+            env,
+            onReady: async () => {
+                expect((await fetch(`http://127.0.0.1:${port}/`)).status).toBe(200);
+                const html = fs.readFileSync(path.join(dir, 'docs', 'index.html'), 'utf8');
+                expect(html).not.toContain('c4builder-redirects');
+                expect(html).not.toContain('"redirects"');
+                expect(fs.existsSync(path.join(dir, 'docs', 'vendor', 'c4builder-redirects.js'))).toBe(false);
+            }
+        });
+        expect(out).toContain(`go to http://localhost:${port}/#/change/nope`);
+        expect(out).toContain('warning: the site has no page change/nope');
+    }, 60_000);
+
+    it("id change'а из плагина openspec — адрес #/change/<id> без предупреждения", async () => {
+        const project = path.join(dir, 'openspec-project');
+        fs.mkdirSync(path.join(project, 'src'), { recursive: true });
+        fs.mkdirSync(path.join(project, 'openspec', 'changes', 'add-dark-mode'), { recursive: true });
+        fs.writeFileSync(path.join(project, 'src', 'README.md'), '# root\n');
+        fs.writeFileSync(
+            path.join(project, 'openspec', 'changes', 'add-dark-mode', 'proposal.md'),
+            '## Why\n\ndark\n'
+        );
+        fs.writeFileSync(
+            path.join(project, '.c4builder'),
+            JSON.stringify({ ...CONFIG, generateLocalImages: false, plugins: ['openspec'] })
+        );
+        const port = 38332;
+        const out = await serveSite(project, ['site', '-w', '-p', String(port), '--open', 'add-dark-mode'], {
+            env,
+            onReady: async () => {
+                const html = await (await fetch(`http://127.0.0.1:${port}/`)).text();
+                expect(html).toContain(
+                    '"/change/add-dark-mode": "/OpenSpec/Changes/add-dark-mode/add-dark-mode"'
+                );
+                expect(html).toContain('<script src="vendor/c4builder-redirects.js"></script>');
+                expect((await fetch(`http://127.0.0.1:${port}/vendor/c4builder-redirects.js`)).status).toBe(
+                    200
+                );
+            }
+        });
+        expect(out).toContain(`go to http://localhost:${port}/#/change/add-dark-mode`);
+        expect(out).not.toContain('warning: the site has no page');
+    }, 60_000);
+
+    it('--open без значения — главная, как раньше', async () => {
+        const port = 38333;
+        // serveSite резолвится по строке «serving» — «go to» приходит следом, ждём её запросом.
+        const out = await serve(['site', '-p', String(port), '--open'], {
+            env,
+            onReady: async () => {
+                expect((await fetch(`http://127.0.0.1:${port}/`)).status).toBe(200);
+            }
+        });
+        expect(out).toContain(`go to http://localhost:${port}\n`);
+        expect(out).not.toContain('#/change/');
     }, 60_000);
 });

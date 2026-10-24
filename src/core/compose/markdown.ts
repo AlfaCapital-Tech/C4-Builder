@@ -22,6 +22,7 @@ import { getMime, httpGet } from '../render/diagrams.ts';
 // Граф D2-импортов — тот же, что у рендера (приложение llms-full.txt).
 import { d2LocalImports } from '../render/d2renderer.ts';
 import type { BuildOptions } from '../../config/options.ts';
+import type { Redirects } from '../plugins/tree.ts';
 
 // Стратегия подстановки диаграммы в markdown (embed/link/img) — задаётся вызывающим.
 type GetDiagram = (item: TreeItem, diagram: Diagram, options: BuildOptions) => Promise<string>;
@@ -418,7 +419,12 @@ export const generateMD = async (
 /** Страница сайта (posix-путь `.md` от корня dist, как его грузит docsify) → исходные файлы. */
 export type PageSources = Map<string, string[]>;
 
-export const generateWebMD = async (tree: TreeItem[], options: BuildOptions): Promise<PageSources> => {
+export const generateWebMD = async (
+    tree: TreeItem[],
+    options: BuildOptions,
+    // Переадресации плагинов (change site-agent-review) — в опции docsify, см. DocsifyOptions.
+    redirects: Redirects = new Map()
+): Promise<PageSources> => {
     const filePromises: Promise<void>[] = [];
     let docsifySideBar = '';
     const pages: PageSources = new Map();
@@ -484,7 +490,8 @@ export const generateWebMD = async (tree: TreeItem[], options: BuildOptions): Pr
                 supportSearch: options.SUPPORT_SEARCH,
                 executeScript: options.EXECUTE_SCRIPT,
                 // Ключ только при включённом сворачивании: при false index.html остаётся прежним.
-                ...(options.SIDEBAR_COLLAPSE ? { sidebarDisplayLevel: 1 } : {})
+                ...(options.SIDEBAR_COLLAPSE ? { sidebarDisplayLevel: 1 } : {}),
+                ...(redirects.size ? { c4builder: { redirects: Object.fromEntries(redirects) } } : {})
             })
         )
     );
@@ -496,9 +503,13 @@ export const generateWebMD = async (tree: TreeItem[], options: BuildOptions): Pr
         // Тема — без ведущего @import Google Fonts (у её шрифтов есть системный fallback).
         // Правим копию, а не vendor/: повторное вендорение вернуло бы @import.
         const theme = path.join(vendorDist, 'vue.css');
+        // Скрипты c4builder (`c4builder-*.js`) копирует injectRedirects — только когда они нужны
+        // странице; иначе в dist каждого проекта лежал бы лишний файл.
         filePromises.push(
             fsextra
-                .copy(docsifyVendorSrc, vendorDist)
+                .copy(docsifyVendorSrc, vendorDist, {
+                    filter: (src) => !path.basename(src).startsWith('c4builder-')
+                })
                 .then(async () =>
                     writeFile(theme, (await readFile(theme)).toString().replace(/^@import url\([^)]*\);/, ''))
                 )

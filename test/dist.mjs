@@ -10,7 +10,7 @@ export { textWidth } from '../dist/core/render/textmetrics.js';
 export { renderArgv, fontCacheTag, renderKey } from '../dist/core/render/diagrams.js';
 export { acquireBuildLock, BuildLockHeldError, waitBuildLock } from '../dist/util/lock.js';
 export { loadPlugins, expandEnv, pluginWatchPaths } from '../dist/core/plugins/load.js';
-export { addPage, isVirtual } from '../dist/core/plugins/tree.js';
+export { addPage, addRedirect, isVirtual, redirectKey } from '../dist/core/plugins/tree.js';
 export { injectHtml, injectSiteAssets } from '../dist/core/plugins/assets.js';
 export { resolveSource, tlsHint } from '../dist/core/plugins/source.js';
 export { extractZip, extractTarGz } from '../dist/util/archive.js';

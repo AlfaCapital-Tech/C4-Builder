@@ -3,7 +3,7 @@
 import type { BuildOptions } from '../../config/options.ts';
 import type { TreeItem } from '../scan/tree.ts';
 import { resolveSource } from './source.ts';
-import { addPage } from './tree.ts';
+import { addPage, addRedirect, type Redirects } from './tree.ts';
 import type { LoadedPlugin } from './types.ts';
 
 const wrap = async (name: string, hook: string, fn: () => Promise<void> | void): Promise<void> => {
@@ -17,7 +17,9 @@ const wrap = async (name: string, hook: string, fn: () => Promise<void> | void):
 export const runAfterScan = async (
     tree: TreeItem[],
     options: BuildOptions,
-    plugins: LoadedPlugin[]
+    plugins: LoadedPlugin[],
+    // Карта переадресаций сборки: плагины наполняют её из afterScan, compose кладёт в index.html.
+    redirects: Redirects = new Map()
 ): Promise<void> => {
     for (const { plugin, opts } of plugins) {
         if (!plugin.afterScan) continue;
@@ -25,6 +27,7 @@ export const runAfterScan = async (
             tree,
             options,
             addPage: (page: Parameters<typeof addPage>[2]) => addPage(tree, options, page),
+            addRedirect: (from: string[], to: string[]) => addRedirect(redirects, options, from, to),
             source: resolveSource
         };
         await wrap(plugin.name, 'afterScan', () => plugin.afterScan?.(ctx, opts));

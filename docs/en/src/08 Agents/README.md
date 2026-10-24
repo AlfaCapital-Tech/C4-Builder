@@ -44,7 +44,11 @@ the draft and sends nothing to the agent. The agent loop:
 
 1. Start `c4builder --site -w` and `c4builder feedback --wait --as <name>` in the background,
    `<name>` being the agent's change or task, e.g. `--as add-dark-mode`. In Claude Code — both
-   through Bash with `run_in_background`: the agent is notified when `feedback --wait` exits.
+   through Bash with `run_in_background`: the agent is notified when `feedback --wait` exits. The
+   link to the change page for the human is the short address `http://localhost:<port>/#/change/<id>`
+   (see [Plugins](06%20Plugins/06%20Plugins.md)): `feedback --wait --as <id>` prints it on stderr as
+   `Change page: …`, and `c4builder --site -w --open <id>` opens it in the browser instead of the
+   home page.
 2. `feedback --wait` prints a batch and exits. The agent edits the sources in `src/` — the page
    reloads through livereload and the human sees the result.
 3. Run `c4builder feedback --wait --as <name>` again with the same name and wait for the next batch.
