@@ -1,7 +1,7 @@
 # Diagrams
 
 The engine is chosen by file extension: `.puml` is rendered by PlantUML, `.d2` by D2, `.bpmn`
-by the BPMN engine, `.mmd` by mermaid. The formats can live in one project and even in one folder, as long as the
+by the BPMN engine, `.mmd` by mermaid, `.wireflow.json` by Wireflow. The formats can live in one project and even in one folder, as long as the
 file names differ.
 
 ## PlantUML
@@ -57,7 +57,7 @@ fonts. The look becomes more familiar, but the result depends on the machine.
 
 Unchanged diagrams are not rendered again: c4builder keeps checksums in `.c4builder.cache`. A
 checksum covers the source, all local `!include`s and D2 imports, the output path and the render
-settings, plus the engine package versions for D2, BPMN and mermaid. Editing a shared `styles.iuml` re-renders every diagram that includes it, and only
+settings, plus the engine package versions for D2, BPMN and mermaid and the vendored template catalog version for wireflow. Editing a shared `styles.iuml` re-renders every diagram that includes it, and only
 those.
 
 Checksums are saved as the rendering goes (at most twice a second and at the end of the phase),
@@ -204,17 +204,58 @@ loaded only when the project contains an `.mmd` or a `mermaid` block. With `--om
 project with an `.mmd` stops and a block becomes a placeholder — with a hint to reinstall
 c4builder without that flag.
 
+## Wireflow
+
+[Wireflow](https://github.com/vanila-io/wireflow) is an open-source user-flow editor: screen
+cards from ready-made templates, notes, groups and transitions between them. The file the editor
+saves with the Export JSON button goes into a page folder as is and is rendered as an image. A
+markdown reference is the usual one: `![user flow](flow.wireflow.json)`. The example below was
+rendered by this build:
+
+![Bank sign-in](sign-in.wireflow.json)
+
+**File names.** A Wireflow diagram is a file named `wireflow.json` (the editor's export name) or
+ending in `.wireflow.json`, case-insensitive. The image is named without the suffix:
+`sign-in.wireflow.json` → `sign-in.svg`, `wireflow.json` → `wireflow.svg`. Other `.json` files are
+regular files and are copied to the output as before. The file stays an editor export: you can
+open it in Wireflow, edit it and save it back.
+
+**Rendering** is c4builder's own, without a browser, network or npm dependencies: the SVG is
+built straight from the JSON. Geometry, colours and edge shapes (bezier, step, smooth step)
+follow the editor, and screen templates come from the Wireflow catalog vendored into the package
+(`vendor/wireflow/`, 125 templates, MIT). Text is set in the bundled Nimbus Sans instead of the
+editor's font, so the SVG is identical on any machine, and PNG comes from the regular
+rasterization. A long card header is cut with an ellipsis, note text wraps to the note width.
+Estimates, rates and stages (`settings`) do not affect the image.
+
+**Format versions.** Files `{"format": "wireflow", "version": 2…4}` — what the current editor
+saves — are supported. Old-format files (version 1 and files without the `format` field) fail
+with advice to open and re-save the file in the current Wireflow; a version newer than 4 fails
+with the version number.
+
+**Errors and placeholders.** An edge to a missing node, a `parentId` to a missing group, a node
+without `id` or `position` is an error with the file name and the element id, and the build
+stops. An unknown screen template is a warning and a placeholder card with the template id. A
+card's own image (`own-image`) is embedded when it is a PNG, JPEG or WebP `data:` URL; an external
+address is not fetched (the build does not use the network) — a placeholder and a warning take its
+place. WebP is not rasterized to PNG: with `diagramFormat: png` such a card becomes a placeholder
+too.
+
+**Limits.** There is no ```` ```wireflow ```` block in pages: wireflow is file-only. In
+`llms-full.txt` the source goes as a `json` block, with embedded images replaced by an
+`"<embedded image>"` marker.
+
 ## PNG
 
 With `diagramFormat: png`, c4builder renders SVG and rasterizes it with
 [resvg](https://github.com/thx/resvg-js) using the same bundled font. The PNG is consistent for
-PlantUML, D2, BPMN and mermaid and needs no browser. ditaa stays a native PlantUML PNG.
+PlantUML, D2, BPMN, mermaid and wireflow and needs no browser. ditaa stays a native PlantUML PNG.
 
 ## Online PlantUML server
 
 With `generateLocalImages: false`, diagrams are not rendered locally: the output links to the
 server from `plantumlServerUrl` (default `https://www.plantuml.com/plantuml`). This means diagram
-sources go to an external server, and D2, BPMN and mermaid do not work in this mode — the build stops
+sources go to an external server, and D2, BPMN, mermaid and wireflow do not work in this mode — the build stops
 with an error. The mode is kept for compatibility; local rendering is the main one.
 
 ## Checking individual diagrams
@@ -223,8 +264,8 @@ with an error. The mode is kept for compatibility; local rendering is the main o
 c4builder check src/context.puml "src/4 D2 Example/landscape.d2"
 ```
 
-`check` validates `.puml`, `.iuml`, `.d2`, `.bpmn` and `.mmd` files with the same engine as the
-build (for `.bpmn`: parsing, rules, layout and rendering), but writes nothing and needs no project
+`check` validates `.puml`, `.iuml`, `.d2`, `.bpmn`, `.mmd` and `.wireflow.json`/`wireflow.json` files with the same engine as the
+build (for `.bpmn`: parsing, rules, layout and rendering; for wireflow: file structure and rendering), but writes nothing and needs no project
 or `.c4builder`. Exit code 0 means every file compiles, 1 means there is an error (warnings do not
 affect the code):
 
@@ -243,5 +284,5 @@ fine):
 
 ```bash
 #!/bin/sh
-git diff --cached --name-only -z --diff-filter=ACM -- '*.puml' '*.iuml' '*.d2' '*.bpmn' '*.mmd' | xargs -0 -r c4builder check
+git diff --cached --name-only -z --diff-filter=ACM -- '*.puml' '*.iuml' '*.d2' '*.bpmn' '*.mmd' '*wireflow.json' | xargs -0 -r c4builder check
 ```

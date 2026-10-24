@@ -16,13 +16,21 @@ import { renderD2, foldD2Imports } from './d2renderer.ts';
 import { renderBpmn, BPMN_CACHE_PACKAGES } from './bpmnrenderer.ts';
 // Mermaid-бэкенд: пакет движка грузится лениво внутри renderMermaid.
 import { renderMermaid, MERMAID_PACKAGE } from './mermaidrenderer.ts';
+// Wireflow-бэкенд: прямая генерация SVG, зависимостей нет; версия каталога шаблонов — в ключ кэша.
+import { renderWireflow, wireflowCatalogVersion } from './wireflowrenderer.ts';
 import { resolveJava } from './jre.ts';
 // PNG-выход: SVG обоих движков растеризуется resvg (ленивая загрузка внутри модуля).
 import { rasterizeSvgToPng } from './pngraster.ts';
 // Шрифт-пин общий с resvg-растеризатором (одна точка правды, см. fonts.ts).
 import { FONTS_DIR, DEFAULT_FONT_NAME } from './fonts.ts';
 import { VENDOR_DIR } from '../../util/paths.ts';
-import { foldIncludes, diagramOutputFormat, type Diagram, type TreeItem } from '../scan/tree.ts';
+import {
+    foldIncludes,
+    diagramBaseName,
+    diagramOutputFormat,
+    type Diagram,
+    type TreeItem
+} from '../scan/tree.ts';
 import type { BuildOptions } from '../../config/options.ts';
 
 // cacheConf: Configstore-подобная заглушка чексумм картинок (см. cli/dispatch).
@@ -67,7 +75,7 @@ const renderConcurrency = (): number => {
 // Дорожки очереди рендера. Каждая — свой пул: PlantUML — отдельные процессы java
 // (renderConcurrency()), остальные движки — по одной задаче (см. комментарии в
 // generateImages); дорожки работают параллельно друг другу.
-export type DiagramLane = 'plantuml' | 'd2' | 'bpmn' | 'mermaid';
+export type DiagramLane = 'plantuml' | 'd2' | 'bpmn' | 'mermaid' | 'wireflow';
 
 export interface DiagramTask {
     /** Путь картинки относительно dist (posix, без ведущего слэша): по нему страница узнаёт готовую картинку. */
@@ -216,7 +224,9 @@ export const renderKey = (
           ? `bpmn\0${BPMN_CACHE_PACKAGES.map(pkgVersion).join('\0')}\0fmt=${outFormat}`
           : diagram.engine === 'mermaid'
             ? `mermaid\0${pkgVersion(MERMAID_PACKAGE)}\0fmt=${outFormat}`
-            : `puml\0${VENDORED_JAR.version}\0charset=${options.CHARSET}\0fmt=${outFormat}\0ditaa=${diagram.isDitaa}`) +
+            : diagram.engine === 'wireflow'
+              ? `wireflow\0${wireflowCatalogVersion()}\0fmt=${outFormat}`
+              : `puml\0${VENDORED_JAR.version}\0charset=${options.CHARSET}\0fmt=${outFormat}\0ditaa=${diagram.isDitaa}`) +
     `\0font=${fontCacheTag(options)}`;
 
 export const getMime = (format: string): string => {
@@ -500,13 +510,14 @@ export const generateImages = async (
             const isD2 = diagram.engine === 'd2';
             const isBpmn = diagram.engine === 'bpmn';
             const isMermaid = diagram.engine === 'mermaid';
+            const isWireflow = diagram.engine === 'wireflow';
             const includes = isD2
                 ? foldD2Imports(entryPath, body)
-                : isBpmn || isMermaid
+                : isBpmn || isMermaid || isWireflow
                   ? ''
                   : foldIncludes(body, item.dir, item.dir, new Set());
             const outFormat = diagramOutputFormat(diagram, options);
-            const outName = `${path.parse(diagram.dir).name}.${outFormat}`;
+            const outName = `${diagramBaseName(diagram.dir)}.${outFormat}`;
             const relOut = path.join(item.dir.replace(options.ROOT_FOLDER, ''), outName);
             // Путь выхода — тоже в чексумме: восстановление из бэкапа идёт по паре
             // «чексумма встречалась» + «бэкап с этим именем есть», иначе диаграммы,
@@ -558,7 +569,17 @@ export const generateImages = async (
             // без исходного файла в сообщении его не найти.
             const source = diagram.source;
             const soft = diagram.soft === true;
-            const lane: DiagramLane = isD2 ? 'd2' : isBpmn ? 'bpmn' : isMermaid ? 'mermaid' : 'plantuml';
+            // Wireflow рендерится синхронно в главном потоке — своя дорожка с параллелизмом 1
+            // ради единообразия, выигрыша от конкурентности нет.
+            const lane: DiagramLane = isD2
+                ? 'd2'
+                : isBpmn
+                  ? 'bpmn'
+                  : isMermaid
+                    ? 'mermaid'
+                    : isWireflow
+                      ? 'wireflow'
+                      : 'plantuml';
 
             // Заглушка с ошибкой вместо картинки: у «мягких» диаграмм — всегда (блоки в markdown
             // плагинов писались под онлайн-рендер, где битый блок давал картинку с ошибкой, а
@@ -585,6 +606,9 @@ export const generateImages = async (
                         rendered = await renderBpmn(body, file);
                     } else if (isMermaid) {
                         rendered = await renderMermaid(body, file);
+                    } else if (isWireflow) {
+                        // В PNG WebP-картинки карточек не растеризуются (resvg) — рендер знает о цели.
+                        rendered = await renderWireflow(body, file, { raster: needsRaster });
                     } else {
                         // Резолв JRE отложен до первого реального PlantUML-рендера (эта
                         // ветка исполняется лишь при промахе кэша). getJava мемоизирует.

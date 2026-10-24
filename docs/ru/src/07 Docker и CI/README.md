@@ -2,7 +2,7 @@
 
 ## Docker-образ
 
-В образе есть всё для сборки: Node, JRE, PlantUML-jar, шрифты, D2, BPMN- и mermaid-движок. Смонтируйте проект в
+В образе есть всё для сборки: Node, JRE, PlantUML-jar, шрифты, D2, движки BPMN, mermaid и wireflow с каталогом шаблонов экранов. Смонтируйте проект в
 `/pwd`:
 
 ```bash
@@ -44,7 +44,7 @@ GitLab CI, проверка диаграмм и публикация в GitLab P
 check:
   image: ghcr.io/alfacapital-tech/c4builder:0.9.0
   script:
-    - find src \( -name '*.puml' -o -name '*.d2' -o -name '*.bpmn' -o -name '*.mmd' \) -exec c4builder check {} +
+    - find src \( -name '*.puml' -o -name '*.d2' -o -name '*.bpmn' -o -name '*.mmd' -o -name '*wireflow.json' \) -exec c4builder check {} +
 
 pages:
   image: ghcr.io/alfacapital-tech/c4builder:0.9.0

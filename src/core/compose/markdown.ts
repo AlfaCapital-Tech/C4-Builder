@@ -10,6 +10,7 @@ import { VENDOR_DIR } from '../../util/paths.ts';
 // и единый реестр расширений диаграмм (источник истины для regex ссылок ниже).
 import {
     getFolderName,
+    diagramBaseName,
     diagramOutputFormat,
     DIAGRAM_ENGINES,
     engineSupportsRemote,
@@ -55,14 +56,23 @@ const injectAfterFirstH1 = (md: string, block: string): string => {
 // Расширения диаграмм без точки, экранированные для regex. Источник истины — реестр
 // DIAGRAM_ENGINES из фазы scan (scan/tree.ts): добавление движка там автоматически
 // расширяет regex ссылок здесь, без синхронной правки. Экранируем на случай спецсимволов.
-const diagramExtAlternation = (): string =>
-    DIAGRAM_ENGINES.map((e) => e.ext.slice(1).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const diagramExtAlternation = (): string => DIAGRAM_ENGINES.map((e) => escapeRe(e.ext.slice(1))).join('|');
+// Суффиксы из нескольких расширений (`.wireflow.json`) — ещё и точным именем файла
+// (`wireflow.json`), как в engineForFile.
+const diagramNameAlternation = (): string =>
+    DIAGRAM_ENGINES.filter((e) => e.ext.indexOf('.', 1) !== -1)
+        .map((e) => escapeRe(e.ext.slice(1)))
+        .join('|');
 
 // Ссылка на диаграмму в markdown: ![alt](path.puml|d2). Путь ленивый и не пересекает ')',
 // иначе две ссылки на одной строке склеились бы в один матч и не заменились. Свежий объект
 // на вызов — чтобы matchAll не тянул чужой lastIndex.
-const diagramRefRegex = (): RegExp =>
-    new RegExp(`!\\[.*?\\]\\(([^)]*?\\.(?:${diagramExtAlternation()}))\\)`, 'g');
+const diagramRefRegex = (): RegExp => {
+    const names = diagramNameAlternation();
+    const byName = names ? `|(?:[^)]*/)?(?:${names})` : '';
+    return new RegExp(`!\\[.*?\\]\\(([^)]*?\\.(?:${diagramExtAlternation()})${byName})\\)`, 'g');
+};
 
 // Кеш base64 отрендеренных диаграмм на время ОДНОЙ сборки: один файл читают все три
 // генератора (per-page md / docsify / complete). clearDiagramCache() зовётся в начале build() —
@@ -100,7 +110,7 @@ const buildDiagramMarkdown = async (
     variant: 'page' | 'complete'
 ): Promise<string> => {
     const isComplete = variant === 'complete';
-    const name = path.parse(diagram.dir).name;
+    const name = diagramBaseName(diagram.dir);
     const format = diagramOutputFormat(diagram, options);
     // rawPath — сырой путь (для чтения файла и как основа ссылок), кодируем ровно один раз.
     const rawPath = path.join(path.dirname(diagram.dir), `${name}.${format}`);
@@ -288,7 +298,7 @@ export const generateLlmsTxt = (tree: TreeItem[], options: BuildOptions): string
     return (
         `# ${options.PROJECT_NAME}\n\n` +
         '> Architecture documentation built with c4builder. Pages are markdown; full text with ' +
-        'diagram sources (PlantUML/D2/BPMN/Mermaid): [llms-full.txt](llms-full.txt).\n\n' +
+        'diagram sources (PlantUML/D2/BPMN/Mermaid/Wireflow): [llms-full.txt](llms-full.txt).\n\n' +
         `## Pages\n\n${pages.join('')}`
     );
 };
@@ -304,15 +314,25 @@ const FENCE_LANG: Record<string, string> = {
     '.iuml': 'plantuml',
     '.d2': 'd2',
     '.bpmn': 'xml',
-    '.mmd': 'mermaid'
+    '.mmd': 'mermaid',
+    '.wireflow.json': 'json'
 };
+
+// Исходник wireflow для llms-full.txt: встроенные картинки карточек (`data:`-URL, сотни КБ
+// base64 на экран) заменяются пометкой — остальной JSON без изменений. Строковый литерал
+// JSON целиком, с экранированными кавычками внутри.
+export const stripEmbeddedImages = (json: string): string =>
+    json.replace(/"data:[a-z]+\/[-+.\w]+;base64,[^"\\]*(?:\\.[^"\\]*)*"/g, '"<embedded image>"');
 
 // llms-full.txt: состав complete-документа, но диаграмма — исходником (C4-PlantUML/D2-текст
 // агенту полезнее SVG). Локальные include/импорты — один раз в приложении, а не инлайном:
 // общий styles.iuml иначе повторился бы в каждой диаграмме. Резолв — тот же, что у рендера.
 export const generateLlmsFull = async (tree: TreeItem[], options: BuildOptions): Promise<string> => {
     const MD = await composeComplete(tree, options, async (_item, diagram) =>
-        fenced(`${diagram.content}`, FENCE_LANG[diagram.ext])
+        fenced(
+            diagram.engine === 'wireflow' ? stripEmbeddedImages(`${diagram.content}`) : `${diagram.content}`,
+            FENCE_LANG[diagram.ext]
+        )
     );
     const deps = new Map<string, string>();
     for (const item of tree) {

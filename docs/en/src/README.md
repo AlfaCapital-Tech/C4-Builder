@@ -2,8 +2,8 @@
 
 **Architecture as code that an agent writes, checks and reads.**
 
-C4-Builder is a CLI that builds a folder of markdown files and PlantUML, D2, BPMN or Mermaid
-diagrams into documentation: a docsify site, a markdown file per folder, or a single file.
+C4-Builder is a CLI that builds a folder of markdown files and PlantUML, D2, BPMN, Mermaid or
+Wireflow diagrams into documentation: a docsify site, a markdown file per folder, or a single file.
 Folders define the hierarchy of the [C4 model](https://c4model.com/) (system → container →
 component), and git keeps the history of architecture decisions next to the code: a change to the
 architecture is reviewed in a pull request like any other change.
@@ -36,6 +36,8 @@ to working with AI agents:
   build checks the model and lays it out with horizontal pools and lanes.
 - **Mermaid** as a fourth engine: `.mmd` files and `mermaid` blocks in pages and OpenSpec
   artifacts are rendered at build time by real mermaid, without a browser or network.
+- **Wireflow** as a fifth engine: an export of the user-flow editor (`.wireflow.json`) becomes an
+  image with screen cards, notes and transitions — without a browser or network.
 - **Engineering basics.** TypeScript, golden snapshots of the rendering, CI on every pull
   request, an npm package and a Docker image per release tag.
 
@@ -55,7 +57,7 @@ Agent skills, `AGENTS.md` in a new project and `llms.txt` with diagram sources a
 
 - [Getting started](01%20Getting%20started/01%20Getting%20started.md) — installation and the first project.
 - [Project](02%20Project/02%20Project.md) — how folders and files become pages.
-- [Diagrams](03%20Diagrams/03%20Diagrams.md) — PlantUML, D2, BPMN, Mermaid, fonts, PNG, checking.
+- [Diagrams](03%20Diagrams/03%20Diagrams.md) — PlantUML, D2, BPMN, Mermaid, Wireflow, fonts, PNG, checking.
 - [Outputs](04%20Outputs/04%20Outputs.md) — site, markdown per folder, single file.
 - [CLI & configuration](05%20CLI%20and%20configuration/05%20CLI%20and%20configuration.md) —
   commands and `.c4builder` keys.

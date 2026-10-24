@@ -25,9 +25,15 @@ export { resolveSource, tlsHint } from '../dist/core/plugins/source.js';
 export { extractZip, extractTarGz } from '../dist/util/archive.js';
 export { BUILTIN_PLUGINS } from '../dist/plugins/index.js';
 export { createFenceExtractor, mapOutsideFences } from '../dist/core/scan/fences.js';
-export { foldIncludes, clearIncludeCache } from '../dist/core/scan/tree.js';
+export {
+    foldIncludes,
+    clearIncludeCache,
+    engineForFile,
+    diagramBaseName,
+    diagramExt
+} from '../dist/core/scan/tree.js';
 export { foldD2Imports, d2LocalImports, clearD2FileCache } from '../dist/core/render/d2renderer.js';
-export { generateLlmsFull } from '../dist/core/compose/markdown.js';
+export { generateLlmsFull, stripEmbeddedImages } from '../dist/core/compose/markdown.js';
 export { compareVersions, newestVersion } from '../dist/cli/update.js';
 export { detectAgent } from '../dist/cli/agent.js';
 export { default as cmdSite } from '../dist/cli/commands/site.js';
@@ -56,3 +62,13 @@ export {
     teardownMermaid
 } from '../dist/core/render/mermaidrenderer.js';
 export { renderChange, renderMarkdown } from '../dist/plugins/openspec/render.js';
+export {
+    WireflowError,
+    WIREFLOW_VERSIONS,
+    layoutWireflow,
+    parseWireflow,
+    renderWireflow,
+    renderWireflowSvg,
+    wireflowCatalogVersion
+} from '../dist/core/render/wireflowrenderer.js';
+export { getBezierPath, getSmoothStepPath } from '../dist/core/render/xyflowpaths.js';

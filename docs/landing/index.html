@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>C4-Builder — архитектура как код для людей и агентов</title>
-    <meta name="description" content="C4-Builder собирает markdown и диаграммы PlantUML, D2, BPMN и Mermaid в сайт документации. Локальный детерминированный рендер, проверка диаграмм для агентов, плагины OpenSpec и OpenAPI.">
+    <meta name="description" content="C4-Builder собирает markdown и диаграммы PlantUML, D2, BPMN, Mermaid и Wireflow в сайт документации. Локальный детерминированный рендер, проверка диаграмм для агентов, плагины OpenSpec и OpenAPI.">
     <link rel="alternate" hreflang="en" href="en.html">
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='2' fill='%231168bd'/%3E%3C/svg%3E">
     <link rel="stylesheet" href="landing.css">
@@ -26,7 +26,7 @@
             <div>
                 <span class="name">Разработчик или AI-агент</span>
                 <span class="kind">[Person]</span>
-                <p>Пишет markdown и диаграммы PlantUML, D2, BPMN или Mermaid и хранит их в git рядом с кодом.</p>
+                <p>Пишет markdown и диаграммы PlantUML, D2, BPMN, Mermaid или Wireflow и хранит их в git рядом с кодом.</p>
             </div>
         </div>
 
@@ -150,6 +150,10 @@ c4builder --site -w</code></pre>
             <dd>Файлы <code>.mmd</code> и блоки <code>```mermaid</code> в страницах и артефактах
                 OpenSpec становятся картинками при сборке: настоящий mermaid без браузера и сети,
                 в SVG и PNG.</dd>
+            <dt>Пользовательские сценарии Wireflow</dt>
+            <dd>Экспорт редактора Wireflow (<code>.wireflow.json</code>) — карточки экранов,
+                заметки, группы и переходы — рендерится при сборке без браузера и сети, шаблоны
+                экранов вендорены в пакет.</dd>
             <dt>Ревью со страницы</dt>
             <dd>В <code>c4builder --site -w</code> выделенный текст становится вопросом в исходном
                 <code>.md</code> или замечанием агенту: <code>c4builder feedback --wait</code> отдаёт

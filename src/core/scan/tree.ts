@@ -11,7 +11,7 @@ import { createFenceExtractor } from './fences.ts';
 export interface Diagram {
     dir: string; // имя файла диаграммы (историческое поле)
     ext: string;
-    engine: string; // 'plantuml' | 'd2' | 'bpmn' | 'mermaid'
+    engine: string; // 'plantuml' | 'd2' | 'bpmn' | 'mermaid' | 'wireflow'
     content: string | Buffer;
     isDitaa: boolean;
     /** Виртуальные страницы: исходный файл (у файловых диаграмм это сам `dir`). */
@@ -41,14 +41,44 @@ export const DIAGRAM_ENGINES = [
     { ext: '.puml', engine: 'plantuml', remoteRender: true },
     { ext: '.d2', engine: 'd2', remoteRender: false },
     { ext: '.bpmn', engine: 'bpmn', remoteRender: false },
-    { ext: '.mmd', engine: 'mermaid', remoteRender: false }
+    { ext: '.mmd', engine: 'mermaid', remoteRender: false },
+    // Экспорт редактора Wireflow: суффикс из двух расширений, прочие .json — не диаграммы.
+    { ext: '.wireflow.json', engine: 'wireflow', remoteRender: false }
 ] as const satisfies ReadonlyArray<{ ext: string; engine: string; remoteRender: boolean }>;
 
 export type DiagramEngine = (typeof DIAGRAM_ENGINES)[number]['engine'];
+type EngineEntry = (typeof DIAGRAM_ENGINES)[number];
 
-// Расширение (lowercase, с точкой) → движок. undefined ⇒ файл не диаграмма.
-export const engineForExt = (ext: string): DiagramEngine | undefined =>
-    DIAGRAM_ENGINES.find((e) => e.ext === ext)?.engine;
+// Суффикс из нескольких расширений (`.wireflow.json`) совпадает и как точное имя файла
+// (`wireflow.json` — так редактор Wireflow называет экспорт); для `.puml` файл `puml` без
+// расширения диаграммой не считается.
+const isExactName = (e: EngineEntry, lower: string): boolean =>
+    e.ext.indexOf('.', 1) !== -1 && lower === e.ext.slice(1);
+
+// Движок по имени файла: самый длинный совпавший суффикс реестра (у `x.wireflow.json`
+// path.extname даёт `.json`, поэтому по расширению не ищем), без учёта регистра.
+// undefined ⇒ файл не диаграмма.
+const engineEntryFor = (name: string): EngineEntry | undefined => {
+    const lower = path.basename(name).toLowerCase();
+    let best: EngineEntry | undefined;
+    for (const e of DIAGRAM_ENGINES)
+        if ((lower.endsWith(e.ext) || isExactName(e, lower)) && (!best || e.ext.length > best.ext.length))
+            best = e;
+    return best;
+};
+export const engineForFile = (name: string): DiagramEngine | undefined => engineEntryFor(name)?.engine;
+
+// Расширение движка (из реестра, с точкой) для Diagram.ext; у `wireflow.json` — `.wireflow.json`.
+export const diagramExt = (name: string): string | undefined => engineEntryFor(name)?.ext;
+
+// Имя выхода диаграммы без суффикса движка: `checkout.wireflow.json` → `checkout`,
+// `wireflow.json` → `wireflow`; не-диаграммы — как path.parse().name.
+export const diagramBaseName = (name: string): string => {
+    const base = path.basename(name);
+    const entry = engineEntryFor(base);
+    if (!entry || isExactName(entry, base.toLowerCase())) return path.parse(base).name;
+    return base.slice(0, base.length - entry.ext.length);
+};
 
 // Есть ли у движка онлайн-рендер (сервер, как у PlantUML). Для движков без него (D2)
 // сборка при выключенном generateLocalImages невозможна — вывод не из чего собрать.
@@ -140,11 +170,10 @@ export const generateTree = async (dir: string, options: BuildOptions): Promise<
             item.mdFiles.push(markdown);
             item.sources.push(path.resolve(mdPath));
             for (const d of diagrams) {
-                const ext = path.extname(d.file);
-                const engine = engineForExt(ext) ?? 'plantuml';
+                const engine = engineForFile(d.file) ?? 'plantuml';
                 item.diagrams.push({
                     dir: d.file,
-                    ext,
+                    ext: diagramExt(d.file) ?? path.extname(d.file),
                     engine,
                     content: d.content,
                     isDitaa: engine === 'plantuml' && /@startditaa/i.test(d.content),
@@ -153,12 +182,12 @@ export const generateTree = async (dir: string, options: BuildOptions): Promise<
                 });
             }
         }
-        // Диаграммы: расширение → движок берём из DIAGRAM_ENGINES. Поле dir — имя файла
+        // Диаграммы: суффикс имени → движок берём из DIAGRAM_ENGINES. Поле dir — имя файла
         // (историческое), engine выбирает рендерер, isDitaa — только для PlantUML.
         for (const diagramFile of files) {
-            const ext = path.extname(diagramFile).toLowerCase();
-            const engine = engineForExt(ext);
+            const engine = engineForFile(diagramFile);
             if (!engine) continue; // не диаграмма — пропускаем
+            const ext = diagramExt(diagramFile) as string;
             const fileContents = await readFile(path.join(dir, diagramFile));
             const isDitaa =
                 engine === 'plantuml' &&
@@ -167,14 +196,14 @@ export const generateTree = async (dir: string, options: BuildOptions): Promise<
         }
         item.diagrams.sort((a, b) => `${a.dir}`.localeCompare(b.dir));
 
-        //copy all other files (.d2/.bpmn исходники, как и .puml, не копируем — они рендерятся)
+        //copy all other files (.d2/.bpmn/.wireflow.json исходники, как и .puml, не копируем — они рендерятся)
         const otherFiles = options.EXCLUDE_OTHER_FILES
             ? []
             : files.filter((x) => {
                   const ext = path.extname(x).toLowerCase();
                   // копируем всё, кроме .md и исходников диаграмм (их рендерим);
                   // _-файлы сюда не доходят — отфильтрованы на readdir выше.
-                  return ext !== '.md' && engineForExt(ext) === undefined;
+                  return ext !== '.md' && engineForFile(x) === undefined;
               });
 
         for (const otherFile of otherFiles) {
@@ -198,7 +227,7 @@ export const generateTree = async (dir: string, options: BuildOptions): Promise<
     for (const item of tree) {
         const seen = new Map<string, string>();
         for (const d of item.diagrams) {
-            const out = `${path.parse(d.dir).name}.${diagramOutputFormat(d, options)}`;
+            const out = `${diagramBaseName(d.dir)}.${diagramOutputFormat(d, options)}`;
             if (seen.has(out))
                 throw new Error(
                     `Output name collision '${out}' in ${item.dir}: '${seen.get(out)}' and '${d.dir}' ` +

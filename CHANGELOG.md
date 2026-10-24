@@ -84,6 +84,15 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
   page with 200, so link checks with `curl` see broken links
 - Security: zod 4.6.7, undici 7.30.1 and body-parser 2.4.0 to fix npm audit advisories
   (GHSA-mrhx-c7xc-m3w5, GHSA-4qv8-2p9j-2685 and others)
+- Wireflow user flows as a fifth diagram engine: a `*.wireflow.json` (or `wireflow.json`) export of
+  the [Wireflow](https://github.com/vanila-io/wireflow) editor in a page folder is rendered at build
+  time into `<name>.svg`/`.png` — screen cards from the bundled template catalog
+  (`vendor/wireflow/`, MIT), notes, groups and bezier/step/smooth-step edges with labels — without a
+  browser, network or new npm packages. Formats 2–4 are supported; older files fail with advice to
+  re-save them in the editor. Other `.json` files are copied as before. `c4builder check` accepts
+  `.wireflow.json` and `wireflow.json` (`✗` per problem with the element id, `⚠` for an unknown
+  template or an external image); `llms-full.txt` carries the source as a `json` block with embedded
+  images replaced by `"<embedded image>"`. The project template gets a `7 Wireflow Example` section
 - The `openapi` plugin gives every spec of a folder its own page: a folder with several specs
   (`billing/openapi.yaml`, `billing/openapi-admin.yaml`) becomes an index page `billing` with links
   and `info.title`, plus `billing/openapi`, `billing/openapi-admin` pages, instead of the
