@@ -26,9 +26,10 @@ search, markdown outputs, local diagram rendering) and site assets. They are lis
 
 Renders an [OpenSpec](https://github.com/Fission-AI/OpenSpec) store: a summary page
 (counters, task progress), one page per active change (header + first artifact, the other
-artifacts and spec deltas as subpages), the specs tree and the archive. `plantuml` / `d2`
-fenced blocks in artifacts are rendered by the local engines; a broken block gets a
-placeholder image and a warning naming the file instead of failing the build.
+artifacts and spec deltas as subpages), the specs tree and the archive. `plantuml` / `d2` /
+`mermaid` fenced blocks in artifacts and image links to diagram files next to them
+(`![](flow.wireflow.json)`, `.puml`, `.d2`, `.bpmn`, `.mmd`) are rendered by the local engines; a
+broken one gets a placeholder image and a warning naming the file instead of failing the build.
 
 | Option | Default | Meaning |
 |---|---|---|
@@ -83,21 +84,24 @@ their relative layout, so relative `$ref`s keep working. Archive download fails 
 `self-signed certificate in certificate chain` behind a TLS-intercepting proxy → set
 `NODE_EXTRA_CA_CERTS` to the proxy CA bundle.
 
-## `figma` — Figma frames as a site section
+## `figma` — Figma frames as a site section and embeds in pages
 
 One page per frame listed in the options (a live `embed.figma.com` iframe with an
 `Open in Figma` link above it) plus a summary in list order. `name` with `/` nests
 (`Mobile/Login`). `url` is the Figma "Share" link
 `https://www.figma.com/<design|file|proto|board|slides|deck>/<key>/<name>?node-id=…`; it is
-normalised at load (`file` → `design`, only `node-id` kept), and a non-Figma link, a duplicate
-name or an empty list fails before the build. No `executeScript`, no assets. The build is
+normalised at load (`file` → `design`, only `node-id` kept), and a non-Figma link or a duplicate
+name fails before the build. `frames` is optional. An image link to Figma on a line of its own
+(`![Screen](https://www.figma.com/design/…?node-id=…)`) in any page — including OpenSpec
+artifacts when `figma` comes after `openspec` in `plugins` — becomes the same `Open in Figma` link
+plus iframe; inline it becomes a plain link, code blocks are untouched. No `executeScript`, no assets. The build is
 offline; readers need network access to Figma and view access to the file ("Anyone with the
 link can view"), which the build notes with one log line.
 
 | Option | Default | Meaning |
 |---|---|---|
 | `mount` | `Figma` | section name |
-| `frames` | — | `[{ "name", "url", "description"? }]`, at least one |
+| `frames` | `[]` | `[{ "name", "url", "description"? }]`; empty — no section |
 | `height` | `600` | iframe height in pixels |
 | `embedHost` | `c4builder` | the embed's `embed-host` parameter |
 

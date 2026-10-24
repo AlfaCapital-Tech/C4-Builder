@@ -5,6 +5,16 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
 
 ## Unreleased
 
+- The `figma` plugin embeds Figma right inside pages: an image link to Figma on a line of its own
+  (`![Payment screen](https://www.figma.com/design/<key>/<name>?node-id=…)`) in a project page or an
+  OpenSpec artifact becomes an `Open in Figma: Payment screen` link plus the `embed.figma.com`
+  iframe (same normalisation, `height` and `embedHost` as frame pages); inline it becomes a plain
+  link, code blocks are untouched, an unparsable link stays with a warning. Pages of plugins listed
+  before `figma` are processed, so put it last. `frames` is now optional — without it there is no
+  section; the log line counts frame pages and embeds
+- OpenSpec artifacts render image links to diagram files next to them — `![Flow](flow.wireflow.json)`,
+  `![](context.puml)`, `.d2`, `.bpmn`, `.mmd` — as diagrams, like fenced blocks: the page shows the
+  picture, the source is not copied to the output, a broken file gets a placeholder and a warning
 - The `openapi` plugin shows AsyncAPI specs too: a matched file with a top-level `asyncapi` key
   gets its own page under the same layout rules (folder index, summary, `info.title`), rendered
   by the bundled official AsyncAPI component (`@asyncapi/react-component` 3.2.2, Apache-2.0) —

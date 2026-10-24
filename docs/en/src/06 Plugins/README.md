@@ -47,6 +47,10 @@ folder.
   build prints a warning naming the artifact file.
 - Relative links between artifacts point to their pages; files referenced by artifacts (images,
   notes) are copied next to the page.
+- An image link to a diagram file next to an artifact — `![Flow](flow.wireflow.json)`,
+  `![](context.puml)`, `.d2`, `.bpmn`, `.mmd` — is rendered as a diagram, like a block in the text:
+  the page shows the picture, the source is not copied to the output, a broken file gets a
+  placeholder and a warning.
 - In `-w` mode the store folder is watched too.
 - With `parentKey`, changes form a tree. A change whose `.openspec.yaml` key `parentKey` points at
   another change (e.g. `x-parent: dig-1-root`) gets a page under it: in the sidebar after the
@@ -173,33 +177,42 @@ token:
 
 ## `figma` — Figma frames on the site
 
-Publishes UI mockups next to the C4 model: the list of frames lives in the plugin options, and the
-output is a site section (`mount`, `Figma` by default) with a summary page and a page per frame. A
-frame page is a live Figma embed (Embed Kit 2.0, `embed.figma.com`) with an **Open in Figma** link
+Publishes UI mockups next to the C4 model in two ways: a site section from the frames listed in
+the options (`mount`, `Figma` by default: a summary and a page per frame) and embeds right inside
+pages. Both are a live Figma embed (Embed Kit 2.0, `embed.figma.com`) with an **Open in Figma** link
 above it, so a reader without network access or without access to the file still gets a working
 link.
+
+- An embed in a page is an image link to Figma on a line of its own:
+  `![Payment screen](https://www.figma.com/design/<key>/<name>?node-id=…)` in a section README or
+  in the `design.md` of an OpenSpec change. It is replaced by `Open in Figma: Payment screen` and the
+  iframe. Inside a line of text such an image becomes a regular link, inside a code block it stays as
+  is; a link that cannot be parsed is left alone with a warning. Regular `[text](…)` links to Figma
+  do not change. Pages of other plugins are processed when `figma` comes after them in `plugins` —
+  put it last.
 
 - `url` is the regular "Share" link from Figma: `https://www.figma.com/<type>/<key>/<name>?node-id=…`
   with the type `design`, `file`, `proto`, `board`, `slides` or `deck` (`https://embed.figma.com/…`
   is accepted too). When the plugin loads it is normalised to the embed address: `file` → `design`,
-  only `node-id` is kept from the query, tracking `t=`, `p=` are dropped. Any other link, a repeated
-  frame name or an empty `frames` is an error before the build starts, naming the frame index.
+  only `node-id` is kept from the query, tracking `t=`, `p=` are dropped. Any other link or a
+  repeated frame name is an error before the build starts, naming the frame index. Without `frames`
+  there is no section — the plugin only embeds in pages (`"plugins": ["openspec", "figma"]`).
 - `/` in a name makes a nested subsection: `Mobile/Login` is the page `Login` under `Mobile`. The
   summary lists pages in the order of `frames`.
 - `description` is markdown shown above the link; its first line goes to the summary.
 - The embed shows the file only to readers who have access to it: share the file as "Anyone with
   the link can view", or expect the reader to sign in to Figma inside the iframe.
 - The plugin is a deliberate exception to the site's offline guarantee: the build itself never
-  touches the network and prints one log line (`figma: N frame page(s) embed embed.figma.com —
-  readers need network access to Figma`), but frame pages load `embed.figma.com` in the reader's
-  browser. All other pages, `index.html` and CSS stay free of external addresses; the plugin needs
+  touches the network and prints one log line (`figma: N frame page(s), M embed(s) in pages load
+  embed.figma.com — readers need network access to Figma`), but pages with embeds load
+  `embed.figma.com` in the reader's browser. All other pages, `index.html` and CSS stay free of external addresses; the plugin needs
   neither `executeScript` nor bundled assets. Markdown hosts strip the iframe — the link remains.
 
 | Option | Default | Meaning |
 |---|---|---|
 | `mount` | `Figma` | section name |
-| `frames` | — | list of frames `[{ "name", "url", "description"? }]`, not empty |
-| `height` | `600` | iframe height in pixels |
+| `frames` | `[]` | list of frames `[{ "name", "url", "description"? }]`; empty — no section |
+| `height` | `600` | iframe height in pixels (embeds in pages too) |
 | `embedHost` | `c4builder` | the embed's `embed-host` parameter (your site's name in Figma statistics) |
 
 ```json
