@@ -27,7 +27,7 @@ npm run check        # biome ci (линт + формат)
 - `docs/` — сайт документации, собирается самим c4builder: `ru/` (основной) и `en/` —
   отдельные проекты (`.c4builder` + `src/`), `landing/` — лендинг, `docsify-template.mjs` —
   шаблон без внешних ресурсов; сборка и публикация — `.github/workflows/pages.yml`.
-  Локально: `cd docs/ru && node ../../dist/index.js --site -w`
+  Локально: `cd docs/ru && NO_UPDATE_NOTIFIER=1 node ../../dist/index.js --site -w`
 
 ## Правила
 

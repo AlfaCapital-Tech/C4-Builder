@@ -38,11 +38,12 @@ TypeScript, ESM, Node 22.17+. Тесты запускают собранный C
 
 **Сайт документации.** Исходники — `docs/ru/src` и `docs/en/src`, лендинг — `docs/landing`.
 Тест `test/docs-parity.test.mjs` проверяет, что у RU и EN одинаковый набор страниц: папки
-сопоставляются по числовому префиксу, файлы — по имени. Локальный просмотр:
+сопоставляются по числовому префиксу, файлы — по имени. Локальный просмотр (`NO_UPDATE_NOTIFIER=1`
+глушит уведомления о версии и скиллах — в репо самого c4builder они не к месту):
 
 ```bash
 npm run build
-cd docs/ru && node ../../dist/index.js --site -w
+cd docs/ru && NO_UPDATE_NOTIFIER=1 node ../../dist/index.js --site -w
 ```
 
 ## Процесс: OpenSpec
