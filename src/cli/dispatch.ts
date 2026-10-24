@@ -158,6 +158,7 @@ function getOptions(c: Partial<C4ConfigFile>): BuildOptions | Partial<BuildOptio
         MD_FILE_NAME: 'README',
         WEB_FILE_NAME: c.webFileName,
         SUPPORT_SEARCH: c.supportSearch,
+        SIDEBAR_COLLAPSE: c.sidebarCollapse,
         EXECUTE_SCRIPT: c.executeScript,
         EXCLUDE_OTHER_FILES: c.excludeOtherFiles,
         USE_SYSTEM_FONTS: c.useSystemFonts,
