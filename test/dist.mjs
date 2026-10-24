@@ -11,7 +11,7 @@ export { renderArgv, fontCacheTag, renderKey } from '../dist/core/render/diagram
 export { acquireBuildLock, BuildLockHeldError, waitBuildLock } from '../dist/util/lock.js';
 export { loadPlugins, expandEnv, pluginWatchPaths } from '../dist/core/plugins/load.js';
 export { addPage, isVirtual } from '../dist/core/plugins/tree.js';
-export { injectHtml, injectPluginAssets } from '../dist/core/plugins/assets.js';
+export { injectHtml, injectSiteAssets } from '../dist/core/plugins/assets.js';
 export { resolveSource, tlsHint } from '../dist/core/plugins/source.js';
 export { extractZip, extractTarGz } from '../dist/util/archive.js';
 export { BUILTIN_PLUGINS } from '../dist/plugins/index.js';

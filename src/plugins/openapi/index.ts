@@ -51,7 +51,7 @@ export default definePlugin<Opts>({
     options: optionsSchema,
     requires: { executeScript: true },
     // Бандл объявлен ассетом, а не взят из шаблона docsify: пользовательский docsifyTemplate
-    // может его не подключать; при дефолтном шаблоне injectPluginAssets дубль не добавит.
+    // может его не подключать; при дефолтном шаблоне injectSiteAssets дубль не добавит.
     assets: {
         styles: [path.join(VENDOR_DIR, 'swagger-ui', 'swagger-ui.css')],
         scripts: [path.join(VENDOR_DIR, 'docsify', 'swagger-ui-bundle.js')]

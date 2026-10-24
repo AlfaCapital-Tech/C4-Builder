@@ -22,7 +22,7 @@ import {
 // Плагины: хуки afterScan (виртуальные страницы) / afterBuild и ассеты сайта.
 // Загружены заранее в cli/dispatch и приходят третьим аргументом (как cacheConf).
 import { runAfterScan, runAfterBuild } from './plugins/hooks.ts';
-import { injectPluginAssets } from './plugins/assets.ts';
+import { injectSiteAssets } from './plugins/assets.ts';
 import type { LoadedPlugin } from './plugins/types.ts';
 
 // Оркестратор владеет lifecycle выходного каталога: dist бэкапится в dist_bk, откуда
@@ -107,7 +107,7 @@ const build = async (
         if (options.GENERATE_WEBSITE) {
             console.log(chalk.blue('generating docsify site'));
             pages = await generateWebMD(tree, options);
-            await injectPluginAssets(plugins, options);
+            await injectSiteAssets(plugins, options);
         }
         // llms.txt ссылается на .md страниц сайта — без website ссылаться не на что.
         if (options.GENERATE_LLMS && options.GENERATE_WEBSITE) {

@@ -482,7 +482,9 @@ export const generateWebMD = async (tree: TreeItem[], options: BuildOptions): Pr
                 alias: { '/.*/_sidebar.md': '/_sidebar.md' },
                 nativeEmoji: true,
                 supportSearch: options.SUPPORT_SEARCH,
-                executeScript: options.EXECUTE_SCRIPT
+                executeScript: options.EXECUTE_SCRIPT,
+                // Ключ только при включённом сворачивании: при false index.html остаётся прежним.
+                ...(options.SIDEBAR_COLLAPSE ? { sidebarDisplayLevel: 1 } : {})
             })
         )
     );

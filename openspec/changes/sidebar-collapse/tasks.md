@@ -7,8 +7,8 @@
 
 ## 2. Подключение в сайт
 
-- [ ] 2.1 `DocsifyOptions.sidebarDisplayLevel` (передаётся только при `SIDEBAR_COLLAPSE`); `injectPluginAssets` → `injectSiteAssets` с ассетами ядра (`<link>` + `<script>` при включённом ключе). Проверка: тест сборки — `index.html` содержит оба тега и `"sidebarDisplayLevel": 1` по умолчанию; при `sidebarCollapse: false` — ни тегов, ни ключа; с пользовательским `docsifyTemplate` (фикстура, спредящая опции) теги есть; `offline-site` зелёный (новый CSS сканируется как `vendor/*.css`).
-- [ ] 2.2 Golden: пересъёмка `UPDATE_GOLDEN=1`. Проверка: diff эталонов — только `index.html` и новые записи `vendor/`; повторный прогон без `UPDATE_GOLDEN` зелёный.
+- [x] 2.1 `DocsifyOptions.sidebarDisplayLevel` (передаётся только при `SIDEBAR_COLLAPSE`); `injectPluginAssets` → `injectSiteAssets` с ассетами ядра (`<link>` + `<script>` при включённом ключе). Проверка: тест сборки — `index.html` содержит оба тега и `"sidebarDisplayLevel": 1` по умолчанию; при `sidebarCollapse: false` — ни тегов, ни ключа; с пользовательским `docsifyTemplate` (фикстура, спредящая опции) теги есть; `offline-site` зелёный (новый CSS сканируется как `vendor/*.css`).
+- [x] 2.2 Golden: пересъёмка `UPDATE_GOLDEN=1`. Проверка: diff эталонов — только `index.html` и новые записи `vendor/`; повторный прогон без `UPDATE_GOLDEN` зелёный.
 - [ ] 2.3 Ручная проверка на `docs/ru` (`--site -w`): свёрнуто до первого уровня, путь к текущей странице раскрыт, клик сворачивает/раскрывает, кириллические пути подсвечиваются, длинный sidebar прокручивается без рывков (`sidebar-pin`); livereload после правки не ломает состояние. Итог — заметкой к задаче.
 
 ## 3. Актуализация
