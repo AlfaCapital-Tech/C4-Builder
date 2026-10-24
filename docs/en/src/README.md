@@ -29,7 +29,7 @@ to working with AI agents:
   `.puml` and immediately knows whether it broke something — without a human and without a full
   build.
 - **Plugins.** `openspec` publishes specs and changes next to the C4 model, `openapi` publishes
-  service contracts as offline swagger-ui pages.
+  service contracts as offline swagger-ui pages, `figma` embeds Figma frames.
 - **D2** as a second diagram engine, PNG via resvg, Java is optional: c4builder downloads a JRE
   if there is none.
 - **BPMN processes** as a third engine: the agent writes BPMN 2.0 XML without coordinates, the
@@ -59,7 +59,7 @@ Agent skills, `AGENTS.md` in a new project and `llms.txt` with diagram sources a
 - [Outputs](04%20Outputs/04%20Outputs.md) — site, markdown per folder, single file.
 - [CLI & configuration](05%20CLI%20and%20configuration/05%20CLI%20and%20configuration.md) —
   commands and `.c4builder` keys.
-- [Plugins](06%20Plugins/06%20Plugins.md) — `openspec`, `openapi`, writing your own.
+- [Plugins](06%20Plugins/06%20Plugins.md) — `openspec`, `openapi`, `figma`, writing your own.
 - [Docker & CI](07%20Docker%20and%20CI/07%20Docker%20and%20CI.md) — the image and pipeline builds.
 - [Development](09%20Development/09%20Development.md) — how c4builder is built and released.
 - **Design log** — the OpenSpec store of this repository: why c4builder works the way it does.

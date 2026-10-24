@@ -14,7 +14,7 @@ search, markdown outputs, local diagram rendering) and site assets. They are lis
 ```
 
 - An entry is `"name"` or `["name", { options }]`. A malformed entry always fails the build.
-- Name resolution: built-in (`openspec`, `openapi`) → local ESM module
+- Name resolution: built-in (`openspec`, `openapi`, `figma`) → local ESM module
   (`./plugins/my.mjs`, relative to the project) → npm package installed in the project.
 - Options are validated before the build; built-in plugins reject unknown option keys.
 - `${ENV_VAR}` inside string options is replaced from the environment (unset → empty) and
@@ -59,6 +59,24 @@ All `yaml`/`yml`/`json` files of the source are published under `<mount>/_specs/
 their relative layout, so relative `$ref`s keep working. Archive download fails with
 `self-signed certificate in certificate chain` behind a TLS-intercepting proxy → set
 `NODE_EXTRA_CA_CERTS` to the proxy CA bundle.
+
+## `figma` — Figma frames as a site section
+
+One page per frame listed in the options (a live `embed.figma.com` iframe with an
+`Open in Figma` link above it) plus a summary in list order. `name` with `/` nests
+(`Mobile/Login`). `url` is the Figma "Share" link
+`https://www.figma.com/<design|file|proto|board|slides|deck>/<key>/<name>?node-id=…`; it is
+normalised at load (`file` → `design`, only `node-id` kept), and a non-Figma link, a duplicate
+name or an empty list fails before the build. No `executeScript`, no assets. The build is
+offline; readers need network access to Figma and view access to the file ("Anyone with the
+link can view"), which the build notes with one log line.
+
+| Option | Default | Meaning |
+|---|---|---|
+| `mount` | `Figma` | section name |
+| `frames` | — | `[{ "name", "url", "description"? }]`, at least one |
+| `height` | `600` | iframe height in pixels |
+| `embedHost` | `c4builder` | the embed's `embed-host` parameter |
 
 ## Custom plugins
 

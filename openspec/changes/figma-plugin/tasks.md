@@ -23,11 +23,13 @@
   - в markdown-выходе (`generateMD`) есть ссылка на исходный `url`;
   - `embed.figma.com` встречается только в страницах раздела (не в `index.html`, CSS, других страницах).
 - [ ] 2.2 Ручная проверка в браузере: `site` на фикстуре с публичным файлом Figma показывает эмбед; с отключённой сетью ссылка «Open in Figma» видна над ошибкой iframe.
+  Не выполнено (нет браузера у агента); собранный markdown страницы фрейма проверен: описание → ссылка → iframe.
 
 ## 3. Актуализация
 
-- [ ] 3.1 Страница `06 Плагины` RU и EN: раздел `figma` — назначение, таблица опций, пример, требование к доступу к файлу («Anyone with the link»), исключение из офлайн-гарантии. Обзорные страницы `README.md` сайта (список плагинов) и `context.puml` (внешняя система Figma). Проверка: `cd docs/ru && node ../../dist/index.js --site` и то же для `docs/en` собираются; `docs-parity` зелёный.
-- [ ] 3.2 `skills/c4builder/references/plugins.md` (раздел `figma`, список встроенных имён) и строка `plugins` в `skills/c4builder/SKILL.md`. Проверка: тест `skills` зелёный.
-- [ ] 3.3 `CHANGELOG.md`, `## Unreleased`: строка о плагине `figma`. Проверка: строка есть; `cli-language` зелёный (сообщения плагина на английском).
+- [x] 3.1 Страница `06 Плагины` RU и EN: раздел `figma` — назначение, таблица опций, пример, требование к доступу к файлу («Anyone with the link»), исключение из офлайн-гарантии. Обзорные страницы `README.md` сайта (список плагинов) и `context.puml` (внешняя система Figma). Проверка: `cd docs/ru && node ../../dist/index.js --site` и то же для `docs/en` собираются; `docs-parity` зелёный.
+- [x] 3.2 `skills/c4builder/references/plugins.md` (раздел `figma`, список встроенных имён) и строка `plugins` в `skills/c4builder/SKILL.md`. Проверка: тест `skills` зелёный.
+- [x] 3.3 `CHANGELOG.md`, `## Unreleased`: строка о плагине `figma`. Проверка: строка есть; `cli-language` зелёный (сообщения плагина на английском).
 - [ ] 3.4 Итог: `npm run build && npm test && npm run check` зелёные; `openspec validate figma-plugin --strict` проходит.
-- [ ] 3.5 Публичность: `grep -rniE --exclude=tasks.md "alfacapital\.ru|artifactory|harbor" openspec/changes/figma-plugin docs/ru/src docs/en/src skills CHANGELOG.md` — пусто. Проверка: вывод команды пуст.
+  `build`, `check`, `openspec validate` зелёные; `npm test` — 390/391, красный только `plugins-source` «archive tar.gz» (локальная среда, bsdtar; код архива не менялся).
+- [x] 3.5 Публичность: `grep -rniE --exclude=tasks.md "alfacapital\.ru|artifactory|harbor" openspec/changes/figma-plugin docs/ru/src docs/en/src skills CHANGELOG.md` — пусто. Проверка: вывод команды пуст.

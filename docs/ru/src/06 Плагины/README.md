@@ -16,7 +16,7 @@
 }
 ```
 
-Идентификатор плагина разрешается в таком порядке: встроенное имя (`openspec`, `openapi`) →
+Идентификатор плагина разрешается в таком порядке: встроенное имя (`openspec`, `openapi`, `figma`) →
 локальный ESM-модуль (`./plugins/my.mjs`, `../shared/plugin.mjs`, абсолютный путь) → npm-пакет
 из папки проекта.
 
@@ -120,6 +120,51 @@
       "archive": "https://gitlab.example.com/api/v4/projects/123/repository/archive.tar.gz?sha=main",
       "glob": "*/openapi.yaml",
       "headers": { "PRIVATE-TOKEN": "${GITLAB_TOKEN}" }
+    }]
+  ]
+}
+```
+
+## `figma` — фреймы Figma на сайте
+
+Публикует макеты интерфейсов рядом с C4-моделью: список фреймов задаётся в опциях плагина, на
+выходе — раздел сайта (`mount`, по умолчанию `Figma`) со страницей-сводкой и страницей на каждый
+фрейм. Страница фрейма — живой эмбед Figma (Embed Kit 2.0, `embed.figma.com`) и ссылка
+**Open in Figma** над ним, так что без сети или без доступа к файлу у читателя остаётся рабочая
+ссылка.
+
+- `url` — обычная ссылка «Share» из Figma: `https://www.figma.com/<тип>/<ключ>/<имя>?node-id=…`
+  с типом `design`, `file`, `proto`, `board`, `slides` или `deck` (принимается и
+  `https://embed.figma.com/…`). При загрузке плагина она приводится к адресу эмбеда: `file` →
+  `design`, из query остаётся только `node-id`, трекинговые `t=`, `p=` отбрасываются. Иная
+  ссылка, повтор имени фрейма или пустой `frames` — ошибка до старта сборки с номером фрейма.
+- `/` в имени даёт вложенный подраздел: `Mobile/Login` — страница `Login` в подразделе `Mobile`.
+  Порядок страниц в сводке — порядок списка `frames`.
+- `description` — markdown, выводится над ссылкой; первая строка попадает в сводку.
+- Эмбед показывает файл только тому, у кого есть к нему доступ: откройте файлу доступ
+  «Anyone with the link can view» либо рассчитывайте, что читатель войдёт в Figma внутри iframe.
+- Плагин — осознанное исключение из офлайн-гарантии сайта: сама сборка в сеть не ходит и пишет
+  одну строку в лог (`figma: N frame page(s) embed embed.figma.com — readers need network access
+  to Figma`), но страницы фреймов загружают `embed.figma.com` в браузере читателя. Остальные
+  страницы, `index.html` и CSS остаются без внешних адресов; `executeScript` и вендорные ассеты
+  плагину не нужны. В markdown-выходах хостинги iframe вырежут — ссылка останется.
+
+| Опция | По умолчанию | Значение |
+|---|---|---|
+| `mount` | `Figma` | название раздела |
+| `frames` | — | список фреймов `[{ "name", "url", "description"? }]`, не пустой |
+| `height` | `600` | высота iframe в пикселях |
+| `embedHost` | `c4builder` | параметр `embed-host` эмбеда (имя вашего сайта в статистике Figma) |
+
+```json
+{
+  "plugins": [
+    ["figma", {
+      "frames": [
+        { "name": "Onboarding", "url": "https://www.figma.com/design/AbC123xyz/App?node-id=12-34",
+          "description": "First launch and sign-up." },
+        { "name": "Mobile/Login", "url": "https://www.figma.com/proto/PrO456/Flow?node-id=1-2" }
+      ]
     }]
   ]
 }
