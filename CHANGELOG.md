@@ -39,6 +39,17 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
   page with 200, so link checks with `curl` see broken links
 - Security: zod 4.6.7, undici 7.30.1 and body-parser 2.4.0 to fix npm audit advisories
   (GHSA-mrhx-c7xc-m3w5, GHSA-4qv8-2p9j-2685 and others)
+- The `openapi` plugin gives every spec of a folder its own page: a folder with several specs
+  (`billing/openapi.yaml`, `billing/openapi-admin.yaml`) becomes an index page `billing` with links
+  and `info.title`, plus `billing/openapi`, `billing/openapi-admin` pages, instead of the
+  `two specs give the same page name` error. New option `layout`: `flat` (default) names the folder
+  page by the folder name as before, so existing addresses do not change; `tree` nests pages by the
+  source folder path (`billing/v2`, `ledger/v2`), and the error for same-named folders in `flat`
+  now suggests it. Only a matched file with a top-level `openapi` or `swagger` key is a spec: other
+  matched files (schema fragments, AsyncAPI, configs) get no page and a warning each, so a wide
+  `glob` like `*/*.{yaml,yml,json}` is safe. The summary lists spec pages with their full path. A
+  folder that gains a second spec turns its page into the index; a file named `openapi.yaml`
+  without the key loses its page and is reported in the log
 
 ## v0.9.0
 
