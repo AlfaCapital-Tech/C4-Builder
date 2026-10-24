@@ -7,7 +7,16 @@ export { parseConfig } from '../dist/config/options.js';
 export { defaultConfig } from '../dist/config/defaults.js';
 export { rasterizeSvgToPng, resvgFontOptions } from '../dist/core/render/pngraster.js';
 export { textWidth } from '../dist/core/render/textmetrics.js';
-export { renderArgv, fontCacheTag, renderKey } from '../dist/core/render/diagrams.js';
+export {
+    renderArgv,
+    fontCacheTag,
+    renderKey,
+    DiagramQueue,
+    generateImages,
+    pendingPlaceholderSvg
+} from '../dist/core/render/diagrams.js';
+export { build } from '../dist/core/build.js';
+export { teardownD2 } from '../dist/core/render/d2renderer.js';
 export { acquireBuildLock, BuildLockHeldError, waitBuildLock } from '../dist/util/lock.js';
 export { loadPlugins, expandEnv, pluginWatchPaths } from '../dist/core/plugins/load.js';
 export { addPage, isVirtual } from '../dist/core/plugins/tree.js';

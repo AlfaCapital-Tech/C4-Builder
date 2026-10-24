@@ -64,30 +64,110 @@ const renderConcurrency = (): number => {
     return Math.max(1, Math.min(4, os.cpus().length - 1));
 };
 
-// Пул ограниченной конкурентности: гоняет tasks не более `concurrency` одновременно.
-// Порядок вызова задач сохраняется (worker'ы разбирают общий индекс next), результат —
-// не собираем (каждая задача пишет свой файл сама). При первой ошибке новые задачи не
-// стартуют, но УЖЕ запущенные дожидаются (finally у Promise.all в воркере) — чтобы не
-// осталось висящих JVM, — после чего пробрасывается первая пойманная ошибка.
-const runPool = async (tasks: Array<() => Promise<void>>, concurrency: number): Promise<void> => {
-    let next = 0;
-    let firstError: unknown;
-    const worker = async (): Promise<void> => {
-        while (next < tasks.length && firstError === undefined) {
-            const task = tasks[next++];
-            try {
-                await task();
-            } catch (err) {
-                if (firstError === undefined) firstError = err;
-            }
+// Дорожки очереди рендера. Каждая — свой пул: PlantUML — отдельные процессы java
+// (renderConcurrency()), остальные движки — по одной задаче (см. комментарии в
+// generateImages); дорожки работают параллельно друг другу.
+export type DiagramLane = 'plantuml' | 'd2' | 'bpmn' | 'mermaid';
+
+export interface DiagramTask {
+    /** Путь картинки относительно dist (posix, без ведущего слэша): по нему страница узнаёт готовую картинку. */
+    out: string;
+    lane: DiagramLane;
+    run: () => Promise<void>;
+}
+
+// Путь задачи/страницы к единому виду: posix, без ведущего слэша (relOut корневой папки
+// идёт без него, вложенных — с ним; из URL страницы он приходит с ним всегда).
+const normalizeRel = (p: string): string => p.split(path.sep).join('/').replace(/^\/+/, '');
+
+// Очередь рендера с приоритетом. Задачи лежат в порядке обхода дерева; воркеры дорожки
+// берут их с головы (shift), поэтому prioritize() переставляет ещё не начатые задачи, а
+// выполняющиеся не трогает. Без prioritize ведёт себя как прежний пул с общим индексом:
+// при первой ошибке дорожки новые задачи не стартуют, УЖЕ запущенные дожидаются (чтобы не
+// осталось висящих JVM), после чего пробрасывается первая пойманная ошибка. Результат
+// не собираем — каждая задача пишет свой файл сама.
+export class DiagramQueue {
+    private readonly lanes = new Map<DiagramLane, DiagramTask[]>();
+    private readonly doneListeners: Array<(out: string) => void> = [];
+    private total = 0;
+
+    constructor(
+        private readonly hooks: {
+            width: (lane: DiagramLane) => number;
+            /** Вызывается по окончании run() при любом исходе (персист кэша). */
+            onSettled?: () => void;
         }
-    };
-    const width = Math.max(1, Math.min(concurrency, tasks.length));
-    const workers: Promise<void>[] = [];
-    for (let i = 0; i < width; i++) workers.push(worker());
-    await Promise.all(workers);
-    if (firstError !== undefined) throw firstError;
-};
+    ) {}
+
+    /** Сколько задач добавлено (в т.ч. уже выполненных). */
+    get size(): number {
+        return this.total;
+    }
+
+    add(task: DiagramTask): void {
+        const tasks = this.lanes.get(task.lane) ?? [];
+        this.lanes.set(task.lane, tasks);
+        tasks.push({ ...task, out: normalizeRel(task.out) });
+        this.total++;
+    }
+
+    /** Колбэк на каждую УСПЕШНО завершённую задачу — путь картинки относительно dist. */
+    onDone(cb: (out: string) => void): void {
+        this.doneListeners.push(cb);
+    }
+
+    /** Диаграммы из папки страницы `pageMd` (путь относительно dist) — в голову очереди. */
+    prioritize(pageMd: string): void {
+        const dir = path.posix.dirname(normalizeRel(pageMd));
+        for (const tasks of this.lanes.values()) {
+            const head = tasks.filter((t) => path.posix.dirname(t.out) === dir);
+            if (!head.length || head.length === tasks.length) continue;
+            const rest = tasks.filter((t) => !head.includes(t));
+            tasks.splice(0, tasks.length, ...head, ...rest);
+        }
+    }
+
+    async run(): Promise<void> {
+        try {
+            // allSettled — чтобы падение одной дорожки не оставляло другие как floating promise
+            // с висящими JVM: все доосушаются, затем бросаем первую ошибку (порядок между
+            // дорожками не значим).
+            const results = await Promise.allSettled(
+                [...this.lanes].map(([lane, tasks]) => this.drain(tasks, this.hooks.width(lane)))
+            );
+            const failed = results.find((r) => r.status === 'rejected');
+            if (failed && failed.status === 'rejected') throw failed.reason;
+        } finally {
+            this.hooks.onSettled?.();
+        }
+    }
+
+    private async drain(tasks: DiagramTask[], concurrency: number): Promise<void> {
+        let firstError: unknown;
+        const worker = async (): Promise<void> => {
+            for (;;) {
+                if (firstError !== undefined) return;
+                const task = tasks.shift();
+                if (!task) return;
+                try {
+                    await task.run();
+                } catch (err) {
+                    if (firstError === undefined) firstError = err;
+                    continue;
+                }
+                for (const cb of this.doneListeners) cb(task.out);
+            }
+        };
+        const width = Math.max(1, Math.min(concurrency, tasks.length));
+        await Promise.all(Array.from({ length: width }, worker));
+        if (firstError !== undefined) throw firstError;
+    }
+}
+
+// Пауза между записями .c4builder.cache по ходу рендера: не чаще раза в полсекунды, а не
+// после каждой диаграммы (Configstore пишет файл синхронно), но и не только в конце —
+// прерванная Ctrl+C сборка оставляет в кэше всё готовое, кроме последних полусекунды.
+const CACHE_PERSIST_MS = 500;
 
 // Версии пакетов движков (D2, BPMN, mermaid) для чексуммы кэша (апгрейд движка → перерендер).
 // Читаем package.json лениво и один раз: pure-PlantUML сборки их не трогают.
@@ -282,21 +362,70 @@ const errorPlaceholderSvg = (name: string, reason: string): string => {
     );
 };
 
+// Заглушка на месте диаграммы, которую dev-сервер дорисует в фоне (режим deferImages):
+// страница отдаётся сразу, картинка подменится по готовности. Нейтральные цвета — это
+// не ошибка. В dist без `-w` не попадает: обычная сборка ждёт рендера.
+export const pendingPlaceholderSvg = (name: string): string => {
+    const esc = (s: string): string =>
+        s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c] as string);
+    const w = 480;
+    const h = 56;
+    return (
+        `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" ` +
+        `font-family="${DEFAULT_FONT_NAME}" fill="#666">` +
+        `<rect x="1" y="1" width="${w - 2}" height="${h - 2}" fill="#f7f7f7" stroke="#bbb" stroke-dasharray="6 4"/>` +
+        `<text x="16" y="34" font-size="14">${esc(name)}: rendering…</text></svg>`
+    );
+};
+
+export interface GenerateImagesFlags {
+    /**
+     * Отложенный рендер (dev-сервер `site -w`): из кэша восстанавливаем сразу, остальным
+     * диаграммам пишем заглушку `rendering…` и возвращаем очередь, не дожидаясь её.
+     * Подразумевает softErrors.
+     */
+    deferImages?: boolean;
+    /**
+     * Ошибка рендера любой диаграммы — заглушка с ошибкой и `✗` в логе вместо исключения
+     * (как у «мягких» диаграмм плагинов). Dev-сервер включает это и для пересборки по
+     * окончании фоновой очереди: битая диаграмма не должна оставить сайт полусобранным.
+     */
+    softErrors?: boolean;
+}
+
 export const generateImages = async (
     tree: TreeItem[],
     options: BuildOptions,
     onImageGenerated: ImageProgress | undefined,
     cacheConf: CacheConf,
-    bkFolderName: string
-): Promise<void> => {
+    bkFolderName: string,
+    { deferImages = false, softErrors = deferImages }: GenerateImagesFlags = {}
+): Promise<DiagramQueue | undefined> => {
     // Чексуммы прошлого прогона — в Set: попадание проверяется O(1) на диаграмму
     // (было O(N) find → O(N²) на всё дерево).
     const oldChecksums = new Set((cacheConf.get('checksums') as string[] | undefined) || []);
     // Каждой диаграмме — запись в порядке обхода дерева; ok выставляется задачей при
     // УСПЕХЕ (рендер или восстановление из бэкапа). В кеш пишем только успешные: иначе
     // упавший прогон терял бы чексуммы уже отрендеренных → их полный перерендер на
-    // следующем запуске (см. persist в finally ниже).
+    // следующем запуске (см. persist ниже).
     const checksumEntries: { cksum: string; ok: boolean }[] = [];
+
+    // Персист кэша по ходу рендера: не чаще CACHE_PERSIST_MS и обязательно по окончании
+    // очереди (onSettled). Набор — old ∩ успешные, как и раньше, но накапливается постепенно.
+    let persistTimer: NodeJS.Timeout | undefined;
+    const persist = (): void => {
+        if (persistTimer) clearTimeout(persistTimer);
+        persistTimer = undefined;
+        cacheConf.set(
+            'checksums',
+            checksumEntries.filter((e) => e.ok).map((e) => e.cksum)
+        );
+    };
+    const schedulePersist = (): void => {
+        if (persistTimer) return;
+        persistTimer = setTimeout(persist, CACHE_PERSIST_MS);
+        persistTimer.unref();
+    };
 
     let totalImages = 0;
     let processedImages = 0;
@@ -344,18 +473,22 @@ export const generateImages = async (
             if (onImageGenerated) onImageGenerated(processedImages, totalImages);
         };
 
-    // D2-задачи гоняем отдельной очередью с конкурентностью 1: @terrastruct/d2 держит
+    // D2-задачи гоняем отдельной дорожкой с конкурентностью 1: @terrastruct/d2 держит
     // ЕДИНСТВЕННЫЙ worker с одним currentResolve/currentReject без корреляции запросов —
     // два параллельных renderD2 затирают колбэк друг друга (промис виснет / результаты
     // перепутываются). Движок всё равно однопоточный, так что сериализация D2 бесплатна.
-    // PlantUML — отдельные процессы java, их гоняем пулом renderConcurrency().
-    const d2Tasks: Array<() => Promise<void>> = [];
     // BPMN рендерится в общем окне jsdom главного потока — параллельность ничего не даёт,
     // а последовательная очередь исключает гонки на общем состоянии бандла bpmn-js.
-    const bpmnTasks: Array<() => Promise<void>> = [];
     // Mermaid — так же: своё окно jsdom, глобальный конфиг и подмены на время рендера.
-    const mermaidTasks: Array<() => Promise<void>> = [];
-    const otherTasks: Array<() => Promise<void>> = [];
+    // PlantUML — отдельные процессы java, их гоняем пулом renderConcurrency().
+    const queue = new DiagramQueue({
+        width: (lane) => (lane === 'plantuml' ? renderConcurrency() : 1),
+        onSettled: persist
+    });
+    // Отложенный режим: восстановление из кэша выполняется сразу (до возврата), заглушки
+    // пишутся параллельно; в очередь уходит только то, что надо рендерить.
+    const immediate: Array<() => Promise<void>> = [];
+    const placeholders: Promise<void>[] = [];
 
     for (const item of tree) {
         for (const diagram of item.diagrams) {
@@ -402,13 +535,15 @@ export const generateImages = async (
             // if checksum exists (diagram untouched) and file/image exists - copy image back from backup folder
             if (oldChecksums.has(cksum) && fs.existsSync(bkFilePath)) {
                 // Восстановление из бэкапа — без рендера; JVM/worker не задействованы,
-                // поэтому кладём в общий пул (kind не важен).
-                otherTasks.push(
-                    withProgress(async () => {
-                        fsextra.copyFileSync(bkFilePath, filePath);
-                        cksumEntry.ok = true;
-                    })
-                );
+                // поэтому кладём в дорожку PlantUML (движок не важен). В отложенном
+                // режиме — сразу: страница должна уйти с готовыми картинками из кэша.
+                const restore = withProgress(async () => {
+                    fsextra.copyFileSync(bkFilePath, filePath);
+                    cksumEntry.ok = true;
+                    schedulePersist();
+                });
+                if (deferImages) immediate.push(restore);
+                else queue.add({ out: relOut, lane: 'plantuml', run: restore });
                 continue;
             }
 
@@ -423,8 +558,21 @@ export const generateImages = async (
             // без исходного файла в сообщении его не найти.
             const source = diagram.source;
             const soft = diagram.soft === true;
+            const lane: DiagramLane = isD2 ? 'd2' : isBpmn ? 'bpmn' : isMermaid ? 'mermaid' : 'plantuml';
 
-            const task = withProgress(async () => {
+            // Заглушка с ошибкой вместо картинки: у «мягких» диаграмм — всегда (блоки в markdown
+            // плагинов писались под онлайн-рендер, где битый блок давал картинку с ошибкой, а
+            // не падение сборки), при softErrors — у любых: фоновый рендер не должен ронять
+            // dev-сервер. Чексумма не сохраняется — следующая пересборка перерисует.
+            const writeErrorPlaceholder = async (reason: string): Promise<void> => {
+                const svg = Buffer.from(errorPlaceholderSvg(outName, reason), 'utf-8');
+                await writeFile(
+                    filePath,
+                    outFormat === 'png' ? await rasterizeSvgToPng(svg, options.USE_SYSTEM_FONTS) : svg
+                );
+            };
+
+            const render = async (): Promise<void> => {
                 // render diagram to image: D2 через WASM, PlantUML — прямым вызовом java.
                 // Для растеризации PlantUML не-ditaa рендерим в svg (не -tpng), затем resvg.
                 let rendered: Buffer;
@@ -456,46 +604,52 @@ export const generateImages = async (
                         : rendered;
                     await writeFile(filePath, image);
                     cksumEntry.ok = true;
+                    schedulePersist();
                 } catch (err: unknown) {
                     // Имя диаграммы в ошибку: renderDiagram/renderD2 сами его не знают.
                     const reason = `${(err as Error).message || err}`;
                     const msg = `Diagram "${outName}"${source ? ` (${source})` : ''}: ${reason}`;
+                    if (softErrors) {
+                        console.log(chalk.red(`✗ ${msg}`));
+                        await writeErrorPlaceholder(reason);
+                        return;
+                    }
                     if (!soft) throw new Error(msg);
-                    // Диаграммы из markdown-блоков плагинов писались под онлайн-рендер,
-                    // где битый блок давал картинку с ошибкой, а не падение сборки.
                     console.log(chalk.yellow(`⚠ ${msg}`));
-                    const svg = Buffer.from(errorPlaceholderSvg(outName, reason), 'utf-8');
-                    await writeFile(
-                        filePath,
-                        outFormat === 'png' ? await rasterizeSvgToPng(svg, options.USE_SYSTEM_FONTS) : svg
-                    );
+                    await writeErrorPlaceholder(reason);
                 }
-            });
+            };
 
-            (isD2 ? d2Tasks : isBpmn ? bpmnTasks : isMermaid ? mermaidTasks : otherTasks).push(task);
+            if (deferImages) {
+                const svg = Buffer.from(pendingPlaceholderSvg(outName), 'utf-8');
+                placeholders.push(
+                    (async () =>
+                        writeFile(
+                            filePath,
+                            outFormat === 'png' ? await rasterizeSvgToPng(svg, options.USE_SYSTEM_FONTS) : svg
+                        ))()
+                );
+                // Прогресс фоновой очереди печатает dev-сервер — withProgress здесь не нужен.
+                queue.add({ out: relOut, lane, run: render });
+            } else {
+                queue.add({ out: relOut, lane, run: withProgress(render) });
+            }
         }
     }
 
-    // PlantUML-пул, D2-, BPMN- и mermaid-очереди работают независимо (процессы java,
-    // WASM-worker, главный поток) и параллельно друг другу. allSettled — чтобы падение одной очереди не
-    // оставляло другие как floating promise с висящими JVM: все доосушаются, затем бросаем первую
-    // ошибку (приоритет — PlantUML-пул, порядок между очередями не значим).
-    try {
-        const results = await Promise.allSettled([
-            runPool(otherTasks, renderConcurrency()),
-            runPool(d2Tasks, 1),
-            runPool(bpmnTasks, 1),
-            runPool(mermaidTasks, 1)
-        ]);
-        const failed = results.find((r) => r.status === 'rejected');
-        if (failed && failed.status === 'rejected') throw failed.reason;
-    } finally {
-        // Персистим чексуммы даже при частичном падении: успешно обработанные диаграммы
-        // не перерендерятся на следующем прогоне. Вместе с сохранением dist_bk при ошибке
-        // (build.ts) повторный прогон после сбоя чинит только упавшую диаграмму.
-        cacheConf.set(
-            'checksums',
-            checksumEntries.filter((e) => e.ok).map((e) => e.cksum)
-        );
+    if (deferImages) {
+        // В прогрессе этой фазы — только восстановленные из кэша; остальное дорисует очередь.
+        totalImages = immediate.length;
+        await Promise.all([...immediate.map((t) => t()), ...placeholders]);
+        // Чексуммы восстановленных — в кэш сразу: очередь может и не дойти до конца (Ctrl+C).
+        persist();
+        return queue.size ? queue : undefined;
     }
+
+    // Дорожки PlantUML, D2, BPMN и mermaid работают независимо (процессы java, WASM-worker,
+    // главный поток) и параллельно друг другу; при частичном падении чексуммы успешно
+    // обработанных всё равно персистятся (onSettled) — вместе с сохранением dist_bk при
+    // ошибке (build.ts) повторный прогон после сбоя чинит только упавшую диаграмму.
+    await queue.run();
+    return undefined;
 };
