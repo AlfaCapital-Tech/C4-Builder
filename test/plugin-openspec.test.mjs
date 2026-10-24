@@ -71,7 +71,14 @@ const makeStore = (dir, store = 'openspec') => {
     );
     write(s, 'changes/dig-1-alpha/img/pic.png', 'PNG');
     // change 2: без tasks, без метаданных
-    write(s, 'changes/dig-2-beta/proposal.md', '## Why\n\nbeta\n');
+    write(
+        s,
+        'changes/dig-2-beta/proposal.md',
+        '## Why\n\nbeta\n\n![Поток](flow.puml)\n\n![битый](broken.mmd)\n'
+    );
+    // картинки-ссылки на файлы диаграмм: рендер локальным движком, битый файл — заглушка
+    write(s, 'changes/dig-2-beta/flow.puml', '@startuml\nAlice -> Bob : hi\n@enduml\n');
+    write(s, 'changes/dig-2-beta/broken.mmd', 'flowchart LR\n  A -->\n');
     // архив
     write(s, 'changes/archive/2026-08-01-dig-0-old/proposal.md', '## Why\n\nold\n');
     write(s, 'changes/archive/2026-08-01-dig-0-old/tasks.md', '- [x] a\n- [x] b\n');
@@ -631,5 +638,19 @@ describe('плагин openspec: опция columns', () => {
             /\| ↳ \[ios\]\(OpenSpec\/Changes\/dig-3-root\/ios\/ios\) \| — \| .* \| Bob \\\| Carol \| — \|/
         );
         expect(readD('OpenSpec/OpenSpec.md')).toContain('| Assignee | Jira |');
+    });
+});
+
+describe('плагин openspec: файлы диаграмм в артефактах', () => {
+    it('![](flow.puml) — диаграмма страницы, исходник в выход не копируется', () => {
+        const page = read('OpenSpec/Changes/dig-2-beta/dig-2-beta.md');
+        expect(page).toMatch(/!\[[^\]]*\]\(flow\.svg\)/);
+        expect(page).not.toContain('flow.puml');
+        expect(read('OpenSpec/Changes/dig-2-beta/flow.svg')).toContain('<svg');
+        expect(fs.existsSync(path.join(dir, 'docs/OpenSpec/Changes/dig-2-beta/flow.puml'))).toBe(false);
+    });
+
+    it('битый файл диаграммы — заглушка вместо картинки, сборка проходит', () => {
+        expect(read('OpenSpec/Changes/dig-2-beta/broken.svg')).toContain('diagram not rendered');
     });
 });

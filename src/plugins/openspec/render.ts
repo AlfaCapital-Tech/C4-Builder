@@ -1,10 +1,12 @@
 // Markdown страниц раздела OpenSpec: сводка, change и его подстраницы, индексы подразделов.
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
 import type { BuildOptions } from '../../config/options.ts';
 import type { PageDiagram } from '../../core/plugins/types.ts';
 import { createFenceExtractor, mapOutsideFences } from '../../core/scan/fences.ts';
+import { engineForFile } from '../../core/scan/tree.ts';
 import { encodeURIPath } from '../../util/utils.ts';
 import { groupNames, type Layout, pageOrder } from './layout.ts';
 import type { Artifact, Change, Spec, Store } from './scan.ts';
@@ -244,6 +246,28 @@ export const renderMarkdown = (
                 return `${bang}[${inner}](${pageLink(page, options)}${hash ? `?id=${hash}` : ''}${title})`;
             const abs = path.join(srcRoot, rel);
             if (!fs.existsSync(abs) || fs.statSync(abs).isDirectory()) return whole;
+            // Картинка-ссылка на файл диаграммы (`![](flow.wireflow.json)`, `.puml`, `.bpmn`…) —
+            // диаграмма страницы, как fenced-блок: рендер локальным движком, битый файл — заглушка.
+            // Иначе в выход ушёл бы исходник, а на странице — битая картинка.
+            if (bang && engineForFile(rel)) {
+                const name = path.posix.basename(rel);
+                const taken = diagrams.find((d) => d.file === name);
+                const relSrc = relSource(srcRoot, rel);
+                // Одноимённые файлы из разных папок артефактов — имя с хэшем пути, а не перезапись.
+                const file =
+                    taken && taken.source !== relSrc
+                        ? `${createHash('sha1').update(rel).digest('hex').slice(0, 8)}-${name}`
+                        : name;
+                if (!diagrams.some((d) => d.file === file))
+                    diagrams.push({
+                        file,
+                        content: fs.readFileSync(abs, 'utf8'),
+                        source: relSrc,
+                        soft: true
+                    });
+                if (!sources.includes(relSrc)) sources.push(relSrc);
+                return `![${inner}](${file}${title})`;
+            }
             const embed = !bang && /:include\b/.test(title);
             if (embed && /\.md$/i.test(rel) && !included.has(rel)) {
                 const dir = path.posix.dirname(rel);
