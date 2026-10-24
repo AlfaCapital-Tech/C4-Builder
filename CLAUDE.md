@@ -11,6 +11,7 @@ npm test             # vitest, все тесты (golden требует java и�
 npm run test:unit    # без golden
 npm run test:golden  # golden-снапшоты рендера; UPDATE_GOLDEN=1 — переснять
 npm run check        # biome ci (линт + формат)
+openspec init --tools claude   # разово после клона: скиллы и /opsx:* OpenSpec, в git не хранятся
 ```
 
 ## Структура
