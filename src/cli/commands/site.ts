@@ -139,7 +139,7 @@ export default (
     const liveReloadEnabled = !!(program.watch && reloadEmitter);
     const agent: AgentMode = { ...(program.agent ?? { on: false, name: '', explicit: false }) };
 
-    // Кеш index.html — отдаём его из памяти, если на диске его временно нет
+    // Кеш корневого index.html — отдаём его из памяти, если на диске его временно нет
     // (в окне build.js → emptyDir(DIST_FOLDER) перед записью).
     let lastIndexHtml: string | null = null;
     let sweeper: NodeJS.Timeout | undefined;
@@ -484,6 +484,9 @@ export default (
             }
             let filePath: string;
             const isIndex = urlPath.endsWith('/');
+            // docsify — один корневой index.html с hash-роутингом. Фолбэк окна ребилда только
+            // для корня: иначе любой несуществующий `…/` отвечал бы 200 главной, а не 404.
+            const isRoot = urlPath === '/';
             if (isIndex) {
                 filePath = path.join(distFolder, urlPath, 'index.html');
             } else if (/\.html?$/.test(urlPath)) {
@@ -497,14 +500,14 @@ export default (
             fs.readFile(resolved, 'utf8', (err, data) => {
                 if (err) {
                     // ENOENT в окне ребилда (emptyDir → запись) — отдаём последний известный index.html.
-                    if (isIndex && lastIndexHtml) {
+                    if (isRoot && lastIndexHtml) {
                         res.set('Cache-Control', 'no-store').type('html').send(lastIndexHtml);
                         return;
                     }
                     return next();
                 }
                 const page = inject(data);
-                if (isIndex) lastIndexHtml = page;
+                if (isRoot) lastIndexHtml = page;
                 res.set('Cache-Control', 'no-store').type('html').send(page);
             });
         });

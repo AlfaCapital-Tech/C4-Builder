@@ -225,3 +225,21 @@ describe('агентский режим site -w', () => {
         expect(res.html).toContain('var AGENT = { on: false');
     }, 60_000);
 });
+
+// Фолбэк на закешированный index.html (окно ребилда) — только для корня: ссылка на
+// несуществующую папку должна давать 404, а не главную со статусом 200.
+describe('неизвестные пути в site -w', () => {
+    it('корень и реальный файл — 200, несуществующий каталог — 404', async () => {
+        const port = 38329;
+        await serve(['site', '-w', '-p', String(port)], {
+            onReady: async () => {
+                const base = `http://127.0.0.1:${port}`;
+                const root = await fetch(`${base}/`);
+                expect(root.status).toBe(200);
+                expect(await root.text()).toContain('</html>');
+                expect((await fetch(`${base}/index.html`)).status).toBe(200);
+                expect((await fetch(`${base}/nope/`)).status).toBe(404);
+            }
+        });
+    }, 60_000);
+});
