@@ -8,4 +8,4 @@
 
 - [x] 2.1 «06 Плагины» RU/EN (раздел `openspec`), `skills/c4builder/references/plugins.md`, `CHANGELOG.md`. Проверка: `docs-parity`, `skills` зелёные.
 - [x] 2.2 `npm run build && npm test && npx biome ci src test` зелёные; `openspec validate openspec-diagram-files --strict`.
-- [ ] 2.3 Ручная проверка: wireflow в design.md OpenSpec-change'а рабочего проекта отображается картинкой.
+- [x] 2.3 Ручная проверка: wireflow в design.md OpenSpec-change'а рабочего проекта отображается картинкой.
