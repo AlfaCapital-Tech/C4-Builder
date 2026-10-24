@@ -16,5 +16,6 @@
 
 - [x] 3.1 Страницы `05 CLI и конфигурация` (таблица ключей) и `04 Выводы` (описание сайта) RU и EN; `skills/c4builder/references/config.md`. Проверка: `docs-parity` и `skills` зелёные; сборка `docs/ru` и `docs/en`.
 - [x] 3.2 `CHANGELOG.md`, `## Unreleased`: сворачивание sidebar по умолчанию, ключ `sidebarCollapse`, совет убрать ручное подключение плагина из своих шаблонов. Проверка: строка есть.
-- [ ] 3.3 `npm run build && npm test && npm run check` зелёные; `openspec validate sidebar-collapse --strict` проходит.
+- [x] 3.3 `npm run build && npm test && npm run check` зелёные; `openspec validate sidebar-collapse --strict` проходит.
+  > Итог: `npm run build` и `npm run check` зелёные, `openspec validate sidebar-collapse --strict` проходит. `npm test`: 391 passed, 1 failed — `plugins-source › archive tar.gz` (resolveSource распаковывает архив, собранный bsdtar macOS, и не находит корневой каталог); код `src/core/plugins/source.ts`, `src/util/archive.ts` и сам тест в change не трогались, падение воспроизводится до изменений — локальная среда (macOS), не регресс change.
 - [x] 3.4 Публичность: `grep -rniE --exclude=tasks.md "alfacapital\.ru|artifactory|harbor" openspec/changes/sidebar-collapse docs/ru/src docs/en/src skills template CHANGELOG.md` — пусто. Проверка: вывод команды пуст.
