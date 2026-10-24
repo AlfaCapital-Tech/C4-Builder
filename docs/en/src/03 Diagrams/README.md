@@ -60,6 +60,18 @@ checksum covers the source, all local `!include`s and D2 imports, the output pat
 settings, plus the engine package versions for D2, BPMN and mermaid and the vendored template catalog version for wireflow. Editing a shared `styles.iuml` re-renders every diagram that includes it, and only
 those.
 
+Checksums are saved as the rendering goes (at most twice a second and at the end of the phase),
+not only when the build finishes: a build interrupted with Ctrl+C or failed on one diagram keeps
+everything already rendered in the cache, and the next build continues from there. The cache is
+portable between machines and CI jobs as long as the c4builder version and the font mode match —
+see "Docker and CI".
+
+PlantUML diagrams are rendered in parallel: each one is a separate `java` process, by default
+`min(4, CPU − 1)` at a time but at least one. The `C4BUILDER_RENDER_CONCURRENCY` environment
+variable (an integer ≥ 1) sets the number of processes explicitly — more on a powerful machine, `1`
+on a weak one. It does not affect the result: the output is byte-identical for any value. D2,
+BPMN and mermaid render one diagram at a time, in parallel with the PlantUML pool.
+
 ## D2
 
 [D2](https://d2lang.com) is rendered by the WASM build of the engine right inside Node — no

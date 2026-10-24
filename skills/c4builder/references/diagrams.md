@@ -75,4 +75,6 @@ install hint. D2 has no online renderer, so `generateLocalImages` must stay `tru
   ```` ```mermaid ```` block is rendered the same way ([mermaid.md](mermaid.md)).
 - `embedDiagram: true` inlines images as base64; `includeLinkToDiagram: true` replaces
   images with links.
-- Unchanged diagrams are reused from the previous build (checksums in `.c4builder.cache`).
+- Unchanged diagrams are reused from the previous build (checksums in `.c4builder.cache`). The
+  checksums are written as the rendering goes, so an interrupted or failed build keeps what it
+  rendered; in CI, caching `distFolder` and `.c4builder.cache` between jobs gives a warm start.

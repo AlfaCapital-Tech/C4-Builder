@@ -5,6 +5,51 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
 
 ## Unreleased
 
+- `c4builder --site -w` serves the site right after the pages are composed instead of waiting
+  for every diagram: diagrams missing from the cache show a `rendering…` placeholder and are
+  rendered in the background after `serving your docsify site` (`rendering N diagrams in
+  background…` → `rendered N diagrams in T s`), the page open in the browser first. A finished
+  image replaces its placeholder on the page without a reload; when the queue is done, a regular
+  rebuild and one reload bring `embedDiagram`, the complete document and `llms-full.txt` up to
+  date and pick up edits made meanwhile. A render error in the background shows an error
+  placeholder with `✗` in the log and keeps the server up. Builds without `-w` still wait for
+  every diagram and fail on a broken one
+- `.c4builder.cache` is written as the rendering goes (at most twice a second and at the end),
+  so a build interrupted with Ctrl+C or failed on one diagram keeps the finished diagrams in the
+  cache and the next build renders only the rest
+- Documentation: `C4BUILDER_RENDER_CONCURRENCY` (parallel PlantUML processes, default
+  `min(4, CPU − 1)`) and the warm start in CI (caching `distFolder` and `.c4builder.cache`
+  between jobs, GitLab CI and GitHub Actions examples); the documentation site workflow uses
+  such a cache
+- The docsify site collapses sidebar sections by default (bundled `docsify-sidebar-collapse`
+  1.3.5, no external resources): the first level and the path to the current page are open, a
+  click on a section expands or collapses it. New `.c4builder` key `sidebarCollapse` (default
+  `true`); `false` restores the fully expanded sidebar. The script and style are injected into
+  `index.html` after the template and the display level travels in the docsify options, so a
+  custom `docsifyTemplate` that puts the options into `window.$docsify` gets collapsing without
+  changes — remove a manual `docsify-sidebar-collapse` include from your template (a file the
+  template already links is not added twice)
+- New built-in plugin `figma`: the frames listed in its options (`name`, Figma "Share" `url`,
+  optional `description`) become a site section (`mount`, `Figma` by default) with a summary page and
+  one page per frame — a live `embed.figma.com` iframe (`height`, `embedHost`) with an `Open in Figma`
+  link above it. `/` in a name nests pages. Links are validated and normalised when the plugin loads
+  (`design`/`file`/`proto`/`board`/`slides`/`deck`, `node-id` kept; `file` → `design`); a non-Figma
+  link, a duplicate name or an empty list fails before the build. The build stays offline and prints
+  one line that readers need network access to Figma; `executeScript` and assets are not needed
+- Short permanent address of an OpenSpec change page: `#/change/<id>` (`<id>` — the change folder
+  name, without the archive date prefix; a nested change by its full id) opens the change page
+  whatever the `mount`, `groupKey` and `nameKey` of the `openspec` plugin are, and after archiving
+  leads to the newest archived change with that id; the browser swaps it for the real page path, so
+  relative links, images and the sidebar highlight work and "back" skips the short address. Plugins
+  declare such redirects with `ctx.addRedirect(from, to)` in `afterScan` (a repeated short path
+  fails the build naming the path and the plugin); the map goes to `$docsify.c4builder.redirects` in
+  `index.html` with the local script `vendor/c4builder-redirects.js`, so it works on a published
+  site and with a `docsifyTemplate` that outputs the options; a site without redirects is unchanged.
+  `--open <id>` (with `--site`) opens that address instead of the home page and warns on stderr when
+  the site has no such change; `c4builder feedback --as <id>` prints
+  `Change page: http://localhost:<port>/#/change/<id>` on stderr when `<id>` is a change of the
+  site (stdout stays the batch). The `c4builder-review` skill links the change page by this address
+  instead of searching the build output
 - Agent skills are part of the npm package and match the installed CLI version. The new
   `c4builder skills` installs or updates them offline in the current folder: `.agents/skills/`
   always, `.claude/skills/` under Claude Code (`CLAUDECODE`) or when `.claude/` exists. The folder of
@@ -48,6 +93,17 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
   `.wireflow.json` and `wireflow.json` (`✗` per problem with the element id, `⚠` for an unknown
   template or an external image); `llms-full.txt` carries the source as a `json` block with embedded
   images replaced by `"<embedded image>"`. The project template gets a `7 Wireflow Example` section
+- The `openapi` plugin gives every spec of a folder its own page: a folder with several specs
+  (`billing/openapi.yaml`, `billing/openapi-admin.yaml`) becomes an index page `billing` with links
+  and `info.title`, plus `billing/openapi`, `billing/openapi-admin` pages, instead of the
+  `two specs give the same page name` error. New option `layout`: `flat` (default) names the folder
+  page by the folder name as before, so existing addresses do not change; `tree` nests pages by the
+  source folder path (`billing/v2`, `ledger/v2`), and the error for same-named folders in `flat`
+  now suggests it. Only a matched file with a top-level `openapi` or `swagger` key is a spec: other
+  matched files (schema fragments, AsyncAPI, configs) get no page and a warning each, so a wide
+  `glob` like `*/*.{yaml,yml,json}` is safe. The summary lists spec pages with their full path. A
+  folder that gains a second spec turns its page into the index; a file named `openapi.yaml`
+  without the key loses its page and is reported in the log
 
 ## v0.9.0
 

@@ -16,7 +16,7 @@ Plugins are listed in `.c4builder` under the `plugins` key — either as `"name"
 }
 ```
 
-A plugin identifier resolves in this order: a built-in name (`openspec`, `openapi`) → a local
+A plugin identifier resolves in this order: a built-in name (`openspec`, `openapi`, `figma`) → a local
 ESM module (`./plugins/my.mjs`, `../shared/plugin.mjs`, an absolute path) → an npm package
 resolved from the project folder.
 
@@ -68,6 +68,21 @@ folder.
   group pages) after the standard ones — e.g. the assignee:
   `"columns": [{ "key": "x-assignee", "title": "Assignee" }]`. A missing value is shown as `—`. A value
   containing ` #` is quoted (`x-assignee: "Alice #1"`), otherwise the rest is a comment.
+- The address of a change page depends on the layout: `#/<mount>/Changes/<group>/<name or id>/<name or id>`,
+  for a nested change `…/<parent>/<id tail>/<id tail>`, for an archived one
+  `#/<mount>/Archive/<date>-<id>/<date>-<id>`; with non-Latin letters in `mount` or the name it
+  runs to hundreds of characters once encoded. So every change also has a short permanent address
+  `#/change/<id>`, `<id>` being the change folder name (without the date prefix for an archived
+  one): it leads to the page of the active change, for a nested one by its full id
+  (`#/change/dig-1-root-ios`), and after archiving to the newest archived change with that id; the
+  browser swaps it for the real page path, so relative links, images and the sidebar highlight work
+  as usual and "back" does not return to the short address. An unknown id shows the standard docsify
+  "not found" page. The address map lives in `index.html` (`$docsify.c4builder.redirects`) together
+  with the local script `vendor/c4builder-redirects.js`, so the address works on a published site
+  too; with your own `docsifyTemplate` — as long as the template writes the options it receives into
+  `window.$docsify` as a whole. `c4builder --site -w --open <id>` and the `Change page` line of the
+  `feedback` command use this address, see
+  [CLI & configuration](05%20CLI%20and%20configuration/05%20CLI%20and%20configuration.md).
 
 | Option | Default | Meaning |
 |---|---|---|
@@ -83,9 +98,25 @@ folder.
 
 Finds specs by `glob` in a local folder (`dir`) **or** in a `tar.gz`/`zip` archive downloaded
 over HTTP (`archive` — for example, a GitLab or GitHub repository archive URL). One page per
-spec, named after the spec's parent folder (after the file name for specs in the source root),
-plus an index.
+spec, plus a section summary linking every spec page.
 
+- Only a file matched by `glob` that has a top-level `openapi` or `swagger` key is a spec. Other
+  matched files (schema fragments, AsyncAPI, configs) get no page — the build prints a
+  `⚠ openapi: <path>: not an OpenAPI document` warning for each. So
+  `glob: "*/*.{yaml,yml,json}"` safely picks up every spec of a folder.
+- Pages follow the source folders. A folder with one spec is that spec's page (`billing`). A
+  folder with several specs (`billing/openapi.yaml`, `billing/openapi-admin.yaml`,
+  `billing/payouts.yaml`) becomes an index page `billing` with links (`openapi.*` first, the rest
+  by name, with the spec's `info.title`) plus one page per spec named after the file without the
+  extension: `billing/openapi`, `billing/openapi-admin`, `billing/payouts`. A spec in the source
+  root is a page named after the file.
+- `layout` sets the folder page path. `flat` (default) — the folder name wherever it sits
+  (`services/team/finch/openapi.yaml` → `finch`): existing sites keep their addresses, and
+  same-named folders in different places (`billing/v2` and `ledger/v2`) fail the build with a
+  hint. `tree` — the folder path from the source root: `billing`, `billing/v2`, `ledger/v2`, so
+  versions in nested folders become nested pages.
+- Two pages with the same path (`finch.yaml` and `finch/openapi.yaml`, `openapi.yaml` and
+  `openapi.json` in one folder) fail the build naming both files.
 - All `yaml`/`yml`/`json` files of the source are copied into `<mount>/_specs/…` keeping their
   layout, so relative `$ref`s (including shared schema files that do not match `glob`) keep
   resolving.
@@ -106,6 +137,18 @@ plus an index.
 | `subdir` | — | folder inside the archive or `dir` |
 | `headers` | — | HTTP headers for the archive request; empty values are dropped |
 | `glob` | `**/openapi.{yaml,yml,json}` | spec pattern (`**`, `*`, `?`, `{a,b}`); directories starting with a dot are skipped |
+| `layout` | `flat` | folder page path: `flat` — the folder name, `tree` — the folder path relative to the source |
+
+A contracts repository where a service API is split into several files per folder and versions
+live in nested folders:
+
+```json
+{
+  "plugins": [
+    ["openapi", { "dir": "../contracts", "glob": "**/*.{yaml,yml,json}", "layout": "tree" }]
+  ]
+}
+```
 
 Example: the OpenSpec store sits next to the C4 sources, and contracts come from another
 repository. An empty `GITLAB_TOKEN` drops the header, so the same config works with and without a
@@ -119,6 +162,51 @@ token:
       "archive": "https://gitlab.example.com/api/v4/projects/123/repository/archive.tar.gz?sha=main",
       "glob": "*/openapi.yaml",
       "headers": { "PRIVATE-TOKEN": "${GITLAB_TOKEN}" }
+    }]
+  ]
+}
+```
+
+## `figma` — Figma frames on the site
+
+Publishes UI mockups next to the C4 model: the list of frames lives in the plugin options, and the
+output is a site section (`mount`, `Figma` by default) with a summary page and a page per frame. A
+frame page is a live Figma embed (Embed Kit 2.0, `embed.figma.com`) with an **Open in Figma** link
+above it, so a reader without network access or without access to the file still gets a working
+link.
+
+- `url` is the regular "Share" link from Figma: `https://www.figma.com/<type>/<key>/<name>?node-id=…`
+  with the type `design`, `file`, `proto`, `board`, `slides` or `deck` (`https://embed.figma.com/…`
+  is accepted too). When the plugin loads it is normalised to the embed address: `file` → `design`,
+  only `node-id` is kept from the query, tracking `t=`, `p=` are dropped. Any other link, a repeated
+  frame name or an empty `frames` is an error before the build starts, naming the frame index.
+- `/` in a name makes a nested subsection: `Mobile/Login` is the page `Login` under `Mobile`. The
+  summary lists pages in the order of `frames`.
+- `description` is markdown shown above the link; its first line goes to the summary.
+- The embed shows the file only to readers who have access to it: share the file as "Anyone with
+  the link can view", or expect the reader to sign in to Figma inside the iframe.
+- The plugin is a deliberate exception to the site's offline guarantee: the build itself never
+  touches the network and prints one log line (`figma: N frame page(s) embed embed.figma.com —
+  readers need network access to Figma`), but frame pages load `embed.figma.com` in the reader's
+  browser. All other pages, `index.html` and CSS stay free of external addresses; the plugin needs
+  neither `executeScript` nor bundled assets. Markdown hosts strip the iframe — the link remains.
+
+| Option | Default | Meaning |
+|---|---|---|
+| `mount` | `Figma` | section name |
+| `frames` | — | list of frames `[{ "name", "url", "description"? }]`, not empty |
+| `height` | `600` | iframe height in pixels |
+| `embedHost` | `c4builder` | the embed's `embed-host` parameter (your site's name in Figma statistics) |
+
+```json
+{
+  "plugins": [
+    ["figma", {
+      "frames": [
+        { "name": "Onboarding", "url": "https://www.figma.com/design/AbC123xyz/App?node-id=12-34",
+          "description": "First launch and sign-up." },
+        { "name": "Mobile/Login", "url": "https://www.figma.com/proto/PrO456/Flow?node-id=1-2" }
+      ]
     }]
   ]
 }
@@ -146,6 +234,9 @@ export default {
       markdown: '## Latest\n\n![flow](flow.puml)',
       diagrams: [{ file: 'flow.puml', content: '@startuml\nA -> B\n@enduml' }]
     });
+    // ctx.addRedirect — a short address `#/changelog/latest` that the browser swaps for the
+    // page path (relative links and images of the page work as usual).
+    ctx.addRedirect(['changelog', 'latest'], ['Changelog']);
   },
   async afterBuild(ctx, opts) { /* ctx.distFolder, ctx.options — copy extra files, check the output */ }
 };
@@ -153,4 +244,6 @@ export default {
 
 Hooks run in the order of the `plugins` list. An exception in a hook aborts the build with the
 plugin's name; the copy of the previous output is kept. A virtual page path cannot coincide with
-a real source folder — the build stops and asks you to rename the `mount`.
+a real source folder — the build stops and asks you to rename the `mount`. The redirects of all
+plugins go to `index.html` (`$docsify.c4builder.redirects`) together with a local script; one short
+path declared twice (by a second plugin or again) is a build error naming that path and the plugin.

@@ -70,6 +70,47 @@ GitHub Actions без Docker: Node из `setup-node`, Java из `setup-java` (и
 каждый раз, кэшируйте каталог из `c4builder jre info` (поле `cacheDir`), а при промахе кэша
 прогревайте его командой `c4builder jre install`.
 
+### Тёплый старт: кэш рендера между джобами
+
+Каждая джоба стартует с чистого клона и рендерит все диаграммы заново — на большом проекте это
+минуты. Кэш рендера переносим: сохраните между джобами папку выхода (`distFolder`) и
+`.c4builder.cache`, и следующая сборка отрендерит только изменённые диаграммы, остальные
+возьмёт из прошлого выхода (в логе — `processed N images` без запуска Java). Условия: та же
+версия c4builder (версии PlantUML и движков входят в чексуммы) и тот же режим шрифтов. В ключ
+кэша включите версию пакета или lock-файл, чтобы обновление c4builder не отдавало старые
+картинки.
+
+GitLab CI:
+
+```yaml
+pages:
+  image: ghcr.io/alfacapital-tech/c4builder:0.9.0
+  cache:
+    key: c4builder-$CI_COMMIT_REF_SLUG
+    paths: [public, .c4builder.cache]
+  script:
+    - c4builder
+  artifacts:
+    paths: [public]
+```
+
+GitHub Actions:
+
+```yaml
+- uses: actions/cache@v4
+  with:
+    path: |
+      docs
+      .c4builder.cache
+    key: c4builder-${{ hashFiles('package-lock.json') }}-${{ github.sha }}
+    restore-keys: c4builder-${{ hashFiles('package-lock.json') }}-
+- run: c4builder
+```
+
+`C4BUILDER_RENDER_CONCURRENCY` задаёт число параллельных процессов PlantUML (по умолчанию
+`min(4, CPU − 1)`): на раннере с большим числом ядер и памяти его можно поднять, на слабом —
+опустить до `1`. Выход от него не зависит.
+
 Фоновая проверка новой версии в CI выключается сама по переменной `CI`: ни процесса, ни
 обращений к реестру, сборка без интернета идёт столько же, сколько и раньше.
 

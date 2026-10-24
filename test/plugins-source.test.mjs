@@ -49,7 +49,11 @@ describe('resolveSource', () => {
         fs.mkdirSync(path.join(src, 'spec'), { recursive: true });
         fs.writeFileSync(path.join(src, 'spec', 'openapi.yaml'), 'openapi: 3.0.0');
         fs.writeFileSync(path.join(src, 'readme'), 'r');
-        execFileSync('tar', ['-czf', path.join(tmp, 'repo.tar.gz'), '-C', tmp, 'repo-abc123']);
+        // COPYFILE_DISABLE: bsdtar на macOS иначе кладёт в архив AppleDouble-записи `._*`
+        // из xattr файлов, и у архива оказывается не один корневой каталог.
+        execFileSync('tar', ['-czf', path.join(tmp, 'repo.tar.gz'), '-C', tmp, 'repo-abc123'], {
+            env: { ...process.env, COPYFILE_DISABLE: '1' }
+        });
         execFileSync('zip', ['-qr', path.join(tmp, 'repo.zip'), 'repo-abc123'], { cwd: tmp });
         // zip-slip: запись ../evil.txt (zip позволяет её собрать явно)
         fs.writeFileSync(path.join(tmp, 'evil.txt'), 'evil');

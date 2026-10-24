@@ -31,15 +31,27 @@ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:<port>/
 `c4builder --site -w`, or ask whether you may start it yourself in the background — many teams
 keep the preview server in the human's hands.
 
+The server answers right after `serving your docsify site`, before the diagrams are rendered: on
+a cold cache the pages show `rendering…` placeholders that turn into images by themselves, the
+open page first. That is normal — give the link without waiting. The background rendering ends
+with `rendered N diagrams in T s` in the server output; `✗ Diagram "<file>": <reason>` there is a
+broken diagram worth fixing before the human reaches it.
+
 ## 2. Link
 
-- Argument is an OpenSpec change id: find its page in the build output (`distFolder` from
-  `.c4builder`, `docs` by default). The path depends on the `mount`, `groupKey` and `nameKey`
-  options of the `openspec` plugin — search, do not guess:
-  `find <distFolder> -path '*<change-id>*' -name '*.md' | head` (with `nameKey` the folder carries
-  the change's name from its `.openspec.yaml` instead of the id). The address is
+- Argument is an OpenSpec change id: the address is `http://localhost:<port>/#/change/<change-id>`
+  — the short permanent address the `openspec` plugin declares for every change (active, nested or
+  archived). It does not depend on the `mount`, `groupKey` and `nameKey` options, and the browser
+  swaps it for the real page path. Do not search the build output and do not build the long path
+  by hand. `curl` cannot check a `#/…` address — the hash never reaches the server: check `/`
+  (step 1) and the `Change page: …` line that `c4builder feedback --as <change-id>` prints on
+  stderr in step 3. No such line means the site has no change with this id: a typo, not built yet
+  (the next rebuild adds it), or a CLI older than 0.10.0 — only then fall back to the build output:
+  `find <distFolder> -path '*<change-id>*' -name '*.md' | head` (`distFolder` from `.c4builder`,
+  `docs` by default), address `http://localhost:<port>/#/<path without .md>`.
+- Argument is a page or a section: find it in the build output —
+  `find <distFolder> -path '*<page>*' -name '*.md' | head`, address
   `http://localhost:<port>/#/<path without .md>`.
-- Argument is a page or a section: find it in the build output the same way.
 - No argument: the home page `http://localhost:<port>/`.
 
 Give the link, remind in two lines what **Feedback** and **Question** do (see above) and say your
@@ -53,8 +65,10 @@ Start in the background (in Claude Code: Bash with `run_in_background`):
 c4builder feedback --wait --as <name>
 ```
 
-It exits when a batch arrives; its stdout is the batch. Connecting turns the **Feedback** button
-on by itself, the server needs no restart. Errors:
+It exits when a batch arrives; its stdout is the batch. When `<name>` is a change of the site, it
+first prints `Change page: http://localhost:<port>/#/change/<name>` on stderr — the link from step
+2 confirmed by the server. Connecting turns the **Feedback** button on by itself, the server needs
+no restart. Errors:
 
 - `--as <name> is required` (exit code 2) — the name is missing or invalid: fix it and run again;
 - `no c4builder site -w on …` (exit code 1) — no server or it crashed: back to step 1;

@@ -49,7 +49,8 @@ export const agentEnv = (extra = {}) => ({
 });
 
 // `c4builder site …` в cwd: onReady выполняется, пока сервер жив; после него процесс гасится.
-// Резолвится выводом сервера.
+// Резолвится выводом сервера. onReady получает `waitFor(re, ms)` — ждёт строку вывода, появившуюся
+// ПОСЛЕ предыдущего совпадения (курсор), чтобы различать повторяющиеся `built in`.
 export const serveSite = (cwd, args, { env = process.env, onReady = async () => {} } = {}) =>
     new Promise((resolve, reject) => {
         const child = spawn(process.execPath, [path.join(REPO_ROOT, 'dist', 'index.js'), ...args], {
@@ -59,16 +60,43 @@ export const serveSite = (cwd, args, { env = process.env, onReady = async () => 
         });
         let out = '';
         let ready = false;
+        let cursor = 0;
+        const waiters = [];
+        const check = () => {
+            for (const w of [...waiters]) {
+                const m = out.slice(cursor).match(w.re);
+                if (!m) continue;
+                cursor += m.index + m[0].length;
+                clearTimeout(w.timer);
+                waiters.splice(waiters.indexOf(w), 1);
+                w.resolve(m[0]);
+            }
+        };
+        const waitFor = (re, ms = 60_000) =>
+            new Promise((res, rej) => {
+                const w = {
+                    re,
+                    resolve: res,
+                    timer: setTimeout(() => {
+                        waiters.splice(waiters.indexOf(w), 1);
+                        rej(new Error(`не дождались ${re} за ${ms} мс:\n${out}`));
+                    }, ms)
+                };
+                waiters.push(w);
+                check();
+            });
         const done = setTimeout(() => {
             child.kill('SIGKILL');
             reject(new Error(`сервер не поднялся за 30 с:\n${out}`));
         }, 30_000);
         child.stdout.on('data', (d) => {
             out += d;
+            check();
             if (ready || !out.includes('serving your docsify site')) return;
             ready = true;
             clearTimeout(done);
-            onReady()
+            cursor = out.indexOf('serving your docsify site');
+            onReady({ waitFor, output: () => out })
                 .then(() => resolve(out), reject)
                 .finally(() => child.kill('SIGTERM'));
         });

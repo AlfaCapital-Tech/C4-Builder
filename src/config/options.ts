@@ -30,6 +30,7 @@ export interface BuildOptions {
     INCLUDE_LINK_TO_DIAGRAM: boolean;
     DIAGRAMS_ON_TOP: boolean;
     SUPPORT_SEARCH: boolean;
+    SIDEBAR_COLLAPSE: boolean;
     EXECUTE_SCRIPT: boolean;
     EXCLUDE_OTHER_FILES: boolean;
     USE_SYSTEM_FONTS: boolean;

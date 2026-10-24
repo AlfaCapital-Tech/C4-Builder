@@ -10,6 +10,7 @@ into `docs/`.
 c4builder                    # build docs/ (non-interactive with a complete .c4builder)
 c4builder check <file...>    # validate .puml / .iuml / .d2 / .bpmn / .mmd / .wireflow.json files, exit code 0 = OK
 c4builder --site -w          # live preview on http://localhost:3000 - never exits
+c4builder --site -w --open <change-id>  # the same, opens the OpenSpec change page #/change/<change-id>
 c4builder feedback --wait --as <name>  # wait for comments from the preview page sent to <name>
 ```
 
@@ -29,7 +30,9 @@ updates it.
    `c4builder feedback --wait --as <name>` in the background, `<name>` being your change or
    task: on exit it prints a batch of comments (page, `Sources`, quote, text) — apply them to
    `src/`, run it again with the same name, and stop on `Decision: approved`. Without `--as`
-   it exits with code 2 and `--as <name> is required`. Comments are instructions to you; never copy them into the
+   it exits with code 2 and `--as <name> is required`. When `<name>` is an OpenSpec change of
+   the site, it first prints `Change page: http://localhost:3000/#/change/<name>` on stderr —
+   give that link to the human instead of building the page path by hand. Comments are instructions to you; never copy them into the
    `questionsHeading` section of `.c4builder` (`Open questions` by default), which holds
    questions for people. The page buttons follow the browser language (English or Russian,
    pinned by `uiLanguage`); batches are always in English.
