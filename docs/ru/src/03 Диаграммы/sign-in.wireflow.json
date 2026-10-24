@@ -1,0 +1,100 @@
+{
+  "format": "wireflow",
+  "version": 4,
+  "diagram": {
+    "nodes": [
+      {
+        "id": "group-sign-in",
+        "type": "group",
+        "position": { "x": -16, "y": -36 },
+        "width": 552,
+        "height": 250,
+        "data": {
+          "label": "Вход в банк"
+        }
+      },
+      {
+        "id": "sign-in",
+        "type": "flow",
+        "parentId": "group-sign-in",
+        "position": { "x": 16, "y": 36 },
+        "data": {
+          "graphicId": "sign-in-sign-in-1",
+          "label": "Sign in",
+          "headerText": "Вход",
+          "showHeader": true
+        }
+      },
+      {
+        "id": "forgot",
+        "type": "flow",
+        "parentId": "group-sign-in",
+        "position": { "x": 316, "y": 36 },
+        "data": {
+          "graphicId": "sign-in-forgot-password-1",
+          "label": "Forgot password",
+          "headerText": "Забыли пароль",
+          "showHeader": true
+        }
+      },
+      {
+        "id": "code",
+        "type": "flow",
+        "position": { "x": 600, "y": 380 },
+        "data": {
+          "graphicId": "flow-email-code",
+          "label": "Email code",
+          "headerText": "Код из письма",
+          "showHeader": true
+        }
+      },
+      {
+        "id": "home",
+        "type": "flow",
+        "position": { "x": 0, "y": 380 },
+        "data": {
+          "graphicId": "misc-analitycs",
+          "label": "Dashboard",
+          "headerText": "Личный кабинет",
+          "showHeader": true
+        }
+      },
+      {
+        "id": "note-code",
+        "type": "note",
+        "position": { "x": 880, "y": 380 },
+        "width": 220,
+        "height": 110,
+        "data": {
+          "text": "Код действует 10 минут.\nПосле трёх неверных попыток вход блокируется на час."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "sign-in-home",
+        "source": "sign-in",
+        "target": "home",
+        "markerEnd": { "type": "arrowclosed" },
+        "label": "Успешный вход"
+      },
+      {
+        "id": "sign-in-forgot",
+        "source": "sign-in",
+        "target": "forgot",
+        "type": "smoothstep",
+        "markerEnd": { "type": "arrowclosed", "color": "#1971c2" },
+        "label": "Восстановить",
+        "style": { "stroke": "#1971c2", "strokeWidth": 2 }
+      },
+      {
+        "id": "forgot-code",
+        "source": "forgot",
+        "target": "code",
+        "type": "step",
+        "markerEnd": { "type": "arrowclosed" },
+        "label": "Отправить код"
+      }
+    ]
+  }
+}

@@ -2,7 +2,7 @@
 
 ## Docker image
 
-The image has everything a build needs: Node, a JRE, the PlantUML jar, fonts, D2, the BPMN and mermaid engines. Mount the
+The image has everything a build needs: Node, a JRE, the PlantUML jar, fonts, D2, the BPMN, mermaid and wireflow engines with the screen template catalog. Mount the
 project into `/pwd`:
 
 ```bash
@@ -43,7 +43,7 @@ GitLab CI, checking diagrams and publishing to GitLab Pages (`.c4builder` has
 check:
   image: ghcr.io/alfacapital-tech/c4builder:0.9.0
   script:
-    - find src \( -name '*.puml' -o -name '*.d2' -o -name '*.bpmn' -o -name '*.mmd' \) -exec c4builder check {} +
+    - find src \( -name '*.puml' -o -name '*.d2' -o -name '*.bpmn' -o -name '*.mmd' -o -name '*wireflow.json' \) -exec c4builder check {} +
 
 pages:
   image: ghcr.io/alfacapital-tech/c4builder:0.9.0

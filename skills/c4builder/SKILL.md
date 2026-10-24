@@ -1,6 +1,6 @@
 ---
 name: c4builder
-description: Work on a c4builder architecture-docs project - C4 model diagrams in PlantUML (C4-PlantUML stdlib) or D2, BPMN process diagrams, Mermaid diagrams, plus markdown, built into a docsify site or markdown files. Use when creating or editing .puml, .iuml, .d2, .bpmn, .mmd or .md files in a project that has a .c4builder config, when changing .c4builder settings or plugins (openspec, openapi), or when building, validating or previewing the docs. Teaches the edit, c4builder check, build loop and the C4-PlantUML conventions.
+description: Work on a c4builder architecture-docs project - C4 model diagrams in PlantUML (C4-PlantUML stdlib) or D2, BPMN process diagrams, Mermaid diagrams, Wireflow user flows, plus markdown, built into a docsify site or markdown files. Use when creating or editing .puml, .iuml, .d2, .bpmn, .mmd, .wireflow.json or .md files in a project that has a .c4builder config, when changing .c4builder settings or plugins (openspec, openapi), or when building, validating or previewing the docs. Teaches the edit, c4builder check, build loop and the C4-PlantUML conventions.
 ---
 
 # c4builder
@@ -37,13 +37,13 @@ How the source tree becomes pages:
   name (the root page is `homepageName`). Siblings are sorted by name — prefix folders with
   numbers (`1 …`, `2 …`) to order them.
 - All `.md` files of a folder are concatenated into its page.
-- Every `.puml` / `.d2` / `.bpmn` / `.mmd` in a folder is rendered and attached to the page (on top by
+- Every `.puml` / `.d2` / `.bpmn` / `.mmd` / `.wireflow.json` in a folder is rendered and attached to the page (on top by
   default, `diagramsOnTop`), unless the markdown places it explicitly with
   `![name](container.puml)` — then it appears exactly there.
 - Files and folders starting with `_` are skipped (use it for shared libraries and drafts);
   `CLAUDE.md` is skipped too. Other files (images, `.iuml`) are copied next to the page —
   keep their names unique across the project.
-- `foo.puml`, `foo.d2`, `foo.bpmn` and `foo.mmd` in one folder render to the same image name → build error.
+- `foo.puml`, `foo.d2`, `foo.bpmn`, `foo.mmd` and `foo.wireflow.json` in one folder render to the same image name → build error.
 - Never edit `docs/` (or whatever `distFolder` is): every build regenerates it.
 
 ## The loop: edit → check → build
@@ -59,10 +59,11 @@ How the source tree becomes pages:
    `✗ <file>: line <N>: <message>` (PlantUML lines count from the top of the file). Errors
    in a `.iuml` carry no line number; D2 errors end with `<file>:<line>:<col>: <message>`;
    BPMN problems are `✗ <file>: <element id> [<rule>] <description>`, one line each;
-   mermaid errors are `✗ <file>: line <N>: <message>`.
+   mermaid errors are `✗ <file>: line <N>: <message>`; wireflow problems are
+   `✗ <file>: <problem>` with the node or edge id, one line each.
    Fix and re-run until the exit code is 0. A changed `.iuml` is checked directly too: a
    styles file calling C4 macros (`UpdateElementStyle`) is checked with the C4 stdlib
-   included. Same engines as the build (bundled PlantUML jar, bundled D2, BPMN pipeline, mermaid), no
+   included. Same engines as the build (bundled PlantUML jar, bundled D2, BPMN pipeline, mermaid, wireflow), no
    `.c4builder` needed.
 3. **Build** the whole project:
 
@@ -142,6 +143,14 @@ ER inside the docs; keep the C4 model in PlantUML. Read
 [references/mermaid.md](references/mermaid.md) before writing mermaid: supported types,
 fixed config keys and the `c4builder check` loop.
 
+## Wireflow
+
+`*.wireflow.json` (or `wireflow.json`) — an export of the Wireflow user-flow editor: screen
+cards, notes, groups and transitions — is rendered at build time into an image (own renderer,
+bundled screen templates, no browser). Read [references/wireflow.md](references/wireflow.md)
+before adding or editing one: file names, structure, format versions and `c4builder check`
+messages.
+
 ## Config and plugins
 
 - Read [references/config.md](references/config.md) before editing `.c4builder`: unknown
@@ -153,7 +162,7 @@ fixed config keys and the `c4builder check` loop.
 ## Reading an existing architecture
 
 With `generateLLMS: true` the built site has `llms.txt` (every page in sidebar order, links
-to its `.md`) and `llms-full.txt` (all pages in one file, diagrams inlined as PlantUML/D2/BPMN/Mermaid
+to its `.md`) and `llms-full.txt` (all pages in one file, diagrams inlined as PlantUML/D2/BPMN/Mermaid/Wireflow
 source, shared local includes once in an appendix). To answer questions about a documented
 system, read `llms-full.txt` from the site or `distFolder` instead of crawling pages or
 images: the C4 source (`Person`, `System`, `Rel`) is the model itself.
@@ -194,6 +203,6 @@ neither stdout nor the exit code.
   agent hangs.
 - Forgetting `c4builder check` and reading a Java stack trace from the full build instead.
 - A page "missing" from the output because its file or folder starts with `_`.
-- `generateLocalImages: false` in a project with `.d2`, `.bpmn` or `.mmd` files — they have no online
+- `generateLocalImages: false` in a project with `.d2`, `.bpmn`, `.mmd` or `.wireflow.json` files — they have no online
   renderer, the build stops with an error.
 - Writing `bpmndi` coordinates into a `.bpmn` — they are ignored; the layout is always automatic.
