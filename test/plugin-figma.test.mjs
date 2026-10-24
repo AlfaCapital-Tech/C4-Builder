@@ -37,7 +37,23 @@ const makeFixture = (name, plugins) => {
     fs.mkdirSync(TMP_ROOT, { recursive: true });
     const dir = fs.mkdtempSync(path.join(TMP_ROOT, `plugin-figma-${name}-`));
     write(dir, 'src/README.md', 'root');
-    write(dir, 'src/Context/README.md', 'context');
+    write(
+        dir,
+        'src/Context/README.md',
+        [
+            'context',
+            '',
+            '![Главный экран](https://www.figma.com/design/EmB789/Screens?node-id=5-6&t=x)',
+            '',
+            'Inline ![chip](https://www.figma.com/design/EmB789/Screens?node-id=7-8) here.',
+            '',
+            '![bad](https://www.figma.com/nope)',
+            '',
+            '```',
+            '![in code](https://www.figma.com/design/EmB789/Screens)',
+            '```'
+        ].join('\n')
+    );
     fs.writeFileSync(path.join(dir, '.c4builder'), JSON.stringify({ ...CONFIG, plugins }));
     return dir;
 };
@@ -86,7 +102,7 @@ describe('плагин figma', () => {
         expect(fs.existsSync(path.join(dir, 'docs/vendor/plugins/figma'))).toBe(false);
         expect(
             log.match(
-                /figma: 3 frame page\(s\) embed embed\.figma\.com — readers need network access to Figma/g
+                /figma: 3 frame page\(s\), 2 embed\(s\) in pages load embed\.figma\.com — readers need network access to Figma/g
             )
         ).toHaveLength(1);
         expect(log).not.toContain('requires executeScript');
@@ -103,9 +119,38 @@ describe('плагин figma', () => {
             .readdirSync(path.join(dir, 'docs'), { recursive: true })
             .map((f) => String(f).split(path.sep).join('/'))
             .filter((f) => /^index\.html$|\.css$|\.md$/.test(f));
-        const outside = files.filter((f) => !f.startsWith('Figma/') && read(f).includes('embed.figma.com'));
+        // Страница с картинкой-ссылкой на Figma — тоже эмбед; прочие страницы и index.html — без.
+        const outside = files.filter(
+            (f) => !f.startsWith('Figma/') && !f.startsWith('Context/') && read(f).includes('embed.figma.com')
+        );
         expect(files.filter((f) => f.startsWith('Figma/')).length).toBeGreaterThan(0);
         expect(outside).toEqual([]);
+    });
+});
+
+describe('плагин figma: эмбеды в страницах', () => {
+    const page = () => read('Context/Context.md');
+
+    it('картинка-ссылка одна на строке — ссылка Open in Figma и iframe на её месте', () => {
+        expect(page()).toContain(
+            '[Open in Figma: Главный экран](https://www.figma.com/design/EmB789/Screens?node-id=5-6&t=x)\n\n<iframe src="https://embed.figma.com/design/EmB789?node-id=5-6&embed-host=c4builder" width="100%" height="800" loading="lazy" allowfullscreen></iframe>'
+        );
+    });
+
+    it('внутри текста — обычная ссылка, в коде и битая ссылка — без изменений', () => {
+        expect(page()).toContain(
+            'Inline [chip](https://www.figma.com/design/EmB789/Screens?node-id=7-8) here.'
+        );
+        expect(page()).toContain('![in code](https://www.figma.com/design/EmB789/Screens)');
+        expect(page()).toContain('![bad](https://www.figma.com/nope)');
+        expect(page().match(/<iframe/g)).toHaveLength(1);
+        expect(log).toContain('figma: https://www.figma.com/nope: not a Figma link');
+    });
+
+    it('markdown-выход: ссылка Open in Figma есть', () => {
+        expect(read('Context/README.md')).toContain(
+            '[Open in Figma: Главный экран](https://www.figma.com/design/EmB789/Screens?node-id=5-6&t=x)'
+        );
     });
 });
 
@@ -114,8 +159,9 @@ describe('плагин figma: ошибки схемы (до старта сбо�
     const load = (o) => loadPlugins([['figma', o]], process.cwd(), opts());
     const frame = (url, name = 'A') => ({ name, url });
 
-    it('пустой frames и неизвестный ключ — ошибка с именем плагина и опции', async () => {
-        await expect(load({ frames: [] })).rejects.toThrow(/plugins\[0\] figma: frames — /);
+    it('неизвестный ключ — ошибка с именем плагина и опции; frames необязателен', async () => {
+        await expect(load({})).resolves.toBeDefined();
+        await expect(load({ frames: [] })).resolves.toBeDefined();
         await expect(
             load({ frames: [frame('https://www.figma.com/design/K/A')], hieght: 1 })
         ).rejects.toThrow(/hieght/);

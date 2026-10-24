@@ -1,11 +1,14 @@
 // Встроенный плагин figma: список фреймов Figma из опций → раздел сайта со страницей-эмбедом
-// на фрейм (Embed Kit 2.0, embed.figma.com) и ссылкой «Open in Figma». Единственный плагин,
-// страницы которого грузят внешний сервис в браузере читателя: ни ассетов, ни executeScript,
-// сама сборка в сеть не ходит. Вся логика ссылок — в одной функции нормализации.
+// на фрейм (Embed Kit 2.0, embed.figma.com) и ссылкой «Open in Figma»; картинка-ссылка на
+// Figma (`![подпись](https://www.figma.com/…)`) в любой странице — такой же эмбед на месте.
+// Единственный плагин, страницы которого грузят внешний сервис в браузере читателя: ни
+// ассетов, ни executeScript, сама сборка в сеть не ходит. Вся логика ссылок — в одной функции
+// нормализации.
 import path from 'node:path';
 import chalk from 'chalk';
 import { z } from 'zod';
 
+import { mapOutsideFences } from '../../core/scan/fences.ts';
 import { definePlugin } from '../../core/plugins/types.ts';
 import { encodeURIPath } from '../../util/utils.ts';
 
@@ -61,7 +64,8 @@ const optionsSchema = z
         mount: z.string().min(1).default('Figma'),
         embedHost: z.string().min(1).default('c4builder'),
         height: z.number().int().positive().default(600),
-        frames: z.array(frameSchema).min(1)
+        // Без фреймов раздела нет — плагин нужен ради эмбедов в страницах.
+        frames: z.array(frameSchema).default([])
     })
     .strict()
     .transform((o, ctx) => {
@@ -94,44 +98,108 @@ const optionsSchema = z
 
 type Opts = z.output<typeof optionsSchema>;
 
+// Ссылка над iframe: без сети или доступа к файлу iframe показывает ошибку браузера или логин
+// Figma, и ссылка не должна теряться под ним. В markdown-выходах HTML вырежут хостинги —
+// ссылка остаётся. lazy — эмбед не грузится, пока не прокрутили.
+const iframe = (embed: string, height: number): string =>
+    `<iframe src="${embed}" width="100%" height="${height}" loading="lazy" allowfullscreen></iframe>`;
+
+// Картинка markdown: `![alt](url)` или `![alt](url "title")`.
+const IMAGE_RE = /!\[([^\]]*)\]\((\S+?)(?:\s+"[^"]*")?\)/g;
+const FIGMA_URL_RE = /^https:\/\/(?:www\.|embed\.)?figma\.com\//i;
+
+/**
+ * Картинки-ссылки на Figma в markdown страницы → эмбеды. Картинка одна на строке — блок
+ * «ссылка + iframe» (HTML-блок отделён пустыми строками, иначе markdown его не распознает);
+ * внутри текста iframe не встанет — там обычная ссылка. Код в ``` не трогается. Ссылка, которую
+ * не удалось разобрать, остаётся как есть и попадает в `bad`.
+ */
+export const embedFigmaImages = (
+    md: string,
+    embedHost: string,
+    height: number,
+    bad: string[] = []
+): { md: string; count: number } => {
+    let count = 0;
+    const out = mapOutsideFences(md, (text) =>
+        text
+            .split('\n')
+            .map((line) => {
+                const alone = /^\s*!\[[^\]]*\]\(\S+?(?:\s+"[^"]*")?\)\s*$/.test(line);
+                return line.replace(IMAGE_RE, (whole, alt: string, url: string) => {
+                    if (!FIGMA_URL_RE.test(url)) return whole;
+                    let embed: string;
+                    try {
+                        embed = figmaEmbedUrl(url, embedHost);
+                    } catch {
+                        bad.push(url);
+                        return whole;
+                    }
+                    count++;
+                    const label = alt.trim() ? `Open in Figma: ${alt.trim()}` : 'Open in Figma';
+                    if (!alone) return `[${alt.trim() || 'Figma'}](${url})`;
+                    return `\n[${label}](${url})\n\n${iframe(embed, height)}\n`;
+                });
+            })
+            .join('\n')
+    );
+    return { md: out, count };
+};
+
 export default definePlugin<Opts>({
     name: 'figma',
     options: optionsSchema,
 
     afterScan(ctx, o) {
         const { mount, height } = o;
-        const link = (segments: string[]): string =>
-            encodeURIPath(
-                path.posix.join(mount, ...segments, ctx.options.WEB_FILE_NAME || segments.at(-1) || '')
-            );
-        // Сводка — в порядке списка, а не по алфавиту: порядок фреймов задаёт пользователь.
-        ctx.addPage({
-            path: [mount],
-            markdown: o.frames
-                .map((f) => {
-                    const summary = f.description?.split('\n').find((l) => l.trim());
-                    return `- [${f.name}](${link(f.segments)})${summary ? ` — ${summary.trim()}` : ''}`;
-                })
-                .join('\n')
-        });
-        for (const f of o.frames) {
-            // Ссылка над iframe: без сети или доступа к файлу iframe показывает ошибку браузера
-            // или логин Figma, и ссылка не должна теряться под ним. В markdown-выходах HTML
-            // вырежут хостинги — ссылка остаётся. lazy — эмбед не грузится, пока не прокрутили.
+        if (o.frames.length) {
+            const link = (segments: string[]): string =>
+                encodeURIPath(
+                    path.posix.join(mount, ...segments, ctx.options.WEB_FILE_NAME || segments.at(-1) || '')
+                );
+            // Сводка — в порядке списка, а не по алфавиту: порядок фреймов задаёт пользователь.
             ctx.addPage({
-                path: [mount, ...f.segments],
-                markdown: [
-                    ...(f.description ? [f.description, ''] : []),
-                    `[Open in Figma](${f.url})`,
-                    '',
-                    `<iframe src="${f.embed}" width="100%" height="${height}" loading="lazy" allowfullscreen></iframe>`
-                ].join('\n')
+                path: [mount],
+                markdown: o.frames
+                    .map((f) => {
+                        const summary = f.description?.split('\n').find((l) => l.trim());
+                        return `- [${f.name}](${link(f.segments)})${summary ? ` — ${summary.trim()}` : ''}`;
+                    })
+                    .join('\n')
+            });
+            for (const f of o.frames) {
+                ctx.addPage({
+                    path: [mount, ...f.segments],
+                    markdown: [
+                        ...(f.description ? [f.description, ''] : []),
+                        `[Open in Figma](${f.url})`,
+                        '',
+                        iframe(f.embed, height)
+                    ].join('\n')
+                });
+            }
+        }
+
+        // Эмбеды в страницах: дерево к этому моменту содержит страницы проекта и плагинов,
+        // объявленных в plugins раньше figma (хуки идут в порядке списка).
+        let embeds = 0;
+        const bad: string[] = [];
+        for (const item of ctx.tree) {
+            item.mdFiles = item.mdFiles.map((md) => {
+                const text = md.toString();
+                if (!text.includes('figma.com')) return md;
+                const r = embedFigmaImages(text, o.embedHost, height, bad);
+                embeds += r.count;
+                return r.count ? r.md : md;
             });
         }
+        for (const url of bad)
+            console.log(chalk.yellow(`⚠ figma: ${url}: not a Figma link, expected ${EXPECTED} — left as is`));
+
         // Одна строка, не предупреждение: внешний эмбед — назначение подключённого плагина.
         console.log(
             chalk.gray(
-                `figma: ${o.frames.length} frame page(s) embed ${EMBED_HOST} — readers need network access to Figma`
+                `figma: ${o.frames.length} frame page(s), ${embeds} embed(s) in pages load ${EMBED_HOST} — readers need network access to Figma`
             )
         );
     }
