@@ -32,6 +32,6 @@
   `actionlint` 1.7.7 (docker) — без замечаний; второй прогон в PR — после пуша.
 - [x] 3.3 Скиллы: `skills/c4builder/SKILL.md` (превью стартует до рендера, заглушки, переменная параллелизма), `skills/c4builder-review/SKILL.md` §1 (сервер отвечает сразу; заглушки `rendering…` на странице — норма, дождаться строки `rendered`). Проверка: тест `skills` зелёный.
 - [x] 3.4 `CHANGELOG.md`, `## Unreleased`: быстрый старт `-w`, инкрементальный кэш, документация `C4BUILDER_RENDER_CONCURRENCY` и CI-кэша. Проверка: строка есть.
-- [ ] 3.5 Итог: `npm run build && npm test && npm run check` зелёные; `openspec validate site-warm-start --strict` проходит; комментарий в issue #32 по п. 1.
+- [x] 3.5 Итог: `npm run build && npm test && npm run check` зелёные; `openspec validate site-warm-start --strict` проходит; комментарий в issue #32 по п. 1.
   build/test/biome зелёные, `openspec validate --strict` — valid. Комментарий в issue #32 не пишется в рамках этой реализации — остаётся за автором.
 - [x] 3.6 Публичность: `grep -rniE --exclude=tasks.md "alfacapital\.ru|artifactory|harbor" openspec/changes/site-warm-start docs/ru/src docs/en/src skills .github CHANGELOG.md` — пусто (итоги ручной проверки 2.4 — без имён внутренних проектов и хостов). Проверка: вывод команды пуст.

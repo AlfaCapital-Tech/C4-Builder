@@ -29,6 +29,6 @@
 ## 5. Актуализация и интеграция
 
 - [x] 5.1 `CHANGELOG.md`, `## Unreleased`: короткий адрес `#/change/<id>`, `--open <id>`, строка `Change page` в `feedback`. Проверка: строка есть.
-- [ ] 5.2 `npm run build && npm test && npm run check` зелёные; `openspec validate site-agent-review --strict` проходит; в issue #32 — комментарий со ссылкой на PR и пометкой, что пункт 1 (холодная сборка) не входит.
+- [x] 5.2 `npm run build && npm test && npm run check` зелёные; `openspec validate site-agent-review --strict` проходит; в issue #32 — комментарий со ссылкой на PR и пометкой, что пункт 1 (холодная сборка) не входит.
   Сделано: build, check и `openspec validate --strict` зелёные; `npm test` — 393/394, единственное красное — `plugins-source` «archive tar.gz» (macOS `tar` кладёт в архив AppleDouble `._repo-abc123`, снятие единственного корневого каталога не срабатывает; с `COPYFILE_DISABLE=1` зелёный; файлы резолвера не менялись). Осталось человеку: комментарий в issue #32 после открытия PR.
 - [x] 5.3 Публичность: `grep -rniE --exclude=tasks.md "alfacapital\.ru|artifactory|harbor" openspec/changes/site-agent-review docs/ru/src docs/en/src skills template CHANGELOG.md` — пусто. Проверка: вывод команды пуст.
