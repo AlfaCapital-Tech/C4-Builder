@@ -5,7 +5,7 @@ import path from 'node:path';
 import { z } from 'zod';
 
 import { definePlugin } from '../../core/plugins/types.ts';
-import { type Layout, layoutChanges, pageOrder } from './layout.ts';
+import { type Layout, layoutChanges, originalId, pageOrder } from './layout.ts';
 import { type Change, scanStore, type Store } from './scan.ts';
 import {
     type RenderedPage,
@@ -108,6 +108,23 @@ export default definePlugin<Opts>({
             nameKey,
             archived: true
         });
+
+        // Короткий адрес `#/change/<id>` (change site-agent-review): не зависит от mount, групп и
+        // имён, переживает архивацию. Активный change — приоритет над архивным с тем же id;
+        // архив отсортирован от новых к старым, поэтому первый встреченный — новейший. Вложенный
+        // объявляется по полному id.
+        const declared = new Set<string>();
+        const addRedirects = (changes: Change[], layout: Layout, archived: boolean): void => {
+            for (const change of changes) {
+                const id = originalId(change, archived);
+                const at = layout.get(change);
+                if (!at || declared.has(id)) continue;
+                declared.add(id);
+                ctx.addRedirect(['change', id], at.segments);
+            }
+        };
+        addRedirects(store.changes, active, false);
+        addRedirects(store.archive, archived, true);
 
         ctx.addPage({ path: [mount], markdown: renderSummary(store, mount, options, active, o.columns) });
 

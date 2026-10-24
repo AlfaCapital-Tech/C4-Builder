@@ -20,7 +20,7 @@ export type Layout = Map<Change, Placement>;
 
 // Архивный change — `<YYYY-MM-DD>-<id>`; ссылка на родителя пишется по активному id.
 const DATE_PREFIX = /^\d{4}-\d{2}-\d{2}-/;
-const originalId = (c: Change, archived: boolean): string =>
+export const originalId = (c: Change, archived: boolean): string =>
     archived ? c.id.replace(DATE_PREFIX, '') : c.id;
 
 /**

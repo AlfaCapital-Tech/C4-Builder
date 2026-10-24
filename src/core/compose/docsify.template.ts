@@ -24,6 +24,14 @@ export interface DocsifyOptions {
     nativeEmoji: boolean;
     supportSearch: boolean;
     executeScript: boolean;
+    /**
+     * Данные c4builder для своих скриптов на странице; docsify незнакомые ключи не трогает, а
+     * пользовательские шаблоны раскладывают опции в `window.$docsify` целиком. `redirects` —
+     * короткий путь → путь страницы (change site-agent-review), читает
+     * vendor/docsify/c4builder-redirects.js. Ключ есть только при непустой карте — index.html
+     * без переадресаций не меняется.
+     */
+    c4builder?: { redirects: Record<string, string> };
 }
 
 export default (options: DocsifyOptions): string => {

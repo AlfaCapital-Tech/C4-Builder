@@ -16,8 +16,7 @@ import cmdSkills, { skillsNotice } from './commands/skills.ts';
 import { detectAgent } from './agent.ts';
 import { cmdUpdate, pendingUpdate, startUpdateCheck } from './update.ts';
 import cmdCollect from './wizard/collect.ts';
-import { build } from '../core/build.ts';
-import type { PageSources } from '../core/compose/markdown.ts';
+import { build, type BuildResult } from '../core/build.ts';
 import { loadPlugins, pluginWatchPaths } from '../core/plugins/load.ts';
 import fs from 'node:fs';
 import watch from 'node-watch';
@@ -182,7 +181,10 @@ export default async () => {
         .option('--reset', 'clear all configuration')
         .option('--site', 'serve the generated site')
         .option('-w, --watch', 'watch for changes and rebuild')
-        .option('-o, --open', 'open the generated site in the browser (with --site)')
+        .option(
+            '-o, --open [page]',
+            'open the generated site in the browser (with --site): the home page, or the OpenSpec change <page> (#/change/<id>)'
+        )
         .option('--agent', 'with --site -w: accept page feedback for a coding agent (c4builder feedback)')
         .option('--no-agent', 'with --site -w: no agent feedback even when run by a coding agent')
         .option('--wait', 'for `feedback`: wait for the next batch of page feedback')
@@ -362,9 +364,9 @@ export default async () => {
         });
         const reloadEmitter = new EventEmitter();
         reloadEmitter.setMaxListeners(0);
-        // Карта «страница сайта → исходники» последней удачной сборки: dev-сервер читает её
-        // геттером, поэтому после ребилда в watch видит свежую без рестарта.
-        let pages: PageSources = new Map();
+        // Итог последней удачной сборки (страницы → исходники, переадресации): dev-сервер читает
+        // его геттером, поэтому после ребилда в watch видит свежий без рестарта.
+        let result: BuildResult = { pages: new Map(), redirects: new Map() };
         if (opts.watch) {
             // node-watch: CJS-рантайм при ESM-.d.ts (export default) — дефолт-импорт
             // типизируется как namespace. Каст к реальной сигнатуре, рантайм не меняется.
@@ -413,10 +415,10 @@ export default async () => {
                         console.log(chalk.gray(`waiting for another build: ${e.message}`))
                     );
                     try {
-                        ({ pages } = await build(options, cacheConf, plugins));
+                        result = await build(options, cacheConf, plugins);
                         while (attemptedWatchBuild) {
                             attemptedWatchBuild = false;
-                            ({ pages } = await build(options, cacheConf, plugins));
+                            result = await build(options, cacheConf, plugins);
                         }
                     } finally {
                         release();
@@ -448,7 +450,7 @@ export default async () => {
             process.exit(1);
         }
         try {
-            ({ pages } = await build(options, cacheConf, plugins));
+            result = await build(options, cacheConf, plugins);
         } finally {
             release();
             // Одиночная сборка: D2-воркер больше не нужен, без teardown он держал бы
@@ -467,7 +469,7 @@ export default async () => {
                     options,
                     { ...opts, agent: detectAgent(process.env, opts) },
                     reloadEmitter,
-                    () => pages
+                    () => result
                 );
             } catch {
                 // Ошибку запуска сервера (занятый порт) cmdSite уже напечатал — остаётся код выхода.

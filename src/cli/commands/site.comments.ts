@@ -3,6 +3,8 @@ import { UI_STRINGS } from './site.i18n.ts';
 export const COMMENTS_PATH = '/__c4builder/comments';
 export const FEEDBACK_PATH = '/__c4builder/feedback';
 export const FEEDBACK_HEADER = 'X-C4builder-Feedback';
+// Адрес страницы change'а по имени слушателя (change site-agent-review): читает `c4builder feedback`.
+export const PAGE_PATH = '/__c4builder/page';
 
 const CSS = [
     '.c4b-cbtns{position:absolute;z-index:1001;white-space:nowrap}',
