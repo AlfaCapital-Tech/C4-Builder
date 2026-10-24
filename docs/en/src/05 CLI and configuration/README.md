@@ -30,7 +30,7 @@ Flags:
 |---|---|
 | `-c, --config-file <path>` | a different config file instead of `.c4builder` |
 | `-w, --watch` | rebuild on changes in the sources and plugin folders |
-| `-o, --open` | open the site in the browser (with `--site`) |
+| `-o, --open [id]` | open the site in the browser (with `--site`): without a value the home page, with an OpenSpec change id its page by the short address `#/change/<id>` (see [Plugins](06%20Plugins/06%20Plugins.md)); when the site has no such address — a warning on stderr, the address is opened anyway |
 | `-p, --port <n>` | port for `--site` and `feedback` (defaults to `webPort` from the config, 3000) |
 | `--agent`, `--no-agent` | turn the agent mode of `site -w` on or off regardless of the environment |
 | `--wait` | for `feedback`: wait for the next batch instead of only checking the queue |
@@ -125,8 +125,11 @@ recipient.
 
 `c4builder feedback --wait --as <name>` connects to `site -w` on the port from `-p` or `webPort`,
 waits for the next batch for `<name>` with no time limit, prints it to stdout as markdown and exits
-with code 0. Without `--wait` the command prints a batch if one is already in the mailbox, otherwise
-nothing, and exits at once. Without `--as` or with an invalid name — exit code 2 and
+with code 0. When `<name>` is the id of a change on the site (the `openspec` plugin), the command
+first prints one stderr line `Change page: http://localhost:<port>/#/change/<name>` — the link to
+the change page for the human; stdout stays reserved for the batch, and there is no line when the
+site has no such change. Without `--wait` the command prints a batch if one is already in the
+mailbox, otherwise nothing, and exits at once. Without `--as` or with an invalid name — exit code 2 and
 `--as <name> is required` with an example, the server is not contacted. No server, or the mode is
 off — exit code 1 and a message with the server address. A batch sent to a recipient that is not
 listening (say, the agent is editing files between batches) waits in its mailbox and goes to the

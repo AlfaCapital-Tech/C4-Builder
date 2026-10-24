@@ -40,6 +40,16 @@ placeholder image and a warning naming the file instead of failing the build.
 | `nameKey` | — | `.openspec.yaml` key with the change's name (e.g. `x-name`); when set, the name labels the top-level change and is its page path segment (falls back to the id on `/`, `#`, `?` or a duplicate) |
 | `columns` | — | extra Changes table columns from `.openspec.yaml`: `[{ "key": "x-assignee", "title": "Assignee" }]`; missing value — `—` |
 
+Change page addresses: `#/<mount>/Changes/<group>/<name or id>/<name or id>`, nested
+`…/<parent>/<id tail>/<id tail>`, archived `#/<mount>/Archive/<date>-<id>/<date>-<id>`. Do not
+build them by hand: every change has the short permanent address `#/change/<id>` (`<id>` — the
+change folder name, without the archive date prefix; a nested change by its full id). It opens the
+active change, after archiving the newest archived one with that id, and the browser swaps it for
+the real page path. The map is in `index.html` (`$docsify.c4builder.redirects`), so it works on a
+published site too; a custom `docsifyTemplate` must write the received options into
+`window.$docsify` as a whole. `c4builder --site -w --open <id>` opens this address and
+`c4builder feedback --as <id>` prints it on stderr as `Change page: …`.
+
 ## `openapi` — swagger-ui pages for OpenAPI specs
 
 One page per spec found by `glob` (named after the spec's parent folder) plus an index;
@@ -64,5 +74,6 @@ their relative layout, so relative `$ref`s keep working. Archive download fails 
 
 A plugin is an ESM module whose default export is an object with `name` and optional
 `options` (zod schema), `watchPaths`, `assets`, `requires`, `afterScan(ctx, opts)` (add
-virtual pages with `ctx.addPage`) and `afterBuild(ctx, opts)`. See the "Writing a plugin"
+virtual pages with `ctx.addPage`, short addresses with `ctx.addRedirect(from, to)` — a repeated
+short path fails the build) and `afterBuild(ctx, opts)`. See the "Writing a plugin"
 section of the c4builder README for the full contract and an example.
