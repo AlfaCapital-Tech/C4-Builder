@@ -131,6 +131,8 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
 - A link to a diagram with an upper-case extension (`![](Context.PUML)`) is replaced by the
   diagram in place, as with a lower-case one, instead of staying raw while the diagram is added
   to the page separately
+- PNG placeholders (`rendering…`, a render error) are rasterised with the bundled font even with
+  `useSystemFonts`, without scanning the system fonts — up to several seconds per placeholder
 
 ## v0.9.0
 

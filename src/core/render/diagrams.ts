@@ -388,6 +388,11 @@ export const pendingPlaceholderSvg = (name: string): string => {
     );
 };
 
+// Заглушки свёрстаны вендорным шрифтом — системные им не нужны, а resvg с
+// loadSystemFonts сканирует все шрифты системы (до нескольких секунд на каждую растеризацию
+// при useSystemFonts), задерживая отдачу страницы ради картинки «rendering…».
+const rasterizePlaceholder = (svg: Buffer): Promise<Buffer> => rasterizeSvgToPng(svg, false);
+
 export interface GenerateImagesFlags {
     /**
      * Отложенный рендер (dev-сервер `site -w`): из кэша восстанавливаем сразу, остальным
@@ -587,10 +592,7 @@ export const generateImages = async (
             // dev-сервер. Чексумма не сохраняется — следующая пересборка перерисует.
             const writeErrorPlaceholder = async (reason: string): Promise<void> => {
                 const svg = Buffer.from(errorPlaceholderSvg(outName, reason), 'utf-8');
-                await writeFile(
-                    filePath,
-                    outFormat === 'png' ? await rasterizeSvgToPng(svg, options.USE_SYSTEM_FONTS) : svg
-                );
+                await writeFile(filePath, outFormat === 'png' ? await rasterizePlaceholder(svg) : svg);
             };
 
             const render = async (): Promise<void> => {
@@ -648,10 +650,7 @@ export const generateImages = async (
                 const svg = Buffer.from(pendingPlaceholderSvg(outName), 'utf-8');
                 placeholders.push(
                     (async () =>
-                        writeFile(
-                            filePath,
-                            outFormat === 'png' ? await rasterizeSvgToPng(svg, options.USE_SYSTEM_FONTS) : svg
-                        ))()
+                        writeFile(filePath, outFormat === 'png' ? await rasterizePlaceholder(svg) : svg))()
                 );
                 // Прогресс фоновой очереди печатает dev-сервер — withProgress здесь не нужен.
                 queue.add({ out: relOut, lane, run: render });
