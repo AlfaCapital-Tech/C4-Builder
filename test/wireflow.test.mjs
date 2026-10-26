@@ -401,6 +401,34 @@ describe('SVG', () => {
         expect(raster.svg).toContain('WebP image');
     });
 
+    it('управляющие символы: VT/FF в тексте — перевод строки, прочие недопустимые в XML вырезаны; SVG и PNG валидны', async () => {
+        const out = renderWireflowSvg(
+            file(
+                [
+                    card('a\u0001', 0, 0, {}, { headerText: 'Кор\u0000зина', graphicId: 'no-such\u0002' }),
+                    note('n', 300, 0, 'Первая\u000bвторая\fтретья\u0007 \ud800\uffffконец'),
+                    group('g', 0, 400, { data: { label: 'Гр\u001fуппа' } })
+                ],
+                [edge('e', 'a\u0001', 'n', { label: 'Да\u0008лее', style: { stroke: '#E8590C\u0001' } })]
+            ),
+            'x'
+        );
+        // Ни одного символа, запрещённого в XML 1.0, в выходе.
+        // biome-ignore lint/suspicious/noControlCharactersInRegex: ищем именно управляющие символы
+        expect(out.svg).not.toMatch(/[\0-\x08\x0B\x0C\x0E-\x1F\uFFFE\uFFFF]|\p{Cs}/u);
+        const lines = [...out.svg.matchAll(/<tspan x="12" y="[\d.]+">([^<]*)<\/tspan>/g)].map((m) => m[1]);
+        expect(lines).toEqual(['Первая', 'вторая', 'третья конец']);
+        expect(out.svg).toContain('>Корзина</text>');
+        expect(out.svg).toContain('>ГРУППА</text>');
+        expect(out.svg).toContain('>Далее</text>');
+        expect(out.svg).toContain('stroke="#e8590c"'); // цвет очищен до нормализации регистра
+        expect(out.svg).toContain('marker-end="url(#wf-arrow-e8590c)"');
+        expect(out.svg).toContain('>no-such</text>'); // id шаблона в заглушке — через escapeXml
+        expect(out.warnings).toEqual(['card "a\\u0001": unknown screen template "no-such\\u0002"']);
+        const png = await rasterizeSvgToPng(out.svg);
+        expect(png.subarray(0, 4)).toEqual(Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    });
+
     it('детерминизм: повторный рендер байт-в-байт, PNG растеризуется', async () => {
         expect(renderWireflowSvg(README_EXAMPLE, 'x.wireflow.json').svg).toBe(svg);
         const png = await rasterizeSvgToPng(svg);

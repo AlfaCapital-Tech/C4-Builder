@@ -5,7 +5,7 @@ import chalk from 'chalk';
 
 import { VENDOR_DIR } from '../../util/paths.ts';
 import { DEFAULT_FONT_NAME } from './fonts.ts';
-import { ASCENT, DESCENT, escapeXml, textWidth } from './textmetrics.ts';
+import { ASCENT, DESCENT, escapeXml, stripInvalidXml, textWidth } from './textmetrics.ts';
 import { type EdgePath, getBezierPath, getSmoothStepPath } from './xyflowpaths.ts';
 
 // Пятый бэкенд рендера: экспорт редактора Wireflow (`*.wireflow.json`, github.com/vanila-io/wireflow,
@@ -174,6 +174,15 @@ const isId = (v: unknown): v is string => typeof v === 'string' && v !== '';
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 const q = (v: unknown): string => JSON.stringify(v);
 
+// Тексты и цвета из файла — к допустимым в XML 1.0 при разборе, чтобы раскладка (перенос,
+// обрезка, ширина подписи) и вывод работали с одной строкой. VT и FF не выбрасываются, а
+// становятся переводом строки: так их вставляет Word (Shift+Enter — разрыв строки, FF —
+// разрыв страницы), и автор имел в виду новую строку; заметка её покажет, однострочные
+// подписи — пробелом, как и обычный \n. Остальное недопустимое — мусор вставки, вырезается.
+// id и graphicId не трогаем: на них ссылаются другие узлы, а в SVG они попадают только через
+// escapeXml, который вырезает то же самое.
+const cleanText = (s: string): string => stripInvalidXml(s.replace(/[\v\f]/g, '\n'));
+
 const RESAVE = 'open and re-save the file in the current Wireflow editor (wireflow.co)';
 
 export interface Parsed {
@@ -226,6 +235,10 @@ export const parseWireflow = (text: string, file: string): Parsed => {
         if (typeof v !== 'string') problems.push(`${who}: ${what} must be a string`);
         return typeof v === 'string' ? v : undefined;
     };
+    const txt = (v: unknown, what: string, who: string): string | undefined => {
+        const s = str(v, what, who);
+        return s === undefined ? undefined : cleanText(s);
+    };
     const size = (v: unknown, fallback: number): number => (isNum(v) && v > 0 ? v : fallback);
 
     diagram.nodes.forEach((raw, i) => {
@@ -266,7 +279,7 @@ export const parseWireflow = (text: string, file: string): Parsed => {
                 ...base,
                 width: isNum(raw.width) && raw.width > 0 ? raw.width : undefined,
                 height: isNum(raw.height) && raw.height > 0 ? raw.height : undefined,
-                label: str(data.label, '"data.label"', who) ?? ''
+                label: txt(data.label, '"data.label"', who) ?? ''
             });
             return;
         }
@@ -276,7 +289,7 @@ export const parseWireflow = (text: string, file: string): Parsed => {
                 ...base,
                 width: size(raw.width, NOTE_SIZE.width),
                 height: size(raw.height, NOTE_SIZE.height),
-                text: str(data.text, '"data.text"', who) ?? ''
+                text: txt(data.text, '"data.text"', who) ?? ''
             });
             return;
         }
@@ -284,8 +297,8 @@ export const parseWireflow = (text: string, file: string): Parsed => {
             problems.push(`${who}: missing "data.graphicId" (screen template)`);
             return;
         }
-        const label = str(data.label, '"data.label"', who);
-        const headerText = str(data.headerText, '"data.headerText"', who);
+        const label = txt(data.label, '"data.label"', who);
+        const headerText = txt(data.headerText, '"data.headerText"', who);
         const src = str(data.src, '"data.src"', who);
         nodes.push({
             kind: 'flow',
@@ -348,13 +361,13 @@ export const parseWireflow = (text: string, file: string): Parsed => {
         }
         if (!ok) return;
         const style = isObject(raw.style) ? raw.style : {};
-        const stroke = typeof style.stroke === 'string' ? style.stroke.trim() : '';
+        const stroke = typeof style.stroke === 'string' ? cleanText(style.stroke).trim() : '';
         edges.push({
             id,
             source: raw.source as string,
             target: raw.target as string,
             shape: raw.type === 'step' || raw.type === 'smoothstep' ? raw.type : 'bezier',
-            label: str(raw.label, '"label"', who) || undefined,
+            label: txt(raw.label, '"label"', who) || undefined,
             color: stroke ? (/^#[0-9a-f]{3,8}$/i.test(stroke) ? stroke.toLowerCase() : stroke) : undefined,
             width: isNum(style.strokeWidth) && style.strokeWidth > 0 ? style.strokeWidth : DEFAULT_EDGE_WIDTH
         });

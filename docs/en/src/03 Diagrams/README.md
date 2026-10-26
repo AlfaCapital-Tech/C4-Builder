@@ -226,6 +226,8 @@ follow the editor, and screen templates come from the Wireflow catalog vendored 
 (`vendor/wireflow/`, 125 templates, MIT). Text is set in the bundled Nimbus Sans instead of the
 editor's font, so the SVG is identical on any machine, and PNG comes from the regular
 rasterization. A long card header is cut with an ellipsis, note text wraps to the note width.
+Control characters that XML does not allow (such as the U+000B line break pasted from Word) do
+not break the render: U+000B and U+000C in texts become line breaks, the rest are dropped.
 Estimates, rates and stages (`settings`) do not affect the image.
 
 **Format versions.** Files `{"format": "wireflow", "version": 2…4}` — what the current editor
