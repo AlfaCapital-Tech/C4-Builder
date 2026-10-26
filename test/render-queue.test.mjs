@@ -451,8 +451,11 @@ describe('renderOffThread', () => {
     }, 120_000);
 
     it('teardown во время рендера: ждущий отклоняется, а не висит', async () => {
-        const job = renderOffThread('mermaid', BIG, 'big.mmd');
+        // Обработчик — до teardown: иначе отклонение без обработчика vitest считает ошибкой прогона.
+        const rejected = expect(renderOffThread('mermaid', BIG, 'big.mmd')).rejects.toThrow(
+            'worker terminated'
+        );
         await teardownOffThread();
-        await expect(job).rejects.toThrow('worker terminated');
+        await rejected;
     }, 120_000);
 });
