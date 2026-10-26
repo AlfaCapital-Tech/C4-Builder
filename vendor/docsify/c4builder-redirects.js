@@ -21,10 +21,13 @@
         if (hash.charAt(0) !== '#') return;
         var route = hash.slice(1);
         var query = route.indexOf('?');
+        // Query (`?id=<якорь>` docsify) переносится на целевую страницу — иначе ссылка на
+        // раздел change'а открыла бы его начало.
+        var search = query >= 0 ? route.slice(query) : '';
         if (query >= 0) route = route.slice(0, query);
         if (route.charAt(0) !== '/') route = '/' + route;
         var target = lookup(route);
-        if (target) location.replace('#' + target);
+        if (target) location.replace('#' + target + search);
     };
     check();
     window.addEventListener('hashchange', check);

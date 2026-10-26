@@ -80,7 +80,7 @@ folder.
   one): it leads to the page of the active change, for a nested one by its full id
   (`#/change/dig-1-root-ios`), and after archiving to the newest archived change with that id; the
   browser swaps it for the real page path, so relative links, images and the sidebar highlight work
-  as usual and "back" does not return to the short address. An unknown id shows the standard docsify
+  as usual and "back" does not return to the short address; a section anchor `?id=…` is kept. An unknown id shows the standard docsify
   "not found" page. An id with `#` or `?`, or one already taken by another `openspec` instance (the
   first one wins), gets no short address — the build prints a warning and goes on. The address map lives in `index.html` (`$docsify.c4builder.redirects`) together
   with the local script `vendor/c4builder-redirects.js`, so the address works on a published site

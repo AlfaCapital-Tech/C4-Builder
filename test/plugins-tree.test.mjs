@@ -264,9 +264,9 @@ describe('vendor/docsify/c4builder-redirects.js (vm)', () => {
         };
     };
 
-    it('совпадение — location.replace на путь страницы сразу и на hashchange; query отбрасывается', () => {
+    it('совпадение — location.replace на путь страницы сразу и на hashchange; query сохраняется', () => {
         expect(run('#/change/x').replaced).toEqual(['#/M/Sub/Page/Page']);
-        expect(run('#/change/x?id=section').replaced).toEqual(['#/M/Sub/Page/Page']);
+        expect(run('#/change/x?id=section').replaced).toEqual(['#/M/Sub/Page/Page?id=section']);
         expect(run('#change/x').replaced).toEqual(['#/M/Sub/Page/Page']);
         const site = run('#/');
         expect(site.replaced).toEqual([]);

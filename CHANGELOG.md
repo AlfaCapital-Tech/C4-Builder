@@ -58,8 +58,9 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
 - Short permanent address of an OpenSpec change page: `#/change/<id>` (`<id>` — the change folder
   name, without the archive date prefix; a nested change by its full id) opens the change page
   whatever the `mount`, `groupKey` and `nameKey` of the `openspec` plugin are, and after archiving
-  leads to the newest archived change with that id; the browser swaps it for the real page path, so
-  relative links, images and the sidebar highlight work and "back" skips the short address. Plugins
+  leads to the newest archived change with that id; the browser swaps it for the real page path
+  (keeping a `?id=…` section anchor), so relative links, images and the sidebar highlight work and
+  "back" skips the short address. Plugins
   declare such redirects with `ctx.addRedirect(from, to)` in `afterScan` (a repeated short path
   fails the build naming the path and the plugin); the map goes to `$docsify.c4builder.redirects` in
   `index.html` with the local script `vendor/c4builder-redirects.js`, so it works on a published
