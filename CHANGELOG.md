@@ -3,7 +3,7 @@
 User-facing changes of C4-Builder. Every pull request that changes behaviour adds a line to
 `## Unreleased`; the release commit renames it to `## vX.Y.Z`.
 
-## Unreleased
+## v0.10.1
 
 - `--site -w` background rendering: the queue follows the page you navigate to rather than every
   `.md` request (the docsify search fetches all pages for its index); a page you come back to shows
