@@ -31,6 +31,12 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
   date and pick up edits made meanwhile. A render error in the background shows an error
   placeholder with `✗` in the log and keeps the server up. Builds without `-w` still wait for
   every diagram and fail on a broken one
+- Fixes to the `--site -w` background rendering: the queue follows the page you navigate to
+  rather than every `.md` request (the docsify search fetches all pages for its index); a page you
+  come back to shows the finished images instead of the cached `rendering…` placeholder; a diagram
+  that failed is not rendered again by the rebuilds of the same session until its input changes
+  (the log says `unchanged since it failed, not re-rendered`); BPMN and mermaid diagrams render in
+  a worker thread, so the server keeps answering requests and live-reload events meanwhile
 - `.c4builder.cache` is written as the rendering goes (at most twice a second and at the end),
   so a build interrupted with Ctrl+C or failed on one diagram keeps the finished diagrams in the
   cache and the next build renders only the rest

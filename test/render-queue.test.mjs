@@ -1,9 +1,20 @@
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
-import { build, DiagramQueue, generateImages, pendingPlaceholderSvg } from './dist.mjs';
+import {
+    build,
+    DiagramQueue,
+    generateImages,
+    pendingPlaceholderSvg,
+    renderBpmn,
+    renderMermaid,
+    renderOffThread,
+    teardownBpmn,
+    teardownMermaid,
+    teardownOffThread
+} from './dist.mjs';
 import { ensureManagedJre, REPO_ROOT, runBuild, TMP_ROOT } from './helpers.mjs';
 
 // Очередь рендера с приоритетом, инкрементальная запись кэша и отложенный рендер
@@ -337,10 +348,111 @@ describe('инкрементальная запись кэша и отложен
             'rendering…'
         );
     }, 240_000);
+
+    it('failedRenders: упавшая диаграмма без изменений не рендерится повторно; правка и возврат к битому — рендер', async () => {
+        const proj = path.join(dir, 'failed');
+        const root = path.join(proj, 'src');
+        const options = OPTIONS(proj);
+        const cache = memCache();
+        const failedRenders = new Map();
+        const badSvg = () => fs.readFileSync(path.join(options.DIST_FOLDER, 'bad', 'bad.svg'), 'utf8');
+        // Пересборка dev-сервера: softErrors + общая на сессию карта упавших.
+        const rebuild = async () => {
+            const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+            try {
+                await build(options, cache, [], { softErrors: true, failedRenders });
+                return log.mock.calls.map((c) => c.join(' ')).join('\n');
+            } finally {
+                log.mockRestore();
+            }
+        };
+
+        makeTree(root, ['ok', 'bad'], new Set(['bad']));
+        let out = await rebuild();
+        expect(out).toMatch(/✗ Diagram "bad\.svg": PlantUML exited/);
+        expect(badSvg()).toContain('diagram not rendered');
+        expect([...failedRenders.keys()]).toEqual(['/bad/bad.svg']);
+
+        // Тот же вход: без JVM — заглушка с ошибкой переносится, `✗` не повторяется.
+        out = await rebuild();
+        expect(out).not.toContain('✗');
+        expect(out).toContain('Diagram "bad.svg": unchanged since it failed, not re-rendered');
+        expect(badSvg()).toContain('diagram not rendered');
+        expect(cache.get('checksums')).toHaveLength(1); // упавшая в кэш не попадает
+
+        // Починили — рендер; вернули битый вход — снова рендер (в бэкапе уже не заглушка).
+        makeTree(root, ['ok', 'bad']);
+        out = await rebuild();
+        expect(badSvg()).not.toContain('diagram not rendered');
+        expect(failedRenders.size).toBe(0);
+        makeTree(root, ['ok', 'bad'], new Set(['bad']));
+        out = await rebuild();
+        expect(out).toMatch(/✗ Diagram "bad\.svg": PlantUML exited/);
+        expect(badSvg()).toContain('diagram not rendered');
+    }, 240_000);
 });
 
 it('pendingPlaceholderSvg — валидный SVG с именем и текстом rendering…, спецсимволы экранированы', () => {
     const svg = pendingPlaceholderSvg('a<b>.svg');
     expect(svg).toMatch(/^<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg"/);
     expect(svg).toContain('a&lt;b&gt;.svg: rendering…');
+});
+
+// BPMN и mermaid в worker-потоке (dev-сервер): тот же результат, та же ошибка, а главный
+// поток не замирает на время рендера.
+describe('renderOffThread', () => {
+    afterAll(async () => {
+        await teardownOffThread();
+        await teardownMermaid();
+        await teardownBpmn();
+    });
+
+    // flowchart на 88 узлов и 160 рёбер — в главном потоке рендер молчит больше секунды.
+    const BIG = `flowchart LR\n${[
+        ...Array.from({ length: 88 }, (_, i) => `  n${i}[Node ${i}] --> n${(i * 7 + 3) % 88}`),
+        ...Array.from({ length: 72 }, (_, i) => `  n${i} --> n${(i * 13 + 5) % 88}`)
+    ].join('\n')}`;
+    const BPMN =
+        '<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="D" ' +
+        'targetNamespace="https://example.com/t"><bpmn:process id="P" name="P">' +
+        '<bpmn:startEvent id="S" name="s"/><bpmn:task id="T" name="t"/><bpmn:endEvent id="E" name="e"/>' +
+        '<bpmn:sequenceFlow id="F1" sourceRef="S" targetRef="T"/>' +
+        '<bpmn:sequenceFlow id="F2" sourceRef="T" targetRef="E"/></bpmn:process></bpmn:definitions>';
+
+    it('mermaid: байты как в главном потоке, event loop не блокируется', async () => {
+        let last = Date.now();
+        let maxGap = 0;
+        const timer = setInterval(() => {
+            maxGap = Math.max(maxGap, Date.now() - last);
+            last = Date.now();
+        }, 5);
+        let off;
+        try {
+            off = await renderOffThread('mermaid', BIG, 'big.mmd');
+        } finally {
+            clearInterval(timer);
+        }
+        expect(maxGap).toBeLessThan(250);
+        expect(Buffer.compare(off, await renderMermaid(BIG, 'big.mmd'))).toBe(0);
+    }, 120_000);
+
+    it('BPMN: байты как в главном потоке', async () => {
+        const off = await renderOffThread('bpmn', BPMN, 'a.bpmn');
+        expect(Buffer.compare(off, await renderBpmn(BPMN, 'a.bpmn'))).toBe(0);
+    }, 120_000);
+
+    it('ошибка движка приходит с тем же message, воркер жив', async () => {
+        const bad = 'flowchart LR\n  A -->';
+        const main = await renderMermaid(bad, 'bad.mmd').catch((e) => e.message);
+        await expect(renderOffThread('mermaid', bad, 'bad.mmd')).rejects.toThrow(main);
+        expect(
+            (await renderOffThread('mermaid', 'flowchart LR\n  A --> B', 'ok.mmd')).length
+        ).toBeGreaterThan(0);
+    }, 120_000);
+
+    it('teardown во время рендера: ждущий отклоняется, а не висит', async () => {
+        const job = renderOffThread('mermaid', BIG, 'big.mmd');
+        await teardownOffThread();
+        await expect(job).rejects.toThrow('worker terminated');
+    }, 120_000);
 });
