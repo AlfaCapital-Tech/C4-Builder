@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { loadPlugins } from './dist.mjs';
+import { embedFigmaImages, loadPlugins } from './dist.mjs';
 import { TMP_ROOT, ensureManagedJre, runBuild } from './helpers.mjs';
 
 // Встроенный плагин figma: список фреймов в опциях → раздел Figma со сводкой в порядке
@@ -151,6 +151,31 @@ describe('плагин figma: эмбеды в страницах', () => {
         expect(read('Context/README.md')).toContain(
             '[Open in Figma: Главный экран](https://www.figma.com/design/EmB789/Screens?node-id=5-6&t=x)'
         );
+    });
+});
+
+describe('плагин figma: код не трогается', () => {
+    const URL = 'https://www.figma.com/design/EmB789/Screens';
+    const embed = (md) => embedFigmaImages(md, 'c4builder', 600);
+
+    it('inline-код: ссылка в `…` и ``…`` остаётся как есть, соседняя вне кода — ссылка', () => {
+        const md = `Use \`![x](${URL})\` or \`\`![y](${URL})\`\` — ![z](${URL})`;
+        const r = embed(md);
+        expect(r.count).toBe(1);
+        expect(r.md).toBe(`Use \`![x](${URL})\` or \`\`![y](${URL})\`\` — [z](${URL})`);
+    });
+
+    it('строка из одного inline-кода — не эмбед', () => {
+        const md = `\`![x](${URL})\``;
+        expect(embed(md)).toEqual({ md, count: 0 });
+    });
+
+    it('блок кода с отступом не трогается, абзац в пункте списка — обрабатывается', () => {
+        const code = `text\n\n    ![x](${URL})\n\n\t![y](${URL})\n\nafter`;
+        expect(embed(code)).toEqual({ md: code, count: 0 });
+        const list = embed(`- item\n\n    ![x](${URL})`);
+        expect(list.count).toBe(1);
+        expect(list.md).toContain('<iframe');
     });
 });
 

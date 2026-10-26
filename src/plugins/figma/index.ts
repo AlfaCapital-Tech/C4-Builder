@@ -8,7 +8,7 @@ import path from 'node:path';
 import chalk from 'chalk';
 import { z } from 'zod';
 
-import { mapOutsideFences } from '../../core/scan/fences.ts';
+import { mapOutsideCode } from '../../core/scan/fences.ts';
 import { definePlugin } from '../../core/plugins/types.ts';
 import { encodeURIPath } from '../../util/utils.ts';
 
@@ -111,7 +111,7 @@ const FIGMA_URL_RE = /^https:\/\/(?:www\.|embed\.)?figma\.com\//i;
 /**
  * Картинки-ссылки на Figma в markdown страницы → эмбеды. Картинка одна на строке — блок
  * «ссылка + iframe» (HTML-блок отделён пустыми строками, иначе markdown его не распознает);
- * внутри текста iframe не встанет — там обычная ссылка. Код в ``` не трогается. Ссылка, которую
+ * внутри текста iframe не встанет — там обычная ссылка. Код (```, `…`, отступ) не трогается. Ссылка, которую
  * не удалось разобрать, остаётся как есть и попадает в `bad`.
  */
 export const embedFigmaImages = (
@@ -121,28 +121,23 @@ export const embedFigmaImages = (
     bad: string[] = []
 ): { md: string; count: number } => {
     let count = 0;
-    const out = mapOutsideFences(md, (text) =>
-        text
-            .split('\n')
-            .map((line) => {
-                const alone = /^\s*!\[[^\]]*\]\(\S+?(?:\s+"[^"]*")?\)\s*$/.test(line);
-                return line.replace(IMAGE_RE, (whole, alt: string, url: string) => {
-                    if (!FIGMA_URL_RE.test(url)) return whole;
-                    let embed: string;
-                    try {
-                        embed = figmaEmbedUrl(url, embedHost);
-                    } catch {
-                        bad.push(url);
-                        return whole;
-                    }
-                    count++;
-                    const label = alt.trim() ? `Open in Figma: ${alt.trim()}` : 'Open in Figma';
-                    if (!alone) return `[${alt.trim() || 'Figma'}](${url})`;
-                    return `\n[${label}](${url})\n\n${iframe(embed, height)}\n`;
-                });
-            })
-            .join('\n')
-    );
+    const out = mapOutsideCode(md, (line) => {
+        const alone = /^\s*!\[[^\]]*\]\(\S+?(?:\s+"[^"]*")?\)\s*$/.test(line);
+        return line.replace(IMAGE_RE, (whole, alt: string, url: string) => {
+            if (!FIGMA_URL_RE.test(url)) return whole;
+            let embed: string;
+            try {
+                embed = figmaEmbedUrl(url, embedHost);
+            } catch {
+                bad.push(url);
+                return whole;
+            }
+            count++;
+            const label = alt.trim() ? `Open in Figma: ${alt.trim()}` : 'Open in Figma';
+            if (!alone) return `[${alt.trim() || 'Figma'}](${url})`;
+            return `\n[${label}](${url})\n\n${iframe(embed, height)}\n`;
+        });
+    });
     return { md: out, count };
 };
 

@@ -187,10 +187,10 @@ link.
 - An embed in a page is an image link to Figma on a line of its own:
   `![Payment screen](https://www.figma.com/design/<key>/<name>?node-id=…)` in a section README or
   in the `design.md` of an OpenSpec change. It is replaced by `Open in Figma: Payment screen` and the
-  iframe. Inside a line of text such an image becomes a regular link, inside a code block it stays as
-  is; a link that cannot be parsed is left alone with a warning. Regular `[text](…)` links to Figma
-  do not change. Pages of other plugins are processed when `figma` comes after them in `plugins` —
-  put it last.
+  iframe. Inside a line of text such an image becomes a regular link, inside code (a code block,
+  indented too, or inline `…`) it stays as is; a link that cannot be parsed is left alone with a
+  warning. Regular `[text](…)` links to Figma do not change. Pages of other plugins are processed
+  when `figma` comes after them in `plugins` — put it last.
 
 - `url` is the regular "Share" link from Figma: `https://www.figma.com/<type>/<key>/<name>?node-id=…`
   with the type `design`, `file`, `proto`, `board`, `slides` or `deck` (`https://embed.figma.com/…`
