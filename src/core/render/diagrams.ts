@@ -17,7 +17,7 @@ import { renderBpmn, BPMN_CACHE_PACKAGES } from './bpmnrenderer.ts';
 // Mermaid-бэкенд: пакет движка грузится лениво внутри renderMermaid.
 import { renderMermaid, MERMAID_PACKAGE } from './mermaidrenderer.ts';
 // Те же BPMN и mermaid в worker-потоке — для dev-сервера (флаг offThread).
-import { renderOffThread } from './offthread.ts';
+import { RenderWorkerError, renderOffThread } from './offthread.ts';
 // Wireflow-бэкенд: прямая генерация SVG, зависимостей нет; версия каталога шаблонов — в ключ кэша.
 import { renderWireflow, wireflowCatalogVersion } from './wireflowrenderer.ts';
 import { resolveJava } from './jre.ts';
@@ -640,6 +640,9 @@ export const generateImages = async (
             };
 
             const render = async (): Promise<void> => {
+                // Нет java или упал worker — дело не во входе: такую ошибку не запоминаем в
+                // failedRenders, следующая пересборка пробует снова (JRE поставили, воркер новый).
+                let environmentFailure = false;
                 // render diagram to image: D2 через WASM, PlantUML — прямым вызовом java.
                 // Для растеризации PlantUML не-ditaa рендерим в svg (не -tpng), затем resvg.
                 let rendered: Buffer;
@@ -662,7 +665,10 @@ export const generateImages = async (
                     } else {
                         // Резолв JRE отложен до первого реального PlantUML-рендера (эта
                         // ветка исполняется лишь при промахе кэша). getJava мемоизирует.
-                        const javaBin = await getJava();
+                        const javaBin = await getJava().catch((e: unknown) => {
+                            environmentFailure = true;
+                            throw e;
+                        });
                         rendered = await renderDiagram(diagramContent, {
                             javaBin,
                             jarPath,
@@ -686,7 +692,8 @@ export const generateImages = async (
                     if (softErrors) {
                         console.log(chalk.red(`✗ ${msg}`));
                         await writeErrorPlaceholder(reason);
-                        failedRenders?.set(outKey, cksum);
+                        if (!environmentFailure && !(err instanceof RenderWorkerError))
+                            failedRenders?.set(outKey, cksum);
                         return;
                     }
                     if (!soft) throw new Error(msg);

@@ -13,6 +13,9 @@ interface Reply {
     error?: string;
 }
 
+/** Сбой самого worker-потока, а не движка: вход диаграммы тут ни при чём. */
+export class RenderWorkerError extends Error {}
+
 let worker: Worker | null = null;
 let nextId = 0;
 const waiting = new Map<number, { resolve: (b: Buffer) => void; reject: (e: Error) => void }>();
@@ -40,10 +43,10 @@ const getWorker = (): Worker => {
         else job.resolve(Buffer.from(svg ?? new Uint8Array()));
     });
     w.on('error', (err: Error) => {
-        if (worker === w) fail(err);
+        if (worker === w) fail(new RenderWorkerError(err.message));
     });
     w.on('exit', (code) => {
-        if (worker === w) fail(new Error(`diagram render worker exited with code ${code}`));
+        if (worker === w) fail(new RenderWorkerError(`diagram render worker exited with code ${code}`));
     });
     worker = w;
     return w;
@@ -59,6 +62,7 @@ export const renderOffThread = (engine: OffThreadEngine, source: string, file: s
 
 export const teardownOffThread = async (): Promise<void> => {
     const w = worker;
-    worker = null;
+    // До terminate: обработчик exit уже не узнает воркер, и ждущие повисли бы навсегда.
+    fail(new RenderWorkerError('diagram render worker terminated'));
     if (w) await w.terminate();
 };

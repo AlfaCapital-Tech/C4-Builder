@@ -449,4 +449,10 @@ describe('renderOffThread', () => {
             (await renderOffThread('mermaid', 'flowchart LR\n  A --> B', 'ok.mmd')).length
         ).toBeGreaterThan(0);
     }, 120_000);
+
+    it('teardown во время рендера: ждущий отклоняется, а не висит', async () => {
+        const job = renderOffThread('mermaid', BIG, 'big.mmd');
+        await teardownOffThread();
+        await expect(job).rejects.toThrow('worker terminated');
+    }, 120_000);
 });
