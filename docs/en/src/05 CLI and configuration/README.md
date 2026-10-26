@@ -54,16 +54,24 @@ rendering 179 diagrams in background…
 rendered 179 diagrams in 118.4 s
 ```
 
-- The diagrams of the page open in the browser are rendered first: the server sees the page
-  request and moves them to the head of the queue.
+- The diagrams of the page open in the browser are rendered first: the page tells the server
+  about every navigation, and it moves that page's diagrams to the head of the queue. The `.md`
+  requests the docsify search makes for its index do not touch the queue.
+- BPMN and mermaid diagrams render in a separate thread (a worker thread): while they render, the
+  server keeps answering requests and sending events to the pages. PlantUML already runs in
+  separate java processes.
 - Every finished image replaces its placeholder on the open page without a reload and without
   losing the scroll position. When the queue is done, the server runs a regular rebuild
   (everything is cached now — a fraction of a second) and reloads the pages: that is how inlined
   diagrams (`embedDiagram`), the complete document and `llms-full.txt` get the real images, and
-  source edits made during the rendering land on the site.
+  source edits made during the rendering land on the site. Finished images also show up when you
+  come back to a page that had a placeholder.
 - A render error in the background does not stop the server: the diagram shows an error
-  placeholder, the log gets `✗ Diagram "<file>": <reason>`. Fixing the file triggers a regular
-  rebuild.
+  placeholder, the log gets `✗ Diagram "<file>": <reason>`. As long as the diagram input (the file
+  and its includes/imports) is unchanged, the rebuilds of this run do not render it again — they
+  carry the placeholder over and print a gray `unchanged since it failed, not re-rendered` line.
+  Fixing the file triggers a regular rebuild that renders it; a new `site -w` run retries every
+  failed diagram.
 - A warm start (everything cached) creates no placeholders and renders nothing in the background.
 
 The `-w` output is for viewing, not for publishing: stopping the server before the background queue
