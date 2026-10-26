@@ -10,7 +10,7 @@ into `docs/`.
 c4builder                    # build docs/ (non-interactive with a complete .c4builder)
 c4builder check <file...>    # validate .puml / .iuml / .d2 / .bpmn / .mmd / .wireflow.json files, exit code 0 = OK
 c4builder --site -w          # live preview on http://localhost:3000 - never exits
-c4builder --site -w --open <change-id>  # the same, opens the OpenSpec change page #/change/<change-id>
+c4builder --site -w --open-change <change-id>  # the same, opens the OpenSpec change page #/change/<change-id>
 c4builder feedback --wait --as <name>  # wait for comments from the preview page sent to <name>
 ```
 

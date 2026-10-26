@@ -338,6 +338,29 @@ describe('плагин openspec: крайние случаи', () => {
         expect(fs.readFileSync(path.join(d2, 'docs/_sidebar.md'), 'utf8')).toContain('* [Планы](%D0%9F');
         fs.rmSync(d2, { recursive: true, force: true });
     });
+    it("короткий адрес: id с '#' и совпадение id у двух экземпляров — предупреждение, сборка проходит", () => {
+        const d = makeFixture(
+            'redirect-clash',
+            [
+                ['openspec', { dir: 'storeA', mount: 'SA' }],
+                ['openspec', { dir: 'storeB', mount: 'SB' }]
+            ],
+            false
+        );
+        makeStore(d, 'storeA');
+        makeStore(d, 'storeB');
+        write(path.join(d, 'storeA'), 'changes/fix#1/proposal.md', '## Why\n\nfix\n');
+        const out = runBuild(d);
+        expect(out).toMatch(/openspec \(SB\): no short address for change dig-1-alpha: .*already declared/);
+        expect(out).toMatch(/openspec \(SA\): no short address for change fix#1: .*invalid redirect path/);
+        const html = fs.readFileSync(path.join(d, 'docs', 'index.html'), 'utf8');
+        const { redirects } = JSON.parse(
+            html.match(/window\.\$docsify = (\{[\s\S]*?\});\s*<\/script>/)[1]
+        ).c4builder;
+        // Первый экземпляр выигрывает.
+        expect(redirects['/change/dig-1-alpha']).toMatch(/^\/SA\//);
+        fs.rmSync(d, { recursive: true, force: true });
+    });
 });
 
 // Корень задачи и подзадачи по платформам: ссылка на родителя — ключ `.openspec.yaml`

@@ -2,6 +2,7 @@
 // change'ы, спеки, архив). Диаграммы артефактов рендерятся локальным движком сборки.
 import fs from 'node:fs';
 import path from 'node:path';
+import chalk from 'chalk';
 import { z } from 'zod';
 
 import { definePlugin } from '../../core/plugins/types.ts';
@@ -112,7 +113,9 @@ export default definePlugin<Opts>({
         // Короткий адрес `#/change/<id>` (change site-agent-review): не зависит от mount, групп и
         // имён, переживает архивацию. Активный change — приоритет над архивным с тем же id;
         // архив отсортирован от новых к старым, поэтому первый встреченный — новейший. Вложенный
-        // объявляется по полному id.
+        // объявляется по полному id. Короткий адрес — удобство, а не часть сайта: id с `#`/`?`
+        // и совпадение id у двух экземпляров плагина (выигрывает первый) — предупреждение,
+        // сборка не падает.
         const declared = new Set<string>();
         const addRedirects = (changes: Change[], layout: Layout, archived: boolean): void => {
             for (const change of changes) {
@@ -120,7 +123,15 @@ export default definePlugin<Opts>({
                 const at = layout.get(change);
                 if (!at || declared.has(id)) continue;
                 declared.add(id);
-                ctx.addRedirect(['change', id], at.segments);
+                try {
+                    ctx.addRedirect(['change', id], at.segments);
+                } catch (e) {
+                    console.log(
+                        chalk.yellow(
+                            `⚠ openspec (${mount}): no short address for change ${id}: ${(e as Error).message}`
+                        )
+                    );
+                }
             }
         };
         addRedirects(store.changes, active, false);

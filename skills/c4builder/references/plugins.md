@@ -48,7 +48,7 @@ change folder name, without the archive date prefix; a nested change by its full
 active change, after archiving the newest archived one with that id, and the browser swaps it for
 the real page path. The map is in `index.html` (`$docsify.c4builder.redirects`), so it works on a
 published site too; a custom `docsifyTemplate` must write the received options into
-`window.$docsify` as a whole. `c4builder --site -w --open <id>` opens this address and
+`window.$docsify` as a whole. `c4builder --site -w --open-change <id>` opens this address and
 `c4builder feedback --as <id>` prints it on stderr as `Change page: …`.
 
 ## `openapi` — swagger-ui and AsyncAPI pages for API specs

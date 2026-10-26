@@ -49,7 +49,7 @@ the draft and sends nothing to the agent. The agent loop:
    through Bash with `run_in_background`: the agent is notified when `feedback --wait` exits. The
    link to the change page for the human is the short address `http://localhost:<port>/#/change/<id>`
    (see [Plugins](06%20Plugins/06%20Plugins.md)): `feedback --wait --as <id>` prints it on stderr as
-   `Change page: …`, and `c4builder --site -w --open <id>` opens it in the browser instead of the
+   `Change page: …`, and `c4builder --site -w --open-change <id>` opens it in the browser instead of the
    home page. The link can be given right after the `serving your docsify site` line: on a fresh
    clone the diagrams are still rendering in the background, and the `rendering…` placeholders on
    the page turn into images by themselves.

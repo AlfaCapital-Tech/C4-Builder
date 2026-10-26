@@ -35,18 +35,19 @@ jobs:
           java-version: '21'
 
       # Тёплый старт рендера: выход и чексуммы прошлого прогона — неизменённые диаграммы берутся
-      # из кэша, а не рендерятся заново. Ключ — версия пакета и lock-файл (версии PlantUML и
-      # движков входят в чексуммы: обновление не должно отдавать старые картинки); sha в ключе —
-      # чтобы каждый прогон сохранял свежий кэш, restore-keys берут ближайший.
+      # из кэша, а не рендерятся заново. Ключ — версия пакета, lock-файл и код c4builder (src,
+      # vendor): сайт собирает CLI из этого же коммита, а версия кода в чексуммы не входит —
+      # без хэша кода PR, ломающий рендерер, получал бы картинки master и зелёный job; sha в
+      # ключе — чтобы каждый прогон сохранял свежий кэш, restore-keys берут ближайший.
       - name: Кэш рендера диаграмм
         uses: actions/cache@v4
         with:
           path: |
             docs/*/dist
             docs/*/.c4builder.cache
-          key: c4builder-render-${{ hashFiles('package.json', 'package-lock.json') }}-${{ github.sha }}
+          key: c4builder-render-${{ hashFiles('package.json', 'package-lock.json', 'src/**', 'vendor/**') }}-${{ github.sha }}
           restore-keys: |
-            c4builder-render-${{ hashFiles('package.json', 'package-lock.json') }}-
+            c4builder-render-${{ hashFiles('package.json', 'package-lock.json', 'src/**', 'vendor/**') }}-
 
       # Каждый язык — отдельный c4builder-проект; cwd = папка проекта, как при локальной
       # сборке (`cd docs/ru && c4builder --site -w`), поэтому относительные пути конфига

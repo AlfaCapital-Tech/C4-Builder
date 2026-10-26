@@ -492,13 +492,14 @@ describe('пути рёбер — перенос @xyflow/system 0.0.82', () => {
 });
 
 describe('кэш и llms', () => {
-    it('ключ кэша несёт версию каталога шаблонов, формат и шрифт', () => {
+    it('ключ кэша несёт версию c4builder (движок — его код), версию каталога шаблонов, формат и шрифт', () => {
         const version = fs.readFileSync(path.join(VENDOR, 'VERSION'), 'utf8').trim();
         expect(version).toMatch(/^[0-9a-f]{40}$/);
         expect(wireflowCatalogVersion()).toBe(version);
+        const pkg = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'package.json'), 'utf8')).version;
         const options = { USE_SYSTEM_FONTS: false, CHARSET: 'UTF-8', D2_LAYOUT: 'dagre' };
         expect(renderKey({ engine: 'wireflow', isDitaa: false }, options, 'svg')).toBe(
-            `wireflow\0${version}\0fmt=svg\0font=Nimbus Sans`
+            `wireflow\0${pkg}\0${version}\0fmt=svg\0font=Nimbus Sans`
         );
         expect(renderKey({ engine: 'wireflow', isDitaa: false }, options, 'png')).not.toBe(
             renderKey({ engine: 'wireflow', isDitaa: false }, options, 'svg')

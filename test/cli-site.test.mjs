@@ -268,13 +268,13 @@ describe('неизвестные пути в site -w', () => {
     }, 60_000);
 });
 
-// `--open [id]` (change site-agent-review): без значения — главная, со значением — короткий
-// адрес change'а; ключа нет в карте — предупреждение в stderr, адрес всё равно печатается.
-describe('--open <id> в site', () => {
+// `--open` — главная, `--open-change <id>` (change site-agent-review) — короткий адрес change'а;
+// ключа нет в карте — предупреждение в stderr, адрес всё равно печатается.
+describe('--open / --open-change <id> в site', () => {
     const env = agentEnv({ BROWSER: 'none' });
     it('неизвестный id — предупреждение в stderr, сервер работает; без переадресаций index.html прежний', async () => {
         const port = 38331;
-        const out = await serve(['site', '-w', '-p', String(port), '--open', 'nope'], {
+        const out = await serve(['site', '-w', '-p', String(port), '--open-change', 'nope'], {
             env,
             onReady: async () => {
                 expect((await fetch(`http://127.0.0.1:${port}/`)).status).toBe(200);
@@ -302,19 +302,23 @@ describe('--open <id> в site', () => {
             JSON.stringify({ ...CONFIG, generateLocalImages: false, plugins: ['openspec'] })
         );
         const port = 38332;
-        const out = await serveSite(project, ['site', '-w', '-p', String(port), '--open', 'add-dark-mode'], {
-            env,
-            onReady: async () => {
-                const html = await (await fetch(`http://127.0.0.1:${port}/`)).text();
-                expect(html).toContain(
-                    '"/change/add-dark-mode": "/OpenSpec/Changes/add-dark-mode/add-dark-mode"'
-                );
-                expect(html).toContain('<script src="vendor/c4builder-redirects.js"></script>');
-                expect((await fetch(`http://127.0.0.1:${port}/vendor/c4builder-redirects.js`)).status).toBe(
-                    200
-                );
+        const out = await serveSite(
+            project,
+            ['site', '-w', '-p', String(port), '--open-change', 'add-dark-mode'],
+            {
+                env,
+                onReady: async () => {
+                    const html = await (await fetch(`http://127.0.0.1:${port}/`)).text();
+                    expect(html).toContain(
+                        '"/change/add-dark-mode": "/OpenSpec/Changes/add-dark-mode/add-dark-mode"'
+                    );
+                    expect(html).toContain('<script src="vendor/c4builder-redirects.js"></script>');
+                    expect(
+                        (await fetch(`http://127.0.0.1:${port}/vendor/c4builder-redirects.js`)).status
+                    ).toBe(200);
+                }
             }
-        });
+        );
         expect(out).toContain(`go to http://localhost:${port}/#/change/add-dark-mode`);
         expect(out).not.toContain('warning: the site has no page');
     }, 60_000);
@@ -323,6 +327,18 @@ describe('--open <id> в site', () => {
         const port = 38333;
         // serveSite резолвится по строке «serving» — «go to» приходит следом, ждём её запросом.
         const out = await serve(['site', '-p', String(port), '--open'], {
+            env,
+            onReady: async () => {
+                expect((await fetch(`http://127.0.0.1:${port}/`)).status).toBe(200);
+            }
+        });
+        expect(out).toContain(`go to http://localhost:${port}\n`);
+        expect(out).not.toContain('#/change/');
+    }, 60_000);
+
+    it('-o не забирает следующий аргумент: `-o site -wp <port>` поднимает сайт', async () => {
+        const port = 38334;
+        const out = await serve(['-o', 'site', '-wp', String(port)], {
             env,
             onReady: async () => {
                 expect((await fetch(`http://127.0.0.1:${port}/`)).status).toBe(200);

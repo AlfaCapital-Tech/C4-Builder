@@ -83,9 +83,11 @@ GitLab CI:
 
 ```yaml
 pages:
-  image: ghcr.io/alfacapital-tech/c4builder:0.9.0
+  variables:
+    C4BUILDER_VERSION: "0.9.0"
+  image: ghcr.io/alfacapital-tech/c4builder:$C4BUILDER_VERSION
   cache:
-    key: c4builder-$CI_COMMIT_REF_SLUG
+    key: c4builder-$C4BUILDER_VERSION-$CI_COMMIT_REF_SLUG
     paths: [public, .c4builder.cache]
   script:
     - c4builder

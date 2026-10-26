@@ -8,12 +8,13 @@ import type { Redirects } from './tree.ts';
 import type { LoadedPlugin } from './types.ts';
 
 // Вставка тегов в готовый HTML: стили — перед последним `</head>`, скрипты — перед
-// последним `</body>` (регистронезависимо); тега нет — в конец файла (браузер исполнит
+// последним `</body>` (регистронезависимо), headScripts — перед первым `<script>` (раньше
+// скриптов шаблона), а без него — перед `</head>`; тега нет — в конец файла (браузер исполнит
 // и так). Пост-обработка не зависит от того, чей это шаблон (docsifyTemplate пользователя
 // править не требуется). Экспортируется для юнит-теста.
 export const injectHtml = (
     html: string,
-    { styles, scripts }: { styles: string[]; scripts: string[] }
+    { styles, scripts, headScripts = [] }: { styles: string[]; scripts: string[]; headScripts?: string[] }
 ): string => {
     const before = (doc: string, closing: RegExp, block: string): string => {
         if (!block) return doc;
@@ -22,19 +23,38 @@ export const injectHtml = (
             ? `${doc}\n${block}`
             : `${doc.slice(0, m.index)}${block}\n${doc.slice(m.index)}`;
     };
+    const tags = (files: string[]): string => files.map((s) => `<script src="${s}"></script>`).join('\n');
     const styleTags = styles.map((s) => `<link rel="stylesheet" href="${s}">`).join('\n');
-    const scriptTags = scripts.map((s) => `<script src="${s}"></script>`).join('\n');
-    return before(before(html, /<\/head>/gi, styleTags), /<\/body>/gi, scriptTags);
+    let doc = before(before(html, /<\/head>/gi, styleTags), /<\/body>/gi, tags(scripts));
+    if (headScripts.length) {
+        const first = doc.search(/<script\b/i);
+        // Тег на своей строке с отступом соседнего `<script>` — если тот начинает строку.
+        const lineStart = doc.lastIndexOf('\n', first - 1) + 1;
+        const indent = /^[ \t]*$/.test(doc.slice(lineStart, first)) ? doc.slice(lineStart, first) : '';
+        doc =
+            first === -1
+                ? before(doc, /<\/head>/gi, tags(headScripts))
+                : `${doc.slice(0, first)}${tags(headScripts)}\n${indent}${doc.slice(first)}`;
+    }
+    return doc;
 };
 
 // Ассеты сайта от самого ядра (не плагинов): уже лежат в `dist/vendor/` — туда целиком
 // копируется vendor/docsify (compose/markdown), поэтому их только подключают, не копируют.
 // Сворачивание sidebar — пост-обработкой, а не строкой шаблона, чтобы работало и с
-// пользовательским docsifyTemplate (включая копии старого встроенного шаблона).
-const coreSiteAssets = (options: BuildOptions): { styles: string[]; scripts: string[] } =>
+// пользовательским docsifyTemplate (включая копии старого встроенного шаблона). Страховка
+// localStorage — раньше всех скриптов: вендорный плагин без неё падает при заблокированном
+// хранилище, и на мобильном в свёрнутом sidebar остаётся только корень.
+const coreSiteAssets = (
+    options: BuildOptions
+): { styles: string[]; scripts: string[]; headScripts: string[] } =>
     options.SIDEBAR_COLLAPSE
-        ? { styles: ['vendor/sidebar-collapse.css'], scripts: ['vendor/docsify-sidebar-collapse.min.js'] }
-        : { styles: [], scripts: [] };
+        ? {
+              styles: ['vendor/sidebar-collapse.css'],
+              scripts: ['vendor/docsify-sidebar-collapse.min.js'],
+              headScripts: ['vendor/c4builder-storage-guard.js']
+          }
+        : { styles: [], scripts: [], headScripts: [] };
 
 /**
  * Подключает в `dist/index.html` ассеты сайта: ядра (сворачивание sidebar при
@@ -54,6 +74,15 @@ export const injectSiteAssets = async (plugins: LoadedPlugin[], options: BuildOp
     const core = coreSiteAssets(options);
     const styles: string[] = core.styles.filter((f) => !linked(f));
     const scripts: string[] = core.scripts.filter((f) => !linked(f));
+    const headScripts: string[] = core.headScripts.filter((f) => !linked(f));
+    // Скрипты c4builder (`c4builder-*.js`) общая копия vendor/docsify пропускает — кладём сами.
+    for (const file of headScripts) {
+        fs.mkdirSync(path.join(options.DIST_FOLDER, 'vendor'), { recursive: true });
+        fs.copyFileSync(
+            path.join(VENDOR_DIR, 'docsify', path.basename(file)),
+            path.join(options.DIST_FOLDER, 'vendor', path.basename(file))
+        );
+    }
     for (const { plugin } of plugins) {
         if (!plugin.assets) continue;
         const rel = path.posix.join('vendor', 'plugins', plugin.name);
@@ -69,8 +98,8 @@ export const injectSiteAssets = async (plugins: LoadedPlugin[], options: BuildOp
         copy(plugin.assets.styles, styles);
         copy(plugin.assets.scripts, scripts);
     }
-    if (!styles.length && !scripts.length) return;
-    fs.writeFileSync(indexPath, injectHtml(html, { styles, scripts }));
+    if (!styles.length && !scripts.length && !headScripts.length) return;
+    fs.writeFileSync(indexPath, injectHtml(html, { styles, scripts, headScripts }));
 };
 
 // Скрипт переадресаций (change site-agent-review): вендорный файл копируется в `dist/vendor/` и

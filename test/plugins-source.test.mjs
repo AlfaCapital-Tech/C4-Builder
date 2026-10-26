@@ -26,6 +26,20 @@ describe('injectHtml', () => {
             '<div></div>\n<link rel="stylesheet" href="a.css">\n<script src="b.js"></script>'
         );
     });
+    it('headScripts — перед первым <script>, без скриптов — перед </head>', () => {
+        expect(
+            injectHtml('<head></head><body><script>x</script></body>', {
+                styles: [],
+                scripts: ['b.js'],
+                headScripts: ['g.js']
+            })
+        ).toBe(
+            '<head></head><body><script src="g.js"></script>\n<script>x</script><script src="b.js"></script>\n</body>'
+        );
+        expect(
+            injectHtml('<head></head><body></body>', { styles: [], scripts: [], headScripts: ['g.js'] })
+        ).toBe('<head><script src="g.js"></script>\n</head><body></body>');
+    });
     it('пустые списки — HTML не меняется', () => {
         expect(injectHtml('<html></html>', { styles: [], scripts: [] })).toBe('<html></html>');
     });

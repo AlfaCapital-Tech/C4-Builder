@@ -139,8 +139,9 @@ export default (
     program: {
         port?: number;
         watch?: boolean;
-        // `--open` — главная; `--open <id>` — короткий адрес `#/change/<id>` (change site-agent-review).
-        open?: boolean | string;
+        // `--open` — главная; `--open-change <id>` — короткий адрес `#/change/<id>` (change site-agent-review).
+        open?: boolean;
+        openChange?: string;
         agent?: AgentMode;
         // Окна long-poll (design D1), пульса присутствия слушателя (D4) и жизни пустого ящика
         // (change feedback-mailboxes, D3) — параметры для тестов.
@@ -589,16 +590,16 @@ export default (
         const server = app.listen(port as number, '127.0.0.1', (err?: Error) => {
             if (err) return;
             const base = `http://localhost:${port}`;
-            // `--open <id>`: короткий адрес change'а. Ключа нет в карте — предупреждаем, но адрес
-            // всё равно открываем: в watch change могут собрать позже.
-            const route = typeof program.open === 'string' ? redirectKey(['change', program.open]) : '';
+            // `--open-change <id>`: короткий адрес change'а. Ключа нет в карте — предупреждаем, но
+            // адрес всё равно открываем: в watch change могут собрать позже.
+            const route = program.openChange ? redirectKey(['change', program.openChange]) : '';
             const url = route ? `${base}/#${route}` : base;
             console.log('serving your docsify site');
             console.log(`go to ${chalk.green(url)}`);
             if (route && !result().redirects.has(route))
                 console.error(
                     chalk.yellow(
-                        `warning: the site has no page change/${program.open} — ${url} shows "not found" until a change with this id is built`
+                        `warning: the site has no page change/${program.openChange} — ${url} shows "not found" until a change with this id is built`
                     )
                 );
             if (liveReloadEnabled)
@@ -607,8 +608,8 @@ export default (
                 console.log(
                     `agent mode (${agent.name}): page feedback goes to "c4builder feedback --wait --as <name>${program.port ? ` -p ${port}` : ''}" — run it in the background, <name> is your change or task; run it again with the same name after each batch`
                 );
-            // --open: открываем браузер один раз при старте; BROWSER=none отключает (CI/headless)
-            if (program.open && process.env.BROWSER !== 'none')
+            // --open/--open-change: открываем браузер один раз при старте; BROWSER=none отключает (CI/headless)
+            if ((program.open || route) && process.env.BROWSER !== 'none')
                 open(url).catch(() => console.log(chalk.gray('could not open the browser automatically')));
             resolve(server);
         });

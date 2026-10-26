@@ -30,7 +30,8 @@ Flags:
 |---|---|
 | `-c, --config-file <path>` | a different config file instead of `.c4builder` |
 | `-w, --watch` | rebuild on changes in the sources and plugin folders |
-| `-o, --open [id]` | open the site in the browser (with `--site`): without a value the home page, with an OpenSpec change id its page by the short address `#/change/<id>` (see [Plugins](06%20Plugins/06%20Plugins.md)); when the site has no such address — a warning on stderr, the address is opened anyway |
+| `-o, --open` | open the home page of the site in the browser (with `--site`) |
+| `--open-change <id>` | open the page of an OpenSpec change by the short address `#/change/<id>` in the browser (with `--site`, see [Plugins](06%20Plugins/06%20Plugins.md)); when the site has no such address — a warning on stderr, the address is opened anyway |
 | `-p, --port <n>` | port for `--site` and `feedback` (defaults to `webPort` from the config, 3000) |
 | `--agent`, `--no-agent` | turn the agent mode of `site -w` on or off regardless of the environment |
 | `--wait` | for `feedback`: wait for the next batch instead of only checking the queue |

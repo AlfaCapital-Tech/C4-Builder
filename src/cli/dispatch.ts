@@ -183,9 +183,12 @@ export default async () => {
         .option('--reset', 'clear all configuration')
         .option('--site', 'serve the generated site')
         .option('-w, --watch', 'watch for changes and rebuild')
+        .option('-o, --open', 'open the generated site in the browser (with --site)')
+        // Отдельная опция, а не `--open [id]`: необязательное значение забирало бы следующий
+        // токен (`-o site`, `-ow`, `-wop 3918` меняли смысл).
         .option(
-            '-o, --open [page]',
-            'open the generated site in the browser (with --site): the home page, or the OpenSpec change <page> (#/change/<id>)'
+            '--open-change <id>',
+            'open the page of the OpenSpec change <id> (#/change/<id>) in the browser (with --site)'
         )
         .option('--agent', 'with --site -w: accept page feedback for a coding agent (c4builder feedback)')
         .option('--no-agent', 'with --site -w: no agent feedback even when run by a coding agent')
@@ -369,6 +372,16 @@ export default async () => {
         // Итог последней удачной сборки (страницы → исходники, переадресации): dev-сервер читает
         // его геттером, поэтому после ребилда в watch видит свежий без рестарта.
         let result: BuildResult = { pages: new Map(), redirects: new Map() };
+        // Пересборка в watch (по правке и после фоновой очереди) — одна на оба пути, чтобы их
+        // протоколы не расходились. softErrors: упавшая диаграмма не кэшируется и упала бы на
+        // каждом ребилде — обычная сборка оставила бы сайт без страниц, пока её не починят;
+        // здесь она получает заглушку с ошибкой. Правки во время сборки — ещё один проход.
+        const rebuild = async (): Promise<void> => {
+            do {
+                attemptedWatchBuild = false;
+                result = await build(options, cacheConf, plugins, { softErrors: true });
+            } while (attemptedWatchBuild);
+        };
         if (opts.watch) {
             // node-watch: CJS-рантайм при ESM-.d.ts (export default) — дефолт-импорт
             // типизируется как namespace. Каст к реальной сигнатуре, рантайм не меняется.
@@ -417,11 +430,7 @@ export default async () => {
                         console.log(chalk.gray(`waiting for another build: ${e.message}`))
                     );
                     try {
-                        result = await build(options, cacheConf, plugins);
-                        while (attemptedWatchBuild) {
-                            attemptedWatchBuild = false;
-                            result = await build(options, cacheConf, plugins);
-                        }
+                        await rebuild();
                     } finally {
                         release();
                     }
@@ -511,12 +520,7 @@ export default async () => {
             console.log(`rendered ${queue.size} diagrams in ${(Date.now() - started) / 1000} s`);
             let buildOk = true;
             try {
-                // softErrors: упавшая в фоне диаграмма не в кэше и упала бы снова — обычная
-                // сборка оставила бы сайт без страниц; здесь она получает заглушку с ошибкой.
-                do {
-                    attemptedWatchBuild = false;
-                    result = await build(options, cacheConf, plugins, { softErrors: true });
-                } while (attemptedWatchBuild);
+                await rebuild();
             } catch (err) {
                 buildOk = false;
                 attemptedWatchBuild = false;

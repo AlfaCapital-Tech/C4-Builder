@@ -45,7 +45,9 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
   `index.html` after the template and the display level travels in the docsify options, so a
   custom `docsifyTemplate` that puts the options into `window.$docsify` gets collapsing without
   changes — remove a manual `docsify-sidebar-collapse` include from your template (a file the
-  template already links is not added twice)
+  template already links is not added twice). When the browser blocks storage (Safari "Block All
+  Cookies"), the local `vendor/c4builder-storage-guard.js` substitutes an in-memory one, so the
+  collapsed sidebar still works on a phone
 - New built-in plugin `figma`: the frames listed in its options (`name`, Figma "Share" `url`,
   optional `description`) become a site section (`mount`, `Figma` by default) with a summary page and
   one page per frame — a live `embed.figma.com` iframe (`height`, `embedHost`) with an `Open in Figma`
@@ -62,8 +64,10 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
   fails the build naming the path and the plugin); the map goes to `$docsify.c4builder.redirects` in
   `index.html` with the local script `vendor/c4builder-redirects.js`, so it works on a published
   site and with a `docsifyTemplate` that outputs the options; a site without redirects is unchanged.
-  `--open <id>` (with `--site`) opens that address instead of the home page and warns on stderr when
-  the site has no such change; `c4builder feedback --as <id>` prints
+  The `openspec` plugin skips the short address with a warning when the id has `#` or `?` or is
+  already taken by another `openspec` instance (the first one wins); the build goes on.
+  `--open-change <id>` (with `--site`) opens that address instead of the home page and warns on
+  stderr when the site has no such change (`-o, --open` stays a flag without a value); `c4builder feedback --as <id>` prints
   `Change page: http://localhost:<port>/#/change/<id>` on stderr when `<id>` is a change of the
   site (stdout stays the batch). The `c4builder-review` skill links the change page by this address
   instead of searching the build output

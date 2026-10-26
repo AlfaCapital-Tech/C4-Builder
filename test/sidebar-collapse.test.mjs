@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { TMP_ROOT, ensureManagedJre, runBuild } from './helpers.mjs';
+import { REPO_ROOT, TMP_ROOT, ensureManagedJre, runBuild } from './helpers.mjs';
 
 // Сворачивание sidebar (change sidebar-collapse): вендорный docsify-sidebar-collapse подключается
 // пост-обработкой index.html и уровнем раскрытия в опциях docsify — поэтому работает и с
@@ -19,6 +19,7 @@ const CONFIG = {
 
 const LINK = '<link rel="stylesheet" href="vendor/sidebar-collapse.css">';
 const SCRIPT = '<script src="vendor/docsify-sidebar-collapse.min.js"></script>';
+const GUARD = '<script src="vendor/c4builder-storage-guard.js"></script>';
 
 // Шаблон-копия: как у команд, вставляет переданные опции в window.$docsify целиком.
 const TEMPLATE = `export default (o) => \`<!DOCTYPE html><html><head><title>\${o.name}</title>
@@ -78,10 +79,21 @@ describe('sidebarCollapse по умолчанию', () => {
         expect(page.indexOf(SCRIPT)).toBeLessThan(page.indexOf('</body>'));
     });
 
+    it('страховка localStorage — раньше всех скриптов страницы', () => {
+        const page = html('default');
+        expect(page.indexOf(GUARD)).toBeGreaterThan(-1);
+        expect(page.indexOf(GUARD)).toBe(page.search(/<script\b/));
+    });
+
     it('ассеты лежат в vendor/ выхода и не ходят во внешние домены', () => {
         expect(inDist('default', 'vendor/sidebar-collapse.css')).toBe(true);
         expect(inDist('default', 'vendor/docsify-sidebar-collapse.min.js')).toBe(true);
-        for (const rel of ['vendor/sidebar-collapse.css', 'vendor/docsify-sidebar-collapse.min.js']) {
+        expect(inDist('default', 'vendor/c4builder-storage-guard.js')).toBe(true);
+        for (const rel of [
+            'vendor/sidebar-collapse.css',
+            'vendor/docsify-sidebar-collapse.min.js',
+            'vendor/c4builder-storage-guard.js'
+        ]) {
             expect(fs.readFileSync(path.join(dirs.default, 'docs', rel), 'utf8')).not.toMatch(
                 /https?:\/\/|\/\/cdn/
             );
@@ -93,10 +105,49 @@ describe('sidebarCollapse по умолчанию', () => {
     });
 });
 
+// Узкий экран (в jsdom clientWidth = 0) и заблокированное хранилище: вендорный плагин пишет в
+// localStorage без try/catch и без страховки не регистрируется — в sidebar остаётся только корень.
+describe('заблокированный localStorage на мобильном', () => {
+    const vendor = (f) => fs.readFileSync(path.join(REPO_ROOT, 'vendor', 'docsify', f), 'utf8');
+    const run = async (withGuard) => {
+        const { JSDOM } = await import('jsdom');
+        const dom = new JSDOM('<!DOCTYPE html><html><head></head><body></body></html>', {
+            runScripts: 'outside-only',
+            beforeParse(window) {
+                Object.defineProperty(window, 'localStorage', {
+                    configurable: true,
+                    get() {
+                        throw new window.DOMException('The operation is insecure.', 'SecurityError');
+                    }
+                });
+            }
+        });
+        dom.window.eval('window.$docsify = {};');
+        if (withGuard) dom.window.eval(vendor('c4builder-storage-guard.js'));
+        let error;
+        try {
+            dom.window.eval(vendor('docsify-sidebar-collapse.min.js'));
+        } catch (e) {
+            error = e;
+        }
+        const plugins = dom.window.$docsify.plugins?.length ?? 0;
+        dom.window.close();
+        return { error, plugins };
+    };
+
+    it('без страховки плагин падает (воспроизведение), со страховкой — регистрируется', async () => {
+        expect((await run(false)).error?.name).toBe('SecurityError');
+        const guarded = await run(true);
+        expect(guarded.error).toBeUndefined();
+        expect(guarded.plugins).toBeGreaterThan(0);
+    });
+});
+
 describe('sidebarCollapse: false', () => {
     it('ни тегов, ни ключа — index.html прежний, sidebar полностью развёрнут', () => {
         const page = html('off');
         expect(page).not.toContain('sidebar-collapse');
+        expect(page).not.toContain('storage-guard');
         expect(page).not.toContain('sidebarDisplayLevel');
     });
 });
@@ -114,5 +165,6 @@ describe('пользовательский docsifyTemplate', () => {
         const page = html('manual');
         expect(page.match(/sidebar-collapse\.css/g)).toHaveLength(1);
         expect(page.match(/docsify-sidebar-collapse\.min\.js/g)).toHaveLength(1);
+        expect(page.match(/c4builder-storage-guard\.js/g)).toHaveLength(1);
     });
 });

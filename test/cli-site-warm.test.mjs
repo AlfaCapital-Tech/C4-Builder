@@ -123,6 +123,15 @@ describe('холодный старт site -w', () => {
                 expect(bad.body).toContain('diagram not rendered');
                 expect((await text(`${base}/Good/diagram.svg`)).body).not.toContain('rendering…');
 
+                // Правка соседней страницы, Bad ещё битая: ребилд по правке тоже мягкий —
+                // сайт не теряет страниц, на месте Bad снова заглушка.
+                fs.writeFileSync(path.join(root, 'src', 'Good', 'page.md'), '# Good\n\nEdited.\n');
+                await waitFor(/built in [\d.]+ seconds/, 120_000);
+                await new Promise((r) => setTimeout(r, 300));
+                expect((await text(`${base}/Good/Good.md`)).body).toContain('Edited.');
+                expect((await text(`${base}/_sidebar.md`)).status).toBe(200);
+                expect((await text(`${base}/Bad/diagram.svg`)).body).toContain('diagram not rendered');
+
                 // Правка файла → обычная пересборка watch → картинка настоящая.
                 fs.writeFileSync(badPuml, puml('Fixed'));
                 await waitFor(/built in [\d.]+ seconds/, 120_000);

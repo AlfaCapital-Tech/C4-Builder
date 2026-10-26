@@ -23,7 +23,7 @@ import { resolveJava } from './jre.ts';
 import { rasterizeSvgToPng } from './pngraster.ts';
 // Шрифт-пин общий с resvg-растеризатором (одна точка правды, см. fonts.ts).
 import { FONTS_DIR, DEFAULT_FONT_NAME } from './fonts.ts';
-import { VENDOR_DIR } from '../../util/paths.ts';
+import { VENDOR_DIR, packageJson } from '../../util/paths.ts';
 import {
     foldIncludes,
     diagramBaseName,
@@ -212,7 +212,7 @@ export const fontCacheTag = (options: BuildOptions): string =>
 // Без него смена layout (D2) или charset (PlantUML) не меняла чексумму → из бэкапа
 // копировалась старая картинка (новые параметры молча игнорировались, кэш чистился
 // только через --reset). Формат/движок/версия движка тоже в ключе: их смена обязана
-// приводить к перерендеру.
+// приводить к перерендеру. Движок wireflow — код самого c4builder, его версия — версия пакета.
 export const renderKey = (
     diagram: Pick<Diagram, 'engine' | 'isDitaa'>,
     options: BuildOptions,
@@ -225,7 +225,7 @@ export const renderKey = (
           : diagram.engine === 'mermaid'
             ? `mermaid\0${pkgVersion(MERMAID_PACKAGE)}\0fmt=${outFormat}`
             : diagram.engine === 'wireflow'
-              ? `wireflow\0${wireflowCatalogVersion()}\0fmt=${outFormat}`
+              ? `wireflow\0${packageJson.version}\0${wireflowCatalogVersion()}\0fmt=${outFormat}`
               : `puml\0${VENDORED_JAR.version}\0charset=${options.CHARSET}\0fmt=${outFormat}\0ditaa=${diagram.isDitaa}`) +
     `\0font=${fontCacheTag(options)}`;
 
