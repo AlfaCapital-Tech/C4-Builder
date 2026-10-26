@@ -75,8 +75,9 @@ export const injectSiteAssets = async (plugins: LoadedPlugin[], options: BuildOp
     const styles: string[] = core.styles.filter((f) => !linked(f));
     const scripts: string[] = core.scripts.filter((f) => !linked(f));
     const headScripts: string[] = core.headScripts.filter((f) => !linked(f));
-    // Скрипты c4builder (`c4builder-*.js`) общая копия vendor/docsify пропускает — кладём сами.
-    for (const file of headScripts) {
+    // Скрипты c4builder (`c4builder-*.js`) общая копия vendor/docsify пропускает — кладём сами,
+    // даже если шаблон подключил их руками: иначе тег есть, а файла в dist нет.
+    for (const file of core.headScripts) {
         fs.mkdirSync(path.join(options.DIST_FOLDER, 'vendor'), { recursive: true });
         fs.copyFileSync(
             path.join(VENDOR_DIR, 'docsify', path.basename(file)),
