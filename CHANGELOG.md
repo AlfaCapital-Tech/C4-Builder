@@ -14,7 +14,14 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
   section; the log line counts frame pages and embeds
 - OpenSpec artifacts render image links to diagram files next to them — `![Flow](flow.wireflow.json)`,
   `![](context.puml)`, `.d2`, `.bpmn`, `.mmd` — as diagrams, like fenced blocks: the page shows the
-  picture, the source is not copied to the output, a broken file gets a placeholder and a warning
+  picture, the source is not copied to the output, a broken file gets a placeholder and a warning.
+  PlantUML `!include` and D2 imports in such files resolve from the file's own folder and are part
+  of the image cache checksum; same-named files from different folders (including `:include`
+  subfiles) give distinct pictures, and two files in one folder rendering to the same image name
+  (`flow.d2` + `flow.mmd`) are both shown with an `Output name collision` warning
+- An inline diagram link with a quoted title — `![x](flow.puml "Flow")`, `![x](flow.mmd ':size=600')` —
+  is replaced by the picture with the title kept; before, the link stayed broken and the diagram was
+  appended to the end of the page
 - The `openapi` plugin shows AsyncAPI specs too: a matched file with a top-level `asyncapi` key
   gets its own page under the same layout rules (folder index, summary, `info.title`), rendered
   by the bundled official AsyncAPI component (`@asyncapi/react-component` 3.2.2, Apache-2.0) —

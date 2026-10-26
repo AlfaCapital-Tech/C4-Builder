@@ -34,7 +34,8 @@ The build walks the tree and merges all `.md` files and diagrams of a folder int
 - **Diagrams** are inserted as images. By default they go before the page text; with
   `diagramsOnTop: false`, after it.
 - **A diagram can be placed anywhere in the text** by linking to its source:
-  `![containers](container.puml)`. Such a diagram is not repeated in the common block.
+  `![containers](container.puml)`. Such a diagram is not repeated in the common block. A quoted
+  title is carried over to the picture: `![containers](container.puml ':size=600')`.
 - **Files and folders prefixed with `_`** do not become pages and are not rendered on their own,
   but they are available to `!include` and D2 imports. This is the place for shared libraries:
   `_c4lib.d2`, `_common.iuml`.
