@@ -21,6 +21,7 @@ import { renderWireflow, wireflowCatalogVersion } from './wireflowrenderer.ts';
 import { resolveJava } from './jre.ts';
 // PNG-выход: SVG обоих движков растеризуется resvg (ленивая загрузка внутри модуля).
 import { rasterizeSvgToPng } from './pngraster.ts';
+import { escapeXml } from './textmetrics.ts';
 // Шрифт-пин общий с resvg-растеризатором (одна точка правды, см. fonts.ts).
 import { FONTS_DIR, DEFAULT_FONT_NAME } from './fonts.ts';
 import { VENDOR_DIR, packageJson } from '../../util/paths.ts';
@@ -352,41 +353,31 @@ export const renderDiagram = (content: string | Buffer, options: RenderDiagramOp
 // bkFolderName — каталог бэкапа dist, откуда восстанавливаются неизменённые картинки
 // по чексумме. Его lifecycle (создание/удаление) держит оркестратор build(); сюда
 // путь приходит явным параметром, а не пересчитывается из общей константы.
+// Каркас заглушек: SVG w×h вендорным шрифтом цвета color, фон-рамка с атрибутами frame и
+// строки текста с шагом 20 px от y=34.
+const placeholderSvg = (w: number, h: number, color: string, frame: string, lines: string[]): string =>
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" ` +
+    `font-family="${DEFAULT_FONT_NAME}" fill="${color}">` +
+    `<rect x="1" y="1" width="${w - 2}" height="${h - 2}" ${frame}/>` +
+    lines.map((l, i) => `<text x="16" y="${34 + i * 20}" font-size="14">${escapeXml(l)}</text>`).join('') +
+    '</svg>';
+
 // Картинка-заглушка вместо упавшей «мягкой» диаграммы: ошибка видна на странице,
 // сайт остаётся собранным (так же вёл себя онлайн-рендер docsify-plantuml).
 const errorPlaceholderSvg = (name: string, reason: string): string => {
-    const esc = (s: string): string =>
-        s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c] as string);
     const lines = [`${name}: diagram not rendered`, ...reason.split('\n')]
         .flatMap((l) => l.match(/.{1,88}/g) ?? [''])
         .slice(0, 8);
-    const w = 720;
-    const h = 34 + lines.length * 20;
-    const text = lines
-        .map((l, i) => `<text x="16" y="${34 + i * 20}" font-size="14">${esc(l)}</text>`)
-        .join('');
-    return (
-        `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" ` +
-        `font-family="${DEFAULT_FONT_NAME}" fill="#8b0000">` +
-        `<rect x="1" y="1" width="${w - 2}" height="${h - 2}" fill="#fff5f5" stroke="#8b0000"/>${text}</svg>`
-    );
+    return placeholderSvg(720, 34 + lines.length * 20, '#8b0000', 'fill="#fff5f5" stroke="#8b0000"', lines);
 };
 
 // Заглушка на месте диаграммы, которую dev-сервер дорисует в фоне (режим deferImages):
 // страница отдаётся сразу, картинка подменится по готовности. Нейтральные цвета — это
 // не ошибка. В dist без `-w` не попадает: обычная сборка ждёт рендера.
-export const pendingPlaceholderSvg = (name: string): string => {
-    const esc = (s: string): string =>
-        s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c] as string);
-    const w = 480;
-    const h = 56;
-    return (
-        `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" ` +
-        `font-family="${DEFAULT_FONT_NAME}" fill="#666">` +
-        `<rect x="1" y="1" width="${w - 2}" height="${h - 2}" fill="#f7f7f7" stroke="#bbb" stroke-dasharray="6 4"/>` +
-        `<text x="16" y="34" font-size="14">${esc(name)}: rendering…</text></svg>`
-    );
-};
+export const pendingPlaceholderSvg = (name: string): string =>
+    placeholderSvg(480, 56, '#666', 'fill="#f7f7f7" stroke="#bbb" stroke-dasharray="6 4"', [
+        `${name}: rendering…`
+    ]);
 
 // Заглушки свёрстаны вендорным шрифтом — системные им не нужны, а resvg с
 // loadSystemFonts сканирует все шрифты системы (до нескольких секунд на каждую растеризацию
