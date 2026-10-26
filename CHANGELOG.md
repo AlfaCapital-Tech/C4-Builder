@@ -120,7 +120,9 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
   `two specs give the same page name` error. New option `layout`: `flat` (default) names the folder
   page by the folder name as before, so existing addresses do not change; `tree` nests pages by the
   source folder path (`billing/v2`, `ledger/v2`), and the error for same-named folders in `flat`
-  now suggests it. Only a matched file with a top-level `openapi` or `swagger` key is a spec: other
+  now suggests it. Only a matched file with a top-level `openapi` or `swagger` key is a spec — YAML
+  with a quoted or bare key and LF or CRLF line endings, or JSON (a `.yaml` file starting with `{` is
+  read as JSON, invalid JSON is not a spec); `info.title` is found in CRLF files too. Other
   matched files (schema fragments, AsyncAPI, configs) get no page and a warning each, so a wide
   `glob` like `*/*.{yaml,yml,json}` is safe. The summary lists spec pages with their full path. A
   folder that gains a second spec turns its page into the index; a file named `openapi.yaml`

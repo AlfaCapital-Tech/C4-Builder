@@ -58,7 +58,8 @@ network. Exactly one source — `dir` **or** `archive` — is required. It force
 `executeScript: true`.
 
 - A matched file is a spec only with a top-level `openapi`/`swagger` (OpenAPI, swagger-ui page) or
-  `asyncapi` (AsyncAPI, page rendered by the bundled AsyncAPI component) key; other matched files
+  `asyncapi` (AsyncAPI, page rendered by the bundled AsyncAPI component) key — YAML (quoted or bare
+  key, LF or CRLF) or JSON, also JSON in a `.yaml` file; other matched files (invalid JSON too)
   get no page and a `⚠ openapi: <path>: not an OpenAPI or AsyncAPI document` warning each, so
   `glob: "*/*.{yaml,yml,json}"` is safe.
 - Pages follow the source folders: a folder with one spec is that spec's page (`billing`); a

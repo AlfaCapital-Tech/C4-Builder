@@ -106,9 +106,10 @@ over HTTP (`archive` — for example, a GitLab or GitHub repository archive URL)
 spec, plus a section summary linking every spec page.
 
 - Only a file matched by `glob` that has a top-level `openapi` or `swagger` (OpenAPI) or
-  `asyncapi` (AsyncAPI) key is a spec. Other matched files (schema fragments, configs) get no
-  page — the build prints a `⚠ openapi: <path>: not an OpenAPI or AsyncAPI document` warning for
-  each. So `glob: "*/*.{yaml,yml,json}"` safely picks up every spec of a folder.
+  `asyncapi` (AsyncAPI) key is a spec — in YAML (quoted or bare key, LF or CRLF line endings) or
+  in JSON, JSON in a `.yaml` file included. Other matched files (schema fragments, configs,
+  invalid JSON) get no page — the build prints a `⚠ openapi: <path>: not an OpenAPI or AsyncAPI
+  document` warning for each. So `glob: "*/*.{yaml,yml,json}"` safely picks up every spec of a folder.
 - Pages follow the source folders. A folder with one spec is that spec's page (`billing`). A
   folder with several specs (`billing/openapi.yaml`, `billing/openapi-admin.yaml`,
   `billing/payouts.yaml`) becomes an index page `billing` with links (`openapi.*` first, the rest
