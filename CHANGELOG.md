@@ -128,6 +128,9 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
   without the key loses its page and is reported in the log
 - The `openapi` plugin: a `'` in a spec path no longer breaks the script of the swagger-ui and
   AsyncAPI pages — the spec URL carries it as `%27`
+- A link to a diagram with an upper-case extension (`![](Context.PUML)`) is replaced by the
+  diagram in place, as with a lower-case one, instead of staying raw while the diagram is added
+  to the page separately
 
 ## v0.9.0
 

@@ -67,11 +67,12 @@ const diagramNameAlternation = (): string =>
 
 // Ссылка на диаграмму в markdown: ![alt](path.puml|d2). Путь ленивый и не пересекает ')',
 // иначе две ссылки на одной строке склеились бы в один матч и не заменились. Свежий объект
-// на вызов — чтобы matchAll не тянул чужой lastIndex.
+// на вызов — чтобы matchAll не тянул чужой lastIndex. Без учёта регистра: scan считает
+// `C.PUML` диаграммой (engineForFile), значит и ссылка на неё должна находиться.
 const diagramRefRegex = (): RegExp => {
     const names = diagramNameAlternation();
     const byName = names ? `|(?:[^)]*/)?(?:${names})` : '';
-    return new RegExp(`!\\[.*?\\]\\(([^)]*?\\.(?:${diagramExtAlternation()})${byName})\\)`, 'g');
+    return new RegExp(`!\\[.*?\\]\\(([^)]*?\\.(?:${diagramExtAlternation()})${byName})\\)`, 'gi');
 };
 
 // Кеш base64 отрендеренных диаграмм на время ОДНОЙ сборки: один файл читают все три
