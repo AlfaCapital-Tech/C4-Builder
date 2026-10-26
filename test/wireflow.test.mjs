@@ -212,6 +212,22 @@ describe('разбор и валидация', () => {
         expect(problemsOf(file([card('a'), card('a')], [edge('e', 'a', 'zz')]))).toHaveLength(2);
     });
 
+    it('graphicId — ключ прототипа (constructor, toString): заглушка и конечная геометрия', () => {
+        const ids = ['constructor', 'toString', '__proto__'];
+        const parsed = parseWireflow(
+            file(ids.map((id, i) => card(`c${i}`, i * 300, 0, {}, { graphicId: id }))),
+            'x'
+        );
+        for (const box of layoutWireflow(parsed.diagram).values())
+            for (const v of Object.values(box)) expect(Number.isFinite(v)).toBe(true);
+        const { svg, warnings } = renderWireflowSvg(
+            file(ids.map((id, i) => card(`c${i}`, i * 300, 0, {}, { graphicId: id }))),
+            'x.wireflow.json'
+        );
+        expect(svg).not.toContain('NaN');
+        expect(warnings).toHaveLength(ids.length);
+    });
+
     it('неизвестный шаблон — предупреждение рендера, не ошибка', () => {
         const { svg, warnings } = renderWireflowSvg(
             file([card('a', 0, 0, {}, { graphicId: 'no-such-template' })]),

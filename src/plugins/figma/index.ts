@@ -39,7 +39,8 @@ export const figmaEmbedUrl = (raw: string, embedHost: string): string => {
         throw new Error(`not a Figma link, expected ${EXPECTED}`);
     }
     const [kind, key] = url.pathname.split('/').filter(Boolean);
-    const type = FIGMA_TYPES[kind ?? ''];
+    // hasOwn: сегмент пути вроде `constructor` не должен находить член прототипа.
+    const type = kind && Object.hasOwn(FIGMA_TYPES, kind) ? FIGMA_TYPES[kind] : undefined;
     if (!FIGMA_HOSTS.has(url.hostname) || !type || !key || !/^[\w-]+$/.test(key))
         throw new Error(`not a Figma link, expected ${EXPECTED}`);
     const embed = new URL(`https://${EMBED_HOST}/${type}/${key}`);

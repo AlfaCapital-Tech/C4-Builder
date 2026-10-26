@@ -107,7 +107,8 @@ const HEADER_MAX_CHARS = 23; // flow-node.tsx: длиннее — 20 симво�
 
 interface Catalog {
     version: string;
-    sizes: Record<string, number>;
+    // Map, а не объект: graphicId из файла вроде `constructor` иначе нашёл бы член прототипа.
+    sizes: Map<string, number>;
     files: Map<string, string>;
 }
 
@@ -118,7 +119,7 @@ const loadCatalog = (): Catalog => {
     const graphics = JSON.parse(read('graphics.json')) as { id: string; src: string }[];
     catalog = {
         version: read('VERSION').trim(),
-        sizes: JSON.parse(read('graphic-sizes.json')) as Record<string, number>,
+        sizes: new Map(Object.entries(JSON.parse(read('graphic-sizes.json')) as Record<string, number>)),
         files: new Map(graphics.map((g) => [g.id, path.join(WIREFLOW_DIR, g.src.replace(/^\//, ''))]))
     };
     return catalog;
@@ -371,7 +372,7 @@ const cardRatio = (card: Card): number => {
         return card.ratio === undefined
             ? DEFAULT_RATIO
             : Math.min(IMAGE_RATIO.max, Math.max(IMAGE_RATIO.min, card.ratio));
-    return loadCatalog().sizes[card.graphicId] ?? DEFAULT_RATIO;
+    return loadCatalog().sizes.get(card.graphicId) ?? DEFAULT_RATIO;
 };
 
 // Размер карточки не хранится в файле (model.ts cardSize): ширина от шаблона, высота — рамка,

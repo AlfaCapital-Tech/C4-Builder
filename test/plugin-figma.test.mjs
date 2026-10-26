@@ -198,7 +198,10 @@ describe('плагин figma: ошибки схемы (до старта сбо�
             'not a url',
             'https://www.figma.com/embed?url=https://www.figma.com/design/K/A',
             'https://www.figma.com/K/A',
-            'https://www.figma.com/design/'
+            'https://www.figma.com/design/',
+            // Тип — ключ прототипа: не должен давать мусорный адрес эмбеда.
+            'https://www.figma.com/constructor/K/A',
+            'https://www.figma.com/toString/K/A'
         ])
             await expect(
                 load({ frames: [frame('https://www.figma.com/design/K/A'), frame(bad, 'B')] })
