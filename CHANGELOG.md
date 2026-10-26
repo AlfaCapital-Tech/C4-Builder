@@ -113,7 +113,9 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
   re-save them in the editor. Other `.json` files are copied as before. `c4builder check` accepts
   `.wireflow.json` and `wireflow.json` (`✗` per problem with the element id, `⚠` for an unknown
   template or an external image); `llms-full.txt` carries the source as a `json` block with embedded
-  images replaced by `"<embedded image>"`. The project template gets a `7 Wireflow Example` section
+  images replaced by `"<embedded image>"`. The project template gets a `7 Wireflow Example` section.
+  Control characters not allowed in XML in texts and edge colours do not break the render: U+000B
+  (the Word line break) and U+000C become line breaks, the rest are dropped
 - The `openapi` plugin gives every spec of a folder its own page: a folder with several specs
   (`billing/openapi.yaml`, `billing/openapi-admin.yaml`) becomes an index page `billing` with links
   and `info.title`, plus `billing/openapi`, `billing/openapi-admin` pages, instead of the
