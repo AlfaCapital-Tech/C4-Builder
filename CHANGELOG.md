@@ -51,9 +51,12 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
 - New built-in plugin `figma`: the frames listed in its options (`name`, Figma "Share" `url`,
   optional `description`) become a site section (`mount`, `Figma` by default) with a summary page and
   one page per frame — a live `embed.figma.com` iframe (`height`, `embedHost`) with an `Open in Figma`
-  link above it. `/` in a name nests pages. Links are validated and normalised when the plugin loads
+  link above it. `/` in a name nests pages, spaces around `/` are ignored (`Mobile / Login` and
+  `Mobile/Home` share the `Mobile` section). Links are validated and normalised when the plugin loads
   (`design`/`file`/`proto`/`board`/`slides`/`deck`, `node-id` kept; `file` → `design`); a non-Figma
-  link, a duplicate name or an empty list fails before the build. The build stays offline and prints
+  link, a duplicate name (after trimming), a name segment that is empty, `.`, `..` or contains `#`,
+  `?` or `\` (it would break the sidebar link) or an empty list fails before the build, naming the
+  frame. The build stays offline and prints
   one line that readers need network access to Figma; `executeScript` and assets are not needed
 - Short permanent address of an OpenSpec change page: `#/change/<id>` (`<id>` — the change folder
   name, without the archive date prefix; a nested change by its full id) opens the change page
