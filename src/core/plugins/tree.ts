@@ -2,7 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import type { BuildOptions } from '../../config/options.ts';
-import { engineForExt, type TreeItem } from '../scan/tree.ts';
+import { encodeURIPath } from '../../util/utils.ts';
+import { diagramExt, engineForFile, type TreeItem } from '../scan/tree.ts';
 import type { PageSpec } from './types.ts';
 
 // Виртуальные элементы дерева (добавлены плагинами, каталога на диске нет). Нужно
@@ -27,10 +28,13 @@ const subtreeEnd = (tree: TreeItem[], parent: TreeItem): number => {
  * (авто-заголовок, как папка без README). Каталог в dist создаётся здесь же — compose
  * пишет страницы без mkdir, полагаясь на scan.
  */
+// Сегменты пути страницы или короткого адреса: не пустые, без разделителей, не «.»/«..».
+const badSegments = (segments: string[]): boolean =>
+    !segments.length || segments.some((s) => !s || /[\\/]/.test(s) || s === '.' || s === '..');
+
 export const addPage = (tree: TreeItem[], options: BuildOptions, page: PageSpec): TreeItem => {
     const segments = page.path;
-    if (!segments.length || segments.some((s) => !s || /[\\/]/.test(s) || s === '.' || s === '..'))
-        throw new Error(`addPage: invalid page path ${JSON.stringify(segments)}`);
+    if (badSegments(segments)) throw new Error(`addPage: invalid page path ${JSON.stringify(segments)}`);
     const root = tree.find((x) => !x.parent);
     if (!root) throw new Error('addPage: tree has no root');
 
@@ -77,15 +81,14 @@ export const addPage = (tree: TreeItem[], options: BuildOptions, page: PageSpec)
     item.mdFiles.push(...md);
     item.sources.push(...(page.sources ?? []).map((s) => path.resolve(s)));
     for (const d of page.diagrams ?? []) {
-        const ext = path.extname(d.file).toLowerCase();
-        const engine = engineForExt(ext);
+        const engine = engineForFile(d.file);
         if (!engine)
             throw new Error(
                 `addPage: diagram "${d.file}" of page ${segments.join('/')} has an unknown extension`
             );
         item.diagrams.push({
             dir: d.file,
-            ext,
+            ext: diagramExt(d.file) as string,
             engine,
             content: d.content,
             isDitaa: engine === 'plantuml' && /@startditaa/i.test(d.content),
@@ -94,4 +97,35 @@ export const addPage = (tree: TreeItem[], options: BuildOptions, page: PageSpec)
         });
     }
     return item;
+};
+
+/**
+ * Переадресации сайта (change site-agent-review): короткий путь → путь страницы. Оба — от корня
+ * сайта, с ведущим `/` и после encodeURI, как ссылки в sidebar; значение — с именем файла
+ * страницы, но без `.md` (маршрут docsify). Карта уходит в `$docsify.c4builder.redirects`.
+ */
+export type Redirects = Map<string, string>;
+
+/** Ключ карты переадресаций для короткого пути: `['change', 'x']` → `/change/x`. */
+export const redirectKey = (from: string[]): string => `/${encodeURIPath(from.join('/'))}`;
+
+/**
+ * Объявляет переадресацию. `#` и `?` в коротком пути encodeURI не кодирует — hash оборвался бы
+ * на них, поэтому такие сегменты отвергаются. Повтор короткого пути — ошибка: сообщение
+ * называет путь, имя плагина добавляет обёртка хука.
+ */
+export const addRedirect = (
+    redirects: Redirects,
+    options: BuildOptions,
+    from: string[],
+    to: string[]
+): void => {
+    if (badSegments(from) || from.some((s) => /[#?]/.test(s)))
+        throw new Error(`addRedirect: invalid redirect path ${JSON.stringify(from)}`);
+    if (badSegments(to)) throw new Error(`addRedirect: invalid page path ${JSON.stringify(to)}`);
+    const key = redirectKey(from);
+    if (redirects.has(key))
+        throw new Error(`addRedirect: redirect path ${from.join('/')} is already declared`);
+    const page = options.WEB_FILE_NAME || to[to.length - 1];
+    redirects.set(key, `/${encodeURIPath(path.posix.join(...to, page))}`);
 };

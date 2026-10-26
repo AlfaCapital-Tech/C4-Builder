@@ -2,7 +2,7 @@
 
 ## Docker image
 
-The image has everything a build needs: Node, a JRE, the PlantUML jar, fonts, D2, the BPMN and mermaid engines. Mount the
+The image has everything a build needs: Node, a JRE, the PlantUML jar, fonts, D2, the BPMN, mermaid and wireflow engines with the screen template catalog. Mount the
 project into `/pwd`:
 
 ```bash
@@ -43,7 +43,7 @@ GitLab CI, checking diagrams and publishing to GitLab Pages (`.c4builder` has
 check:
   image: ghcr.io/alfacapital-tech/c4builder:0.9.0
   script:
-    - find src \( -name '*.puml' -o -name '*.d2' -o -name '*.bpmn' -o -name '*.mmd' \) -exec c4builder check {} +
+    - find src \( -name '*.puml' -o -name '*.d2' -o -name '*.bpmn' -o -name '*.mmd' -o -name '*wireflow.json' \) -exec c4builder check {} +
 
 pages:
   image: ghcr.io/alfacapital-tech/c4builder:0.9.0
@@ -68,6 +68,49 @@ download a JRE itself):
 If the runner has no Java, c4builder downloads a JRE on the first build. To avoid downloading it
 every time, cache the folder reported by `c4builder jre info` (the `cacheDir` field) and warm it
 up with `c4builder jre install` on a cache miss.
+
+### Warm start: the render cache between jobs
+
+Every job starts from a fresh clone and renders all diagrams again — minutes on a large project.
+The render cache is portable: keep the output folder (`distFolder`) and `.c4builder.cache` between
+jobs, and the next build renders only the changed diagrams, taking the rest from the previous
+output (`processed N images` in the log, no Java started). Conditions: the same c4builder version
+(the PlantUML and engine versions are part of the checksums) and the same font mode. Put the
+package version or the lock file into the cache key so that a c4builder upgrade does not serve old
+images.
+
+GitLab CI:
+
+```yaml
+pages:
+  variables:
+    C4BUILDER_VERSION: "0.9.0"
+  image: ghcr.io/alfacapital-tech/c4builder:$C4BUILDER_VERSION
+  cache:
+    key: c4builder-$C4BUILDER_VERSION-$CI_COMMIT_REF_SLUG
+    paths: [public, .c4builder.cache]
+  script:
+    - c4builder
+  artifacts:
+    paths: [public]
+```
+
+GitHub Actions:
+
+```yaml
+- uses: actions/cache@v4
+  with:
+    path: |
+      docs
+      .c4builder.cache
+    key: c4builder-${{ hashFiles('package-lock.json') }}-${{ github.sha }}
+    restore-keys: c4builder-${{ hashFiles('package-lock.json') }}-
+- run: c4builder
+```
+
+`C4BUILDER_RENDER_CONCURRENCY` sets the number of parallel PlantUML processes (default
+`min(4, CPU − 1)`): raise it on a runner with many cores and plenty of memory, lower it to `1` on
+a weak one. The output does not depend on it.
 
 In CI the background new-version check turns itself off by the `CI` variable: no process, no
 registry requests, a build without internet takes as long as before.

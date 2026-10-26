@@ -20,6 +20,10 @@ or `docsifyTemplate` that uses them, external images in page text.
   requests and needs an HTTP server.
 - To publish it, copy the output folder to any static hosting: GitHub Pages, GitLab Pages,
   nginx. The build writes `.nojekyll` so GitHub Pages does not hide files starting with `_`.
+- The sidebar collapses: the first-level sections and the path to the current page are open, a
+  click on a section expands or collapses it. When the browser blocks site storage (Safari "Block
+  All Cookies"), collapsing still works — the state is kept in the tab's memory. Switch it off with
+  `sidebarCollapse: false` (the whole tree expanded, as before).
 - Site search is `supportSearch`, the repository link in the corner is `repoUrl`, a custom theme
   is `webTheme`, a custom `index.html` template is `docsifyTemplate`.
 

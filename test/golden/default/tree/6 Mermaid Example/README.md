@@ -14,6 +14,7 @@
   * [4 D2 Example](../4%20D2%20Example/README.md)
   * [5 BPMN Example](../5%20BPMN%20Example/README.md)
   * [**6 Mermaid Example**](../6%20Mermaid%20Example/README.md)
+  * [7 Wireflow Example](../7%20Wireflow%20Example/README.md)
 
 ---
 

@@ -1,0 +1,129 @@
+{
+  "format": "wireflow",
+  "version": 4,
+  "diagram": {
+    "nodes": [
+      {
+        "id": "group-checkout",
+        "type": "group",
+        "position": { "x": -16, "y": -36 },
+        "width": 852,
+        "height": 250,
+        "data": {
+          "label": "Оформление заказа"
+        }
+      },
+      {
+        "id": "cart",
+        "type": "flow",
+        "parentId": "group-checkout",
+        "position": { "x": 16, "y": 36 },
+        "data": {
+          "graphicId": "e-commerce-cart",
+          "label": "Cart",
+          "headerText": "Корзина",
+          "showHeader": true,
+          "estimate": 6
+        }
+      },
+      {
+        "id": "checkout",
+        "type": "flow",
+        "parentId": "group-checkout",
+        "position": { "x": 316, "y": 36 },
+        "data": {
+          "graphicId": "e-commerce-checkout",
+          "label": "Checkout",
+          "headerText": "Адрес и доставка",
+          "showHeader": true
+        }
+      },
+      {
+        "id": "payment",
+        "type": "flow",
+        "parentId": "group-checkout",
+        "position": { "x": 616, "y": 60 },
+        "data": {
+          "graphicId": "e-commerce-paypal",
+          "label": "Payment",
+          "headerText": "Оплата",
+          "showHeader": false
+        }
+      },
+      {
+        "id": "complete",
+        "type": "flow",
+        "position": { "x": 700, "y": 400 },
+        "data": {
+          "graphicId": "e-commerce-complete",
+          "label": "Complete",
+          "headerText": "Заказ принят",
+          "showHeader": true
+        }
+      },
+      {
+        "id": "mobile-cart",
+        "type": "flow",
+        "position": { "x": 960, "y": 0 },
+        "data": {
+          "graphicId": "mobile-cart",
+          "label": "Mobile cart",
+          "headerText": "Приложение",
+          "showHeader": true
+        }
+      },
+      {
+        "id": "note-coupon",
+        "type": "note",
+        "position": { "x": 300, "y": 400 },
+        "width": 252,
+        "height": 120,
+        "data": {
+          "text": "Поле промокода — необязательное.\nПри отказе банка покупатель возвращается на экран оплаты с текстом ошибки."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "cart-checkout",
+        "source": "cart",
+        "target": "checkout",
+        "type": "smoothstep",
+        "markerEnd": { "type": "arrowclosed", "color": "#e8590c" },
+        "label": "Оформить",
+        "style": { "stroke": "#e8590c", "strokeWidth": 3 }
+      },
+      {
+        "id": "checkout-payment",
+        "source": "checkout",
+        "target": "payment",
+        "type": "step",
+        "markerEnd": { "type": "arrowclosed" },
+        "label": "К оплате"
+      },
+      {
+        "id": "payment-complete",
+        "source": "payment",
+        "target": "complete",
+        "markerEnd": { "type": "arrowclosed" },
+        "label": "Оплата прошла"
+      },
+      {
+        "id": "payment-note",
+        "source": "payment",
+        "target": "note-coupon",
+        "type": "step",
+        "markerEnd": { "type": "arrowclosed" },
+        "label": "Отказ банка"
+      },
+      {
+        "id": "mobile-checkout",
+        "source": "mobile-cart",
+        "target": "complete",
+        "markerEnd": { "type": "arrowclosed" },
+        "label": "Оплата в один клик"
+      }
+    ],
+    "settings": { "hourlyRate": 90, "currency": "EUR" }
+  }
+}

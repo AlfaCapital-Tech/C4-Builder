@@ -163,6 +163,24 @@ describe('контентные проверки: default', () => {
         expect(page).not.toContain('```mermaid');
         expect(page).toContain(`![diagram](${path.posix.basename(block)})`);
     });
+    it('Wireflow: .wireflow.json → SVG по имени без суффикса, группа, карточки, кириллица', () => {
+        const tree = runs.default.tree;
+        const files = Object.keys(tree);
+        // пятый бэкенд — прямая генерация SVG; исходник не копируется, выход без `.wireflow`
+        expect(files).toContain('7 Wireflow Example/checkout.svg');
+        expect(files).not.toContain('7 Wireflow Example/checkout.wireflow.json');
+        const svg = decodeXmlEntities(tree['7 Wireflow Example/checkout.svg'].text);
+        expect(svg).toContain('ОФОРМЛЕНИЕ ЗАКАЗА'); // подпись группы — uppercase
+        for (const header of ['Корзина', 'Адрес и доставка', 'Заказ принят', 'Приложение'])
+            expect(svg).toContain(`>${header}</text>`);
+        expect(svg).toContain('Оплата в один клик'); // подпись ребра
+        expect(svg).toContain('Поле промокода'); // заметка
+        // шаблоны экранов — по <symbol> на шаблон, карточки ссылаются через <use>
+        expect(svg.match(/<symbol id="wf-/g)).toHaveLength(5);
+        expect(svg.match(/<use href="#wf-/g)?.length).toBeGreaterThanOrEqual(5);
+        expect(svg).not.toMatch(/https?:\/\/(?!www\.w3\.org\/)/);
+        expect(tree['7 Wireflow Example/README.md'].text).toContain('![diagram](checkout.svg)');
+    });
 });
 
 describe('контентные проверки: links-top', () => {
@@ -206,6 +224,9 @@ describe('контентные проверки: embed-png', () => {
         // Mermaid → PNG (растеризация SVG): и файл .mmd, и блок страницы
         expect(files).toContain('6 Mermaid Example/flow.png');
         expect(files.some((f) => /^6 Mermaid Example\/mermaid-[0-9a-f]{8}\.png$/.test(f))).toBe(true);
+        // Wireflow → PNG (растеризация SVG)
+        expect(files).toContain('7 Wireflow Example/checkout.png');
+        expect(files).not.toContain('7 Wireflow Example/checkout.svg');
         // ditaa — нативный PNG
         expect(files).toContain('1 Internet Banking System/Single Page Application/Extended Docs/ditaa.png');
         // ни одного .svg-выхода не осталось (vendor svg в шаблоне нет)

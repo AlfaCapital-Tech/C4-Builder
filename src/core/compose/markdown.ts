@@ -10,6 +10,7 @@ import { VENDOR_DIR } from '../../util/paths.ts';
 // и единый реестр расширений диаграмм (источник истины для regex ссылок ниже).
 import {
     getFolderName,
+    diagramBaseName,
     diagramOutputFormat,
     DIAGRAM_ENGINES,
     engineSupportsRemote,
@@ -22,6 +23,7 @@ import { getMime, httpGet } from '../render/diagrams.ts';
 // Граф D2-импортов — тот же, что у рендера (приложение llms-full.txt).
 import { d2LocalImports } from '../render/d2renderer.ts';
 import type { BuildOptions } from '../../config/options.ts';
+import type { Redirects } from '../plugins/tree.ts';
 
 // Стратегия подстановки диаграммы в markdown (embed/link/img) — задаётся вызывающим.
 type GetDiagram = (item: TreeItem, diagram: Diagram, options: BuildOptions) => Promise<string>;
@@ -54,14 +56,23 @@ const injectAfterFirstH1 = (md: string, block: string): string => {
 // Расширения диаграмм без точки, экранированные для regex. Источник истины — реестр
 // DIAGRAM_ENGINES из фазы scan (scan/tree.ts): добавление движка там автоматически
 // расширяет regex ссылок здесь, без синхронной правки. Экранируем на случай спецсимволов.
-const diagramExtAlternation = (): string =>
-    DIAGRAM_ENGINES.map((e) => e.ext.slice(1).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const diagramExtAlternation = (): string => DIAGRAM_ENGINES.map((e) => escapeRe(e.ext.slice(1))).join('|');
+// Суффиксы из нескольких расширений (`.wireflow.json`) — ещё и точным именем файла
+// (`wireflow.json`), как в engineForFile.
+const diagramNameAlternation = (): string =>
+    DIAGRAM_ENGINES.filter((e) => e.ext.indexOf('.', 1) !== -1)
+        .map((e) => escapeRe(e.ext.slice(1)))
+        .join('|');
 
 // Ссылка на диаграмму в markdown: ![alt](path.puml|d2). Путь ленивый и не пересекает ')',
 // иначе две ссылки на одной строке склеились бы в один матч и не заменились. Свежий объект
 // на вызов — чтобы matchAll не тянул чужой lastIndex.
-const diagramRefRegex = (): RegExp =>
-    new RegExp(`!\\[.*?\\]\\(([^)]*?\\.(?:${diagramExtAlternation()}))\\)`, 'g');
+const diagramRefRegex = (): RegExp => {
+    const names = diagramNameAlternation();
+    const byName = names ? `|(?:[^)]*/)?(?:${names})` : '';
+    return new RegExp(`!\\[.*?\\]\\(([^)]*?\\.(?:${diagramExtAlternation()})${byName})\\)`, 'g');
+};
 
 // Кеш base64 отрендеренных диаграмм на время ОДНОЙ сборки: один файл читают все три
 // генератора (per-page md / docsify / complete). clearDiagramCache() зовётся в начале build() —
@@ -99,7 +110,7 @@ const buildDiagramMarkdown = async (
     variant: 'page' | 'complete'
 ): Promise<string> => {
     const isComplete = variant === 'complete';
-    const name = path.parse(diagram.dir).name;
+    const name = diagramBaseName(diagram.dir);
     const format = diagramOutputFormat(diagram, options);
     // rawPath — сырой путь (для чтения файла и как основа ссылок), кодируем ровно один раз.
     const rawPath = path.join(path.dirname(diagram.dir), `${name}.${format}`);
@@ -287,7 +298,7 @@ export const generateLlmsTxt = (tree: TreeItem[], options: BuildOptions): string
     return (
         `# ${options.PROJECT_NAME}\n\n` +
         '> Architecture documentation built with c4builder. Pages are markdown; full text with ' +
-        'diagram sources (PlantUML/D2/BPMN/Mermaid): [llms-full.txt](llms-full.txt).\n\n' +
+        'diagram sources (PlantUML/D2/BPMN/Mermaid/Wireflow): [llms-full.txt](llms-full.txt).\n\n' +
         `## Pages\n\n${pages.join('')}`
     );
 };
@@ -303,15 +314,25 @@ const FENCE_LANG: Record<string, string> = {
     '.iuml': 'plantuml',
     '.d2': 'd2',
     '.bpmn': 'xml',
-    '.mmd': 'mermaid'
+    '.mmd': 'mermaid',
+    '.wireflow.json': 'json'
 };
+
+// Исходник wireflow для llms-full.txt: встроенные картинки карточек (`data:`-URL, сотни КБ
+// base64 на экран) заменяются пометкой — остальной JSON без изменений. Строковый литерал
+// JSON целиком, с экранированными кавычками внутри.
+export const stripEmbeddedImages = (json: string): string =>
+    json.replace(/"data:[a-z]+\/[-+.\w]+;base64,[^"\\]*(?:\\.[^"\\]*)*"/g, '"<embedded image>"');
 
 // llms-full.txt: состав complete-документа, но диаграмма — исходником (C4-PlantUML/D2-текст
 // агенту полезнее SVG). Локальные include/импорты — один раз в приложении, а не инлайном:
 // общий styles.iuml иначе повторился бы в каждой диаграмме. Резолв — тот же, что у рендера.
 export const generateLlmsFull = async (tree: TreeItem[], options: BuildOptions): Promise<string> => {
     const MD = await composeComplete(tree, options, async (_item, diagram) =>
-        fenced(`${diagram.content}`, FENCE_LANG[diagram.ext])
+        fenced(
+            diagram.engine === 'wireflow' ? stripEmbeddedImages(`${diagram.content}`) : `${diagram.content}`,
+            FENCE_LANG[diagram.ext]
+        )
     );
     const deps = new Map<string, string>();
     for (const item of tree) {
@@ -418,7 +439,12 @@ export const generateMD = async (
 /** Страница сайта (posix-путь `.md` от корня dist, как его грузит docsify) → исходные файлы. */
 export type PageSources = Map<string, string[]>;
 
-export const generateWebMD = async (tree: TreeItem[], options: BuildOptions): Promise<PageSources> => {
+export const generateWebMD = async (
+    tree: TreeItem[],
+    options: BuildOptions,
+    // Переадресации плагинов (change site-agent-review) — в опции docsify, см. DocsifyOptions.
+    redirects: Redirects = new Map()
+): Promise<PageSources> => {
     const filePromises: Promise<void>[] = [];
     let docsifySideBar = '';
     const pages: PageSources = new Map();
@@ -482,7 +508,10 @@ export const generateWebMD = async (tree: TreeItem[], options: BuildOptions): Pr
                 alias: { '/.*/_sidebar.md': '/_sidebar.md' },
                 nativeEmoji: true,
                 supportSearch: options.SUPPORT_SEARCH,
-                executeScript: options.EXECUTE_SCRIPT
+                executeScript: options.EXECUTE_SCRIPT,
+                // Ключ только при включённом сворачивании: при false index.html остаётся прежним.
+                ...(options.SIDEBAR_COLLAPSE ? { sidebarDisplayLevel: 1 } : {}),
+                ...(redirects.size ? { c4builder: { redirects: Object.fromEntries(redirects) } } : {})
             })
         )
     );
@@ -494,9 +523,13 @@ export const generateWebMD = async (tree: TreeItem[], options: BuildOptions): Pr
         // Тема — без ведущего @import Google Fonts (у её шрифтов есть системный fallback).
         // Правим копию, а не vendor/: повторное вендорение вернуло бы @import.
         const theme = path.join(vendorDist, 'vue.css');
+        // Скрипты c4builder (`c4builder-*.js`) копирует injectRedirects — только когда они нужны
+        // странице; иначе в dist каждого проекта лежал бы лишний файл.
         filePromises.push(
             fsextra
-                .copy(docsifyVendorSrc, vendorDist)
+                .copy(docsifyVendorSrc, vendorDist, {
+                    filter: (src) => !path.basename(src).startsWith('c4builder-')
+                })
                 .then(async () =>
                     writeFile(theme, (await readFile(theme)).toString().replace(/^@import url\([^)]*\);/, ''))
                 )

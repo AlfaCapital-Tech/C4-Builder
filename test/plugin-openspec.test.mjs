@@ -71,7 +71,14 @@ const makeStore = (dir, store = 'openspec') => {
     );
     write(s, 'changes/dig-1-alpha/img/pic.png', 'PNG');
     // change 2: без tasks, без метаданных
-    write(s, 'changes/dig-2-beta/proposal.md', '## Why\n\nbeta\n');
+    write(
+        s,
+        'changes/dig-2-beta/proposal.md',
+        '## Why\n\nbeta\n\n![Поток](flow.puml)\n\n![битый](broken.mmd)\n'
+    );
+    // картинки-ссылки на файлы диаграмм: рендер локальным движком, битый файл — заглушка
+    write(s, 'changes/dig-2-beta/flow.puml', '@startuml\nAlice -> Bob : hi\n@enduml\n');
+    write(s, 'changes/dig-2-beta/broken.mmd', 'flowchart LR\n  A -->\n');
     // архив
     write(s, 'changes/archive/2026-08-01-dig-0-old/proposal.md', '## Why\n\nold\n');
     write(s, 'changes/archive/2026-08-01-dig-0-old/tasks.md', '- [x] a\n- [x] b\n');
@@ -331,6 +338,29 @@ describe('плагин openspec: крайние случаи', () => {
         expect(fs.readFileSync(path.join(d2, 'docs/_sidebar.md'), 'utf8')).toContain('* [Планы](%D0%9F');
         fs.rmSync(d2, { recursive: true, force: true });
     });
+    it("короткий адрес: id с '#' и совпадение id у двух экземпляров — предупреждение, сборка проходит", () => {
+        const d = makeFixture(
+            'redirect-clash',
+            [
+                ['openspec', { dir: 'storeA', mount: 'SA' }],
+                ['openspec', { dir: 'storeB', mount: 'SB' }]
+            ],
+            false
+        );
+        makeStore(d, 'storeA');
+        makeStore(d, 'storeB');
+        write(path.join(d, 'storeA'), 'changes/fix#1/proposal.md', '## Why\n\nfix\n');
+        const out = runBuild(d);
+        expect(out).toMatch(/openspec \(SB\): no short address for change dig-1-alpha: .*already declared/);
+        expect(out).toMatch(/openspec \(SA\): no short address for change fix#1: .*invalid redirect path/);
+        const html = fs.readFileSync(path.join(d, 'docs', 'index.html'), 'utf8');
+        const { redirects } = JSON.parse(
+            html.match(/window\.\$docsify = (\{[\s\S]*?\});\s*<\/script>/)[1]
+        ).c4builder;
+        // Первый экземпляр выигрывает.
+        expect(redirects['/change/dig-1-alpha']).toMatch(/^\/SA\//);
+        fs.rmSync(d, { recursive: true, force: true });
+    });
 });
 
 // Корень задачи и подзадачи по платформам: ссылка на родителя — ключ `.openspec.yaml`
@@ -522,6 +552,9 @@ describe('плагин openspec: опция nameKey', () => {
         // `#` encodeURI не кодирует — ссылка оборвалась бы на якоре, поэтому id
         write(s, 'changes/dig-6-hash/.openspec.yaml', 'x-name: "Задача #6"\n');
         write(s, 'changes/dig-6-hash/proposal.md', '## Why\n\ndig-6-hash\n');
+        // короткие адреса: архивная копия активного change'а и два архива одного id
+        write(s, 'changes/archive/2026-07-01-dig-3-root/proposal.md', '## Why\n\nold root\n');
+        write(s, 'changes/archive/2026-07-01-dig-5-old/proposal.md', '## Why\n\nolder\n');
         runBuild(d);
     });
     afterAll(() => fs.rmSync(d, { recursive: true, force: true }));
@@ -555,6 +588,33 @@ describe('плагин openspec: опция nameKey', () => {
         expect(readD('OpenSpec/Changes/Service/Корень задачи/ios/ios.md')).toContain(
             `**Parent:** [Корень задачи](${page('OpenSpec', 'Changes', 'Service', 'Корень задачи')})`
         );
+    });
+
+    // Короткие адреса `#/change/<id>` (change site-agent-review): ключ — ASCII-id, значение —
+    // закодированный путь страницы; активный важнее архивного, из архивных — новейший.
+    it('карта переадресаций в index.html: группа и имя, вложенный, архив, активный+архивный', () => {
+        const html = readD('index.html');
+        const { redirects } = JSON.parse(
+            html.match(/window\.\$docsify = (\{[\s\S]*?\});\s*<\/script>/)[1]
+        ).c4builder;
+        expect(redirects).toMatchObject({
+            '/change/dig-3-root': `/${page('OpenSpec', 'Changes', 'Service', 'Корень задачи')}`,
+            '/change/dig-3-root-ios': `/${page('OpenSpec', 'Changes', 'Service', 'Корень задачи', 'ios')}`,
+            '/change/dig-3-root-design': `/${page('OpenSpec', 'Changes', 'Service', 'Корень задачи', 'dig-3-root-design')}`,
+            '/change/dig-1-alpha': `/${page('OpenSpec', 'Changes', 'Бета')}`,
+            '/change/dig-5-old': '/OpenSpec/Archive/2026-08-02-dig-5-old/2026-08-02-dig-5-old'
+        });
+        // Вложенный архивный: по полному id, на страницу под тем архивным родителем, куда его
+        // положила раскладка (при двух архивах одного id layoutChanges берёт последний в списке).
+        expect(redirects['/change/dig-5-old-web']).toMatch(
+            /^\/OpenSpec\/Archive\/\d{4}-\d{2}-\d{2}-dig-5-old\/web\/web$/
+        );
+        expect(Object.keys(redirects).filter((k) => /dig-3-root$|dig-5-old$/.test(k))).toEqual([
+            '/change/dig-3-root',
+            '/change/dig-5-old'
+        ]);
+        expect(Object.keys(redirects).every((k) => /^\/change\/[\w.-]+$/.test(k))).toBe(true);
+        expect(html).toContain('<script src="vendor/c4builder-redirects.js"></script>');
     });
 });
 
@@ -601,5 +661,19 @@ describe('плагин openspec: опция columns', () => {
             /\| ↳ \[ios\]\(OpenSpec\/Changes\/dig-3-root\/ios\/ios\) \| — \| .* \| Bob \\\| Carol \| — \|/
         );
         expect(readD('OpenSpec/OpenSpec.md')).toContain('| Assignee | Jira |');
+    });
+});
+
+describe('плагин openspec: файлы диаграмм в артефактах', () => {
+    it('![](flow.puml) — диаграмма страницы, исходник в выход не копируется', () => {
+        const page = read('OpenSpec/Changes/dig-2-beta/dig-2-beta.md');
+        expect(page).toMatch(/!\[[^\]]*\]\(flow\.svg\)/);
+        expect(page).not.toContain('flow.puml');
+        expect(read('OpenSpec/Changes/dig-2-beta/flow.svg')).toContain('<svg');
+        expect(fs.existsSync(path.join(dir, 'docs/OpenSpec/Changes/dig-2-beta/flow.puml'))).toBe(false);
+    });
+
+    it('битый файл диаграммы — заглушка вместо картинки, сборка проходит', () => {
+        expect(read('OpenSpec/Changes/dig-2-beta/broken.svg')).toContain('diagram not rendered');
     });
 });

@@ -11,7 +11,7 @@
 | `c4builder site` | builds and serves the site locally (same as `--site`) |
 | `c4builder --site -w` | the same, rebuilding on every save and reloading the browser |
 | `c4builder feedback --wait --as <name>` | waits for the next batch of page feedback for the agent `<name>` from `site -w` and prints it, see "Feedback to the agent" below |
-| `c4builder check <files...>` | checks `.puml`, `.iuml`, `.d2`, `.bpmn`, `.mmd` diagrams without a build, exit code 0 or 1 |
+| `c4builder check <files...>` | checks `.puml`, `.iuml`, `.d2`, `.bpmn`, `.mmd`, `.wireflow.json` diagrams without a build, exit code 0 or 1 |
 | `c4builder jre info` | which Java will be used (JSON) |
 | `c4builder jre install [--force]` | download a JRE into the cache in advance; `--force` — even if system Java exists |
 | `c4builder --list` | print the current config; since 0.5.0 outside a project — an error with exit code 1, no files created |
@@ -30,7 +30,8 @@ Flags:
 |---|---|
 | `-c, --config-file <path>` | a different config file instead of `.c4builder` |
 | `-w, --watch` | rebuild on changes in the sources and plugin folders |
-| `-o, --open` | open the site in the browser (with `--site`) |
+| `-o, --open` | open the home page of the site in the browser (with `--site`) |
+| `--open-change <id>` | open the page of an OpenSpec change by the short address `#/change/<id>` in the browser (with `--site`, see [Plugins](06%20Plugins/06%20Plugins.md)); when the site has no such address — a warning on stderr, the address is opened anyway |
 | `-p, --port <n>` | port for `--site` and `feedback` (defaults to `webPort` from the config, 3000) |
 | `--agent`, `--no-agent` | turn the agent mode of `site -w` on or off regardless of the environment |
 | `--wait` | for `feedback`: wait for the next batch instead of only checking the queue |
@@ -38,6 +39,37 @@ Flags:
 | `--system-fonts` | render with system fonts for one run |
 | `-V, --version` | version |
 | `-h, --help` | flags and positional commands |
+
+## The `--site -w` dev server
+
+`c4builder --site -w` serves the site as soon as the pages are composed, without waiting for the
+diagrams. Diagrams missing from the cache (a fresh clone, the first build in a CI preview) get a
+`rendering…` placeholder image in their place, and the rendering goes on in the background after
+the `serving your docsify site` line:
+
+```text
+serving your docsify site
+go to http://localhost:3000
+rendering 179 diagrams in background…
+rendered 179 diagrams in 118.4 s
+```
+
+- The diagrams of the page open in the browser are rendered first: the server sees the page
+  request and moves them to the head of the queue.
+- Every finished image replaces its placeholder on the open page without a reload and without
+  losing the scroll position. When the queue is done, the server runs a regular rebuild
+  (everything is cached now — a fraction of a second) and reloads the pages: that is how inlined
+  diagrams (`embedDiagram`), the complete document and `llms-full.txt` get the real images, and
+  source edits made during the rendering land on the site.
+- A render error in the background does not stop the server: the diagram shows an error
+  placeholder, the log gets `✗ Diagram "<file>": <reason>`. Fixing the file triggers a regular
+  rebuild.
+- A warm start (everything cached) creates no placeholders and renders nothing in the background.
+
+The `-w` output is for viewing, not for publishing: stopping the server before the background queue
+is done leaves placeholders in `distFolder` (they have no checksums, the next build re-renders
+them). A build without `-w` — `c4builder site` included — still waits for every diagram and fails
+if any of them does not render.
 
 ## Updating
 
@@ -125,8 +157,11 @@ recipient.
 
 `c4builder feedback --wait --as <name>` connects to `site -w` on the port from `-p` or `webPort`,
 waits for the next batch for `<name>` with no time limit, prints it to stdout as markdown and exits
-with code 0. Without `--wait` the command prints a batch if one is already in the mailbox, otherwise
-nothing, and exits at once. Without `--as` or with an invalid name — exit code 2 and
+with code 0. When `<name>` is the id of a change on the site (the `openspec` plugin), the command
+first prints one stderr line `Change page: http://localhost:<port>/#/change/<name>` — the link to
+the change page for the human; stdout stays reserved for the batch, and there is no line when the
+site has no such change. Without `--wait` the command prints a batch if one is already in the
+mailbox, otherwise nothing, and exits at once. Without `--as` or with an invalid name — exit code 2 and
 `--as <name> is required` with an example, the server is not contacted. No server, or the mode is
 off — exit code 1 and a message with the server address. A batch sent to a recipient that is not
 listening (say, the agent is editing files between batches) waits in its mailbox and goes to the
@@ -180,6 +215,7 @@ in older versions produce a warning listing them, and the build continues.
 | `charset` | `UTF-8` | encoding of PlantUML sources |
 | `webTheme` | `vendor/vue.css` | docsify CSS theme |
 | `supportSearch` | `true` | search in the sidebar |
+| `sidebarCollapse` | `true` | collapsible sidebar sections: the first level and the path to the current page are open; `false` — the whole tree expanded |
 | `repoUrl` | empty | repository link in the corner of the site |
 | `executeScript` | `false` | run `<script>` in pages and load swagger-ui |
 | `docsifyTemplate` | empty | path to a module with a custom `index.html` template |
@@ -198,3 +234,9 @@ The config of this documentation site is a live example: `docs/en/.c4builder` in
 receives the docsify settings object (name, sidebar, theme, search) and returns the HTML for
 `index.html`. Start from the built-in template in `src/core/compose/docsify.template.ts`; this
 site uses its own, `docs/docsify-template.mjs`.
+
+The template does not need to load the sidebar collapsing (`sidebarCollapse`): the build injects
+its script and style into the finished `index.html` as a post-processing step, like plugin assets,
+and the display level arrives in the settings object as `sidebarDisplayLevel` — just put the whole
+object into `window.$docsify`. If the template already loads
+`vendor/docsify-sidebar-collapse.min.js` itself, the file is not added a second time.

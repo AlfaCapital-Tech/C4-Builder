@@ -102,3 +102,22 @@ describe('uiLanguage', () => {
         expect(r.issues).toEqual([{ key: 'uiLanguage', value: 'de', message: 'expected auto, en or ru' }]);
     });
 });
+
+describe('sidebarCollapse', () => {
+    it('без ключа — true: сворачивание sidebar включено по умолчанию', () => {
+        expect(configSchema.parse({}).sidebarCollapse).toBe(true);
+    });
+
+    it('false принимается — прежний полностью развёрнутый sidebar', () => {
+        const r = configSchema.safeParse({ sidebarCollapse: false });
+        expect(r.success).toBe(true);
+        expect(r.data.sidebarCollapse).toBe(false);
+    });
+
+    it('не булево значение — ошибка с именем ключа, а не тихое truthy', () => {
+        const r = parseConfig({ sidebarCollapse: 'no' });
+        expect(r.ok).toBe(false);
+        expect(r.issues.map((i) => i.key)).toEqual(['sidebarCollapse']);
+        expect(r.salvaged.sidebarCollapse).toBe(true); // дефолт
+    });
+});

@@ -7,7 +7,7 @@ locally, without a network and without a human.
 
 ## The edit → check → build loop
 
-1. **Edit.** The agent changes `.md` and `.puml`/`.d2`/`.bpmn`/`.mmd` files in `src/` — adds a
+1. **Edit.** The agent changes `.md` and `.puml`/`.d2`/`.bpmn`/`.mmd`/`.wireflow.json` files in `src/` — adds a
    container, a relationship, a page, a process step.
 2. **Check.** `c4builder check` on the changed files:
 
@@ -25,9 +25,11 @@ locally, without a network and without a human.
    The check uses the same engine and the same `!include`s as the build and takes seconds: the
    agent fixes the error and repeats until it gets 0. For `.bpmn`, every model violation is a
    line with the element id and the rule: `✗ <file>: <id> [<rule>] <description>`; for `.mmd`
-   — the line number, as for PlantUML.
+   — the line number, as for PlantUML; for `.wireflow.json` — a line with the node or edge id.
 3. **Build.** `c4builder` builds the whole project; `c4builder --site -w` keeps the site open for
-   the human and rebuilds it on every save the agent makes.
+   the human and rebuilds it on every save the agent makes. It comes up right away, without
+   waiting for the rendering: diagrams missing from the cache show a `rendering…` placeholder and
+   are drawn in the background (see "CLI and configuration").
 
 A full build also exits with a non-zero code if any diagram fails to render, so it can be the
 agent's last step or a CI step.
@@ -44,7 +46,13 @@ the draft and sends nothing to the agent. The agent loop:
 
 1. Start `c4builder --site -w` and `c4builder feedback --wait --as <name>` in the background,
    `<name>` being the agent's change or task, e.g. `--as add-dark-mode`. In Claude Code — both
-   through Bash with `run_in_background`: the agent is notified when `feedback --wait` exits.
+   through Bash with `run_in_background`: the agent is notified when `feedback --wait` exits. The
+   link to the change page for the human is the short address `http://localhost:<port>/#/change/<id>`
+   (see [Plugins](06%20Plugins/06%20Plugins.md)): `feedback --wait --as <id>` prints it on stderr as
+   `Change page: …`, and `c4builder --site -w --open-change <id>` opens it in the browser instead of the
+   home page. The link can be given right after the `serving your docsify site` line: on a fresh
+   clone the diagrams are still rendering in the background, and the `rendering…` placeholders on
+   the page turn into images by themselves.
 2. `feedback --wait` prints a batch and exits. The agent edits the sources in `src/` — the page
    reloads through livereload and the human sees the result.
 3. Run `c4builder feedback --wait --as <name>` again with the same name and wait for the next batch.
@@ -124,8 +132,8 @@ texts or the questions section heading (`questionsHeading`).
 
 ## Why offline rendering matters for agents
 
-- **No network, no random failures.** The PlantUML jar, the C4 library, the font, D2, the BPMN and
-  mermaid engines ship with the package; the build does not depend on plantuml.com, proxies or rate limits.
+- **No network, no random failures.** The PlantUML jar, the C4 library, the font, D2, the BPMN,
+  mermaid and wireflow engines ship with the package; the build does not depend on plantuml.com, proxies or rate limits.
 - **Same input, same output.** The bundled font and pinned engine versions give identical SVG on
   any machine. The pull request diff shows what the agent changed in the model, not
   environmental noise.
@@ -163,7 +171,7 @@ metadata:
 
 | Skill | Use it for |
 |---|---|
-| `c4builder` | working on a project: layout of `src/` and `.c4builder`, the edit → `c4builder check` → build loop, C4-PlantUML conventions (stdlib includes, shared `.iuml`, offline rendering), D2, BPMN processes without coordinates, mermaid (`.mmd` and blocks, unsupported types), the `openspec` and `openapi` plugins, `llms.txt`, the new version and skills notices |
+| `c4builder` | working on a project: layout of `src/` and `.c4builder`, the edit → `c4builder check` → build loop, C4-PlantUML conventions (stdlib includes, shared `.iuml`, offline rendering), D2, BPMN processes without coordinates, mermaid (`.mmd` and blocks, unsupported types), wireflow (`.wireflow.json` from the editor, format versions, placeholders), the `openspec` and `openapi` plugins, `llms.txt`, the new version and skills notices |
 | `c4builder-review` | reviewing pages on `c4builder --site -w`: checking the server, the link to the change or section page, the `c4builder feedback --wait --as <name>` loop, a report in the chat; invoked as `/c4builder-review [change-id\|page]` |
 | `c4builder-setup` | install and update (npm channels `latest` and `rc`, a registry mirror through npmrc or `--registry`, the Docker image), Java or the downloaded JRE, a smoke build of the template project, installing the skills into the project |
 
@@ -230,7 +238,7 @@ files following [llmstxt.org](https://llmstxt.org/):
   `excludeSidebarFolderByPath` are left out, plugin pages (such as `openspec`) are included. Links
   are relative to the site root.
 - **`llms-full.txt`** — the full text of all pages in one file, in the same order as the single
-  markdown file. Every diagram is inserted as its **source** in a `plantuml`, `d2`, `mermaid` or `xml` (BPMN) block instead
+  markdown file. Every diagram is inserted as its **source** in a `plantuml`, `d2`, `mermaid`, `xml` (BPMN) or `json` (wireflow, embedded images replaced by an `"<embedded image>"` marker) block instead
   of an image, regardless of `diagramFormat`, `embedDiagram` and `includeLinkToDiagram`. Local
   `!include` files and D2 imports (nested ones too) are listed once in the `## Included files`
   appendix at the end; stdlib includes `!include <C4/...>` and URL includes stay as lines in the
@@ -260,7 +268,7 @@ such a project:
 - include C4 through the stdlib (`!include <C4/C4_Container>`), shared styles with
   `!include ../styles.iuml`;
 - a new page is a new folder in `src/`, the order is set by a numeric prefix;
-- `.puml`, `.d2`, `.bpmn` and `.mmd` files in one folder must not share a name ignoring the extension: they share
+- `.puml`, `.d2`, `.bpmn`, `.mmd` and `.wireflow.json` files in one folder must not share a name ignoring the extension: they share
   the output file, and the build stops with an error.
 
 Add the pre-commit hook from the [Diagrams](03%20Diagrams/03%20Diagrams.md) page: it keeps a

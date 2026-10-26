@@ -34,6 +34,18 @@ beforeAll(() => {
     write('ok.d2', 'a -> b\n');
     write('bad.d2', 'a -> \n');
     write('what.txt', 'x');
+    const wf = (nodes, edges = []) =>
+        JSON.stringify({ format: 'wireflow', version: 4, diagram: { nodes, edges } });
+    const wfCard = (id, graphicId = 'e-commerce-cart') => ({
+        id,
+        type: 'flow',
+        position: { x: 0, y: 0 },
+        data: { graphicId }
+    });
+    write('ok.wireflow.json', wf([wfCard('a'), wfCard('b')], [{ id: 'e1', source: 'a', target: 'b' }]));
+    write('wireflow.json', wf([wfCard('a')]));
+    write('bad.wireflow.json', wf([wfCard('a')], [{ id: 'e1', source: 'a', target: 'x9' }]));
+    write('warn.wireflow.json', wf([wfCard('a', 'no-such-template')]));
     write('ok.mmd', 'flowchart LR\n  A[Клиент] --> B\n');
     write('bad.mmd', 'flowchart LR\n  A -->> ((B\n');
     write('mind.mmd', 'mindmap\n  root\n');
@@ -96,12 +108,12 @@ describe('c4builder check', () => {
         const res = check('what.txt', 'missing.puml');
         expect(res.status).toBe(1);
         expect(res.stderr).toMatch(
-            /✗ what\.txt: unsupported extension \(expected \.puml, \.iuml, \.d2, \.bpmn or \.mmd\)/
+            /✗ what\.txt: unsupported extension \(expected \.puml, \.iuml, \.d2, \.bpmn, \.mmd or \.wireflow\.json\)/
         );
         expect(res.stderr).toMatch(/✗ missing\.puml: ENOENT/);
         const usage = check();
         expect(usage.status).toBe(1);
-        expect(usage.stdout).toMatch(/usage: c4builder check .*\| \.mmd\)/);
+        expect(usage.stdout).toMatch(/usage: c4builder check .*\| \.mmd \| \.wireflow\.json\)/);
     });
 
     it('корректный .bpmn → код 0, процесс завершается (окно jsdom закрыто)', () => {
@@ -136,5 +148,19 @@ describe('c4builder check', () => {
         expect(res.status).toBe(1);
         expect(res.stderr).toMatch(/^✗ bad\.mmd: line 2: .*Expecting /m);
         expect(res.stderr).toMatch(/^✗ mind\.mmd: line 1: unsupported mermaid diagram type 'mindmap'$/m);
+    });
+
+    it('wireflow: валидный файл и wireflow.json → 0; ребро в никуда → ✗ с id ребра, 1; неизвестный шаблон → ⚠, 0', () => {
+        const ok = check('ok.wireflow.json', 'wireflow.json');
+        expect(ok.status, ok.stderr).toBe(0);
+        expect(ok.stdout).toMatch(/✓ ok\.wireflow\.json/);
+        expect(ok.stdout).toMatch(/✓ wireflow\.json/);
+        const bad = check('bad.wireflow.json');
+        expect(bad.status).toBe(1);
+        expect(bad.stderr).toMatch(/^✗ bad\.wireflow\.json: .*e1.*x9/m);
+        const warn = check('warn.wireflow.json');
+        expect(warn.status, warn.stderr).toBe(0);
+        expect(warn.stdout).toMatch(/⚠ warn\.wireflow\.json: .*no-such-template/);
+        expect(warn.stdout).toMatch(/✓ warn\.wireflow\.json/);
     });
 });

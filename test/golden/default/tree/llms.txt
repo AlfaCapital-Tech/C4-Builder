@@ -1,6 +1,6 @@
 # golden-fixture
 
-> Architecture documentation built with c4builder. Pages are markdown; full text with diagram sources (PlantUML/D2/BPMN/Mermaid): [llms-full.txt](llms-full.txt).
+> Architecture documentation built with c4builder. Pages are markdown; full text with diagram sources (PlantUML/D2/BPMN/Mermaid/Wireflow): [llms-full.txt](llms-full.txt).
 
 ## Pages
 
@@ -16,3 +16,4 @@
 - [4 D2 Example](4%20D2%20Example/4%20D2%20Example.md)
 - [5 BPMN Example](5%20BPMN%20Example/5%20BPMN%20Example.md)
 - [6 Mermaid Example](6%20Mermaid%20Example/6%20Mermaid%20Example.md)
+- [7 Wireflow Example](7%20Wireflow%20Example/7%20Wireflow%20Example.md)

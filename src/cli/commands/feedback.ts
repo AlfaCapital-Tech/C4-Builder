@@ -2,7 +2,7 @@ import chalk from 'chalk';
 import fs from 'node:fs';
 import { parseConfig } from '../../config/options.ts';
 import { LISTENER_NAME } from '../../core/feedback.ts';
-import { FEEDBACK_HEADER, FEEDBACK_PATH } from './site.comments.ts';
+import { FEEDBACK_HEADER, FEEDBACK_PATH, PAGE_PATH } from './site.comments.ts';
 
 // `c4builder feedback` (change site-agent-feedback, design D9): забирает пачку замечаний у `site -w`.
 // Конфиг читается как JSON без Configstore — тот создал бы `.c4builder` в любом каталоге. Ошибки —
@@ -37,6 +37,18 @@ export default async (
     // 127.0.0.1, а не localhost: сервер слушает только IPv4, а `localhost` → `::1` на части машин
     // подвешивает соединение.
     const url = `http://127.0.0.1:${port}${FEEDBACK_PATH}/next?as=${opts.as}${opts.wait ? '' : '&wait=0'}`;
+    // Адрес страницы change'а, если имя слушателя — change сайта (change site-agent-review, D6):
+    // один запрос до цикла, строка — в stderr, stdout агент читает как пачку. Нет сервера, старый
+    // сервер без эндпоинта (404) или не change — молча, дальше цикл скажет своё.
+    try {
+        const page = await fetch(`http://127.0.0.1:${port}${PAGE_PATH}?as=${opts.as}`, {
+            headers: { [FEEDBACK_HEADER]: '1' }
+        });
+        if (page.status === 200) {
+            const body = (await page.json()) as { url?: unknown };
+            if (typeof body?.url === 'string') console.error(`Change page: ${shown}${body.url}`);
+        }
+    } catch {}
     for (;;) {
         let res: Response;
         try {

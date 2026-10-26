@@ -44,6 +44,9 @@ export const configSchema = z.object({
     includeTableOfContents: bool(defaultConfig.includeTableOfContents),
     webTheme: str(defaultConfig.webTheme),
     supportSearch: bool(defaultConfig.supportSearch),
+    // Сворачивание разделов sidebar (вендорный docsify-sidebar-collapse); false — прежнее
+    // полностью развёрнутое дерево (change sidebar-collapse).
+    sidebarCollapse: bool(defaultConfig.sidebarCollapse),
     repoUrl: str(defaultConfig.repoUrl),
     executeScript: bool(defaultConfig.executeScript),
     docsifyTemplate: str(defaultConfig.docsifyTemplate),

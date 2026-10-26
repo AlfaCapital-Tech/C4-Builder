@@ -9,10 +9,12 @@
         <meta name="viewport"
         content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
         <link rel="stylesheet" href="vendor/vue.css">
-    </head>
+    <link rel="stylesheet" href="vendor/sidebar-collapse.css">
+</head>
     
     <body>
         <div id="app"></div>
+        <script src="vendor/c4builder-storage-guard.js"></script>
         <script>
         window.$docsify = {
   "name": "golden-fixture",
@@ -29,13 +31,15 @@
   },
   "nativeEmoji": true,
   "supportSearch": true,
-  "executeScript": false
+  "executeScript": false,
+  "sidebarDisplayLevel": 1
 };
         </script>
         <script src="vendor/docsify.min.js"></script>
         <script src="vendor/zoom-image.min.js"></script>
         <script src="vendor/search.min.js"></script>
         
-    </body>
+    <script src="vendor/docsify-sidebar-collapse.min.js"></script>
+</body>
     
     </html>

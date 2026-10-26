@@ -121,12 +121,15 @@ describe('ящики feedback в site -w', () => {
     const FB = { 'X-C4builder-Feedback': '1' };
     const batchFor = (to) => ({ ...ONE, to, comments: [{ ...ONE.comments[0], comment: `for ${to}` }] });
 
+    // Переадресации сборки (change site-agent-review): change `add-dark-mode` есть на сайте.
+    const REDIRECTS = new Map([['/change/add-dark-mode', '/OpenSpec/Changes/add-dark-mode/add-dark-mode']]);
+
     const start = async (port, { agent, pollMs = 10_000, idleMs = 30_000, mailboxTtlMs } = {}) => {
         const server = await cmdSite(
             { DIST_FOLDER: distDir, WEB_PORT: String(port), QUESTIONS_HEADING: 'Open questions' },
             { port, watch: true, agent, pollMs, idleMs, mailboxTtlMs },
             new EventEmitter(),
-            () => PAGES
+            () => ({ pages: PAGES, redirects: REDIRECTS })
         );
         const url = `http://127.0.0.1:${port}`;
         return {
@@ -337,6 +340,47 @@ describe('ящики feedback в site -w', () => {
             const got = await s.listen('foo');
             expect(got.code, got.stderr).toBe(0);
             expect(got.stdout).toContain('> Rename to baz');
+        } finally {
+            await s.close();
+        }
+    }, 30_000);
+
+    // Адрес страницы change'а (change site-agent-review, D6): эндпоинт и строка `Change page` в stderr.
+    it("/page: 200 с адресом для change'а, 404 для чужого имени, 403 с Origin или без заголовка, 400 без имени", async () => {
+        const s = await start(38348);
+        try {
+            const page = (query, headers = FB) => fetch(`${s.url}/__c4builder/page${query}`, { headers });
+            const ok = await page('?as=add-dark-mode');
+            expect(ok.status).toBe(200);
+            expect(await ok.json()).toEqual({ url: '/#/change/add-dark-mode' });
+            expect((await page('?as=review-2')).status).toBe(404);
+            expect((await page('?as=add-dark-mode', { ...FB, Origin: s.url })).status).toBe(403);
+            expect((await page('?as=add-dark-mode', {})).status).toBe(403);
+            expect((await page('?as=a%20b')).status).toBe(400);
+            expect((await page('')).status).toBe(400);
+        } finally {
+            await s.close();
+        }
+    });
+
+    it('feedback --wait --as <change>: строка Change page в stderr, stdout — только пачка; не change — без строки', async () => {
+        const s = await start(38349, { pollMs: 60_000 });
+        try {
+            const next = await sse(s.url);
+            const dark = s.listen('add-dark-mode');
+            const other = s.listen('review-2');
+            await next('agent', listening('add-dark-mode', 'review-2'));
+            await s.post(batchFor('add-dark-mode'));
+            await s.post(batchFor('review-2'));
+            const [got, none] = await Promise.all([dark, other]);
+            expect(got.code, got.stderr).toBe(0);
+            expect(got.stderr).toBe('Change page: http://localhost:38349/#/change/add-dark-mode\n');
+            expect(got.stdout).toMatch(/^# Page feedback \(c4builder\)\n/);
+            expect(got.stdout).toContain('> for add-dark-mode');
+            expect(got.stdout).not.toContain('Change page');
+            expect(none.code, none.stderr).toBe(0);
+            expect(none.stderr).toBe('');
+            expect(none.stdout).toContain('> for review-2');
         } finally {
             await s.close();
         }

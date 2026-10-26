@@ -16,8 +16,8 @@ import cmdSkills, { skillsNotice } from './commands/skills.ts';
 import { detectAgent } from './agent.ts';
 import { cmdUpdate, pendingUpdate, startUpdateCheck } from './update.ts';
 import cmdCollect from './wizard/collect.ts';
-import { build } from '../core/build.ts';
-import type { PageSources } from '../core/compose/markdown.ts';
+import { build, type BuildResult } from '../core/build.ts';
+import type { DiagramQueue } from '../core/render/diagrams.ts';
 import { loadPlugins, pluginWatchPaths } from '../core/plugins/load.ts';
 import fs from 'node:fs';
 import watch from 'node-watch';
@@ -158,6 +158,7 @@ function getOptions(c: Partial<C4ConfigFile>): BuildOptions | Partial<BuildOptio
         MD_FILE_NAME: 'README',
         WEB_FILE_NAME: c.webFileName,
         SUPPORT_SEARCH: c.supportSearch,
+        SIDEBAR_COLLAPSE: c.sidebarCollapse,
         EXECUTE_SCRIPT: c.executeScript,
         EXCLUDE_OTHER_FILES: c.excludeOtherFiles,
         USE_SYSTEM_FONTS: c.useSystemFonts,
@@ -183,6 +184,12 @@ export default async () => {
         .option('--site', 'serve the generated site')
         .option('-w, --watch', 'watch for changes and rebuild')
         .option('-o, --open', 'open the generated site in the browser (with --site)')
+        // Отдельная опция, а не `--open [id]`: необязательное значение забирало бы следующий
+        // токен (`-o site`, `-ow`, `-wop 3918` меняли смысл).
+        .option(
+            '--open-change <id>',
+            'open the page of the OpenSpec change <id> (#/change/<id>) in the browser (with --site)'
+        )
         .option('--agent', 'with --site -w: accept page feedback for a coding agent (c4builder feedback)')
         .option('--no-agent', 'with --site -w: no agent feedback even when run by a coding agent')
         .option('--wait', 'for `feedback`: wait for the next batch of page feedback')
@@ -362,9 +369,19 @@ export default async () => {
         });
         const reloadEmitter = new EventEmitter();
         reloadEmitter.setMaxListeners(0);
-        // Карта «страница сайта → исходники» последней удачной сборки: dev-сервер читает её
-        // геттером, поэтому после ребилда в watch видит свежую без рестарта.
-        let pages: PageSources = new Map();
+        // Итог последней удачной сборки (страницы → исходники, переадресации): dev-сервер читает
+        // его геттером, поэтому после ребилда в watch видит свежий без рестарта.
+        let result: BuildResult = { pages: new Map(), redirects: new Map() };
+        // Пересборка в watch (по правке и после фоновой очереди) — одна на оба пути, чтобы их
+        // протоколы не расходились. softErrors: упавшая диаграмма не кэшируется и упала бы на
+        // каждом ребилде — обычная сборка оставила бы сайт без страниц, пока её не починят;
+        // здесь она получает заглушку с ошибкой. Правки во время сборки — ещё один проход.
+        const rebuild = async (): Promise<void> => {
+            do {
+                attemptedWatchBuild = false;
+                result = await build(options, cacheConf, plugins, { softErrors: true });
+            } while (attemptedWatchBuild);
+        };
         if (opts.watch) {
             // node-watch: CJS-рантайм при ESM-.d.ts (export default) — дефолт-импорт
             // типизируется как namespace. Каст к реальной сигнатуре, рантайм не меняется.
@@ -413,11 +430,7 @@ export default async () => {
                         console.log(chalk.gray(`waiting for another build: ${e.message}`))
                     );
                     try {
-                        ({ pages } = await build(options, cacheConf, plugins));
-                        while (attemptedWatchBuild) {
-                            attemptedWatchBuild = false;
-                            ({ pages } = await build(options, cacheConf, plugins));
-                        }
+                        await rebuild();
                     } finally {
                         release();
                     }
@@ -447,10 +460,18 @@ export default async () => {
             console.error(chalk.red((e as Error).message));
             process.exit(1);
         }
+        // Dev-сервер (change site-warm-start): первая сборка не ждёт диаграмм без кэша —
+        // сервер поднимается на заглушках, рендер идёт в фоне после `serving`. Очередь живёт
+        // в переменной, чтобы dev-сервер мог поднимать диаграммы открытой страницы в её голову.
+        let pending: DiagramQueue | undefined;
         try {
-            ({ pages } = await build(options, cacheConf, plugins));
+            result = await build(options, cacheConf, plugins, {
+                deferImages: !!(opts.site && opts.watch)
+            });
+            ({ pending } = result);
         } finally {
-            release();
+            // Лок и флаг сборки держим, пока фоновый рендер пишет в dist (снимаются ниже).
+            if (!pending) release();
             // Одиночная сборка: D2-воркер больше не нужен, без teardown он держал бы
             // процесс. В watch-режиме воркер живёт до конца процесса (Ctrl+C).
             if (!opts.watch) {
@@ -459,20 +480,58 @@ export default async () => {
                 await teardownMermaid();
             }
         }
-        isBuilding = false;
+        if (!pending) isBuilding = false;
 
         if (opts.site) {
             try {
-                return await cmdSite(
+                await cmdSite(
                     options,
                     { ...opts, agent: detectAgent(process.env, opts) },
                     reloadEmitter,
-                    () => pages
+                    () => result,
+                    (page) => pending?.prioritize(page)
                 );
             } catch {
                 // Ошибку запуска сервера (занятый порт) cmdSite уже напечатал — остаётся код выхода.
                 process.exit(1);
             }
+            if (!pending) return;
+            // Фоновый рендер холодного старта. Готовая картинка → событие `image` открытым
+            // страницам (подмена <img> на месте); по окончании очереди — обычная пересборка из
+            // кэша и reload: так embedDiagram, complete-документ и llms получают картинки, а
+            // правки исходников во время рендера (attemptedWatchBuild) не теряются.
+            const queue = pending;
+            const started = Date.now();
+            console.log(`rendering ${queue.size} diagrams in background…`);
+            let done = 0;
+            queue.onDone((out) => {
+                done++;
+                if (process.stdout.isTTY) process.stdout.write(`rendered ${done}/${queue.size} diagrams\r`);
+                reloadEmitter.emit('image', { path: out });
+            });
+            try {
+                await queue.run();
+            } catch (err) {
+                // Задачи отложенного режима ловят свои ошибки сами; сюда попадает только сбой
+                // самой очереди — сервер всё равно не роняем.
+                console.log(chalk.red(`background render failed: ${(err as Error)?.message ?? err}`));
+            }
+            pending = undefined;
+            console.log(`rendered ${queue.size} diagrams in ${(Date.now() - started) / 1000} s`);
+            let buildOk = true;
+            try {
+                await rebuild();
+            } catch (err) {
+                buildOk = false;
+                attemptedWatchBuild = false;
+                const e = err as Error;
+                console.log(chalk.red(`build failed: ${e?.stack ? e.stack : e}`));
+            } finally {
+                release();
+                isBuilding = false;
+            }
+            if (buildOk) reloadEmitter.emit('reload');
+            return;
         }
 
         if (options.GENERATE_WEBSITE && !opts.watch) {
