@@ -4,13 +4,12 @@
 // Единственный плагин, страницы которого грузят внешний сервис в браузере читателя: ни
 // ассетов, ни executeScript, сама сборка в сеть не ходит. Вся логика ссылок — в одной функции
 // нормализации.
-import path from 'node:path';
 import chalk from 'chalk';
 import { z } from 'zod';
 
+import { pageLink } from '../../core/plugins/tree.ts';
 import { mapOutsideCode } from '../../core/scan/fences.ts';
 import { definePlugin } from '../../core/plugins/types.ts';
-import { encodeURIPath } from '../../util/utils.ts';
 
 const EMBED_HOST = 'embed.figma.com';
 // `file` — старое имя типа `design`: Figma переименовала его, а Embed Kit 2.0 эмбед `file` не
@@ -149,10 +148,7 @@ export default definePlugin<Opts>({
     afterScan(ctx, o) {
         const { mount, height } = o;
         if (o.frames.length) {
-            const link = (segments: string[]): string =>
-                encodeURIPath(
-                    path.posix.join(mount, ...segments, ctx.options.WEB_FILE_NAME || segments.at(-1) || '')
-                );
+            const link = (segments: string[]): string => pageLink([mount, ...segments], ctx.options);
             // Сводка — в порядке списка, а не по алфавиту: порядок фреймов задаёт пользователь.
             ctx.addPage({
                 path: [mount],

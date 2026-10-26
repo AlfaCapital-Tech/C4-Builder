@@ -106,6 +106,14 @@ export const addPage = (tree: TreeItem[], options: BuildOptions, page: PageSpec)
  */
 export type Redirects = Map<string, string>;
 
+/**
+ * Ссылка на страницу сайта от корня (без ведущего «/»): так же строится sidebar, а docsify без
+ * relativePath резолвит ссылки от корня сайта. Сегменты — как у addPage; одна функция для
+ * сводок плагинов и переадресаций, чтобы ссылки не разъехались с путями страниц.
+ */
+export const pageLink = (segments: string[], options: BuildOptions): string =>
+    encodeURIPath(path.posix.join(...segments, options.WEB_FILE_NAME || segments[segments.length - 1]));
+
 /** Ключ карты переадресаций для короткого пути: `['change', 'x']` → `/change/x`. */
 export const redirectKey = (from: string[]): string => `/${encodeURIPath(from.join('/'))}`;
 
@@ -126,6 +134,5 @@ export const addRedirect = (
     const key = redirectKey(from);
     if (redirects.has(key))
         throw new Error(`addRedirect: redirect path ${from.join('/')} is already declared`);
-    const page = options.WEB_FILE_NAME || to[to.length - 1];
-    redirects.set(key, `/${encodeURIPath(path.posix.join(...to, page))}`);
+    redirects.set(key, `/${pageLink(to, options)}`);
 };

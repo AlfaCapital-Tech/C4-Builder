@@ -9,6 +9,7 @@ import { z } from 'zod';
 
 import { outputDirs } from '../../config/options.ts';
 import { redactUrl } from '../../core/plugins/source.ts';
+import { pageLink } from '../../core/plugins/tree.ts';
 import { definePlugin } from '../../core/plugins/types.ts';
 import { isPathInside } from '../../util/archive.ts';
 import { VENDOR_DIR } from '../../util/paths.ts';
@@ -234,10 +235,7 @@ export default definePlugin<Opts>({
         // Порядок страниц — по алфавиту пути: так было до опции layout (боковая панель и
         // сводка), а в tree родитель остаётся раньше вложенной страницы (префикс короче).
         pages.sort((a, b) => a.path.join('/').localeCompare(b.path.join('/')));
-        const link = (segs: string[]): string =>
-            encodeURIPath(
-                path.posix.join(mount, ...segs, ctx.options.WEB_FILE_NAME || segs[segs.length - 1])
-            );
+        const link = (segs: string[]): string => pageLink([mount, ...segs], ctx.options);
         const pageOf = (spec: Spec): Page => pages.find((pg) => pg.spec === spec) as Page;
         ctx.addPage({
             path: [mount],
