@@ -469,6 +469,18 @@ export default async () => {
                 deferImages: !!(opts.site && opts.watch)
             });
             ({ pending } = result);
+            // Правка во время первой сборки: watch только взвёл attemptedWatchBuild — ребилд
+            // за ним делает ждущая сторона. При фоновой очереди это её финальная пересборка,
+            // без очереди — здесь, пока лок ещё наш. Иначе правка терялась до следующей.
+            if (!pending && attemptedWatchBuild) {
+                try {
+                    await rebuild();
+                } catch (err) {
+                    attemptedWatchBuild = false;
+                    const e = err as Error;
+                    console.log(chalk.red(`build failed: ${e?.stack ? e.stack : e}`));
+                }
+            }
         } finally {
             // Лок и флаг сборки держим, пока фоновый рендер пишет в dist (снимаются ниже).
             if (!pending) release();

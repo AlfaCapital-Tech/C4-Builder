@@ -133,6 +133,8 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
   to the page separately
 - PNG placeholders (`rendering…`, a render error) are rasterised with the bundled font even with
   `useSystemFonts`, without scanning the system fonts — up to several seconds per placeholder
+- `-w`: an edit made while the first build is running is picked up by a rebuild right after it,
+  instead of waiting for the next edit
 
 ## v0.9.0
 
