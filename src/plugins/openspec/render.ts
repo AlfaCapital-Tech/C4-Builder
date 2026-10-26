@@ -2,11 +2,12 @@
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import chalk from 'chalk';
 
 import type { BuildOptions } from '../../config/options.ts';
 import type { PageDiagram } from '../../core/plugins/types.ts';
 import { createFenceExtractor, mapOutsideFences } from '../../core/scan/fences.ts';
-import { engineForFile } from '../../core/scan/tree.ts';
+import { diagramOutputName, engineForFile } from '../../core/scan/tree.ts';
 import { encodeURIPath } from '../../util/utils.ts';
 import { groupNames, type Layout, pageOrder } from './layout.ts';
 import type { Artifact, Change, Spec, Store } from './scan.ts';
@@ -191,6 +192,13 @@ export const relSource = (root: string, rel: string): string =>
 // (в отличие от страниц проекта, где извлекается только ```plantuml).
 const FENCE_LANGS = ['plantuml', 'puml', 'd2', 'mermaid'];
 
+// Имя картинки диаграммы страницы — то же, что выберет рендер (ditaa всегда png).
+const outputName = (d: PageDiagram, options: BuildOptions): string =>
+    diagramOutputName(
+        { dir: d.file, isDitaa: engineForFile(d.file) === 'plantuml' && /@startditaa/i.test(d.content) },
+        options
+    );
+
 /**
  * Markdown одного исходного файла → страница сайта: fenced-диаграммы вырезаются, ссылки
  * на другие страницы источника (`target`, `#x` → `?id=x`) — на их адреса, прочие
@@ -210,6 +218,7 @@ export const renderMarkdown = (
         fromDir = '',
         pageDir = fromDir,
         included = new Set<string>(),
+        pageDiagrams: diagrams = [],
         target = () => undefined,
         source,
         options
@@ -219,13 +228,20 @@ export const renderMarkdown = (
         pageDir?: string;
         /** Уже встраиваемые файлы — защита от циклических include. */
         included?: Set<string>;
+        /**
+         * Диаграммы страницы, общие со встраивающим файлом: имена картинок `:include`-подфайла
+         * сверяются со всей страницей, иначе одноимённые диаграммы молча слились бы в одну.
+         */
+        pageDiagrams?: PageDiagram[];
         target?: (rel: string) => string[] | undefined;
         /** Исходный файл артефакта/спеки — попадёт в сообщение об ошибке диаграммы. */
         source?: string;
         options: BuildOptions;
     }
 ): RenderedPage => {
-    const { markdown, diagrams } = createFenceExtractor(FENCE_LANGS).extract(content, base, source);
+    const extracted = createFenceExtractor(FENCE_LANGS).extract(content, base, source);
+    // Имя fenced-блока — хэш содержимого: совпадение имени означает тот же блок.
+    for (const d of extracted.diagrams) if (!diagrams.some((x) => x.file === d.file)) diagrams.push(d);
     const files: PageFile[] = [];
     const sources: string[] = source ? [source] : [];
     const rewrite = (t: string): string =>
@@ -250,23 +266,40 @@ export const renderMarkdown = (
             // диаграмма страницы, как fenced-блок: рендер локальным движком, битый файл — заглушка.
             // Иначе в выход ушёл бы исходник, а на странице — битая картинка.
             if (bang && engineForFile(rel)) {
-                const name = path.posix.basename(rel);
-                const taken = diagrams.find((d) => d.file === name);
                 const relSrc = relSource(srcRoot, rel);
-                // Одноимённые файлы из разных папок артефактов — имя с хэшем пути, а не перезапись.
-                const file =
-                    taken && taken.source !== relSrc
-                        ? `${createHash('sha1').update(rel).digest('hex').slice(0, 8)}-${name}`
-                        : name;
-                if (!diagrams.some((d) => d.file === file))
-                    diagrams.push({
-                        file,
+                let diagram = diagrams.find((d) => d.origin === abs);
+                if (!diagram) {
+                    const name = path.posix.basename(rel);
+                    diagram = {
+                        file: name,
                         content: fs.readFileSync(abs, 'utf8'),
                         source: relSrc,
-                        soft: true
-                    });
+                        soft: true,
+                        origin: abs
+                    };
+                    const out = outputName(diagram, options);
+                    const taken = diagrams.find((d) => outputName(d, options) === out);
+                    if (taken) {
+                        // Картинки страницы лежат в одной папке выхода: одноимённые файлы из разных
+                        // папок (подфайл `:include`) и `flow.d2` + `flow.mmd` рядом дали бы один
+                        // `flow.svg`. Второй получает имя с хэшем пути — показываются обе.
+                        diagram.file = `${createHash('sha1').update(rel).digest('hex').slice(0, 8)}-${name}`;
+                        // Рядом лежащие файлы с одним именем выхода в папке проекта — ошибка
+                        // `Output name collision`; здесь сборка не падает (как и на битой
+                        // диаграмме артефакта), но о путанице предупреждаем.
+                        if (taken.origin && path.dirname(taken.origin) === path.dirname(abs))
+                            console.log(
+                                chalk.yellow(
+                                    `⚠ Output name collision '${out}': '${taken.source}' and '${relSrc}' ` +
+                                        `render to the same file; the latter is published as ` +
+                                        `'${outputName(diagram, options)}'. Rename one of the diagrams.`
+                                )
+                            );
+                    }
+                    diagrams.push(diagram);
+                }
                 if (!sources.includes(relSrc)) sources.push(relSrc);
-                return `![${inner}](${file}${title})`;
+                return `![${inner}](${diagram.file}${title})`;
             }
             const embed = !bang && /:include\b/.test(title);
             if (embed && /\.md$/i.test(rel) && !included.has(rel)) {
@@ -276,11 +309,11 @@ export const renderMarkdown = (
                     fromDir: dir === '.' ? '' : dir,
                     pageDir,
                     included: new Set([...included, rel]),
+                    pageDiagrams: diagrams,
                     target,
                     source: relSource(srcRoot, rel),
                     options
                 });
-                diagrams.push(...sub.diagrams);
                 files.push(...sub.files);
                 sources.push(...sub.sources);
                 return sub.markdown;
@@ -292,7 +325,13 @@ export const renderMarkdown = (
                 ? `${bang}[${inner}](${sameDir ? href : encodeURIPath(to)}${title})`
                 : `[${inner}](${encodeURIPath(path.posix.join(...pagePath, to))}${ignoreTitle(title)})`;
         });
-    return { path: pagePath, markdown: mapOutsideFences(markdown, rewrite).trim(), diagrams, files, sources };
+    return {
+        path: pagePath,
+        markdown: mapOutsideFences(extracted.markdown, rewrite).trim(),
+        diagrams,
+        files,
+        sources
+    };
 };
 
 /**

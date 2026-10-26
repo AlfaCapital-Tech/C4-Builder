@@ -27,6 +27,7 @@ import { VENDOR_DIR, packageJson } from '../../util/paths.ts';
 import {
     foldIncludes,
     diagramBaseName,
+    diagramEntryPath,
     diagramOutputFormat,
     type Diagram,
     type TreeItem
@@ -506,7 +507,10 @@ export const generateImages = async (
             // правка включаемого/импортируемого файла инвалидировала кэш: PlantUML —
             // !include-граф (.iuml и пр.), D2 — граф @/...@-импортов. У BPMN и mermaid их нет.
             const body = `${diagram.content || ''}`;
-            const entryPath = path.join(item.dir, diagram.dir);
+            const entryPath = diagramEntryPath(item, diagram);
+            // Каталог зависимостей: у диаграммы из файла виртуальной страницы — каталог
+            // самого файла (папки страницы на диске нет), иначе — папка элемента.
+            const depsDir = path.dirname(entryPath);
             const isD2 = diagram.engine === 'd2';
             const isBpmn = diagram.engine === 'bpmn';
             const isMermaid = diagram.engine === 'mermaid';
@@ -515,7 +519,7 @@ export const generateImages = async (
                 ? foldD2Imports(entryPath, body)
                 : isBpmn || isMermaid || isWireflow
                   ? ''
-                  : foldIncludes(body, item.dir, item.dir, new Set());
+                  : foldIncludes(body, depsDir, depsDir, new Set());
             const outFormat = diagramOutputFormat(diagram, options);
             const outName = `${diagramBaseName(diagram.dir)}.${outFormat}`;
             const relOut = path.join(item.dir.replace(options.ROOT_FOLDER, ''), outName);
@@ -563,7 +567,7 @@ export const generateImages = async (
             // нативным PlantUML-PNG (у него нет SVG-представления) — не растеризуем.
             const needsRaster = outFormat === 'png' && !diagram.isDitaa;
             const diagramContent = diagram.content;
-            const includePath = item.dir;
+            const includePath = depsDir;
             const isDitaa = diagram.isDitaa;
             // Имя картинки диаграммы виртуальной страницы производно от контента —
             // без исходного файла в сообщении его не найти.
