@@ -17,6 +17,7 @@ export {
 } from '../dist/core/render/diagrams.js';
 export { build } from '../dist/core/build.js';
 export { teardownD2 } from '../dist/core/render/d2renderer.js';
+export { renderOffThread, teardownOffThread } from '../dist/core/render/offthread.js';
 export { acquireBuildLock, BuildLockHeldError, waitBuildLock } from '../dist/util/lock.js';
 export { loadPlugins, expandEnv, pluginWatchPaths } from '../dist/core/plugins/load.js';
 export { addPage, addRedirect, isVirtual, redirectKey } from '../dist/core/plugins/tree.js';

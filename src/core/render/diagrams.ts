@@ -16,6 +16,8 @@ import { renderD2, foldD2Imports } from './d2renderer.ts';
 import { renderBpmn, BPMN_CACHE_PACKAGES } from './bpmnrenderer.ts';
 // Mermaid-бэкенд: пакет движка грузится лениво внутри renderMermaid.
 import { renderMermaid, MERMAID_PACKAGE } from './mermaidrenderer.ts';
+// Те же BPMN и mermaid в worker-потоке — для dev-сервера (флаг offThread).
+import { renderOffThread } from './offthread.ts';
 // Wireflow-бэкенд: прямая генерация SVG, зависимостей нет; версия каталога шаблонов — в ключ кэша.
 import { renderWireflow, wireflowCatalogVersion } from './wireflowrenderer.ts';
 import { resolveJava } from './jre.ts';
@@ -164,6 +166,9 @@ export class DiagramQueue {
                     continue;
                 }
                 for (const cb of this.doneListeners) cb(task.out);
+                // Уступаем event loop между задачами: синхронные куски рендера (wireflow,
+                // растеризация PNG) иначе шли бы подряд, и dev-сервер не отвечал бы всю серию.
+                await new Promise((r) => setImmediate(r));
             }
         };
         const width = Math.max(1, Math.min(concurrency, tasks.length));
@@ -401,6 +406,21 @@ export interface GenerateImagesFlags {
      * окончании фоновой очереди: битая диаграмма не должна оставить сайт полусобранным.
      */
     softErrors?: boolean;
+    /**
+     * Диаграммы, упавшие при softErrors: путь картинки → чексумма входа. Карта живёт всю
+     * сессию dev-сервера; диаграмма с тем же входом не рендерится повторно — на её месте
+     * остаётся прежняя заглушка с ошибкой (рендер детерминирован, а битая .puml — это лишний
+     * JVM, зависание Smetana — ещё RENDER_TIMEOUT_MS под локом сборки). Ключ — путь, а не
+     * чексумма: после удачного рендера по тому же пути в бэкапе уже не заглушка, и возврат
+     * к битому входу обязан рендериться заново. В .c4builder.cache не попадает: новый запуск
+     * пробует снова.
+     */
+    failedRenders?: Map<string, string>;
+    /**
+     * BPMN и mermaid — в worker-потоке, а не в jsdom главного: dev-сервер отвечает на HTTP и
+     * SSE во время их рендера. Обычная сборка и check рендерят в главном потоке.
+     */
+    offThread?: boolean;
 }
 
 export const generateImages = async (
@@ -409,7 +429,12 @@ export const generateImages = async (
     onImageGenerated: ImageProgress | undefined,
     cacheConf: CacheConf,
     bkFolderName: string,
-    { deferImages = false, softErrors = deferImages }: GenerateImagesFlags = {}
+    {
+        deferImages = false,
+        softErrors = deferImages,
+        failedRenders,
+        offThread = false
+    }: GenerateImagesFlags = {}
 ): Promise<DiagramQueue | undefined> => {
     // Чексуммы прошлого прогона — в Set: попадание проверяется O(1) на диаграмму
     // (было O(N) find → O(N²) на всё дерево).
@@ -519,16 +544,14 @@ export const generateImages = async (
             const outFormat = diagramOutputFormat(diagram, options);
             const outName = `${diagramBaseName(diagram.dir)}.${outFormat}`;
             const relOut = path.join(item.dir.replace(options.ROOT_FOLDER, ''), outName);
+            const outKey = relOut.split(path.sep).join('/');
             // Путь выхода — тоже в чексумме: восстановление из бэкапа идёт по паре
             // «чексумма встречалась» + «бэкап с этим именем есть», иначе диаграммы,
             // обменявшиеся содержимым (или сдвинувшиеся имена fence-блоков плагинов),
             // молча получали бы чужую старую картинку.
             const cksum = crypto
                 .createHash('sha256')
-                .update(
-                    `${body}${includes}${renderKey(diagram, options, outFormat)}\0out=${relOut.split(path.sep).join('/')}`,
-                    'utf-8'
-                )
+                .update(`${body}${includes}${renderKey(diagram, options, outFormat)}\0out=${outKey}`, 'utf-8')
                 .digest('hex');
 
             // Записи копим в порядке обхода дерева, СИНХРОННО и до запуска задач:
@@ -542,6 +565,10 @@ export const generateImages = async (
 
             // path to image in dist folder
             const filePath = path.join(options.DIST_FOLDER, relOut);
+            // Заглушка с ошибкой в бэкапе — от этого же входа: всё, что пишет по пути что-то
+            // другое (кэш, удачный рендер, `rendering…`), забывает о прошлом падении.
+            const keptFailure = failedRenders?.get(outKey) === cksum;
+            failedRenders?.delete(outKey);
 
             // if checksum exists (diagram untouched) and file/image exists - copy image back from backup folder
             if (oldChecksums.has(cksum) && fs.existsSync(bkFilePath)) {
@@ -555,6 +582,24 @@ export const generateImages = async (
                 });
                 if (deferImages) immediate.push(restore);
                 else queue.add({ out: relOut, lane: 'plantuml', run: restore });
+                continue;
+            }
+
+            // Упала в этой сессии с тем же входом — переносим её заглушку с ошибкой из бэкапа
+            // вместо повторного рендера. Чексумма в кэш не идёт (ok остаётся false). Причина уже
+            // была в логе строкой `✗`, здесь — серое напоминание без второго `✗`.
+            if (keptFailure && fs.existsSync(bkFilePath)) {
+                const keep = withProgress(async () => {
+                    fsextra.copyFileSync(bkFilePath, filePath);
+                    failedRenders?.set(outKey, cksum);
+                    console.log(
+                        chalk.gray(
+                            `Diagram "${outName}"${diagram.source ? ` (${diagram.source})` : ''}: unchanged since it failed, not re-rendered`
+                        )
+                    );
+                });
+                if (deferImages) immediate.push(keep);
+                else queue.add({ out: relOut, lane: 'plantuml', run: keep });
                 continue;
             }
 
@@ -584,7 +629,8 @@ export const generateImages = async (
             // Заглушка с ошибкой вместо картинки: у «мягких» диаграмм — всегда (блоки в markdown
             // плагинов писались под онлайн-рендер, где битый блок давал картинку с ошибкой, а
             // не падение сборки), при softErrors — у любых: фоновый рендер не должен ронять
-            // dev-сервер. Чексумма не сохраняется — следующая пересборка перерисует.
+            // dev-сервер. Чексумма в кэш не сохраняется: следующая пересборка перерисует (в
+            // сессии dev-сервера — только при изменении входа, см. failedRenders).
             const writeErrorPlaceholder = async (reason: string): Promise<void> => {
                 const svg = Buffer.from(errorPlaceholderSvg(outName, reason), 'utf-8');
                 await writeFile(
@@ -603,9 +649,13 @@ export const generateImages = async (
                     if (isD2) {
                         rendered = await renderD2(entryPath, { layout: options.D2_LAYOUT, seed: body });
                     } else if (isBpmn) {
-                        rendered = await renderBpmn(body, file);
+                        rendered = offThread
+                            ? await renderOffThread('bpmn', body, file)
+                            : await renderBpmn(body, file);
                     } else if (isMermaid) {
-                        rendered = await renderMermaid(body, file);
+                        rendered = offThread
+                            ? await renderOffThread('mermaid', body, file)
+                            : await renderMermaid(body, file);
                     } else if (isWireflow) {
                         // В PNG WebP-картинки карточек не растеризуются (resvg) — рендер знает о цели.
                         rendered = await renderWireflow(body, file, { raster: needsRaster });
@@ -636,6 +686,7 @@ export const generateImages = async (
                     if (softErrors) {
                         console.log(chalk.red(`✗ ${msg}`));
                         await writeErrorPlaceholder(reason);
+                        failedRenders?.set(outKey, cksum);
                         return;
                     }
                     if (!soft) throw new Error(msg);

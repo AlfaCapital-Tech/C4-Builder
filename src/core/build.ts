@@ -48,13 +48,17 @@ export interface BuildFlags {
     deferImages?: boolean;
     /** Ошибка рендера — заглушка с ошибкой и `✗`, а не падение сборки (см. render/diagrams). */
     softErrors?: boolean;
+    /** Упавшие в сессии dev-сервера диаграммы — не перерендеривать без изменений (render/diagrams). */
+    failedRenders?: Map<string, string>;
+    /** BPMN и mermaid — в worker-потоке, чтобы не блокировать dev-сервер (render/offthread). */
+    offThread?: boolean;
 }
 
 const build = async (
     options: BuildOptions,
     cacheConf: CacheConf,
     plugins: LoadedPlugin[] = [],
-    { deferImages = false, softErrors = deferImages }: BuildFlags = {}
+    { deferImages = false, softErrors = deferImages, failedRenders, offThread }: BuildFlags = {}
 ): Promise<BuildResult> => {
     const start_date = new Date();
     let pages: PageSources = new Map();
@@ -116,7 +120,7 @@ const build = async (
                 (count, total) => writeProgress(count, total, 'images'),
                 cacheConf,
                 bkFolderName,
-                { deferImages, softErrors }
+                { deferImages, softErrors, failedRenders, offThread }
             );
             console.log('');
         }

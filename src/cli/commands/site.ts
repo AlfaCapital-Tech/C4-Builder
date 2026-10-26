@@ -36,6 +36,8 @@ type Mailbox = {
 };
 
 const LIVERELOAD_PATH = '/__livereload';
+// Сигнал «читатель открыл страницу» для приоритета фонового рендера (change site-warm-start).
+const OPEN_PATH = '/__c4builder/open';
 // Восстановление скролла после reload: docsify рендерит контент асинхронно после fetch md,
 // высота страницы доступна не сразу — поллим до достижения нужной y или таймаута.
 // Комментарии держим здесь, а не в сниппете: он уходит в браузер пользователя.
@@ -44,7 +46,12 @@ const LIVERELOAD_PATH = '/__livereload';
 // Событие `image` (change site-warm-start): диаграмма дорисована в фоне — у совпавших по
 // пути <img> меняем src на тот же путь с `?v=<ts>`, без перезагрузки и потери прокрутки.
 // Сравниваем декодированные pathname: docsify резолвит src относительно страницы и кодирует
-// пробелы, а сервер шлёт сырой путь относительно dist.
+// пробелы, а сервер шлёт сырой путь относительно dist. Готовые пути запоминаем: docsify при
+// возврате на страницу рисует <img> заново без `?v`, и браузер взял бы из кэша заглушку —
+// поэтому в doneEach версия проставляется снова.
+// Приоритет очереди — по сигналу навигации docsify (beforeEach), а не по любому GET *.md:
+// поиск docsify после первой отрисовки запрашивает .md всех страниц sidebar и перебивал бы
+// открытую, которую сам docsify повторно не запрашивает (берёт из кэша).
 const LIVERELOAD_SNIPPET = `
 <script>
 (function () {
@@ -70,6 +77,36 @@ const LIVERELOAD_SNIPPET = `
             }
         }
     } catch (e) {}
+    var ready = {};
+    var refreshImages = function () {
+        var imgs = document.querySelectorAll('img[src]');
+        for (var i = 0; i < imgs.length; i++) {
+            var url, v;
+            try {
+                url = new URL(imgs[i].getAttribute('src'), location.href);
+                v = url.origin === location.origin && ready[decodeURIComponent(url.pathname)];
+            } catch (err) { continue; }
+            if (!v || url.search === '?v=' + v) continue;
+            url.search = 'v=' + v;
+            imgs[i].setAttribute('src', url.pathname + url.search);
+        }
+    };
+    if (window.$docsify) {
+        window.$docsify.plugins = [].concat(window.$docsify.plugins || [], function (hook, vm) {
+            hook.beforeEach(function (content) {
+                var file = vm && vm.route && vm.route.file;
+                if (typeof file === 'string' && file && window.fetch) {
+                    fetch('${OPEN_PATH}', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ page: file })
+                    }).catch(function () {});
+                }
+                return content;
+            });
+            hook.doneEach(refreshImages);
+        });
+    }
     var delay = 1000;
     var connect = function () {
         var es = new EventSource('${LIVERELOAD_PATH}');
@@ -90,15 +127,8 @@ const LIVERELOAD_SNIPPET = `
         });
         es.addEventListener('image', function (e) {
             try {
-                var target = '/' + JSON.parse(e.data).path;
-                var imgs = document.querySelectorAll('img[src]');
-                for (var i = 0; i < imgs.length; i++) {
-                    var url;
-                    try { url = new URL(imgs[i].getAttribute('src'), location.href); } catch (err) { continue; }
-                    if (url.origin !== location.origin || decodeURIComponent(url.pathname) !== target) continue;
-                    url.search = 'v=' + Date.now();
-                    imgs[i].setAttribute('src', url.pathname + url.search);
-                }
+                ready['/' + JSON.parse(e.data).path] = Date.now();
+                refreshImages();
             } catch (err) {}
         });
         es.onerror = function () {
@@ -504,21 +534,24 @@ export default (
             );
         });
 
-        // Открытая страница — первая в очереди фонового рендера. Служебные `_sidebar.md`,
-        // `_navbar.md` и пр. docsify запрашивает при каждом переходе — диаграмм в них нет,
-        // а приоритет корневой папки они бы перебивали.
-        if (prioritize)
-            app.use((req, _res, next) => {
-                if (req.method === 'GET' && /\.md$/i.test(req.path)) {
-                    try {
-                        const page = decodeURIComponent(req.path).replace(/^\/+/, '');
-                        if (!path.posix.basename(page).startsWith('_')) prioritize(page);
-                    } catch (_e) {
-                        // битый percent-encoding — статика ответит сама
-                    }
-                }
-                next();
-            });
+        // Открытая страница — первая в очереди фонового рендера. Сигнал шлёт сниппет на каждый
+        // переход docsify; путь — route.file (относительный или с basePath, бывает в
+        // percent-encoding). Очереди уже нет (тёплый старт, рендер закончен) — просто 204.
+        app.post(OPEN_PATH, express.json({ limit: '4kb' }), (req, res) => {
+            if (!fromSite(req)) {
+                res.status(403).json({ error: 'accepted only from the site itself' });
+                return;
+            }
+            let page = str(req.body?.page).replace(/^https?:\/\/[^/]+/, '');
+            try {
+                page = decodeURIComponent(page);
+            } catch (_e) {
+                // уже декодирован и содержит «%» — берём как есть
+            }
+            page = page.replace(/^\/+/, '');
+            if (page && prioritize) prioritize(page);
+            res.status(204).end();
+        });
 
         // Адрес страницы change'а по имени слушателя (change site-agent-review, D6): `c4builder
         // feedback --as <name>` печатает его в stderr. Защита — как у /next: чужой странице
