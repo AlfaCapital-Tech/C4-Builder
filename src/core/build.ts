@@ -9,7 +9,12 @@ import { clearD2FileCache } from './render/d2renderer.ts';
 import { type BuildOptions, DIST_BACKUP_FOLDER_SUFFIX } from '../config/options.ts';
 // Фазы сборки: scan (дерево исходников) → render (диаграммы) → compose (markdown/сайт).
 import { generateTree, engineSupportsRemote, clearIncludeCache } from './scan/tree.ts';
-import { generateImages, type CacheConf, type DiagramQueue } from './render/diagrams.ts';
+import {
+    generateImages,
+    type CacheConf,
+    type DiagramQueue,
+    type GenerateImagesFlags
+} from './render/diagrams.ts';
 import {
     generateMD,
     generateWebMD,
@@ -40,21 +45,15 @@ export interface BuildResult {
     pending?: DiagramQueue;
 }
 
-export interface BuildFlags {
-    /**
-     * Отложенный рендер для dev-сервера: сборка не ждёт диаграмм без кэша — пишет заглушки
-     * `rendering…`, компонует страницы поверх них и возвращает очередь в `pending`.
-     */
-    deferImages?: boolean;
-    /** Ошибка рендера — заглушка с ошибкой и `✗`, а не падение сборки (см. render/diagrams). */
-    softErrors?: boolean;
-}
+// Флаги сборки — ровно флаги рендера: build их только пробрасывает (одно описание — в
+// render/diagrams). deferImages: страницы компонуются поверх заглушек, очередь — в `pending`.
+export type BuildFlags = GenerateImagesFlags;
 
 const build = async (
     options: BuildOptions,
     cacheConf: CacheConf,
     plugins: LoadedPlugin[] = [],
-    { deferImages = false, softErrors = deferImages }: BuildFlags = {}
+    flags: BuildFlags = {}
 ): Promise<BuildResult> => {
     const start_date = new Date();
     let pages: PageSources = new Map();
@@ -116,7 +115,7 @@ const build = async (
                 (count, total) => writeProgress(count, total, 'images'),
                 cacheConf,
                 bkFolderName,
-                { deferImages, softErrors }
+                flags
             );
             console.log('');
         }
