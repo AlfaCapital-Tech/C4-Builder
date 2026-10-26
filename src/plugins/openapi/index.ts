@@ -266,7 +266,12 @@ export default definePlugin<Opts>({
             // validatorUrl: null — иначе swagger-ui шлёт адрес спеки на validator.swagger.io.
             // dom_id — из пути страницы спеки от mount: он уникален на сайте, в отличие от
             // последнего сегмента (billing/v2 и ledger/v2), и для папки с одной спекой прежний.
-            const specUrl = encodeURIPath(path.posix.join(mount, '_specs', page.spec.rel));
+            // `'` encodeURI оставляет как есть, а URL стоит в JS-строке в одинарных кавычках
+            // инлайн-скрипта — экранируем процентной кодировкой, сервер её раскодирует.
+            const specUrl = encodeURIPath(path.posix.join(mount, '_specs', page.spec.rel)).replace(
+                /'/g,
+                '%27'
+            );
             const idTail = page.path.join('/').replace(/[^A-Za-z0-9_-]/g, '_');
             if (page.spec.kind === 'asyncapi') {
                 ctx.addPage({

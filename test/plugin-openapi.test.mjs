@@ -327,3 +327,27 @@ describe('плагин openapi: layout tree', () => {
         expect(summary).not.toContain('- [ledger]');
     });
 });
+
+// `'` в пути спеки не должен ломать инлайн-скрипт страницы (URL — в JS-строке в одинарных кавычках).
+describe('плагин openapi: апостроф в пути спеки', () => {
+    let d;
+    const page = (rel) => fs.readFileSync(path.join(d, 'docs', rel), 'utf8');
+    const script = (p) => p.slice(p.indexOf('<script>') + 8, p.indexOf('</script>'));
+    beforeAll(() => {
+        d = makeFixture('quote', [['openapi', { dir: 'contracts', glob: "q'*/*.yaml" }]]);
+        write(d, "contracts/q'events/asyncapi.yaml", 'asyncapi: 2.6.0\ninfo:\n  title: Events\n');
+        write(d, "contracts/q'rest/openapi.yaml", 'openapi: 3.0.0\n');
+        runBuild(d);
+    });
+    afterAll(() => fs.rmSync(d, { recursive: true, force: true }));
+
+    it('URL спеки с %27, скрипт AsyncAPI и swagger-ui синтаксически корректен', () => {
+        const asyncPage = page("API/q'events/q'events.md");
+        expect(asyncPage).toContain("schema: { url: 'API/_specs/q%27events/asyncapi.yaml' }");
+        expect(() => new Function(script(asyncPage))).not.toThrow();
+        const restPage = page("API/q'rest/q'rest.md");
+        expect(restPage).toContain("url: 'API/_specs/q%27rest/openapi.yaml'");
+        expect(() => new Function(script(restPage))).not.toThrow();
+        expect(fs.existsSync(path.join(d, 'docs', "API/_specs/q'events/asyncapi.yaml"))).toBe(true);
+    });
+});

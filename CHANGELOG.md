@@ -125,6 +125,8 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
   `glob` like `*/*.{yaml,yml,json}` is safe. The summary lists spec pages with their full path. A
   folder that gains a second spec turns its page into the index; a file named `openapi.yaml`
   without the key loses its page and is reported in the log
+- The `openapi` plugin: a `'` in a spec path no longer breaks the script of the swagger-ui and
+  AsyncAPI pages — the spec URL carries it as `%27`
 
 ## v0.9.0
 
