@@ -54,14 +54,22 @@ interface Spec {
 }
 
 // Отбор по содержимому без YAML-парсера: ключ верхнего уровня всегда стоит в начале строки.
-// Заголовок — первая `title:` внутри блока `info:` (отступные строки сразу за ним).
-const YAML_SPEC_KEY = /^(openapi|swagger|asyncapi)\s*:/m;
-const YAML_INFO_BLOCK = /^info\s*:[ \t]*\n((?:[ \t]+.*(?:\n|$))*)/m;
-const YAML_TITLE = /^[ \t]+title\s*:[ \t]*(.+?)[ \t]*$/m;
+// Заголовок — первая `title:` внутри блока `info:` (отступные строки сразу за ним). Ключи YAML
+// допускают кавычки (`"openapi": 3.0.3` — так пишут конвертеры из JSON), а файлы из Windows-
+// репозиториев приходят с CRLF: без `\r?` блок `info:` обрывался на первой строке и заголовок терялся.
+const YAML_SPEC_KEY = /^(["']?)(openapi|swagger|asyncapi)\1\s*:/m;
+const YAML_INFO_BLOCK = /^(["']?)info\1\s*:[ \t]*\r?\n((?:[ \t]+.*(?:\r?\n|$))*)/m;
+const YAML_TITLE = /^[ \t]+(["']?)title\1\s*:[ \t]*(.+?)[ \t]*$/m;
+
+// YAML — надмножество JSON, и спеку в JSON-форме кладут и в `.yaml`; регэкспы строчного YAML её не
+// видят, поэтому такой файл (первый значащий символ — `{`) разбирается как JSON. Невалидный JSON —
+// не спека: предупреждение и пропуск, как у файла без ключа, а не падение сборки.
+const looksLikeJson = (rel: string, text: string): boolean =>
+    rel.endsWith('.json') || text.trimStart().startsWith('{');
 
 const readSpec = (file: string, rel: string): Spec | undefined => {
     const text = fs.readFileSync(file, 'utf8').replace(/^﻿/, '');
-    if (rel.endsWith('.json')) {
+    if (looksLikeJson(rel, text)) {
         let doc: unknown;
         try {
             doc = JSON.parse(text);
@@ -81,10 +89,10 @@ const readSpec = (file: string, rel: string): Spec | undefined => {
                 : undefined;
         return { rel, kind, title: title?.trim() || undefined };
     }
-    const key = YAML_SPEC_KEY.exec(text)?.[1];
+    const key = YAML_SPEC_KEY.exec(text)?.[2];
     if (!key) return undefined;
-    const block = YAML_INFO_BLOCK.exec(text)?.[1] ?? '';
-    const raw = YAML_TITLE.exec(block)?.[1];
+    const block = YAML_INFO_BLOCK.exec(text)?.[2] ?? '';
+    const raw = YAML_TITLE.exec(block)?.[2];
     const title = raw?.replace(/^(['"])(.*)\1$/, '$2').trim();
     return { rel, kind: key === 'asyncapi' ? 'asyncapi' : 'openapi', title: title || undefined };
 };
