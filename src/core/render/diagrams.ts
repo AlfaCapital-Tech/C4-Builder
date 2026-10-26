@@ -29,7 +29,9 @@ import {
     foldIncludes,
     diagramBaseName,
     diagramOutputFormat,
+    registeredEngine,
     type Diagram,
+    type DiagramEngine,
     type TreeItem
 } from '../scan/tree.ts';
 import type { BuildOptions } from '../../config/options.ts';
@@ -73,10 +75,11 @@ const renderConcurrency = (): number => {
     return Math.max(1, Math.min(4, os.cpus().length - 1));
 };
 
-// Дорожки очереди рендера. Каждая — свой пул: PlantUML — отдельные процессы java
-// (renderConcurrency()), остальные движки — по одной задаче (см. комментарии в
+// Дорожки очереди рендера — по движку реестра (scan/tree.ts DIAGRAM_ENGINES): новый движок
+// получает свою дорожку без правки здесь. Каждая — свой пул: PlantUML — отдельные процессы
+// java (renderConcurrency()), остальные движки — по одной задаче (см. комментарии в
 // generateImages); дорожки работают параллельно друг другу.
-export type DiagramLane = 'plantuml' | 'd2' | 'bpmn' | 'mermaid' | 'wireflow';
+export type DiagramLane = DiagramEngine;
 
 export interface DiagramTask {
     /** Путь картинки относительно dist (posix, без ведущего слэша): по нему страница узнаёт готовую картинку. */
@@ -567,15 +570,8 @@ export const generateImages = async (
             const soft = diagram.soft === true;
             // Wireflow рендерится синхронно в главном потоке — своя дорожка с параллелизмом 1
             // ради единообразия, выигрыша от конкурентности нет.
-            const lane: DiagramLane = isD2
-                ? 'd2'
-                : isBpmn
-                  ? 'bpmn'
-                  : isMermaid
-                    ? 'mermaid'
-                    : isWireflow
-                      ? 'wireflow'
-                      : 'plantuml';
+            // Движок не из реестра рендерится веткой PlantUML (см. render ниже) — и дорожка его.
+            const lane: DiagramLane = registeredEngine(diagram.engine) ?? 'plantuml';
 
             // Заглушка с ошибкой вместо картинки: у «мягких» диаграмм — всегда (блоки в markdown
             // плагинов писались под онлайн-рендер, где битый блок давал картинку с ошибкой, а
