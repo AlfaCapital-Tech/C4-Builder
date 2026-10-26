@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { STORAGE_GUARD_JS } from './dist.mjs';
 import { REPO_ROOT, TMP_ROOT, ensureManagedJre, runBuild } from './helpers.mjs';
 
 // Сворачивание sidebar (change sidebar-collapse): вендорный docsify-sidebar-collapse подключается
@@ -89,6 +90,10 @@ describe('sidebarCollapse по умолчанию', () => {
         expect(inDist('default', 'vendor/sidebar-collapse.css')).toBe(true);
         expect(inDist('default', 'vendor/docsify-sidebar-collapse.min.js')).toBe(true);
         expect(inDist('default', 'vendor/c4builder-storage-guard.js')).toBe(true);
+        // Комментарии (русские) остаются в исходнике в src — в выход не попадают.
+        expect(
+            fs.readFileSync(path.join(dirs.default, 'docs', 'vendor/c4builder-storage-guard.js'), 'utf8')
+        ).not.toMatch(/\/\/|\/\*|[\u0400-\u04ff]/);
         for (const rel of [
             'vendor/sidebar-collapse.css',
             'vendor/docsify-sidebar-collapse.min.js',
@@ -123,7 +128,7 @@ describe('заблокированный localStorage на мобильном', 
             }
         });
         dom.window.eval('window.$docsify = {};');
-        if (withGuard) dom.window.eval(vendor('c4builder-storage-guard.js'));
+        if (withGuard) dom.window.eval(STORAGE_GUARD_JS);
         let error;
         try {
             dom.window.eval(vendor('docsify-sidebar-collapse.min.js'));

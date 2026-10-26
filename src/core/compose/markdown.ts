@@ -524,13 +524,9 @@ export const generateWebMD = async (
         // Тема — без ведущего @import Google Fonts (у её шрифтов есть системный fallback).
         // Правим копию, а не vendor/: повторное вендорение вернуло бы @import.
         const theme = path.join(vendorDist, 'vue.css');
-        // Скрипты c4builder (`c4builder-*.js`) копирует injectRedirects — только когда они нужны
-        // странице; иначе в dist каждого проекта лежал бы лишний файл.
         filePromises.push(
             fsextra
-                .copy(docsifyVendorSrc, vendorDist, {
-                    filter: (src) => !path.basename(src).startsWith('c4builder-')
-                })
+                .copy(docsifyVendorSrc, vendorDist)
                 .then(async () =>
                     writeFile(theme, (await readFile(theme)).toString().replace(/^@import url\([^)]*\);/, ''))
                 )

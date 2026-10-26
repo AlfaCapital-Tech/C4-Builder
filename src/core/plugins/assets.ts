@@ -2,8 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import type { BuildOptions } from '../../config/options.ts';
-import { VENDOR_DIR } from '../../util/paths.ts';
 import { encodeURIPath } from '../../util/utils.ts';
+import { SITE_SCRIPTS } from '../compose/site.scripts.ts';
 import type { Redirects } from './tree.ts';
 import type { LoadedPlugin } from './types.ts';
 
@@ -39,8 +39,9 @@ export const injectHtml = (
     return doc;
 };
 
-// Ассеты сайта от самого ядра (не плагинов): уже лежат в `dist/vendor/` — туда целиком
-// копируется vendor/docsify (compose/markdown), поэтому их только подключают, не копируют.
+// Ассеты сайта от самого ядра (не плагинов): стили и скрипты вендорных пакетов уже лежат в
+// `dist/vendor/` — туда целиком копируется vendor/docsify (compose/markdown), их только
+// подключают; свои скрипты c4builder (headScripts) пишутся из compose/site.scripts.ts.
 // Сворачивание sidebar — пост-обработкой, а не строкой шаблона, чтобы работало и с
 // пользовательским docsifyTemplate (включая копии старого встроенного шаблона). Страховка
 // localStorage — раньше всех скриптов: вендорный плагин без неё падает при заблокированном
@@ -55,6 +56,13 @@ const coreSiteAssets = (
               headScripts: ['vendor/c4builder-storage-guard.js']
           }
         : { styles: [], scripts: [], headScripts: [] };
+
+// Свой скрипт c4builder → `dist/vendor/<name>`: только когда его подключают, иначе в dist
+// каждого проекта лежал бы лишний файл.
+const writeSiteScript = (options: BuildOptions, name: string): void => {
+    fs.mkdirSync(path.join(options.DIST_FOLDER, 'vendor'), { recursive: true });
+    fs.writeFileSync(path.join(options.DIST_FOLDER, 'vendor', name), SITE_SCRIPTS[name] as string);
+};
 
 /**
  * Подключает в `dist/index.html` ассеты сайта: ядра (сворачивание sidebar при
@@ -75,14 +83,7 @@ export const injectSiteAssets = async (plugins: LoadedPlugin[], options: BuildOp
     const styles: string[] = core.styles.filter((f) => !linked(f));
     const scripts: string[] = core.scripts.filter((f) => !linked(f));
     const headScripts: string[] = core.headScripts.filter((f) => !linked(f));
-    // Скрипты c4builder (`c4builder-*.js`) общая копия vendor/docsify пропускает — кладём сами.
-    for (const file of headScripts) {
-        fs.mkdirSync(path.join(options.DIST_FOLDER, 'vendor'), { recursive: true });
-        fs.copyFileSync(
-            path.join(VENDOR_DIR, 'docsify', path.basename(file)),
-            path.join(options.DIST_FOLDER, 'vendor', path.basename(file))
-        );
-    }
+    for (const file of headScripts) writeSiteScript(options, path.basename(file));
     for (const { plugin } of plugins) {
         if (!plugin.assets) continue;
         const rel = path.posix.join('vendor', 'plugins', plugin.name);
@@ -102,20 +103,15 @@ export const injectSiteAssets = async (plugins: LoadedPlugin[], options: BuildOp
     fs.writeFileSync(indexPath, injectHtml(html, { styles, scripts, headScripts }));
 };
 
-// Скрипт переадресаций (change site-agent-review): вендорный файл копируется в `dist/vendor/` и
-// подключается в index.html только при непустой карте — сайт без переадресаций прежний.
+// Скрипт переадресаций (change site-agent-review): пишется в `dist/vendor/` и подключается в
+// index.html только при непустой карте — сайт без переадресаций прежний.
 // Отдельно от injectSiteAssets: карта переадресаций известна только после скана.
 const REDIRECTS_SCRIPT = 'c4builder-redirects.js';
 
 /** Подключает скрипт переадресаций к `dist/index.html`. Зовётся после injectSiteAssets. */
 export const injectRedirects = (options: BuildOptions, redirects: Redirects): void => {
     if (!redirects.size) return;
-    const vendorDist = path.join(options.DIST_FOLDER, 'vendor');
-    fs.mkdirSync(vendorDist, { recursive: true });
-    fs.copyFileSync(
-        path.join(VENDOR_DIR, 'docsify', REDIRECTS_SCRIPT),
-        path.join(vendorDist, REDIRECTS_SCRIPT)
-    );
+    writeSiteScript(options, REDIRECTS_SCRIPT);
     const indexPath = path.join(options.DIST_FOLDER, 'index.html');
     const html = fs.readFileSync(indexPath, 'utf8');
     fs.writeFileSync(
