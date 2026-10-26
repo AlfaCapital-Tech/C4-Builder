@@ -8,6 +8,7 @@ import {
     DiagramQueue,
     generateImages,
     pendingPlaceholderSvg,
+    rasterizeSvgToPng,
     renderBpmn,
     renderMermaid,
     renderOffThread,
@@ -321,6 +322,17 @@ describe('инкрементальная запись кэша и отложен
 
         // Обычная сборка поверх: всё из кэша, кроме bad — она снова падает (не soft), сборка — ошибка.
         await expect(build(options, cache, [])).rejects.toThrow('bad.svg');
+    }, 240_000);
+
+    it('PNG-заглушка при useSystemFonts растеризуется вендорным шрифтом, без загрузки системных', async () => {
+        const proj = path.join(dir, 'defer-png');
+        makeTree(path.join(proj, 'src'), ['p1']);
+        const options = { ...OPTIONS(proj), DIAGRAM_FORMAT: 'png', USE_SYSTEM_FONTS: true };
+        const { pending } = await build(options, memCache(), [], { deferImages: true });
+        expect(pending.size).toBe(1);
+        // Системные шрифты дали бы другие байты (и секунды на скан шрифтов системы).
+        const expected = await rasterizeSvgToPng(Buffer.from(pendingPlaceholderSvg('p1.png')), false);
+        expect(fs.readFileSync(path.join(options.DIST_FOLDER, 'p1', 'p1.png')).equals(expected)).toBe(true);
     }, 240_000);
 
     it('обычный build() заглушек не оставляет, pending не возвращает', async () => {

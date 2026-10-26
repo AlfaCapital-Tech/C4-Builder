@@ -25,7 +25,9 @@ export { injectHtml, injectSiteAssets } from '../dist/core/plugins/assets.js';
 export { resolveSource, tlsHint } from '../dist/core/plugins/source.js';
 export { extractZip, extractTarGz } from '../dist/util/archive.js';
 export { BUILTIN_PLUGINS } from '../dist/plugins/index.js';
-export { createFenceExtractor, mapOutsideFences } from '../dist/core/scan/fences.js';
+export { REDIRECTS_JS, STORAGE_GUARD_JS } from '../dist/core/compose/site.scripts.js';
+export { createFenceExtractor, mapOutsideCode, mapOutsideFences } from '../dist/core/scan/fences.js';
+export { embedFigmaImages } from '../dist/plugins/figma/index.js';
 export {
     foldIncludes,
     clearIncludeCache,

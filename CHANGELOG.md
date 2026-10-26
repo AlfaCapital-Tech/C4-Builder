@@ -3,6 +3,35 @@
 User-facing changes of C4-Builder. Every pull request that changes behaviour adds a line to
 `## Unreleased`; the release commit renames it to `## vX.Y.Z`.
 
+## Unreleased
+
+- `--site -w` background rendering: the queue follows the page you navigate to rather than every
+  `.md` request (the docsify search fetches all pages for its index); a page you come back to shows
+  the finished images instead of the cached `rendering…` placeholder; a diagram that failed is not
+  rendered again by the rebuilds of the same session until its input changes (the log says
+  `unchanged since it failed, not re-rendered`), while a failure of the environment (no Java, a
+  crashed render worker) is retried by the next rebuild; BPMN and mermaid diagrams render in a worker
+  thread, so the server keeps answering requests and live-reload events meanwhile
+- `-w`: an edit made while the first build is running is picked up by a rebuild right after it,
+  instead of waiting for the next edit
+- The `openspec` plugin, diagram files in artifacts: PlantUML `!include` and D2 imports resolve from
+  the file's own folder — for diagram code blocks of artifacts too — and are part of the image cache
+  checksum; same-named files from different folders (including `:include` subfiles, and two
+  `wireflow.json` exports) give distinct pictures, and two files in one folder rendering to the same
+  image name (`flow.d2` + `flow.mmd`) are both shown with an `Output name collision` warning
+- An inline diagram link with a quoted title — `![x](flow.puml "Flow")`, `![x](flow.mmd ':size=600')` —
+  is replaced by the picture with the title kept; before, the link stayed broken and the diagram was
+  appended to the end of the page
+- A link to a diagram with an upper-case extension (`![](Context.PUML)`) is replaced by the diagram
+  in place, as with a lower-case one, instead of staying raw while the diagram is added to the page
+  separately
+- The short address `#/change/<id>` keeps a `?id=…` section anchor
+- The `figma` plugin leaves Figma links in code alone: fenced and indented blocks and inline code
+- The `openapi` plugin: a `'` in a spec path no longer breaks the script of the swagger-ui and
+  AsyncAPI pages — the spec URL carries it as `%27`
+- PNG placeholders (`rendering…`, a render error) are rasterised with the bundled font even with
+  `useSystemFonts`, without scanning the system fonts — up to several seconds per placeholder
+
 ## v0.10.0
 
 - The `figma` plugin embeds Figma right inside pages: an image link to Figma on a line of its own
@@ -14,14 +43,7 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
   section; the log line counts frame pages and embeds
 - OpenSpec artifacts render image links to diagram files next to them — `![Flow](flow.wireflow.json)`,
   `![](context.puml)`, `.d2`, `.bpmn`, `.mmd` — as diagrams, like fenced blocks: the page shows the
-  picture, the source is not copied to the output, a broken file gets a placeholder and a warning.
-  PlantUML `!include` and D2 imports in such files resolve from the file's own folder and are part
-  of the image cache checksum; same-named files from different folders (including `:include`
-  subfiles) give distinct pictures, and two files in one folder rendering to the same image name
-  (`flow.d2` + `flow.mmd`) are both shown with an `Output name collision` warning
-- An inline diagram link with a quoted title — `![x](flow.puml "Flow")`, `![x](flow.mmd ':size=600')` —
-  is replaced by the picture with the title kept; before, the link stayed broken and the diagram was
-  appended to the end of the page
+  picture, the source is not copied to the output, a broken file gets a placeholder and a warning
 - The `openapi` plugin shows AsyncAPI specs too: a matched file with a top-level `asyncapi` key
   gets its own page under the same layout rules (folder index, summary, `info.title`), rendered
   by the bundled official AsyncAPI component (`@asyncapi/react-component` 3.2.2, Apache-2.0) —
@@ -38,12 +60,6 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
   date and pick up edits made meanwhile. A render error in the background shows an error
   placeholder with `✗` in the log and keeps the server up. Builds without `-w` still wait for
   every diagram and fail on a broken one
-- Fixes to the `--site -w` background rendering: the queue follows the page you navigate to
-  rather than every `.md` request (the docsify search fetches all pages for its index); a page you
-  come back to shows the finished images instead of the cached `rendering…` placeholder; a diagram
-  that failed is not rendered again by the rebuilds of the same session until its input changes
-  (the log says `unchanged since it failed, not re-rendered`); BPMN and mermaid diagrams render in
-  a worker thread, so the server keeps answering requests and live-reload events meanwhile
 - `.c4builder.cache` is written as the rendering goes (at most twice a second and at the end),
   so a build interrupted with Ctrl+C or failed on one diagram keeps the finished diagrams in the
   cache and the next build renders only the rest

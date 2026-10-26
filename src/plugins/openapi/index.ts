@@ -9,6 +9,7 @@ import { z } from 'zod';
 
 import { outputDirs } from '../../config/options.ts';
 import { redactUrl } from '../../core/plugins/source.ts';
+import { pageLink } from '../../core/plugins/tree.ts';
 import { definePlugin } from '../../core/plugins/types.ts';
 import { isPathInside } from '../../util/archive.ts';
 import { VENDOR_DIR } from '../../util/paths.ts';
@@ -242,10 +243,7 @@ export default definePlugin<Opts>({
         // Порядок страниц — по алфавиту пути: так было до опции layout (боковая панель и
         // сводка), а в tree родитель остаётся раньше вложенной страницы (префикс короче).
         pages.sort((a, b) => a.path.join('/').localeCompare(b.path.join('/')));
-        const link = (segs: string[]): string =>
-            encodeURIPath(
-                path.posix.join(mount, ...segs, ctx.options.WEB_FILE_NAME || segs[segs.length - 1])
-            );
+        const link = (segs: string[]): string => pageLink([mount, ...segs], ctx.options);
         const pageOf = (spec: Spec): Page => pages.find((pg) => pg.spec === spec) as Page;
         ctx.addPage({
             path: [mount],
@@ -274,7 +272,12 @@ export default definePlugin<Opts>({
             // validatorUrl: null — иначе swagger-ui шлёт адрес спеки на validator.swagger.io.
             // dom_id — из пути страницы спеки от mount: он уникален на сайте, в отличие от
             // последнего сегмента (billing/v2 и ledger/v2), и для папки с одной спекой прежний.
-            const specUrl = encodeURIPath(path.posix.join(mount, '_specs', page.spec.rel));
+            // `'` encodeURI оставляет как есть, а URL стоит в JS-строке в одинарных кавычках
+            // инлайн-скрипта — экранируем процентной кодировкой, сервер её раскодирует.
+            const specUrl = encodeURIPath(path.posix.join(mount, '_specs', page.spec.rel)).replace(
+                /'/g,
+                '%27'
+            );
             const idTail = page.path.join('/').replace(/[^A-Za-z0-9_-]/g, '_');
             if (page.spec.kind === 'asyncapi') {
                 ctx.addPage({

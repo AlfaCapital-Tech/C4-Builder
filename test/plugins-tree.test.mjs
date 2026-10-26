@@ -3,8 +3,8 @@ import path from 'node:path';
 import vm from 'node:vm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { addPage, addRedirect, isVirtual } from './dist.mjs';
-import { REPO_ROOT, TMP_ROOT, ensureManagedJre, runBuild } from './helpers.mjs';
+import { REDIRECTS_JS, addPage, addRedirect, isVirtual } from './dist.mjs';
+import { TMP_ROOT, ensureManagedJre, runBuild } from './helpers.mjs';
 
 // Виртуальные страницы плагинов: сквозной прогон реального CLI на мини-фикстуре с
 // локальным плагином `./plugin.mjs` — sidebar, страницы сайта, generateMD, complete,
@@ -123,6 +123,8 @@ describe('виртуальные страницы в сборке', () => {
         expect(html).toMatch(/<script src="vendor\/c4builder-redirects.js"><\/script>\s*<\/body>/);
         expect(read('vendor/c4builder-redirects.js')).toContain('location.replace');
         expect(read('vendor/c4builder-redirects.js')).not.toMatch(/https?:\/\//);
+        // Комментарии (русские) остаются в исходнике в src — в выход не попадают.
+        expect(read('vendor/c4builder-redirects.js')).not.toMatch(/\/\/|\/\*|[\u0400-\u04ff]/);
     });
 });
 
@@ -238,13 +240,10 @@ describe('addRedirect (юнит)', () => {
     });
 });
 
-// Вендорный скрипт переадресаций — в песочнице vm с подменой window/location: браузера в тестах
+// Скрипт переадресаций — в песочнице vm с подменой window/location: браузера в тестах
 // нет, а логика (сразу и на hashchange, срез query, раскодированный hash) проверяется и так.
-describe('vendor/docsify/c4builder-redirects.js (vm)', () => {
-    const SCRIPT = fs.readFileSync(
-        path.join(REPO_ROOT, 'vendor', 'docsify', 'c4builder-redirects.js'),
-        'utf8'
-    );
+describe('скрипт c4builder-redirects.js (vm)', () => {
+    const SCRIPT = REDIRECTS_JS;
     const MAP = { '/change/x': '/M/Sub/Page/Page', '/change/%D0%81': '/A/Virt/Virt' };
     const run = (hash, redirects = MAP) => {
         const replaced = [];
@@ -264,9 +263,9 @@ describe('vendor/docsify/c4builder-redirects.js (vm)', () => {
         };
     };
 
-    it('совпадение — location.replace на путь страницы сразу и на hashchange; query отбрасывается', () => {
+    it('совпадение — location.replace на путь страницы сразу и на hashchange; query сохраняется', () => {
         expect(run('#/change/x').replaced).toEqual(['#/M/Sub/Page/Page']);
-        expect(run('#/change/x?id=section').replaced).toEqual(['#/M/Sub/Page/Page']);
+        expect(run('#/change/x?id=section').replaced).toEqual(['#/M/Sub/Page/Page?id=section']);
         expect(run('#change/x').replaced).toEqual(['#/M/Sub/Page/Page']);
         const site = run('#/');
         expect(site.replaced).toEqual([]);

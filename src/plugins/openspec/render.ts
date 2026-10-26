@@ -5,17 +5,13 @@ import path from 'node:path';
 import chalk from 'chalk';
 
 import type { BuildOptions } from '../../config/options.ts';
+import { pageLink } from '../../core/plugins/tree.ts';
 import type { PageDiagram } from '../../core/plugins/types.ts';
 import { createFenceExtractor, mapOutsideFences } from '../../core/scan/fences.ts';
 import { diagramBaseName, diagramExt, diagramOutputName, engineForFile } from '../../core/scan/tree.ts';
 import { encodeURIPath } from '../../util/utils.ts';
 import { groupNames, type Layout, pageOrder } from './layout.ts';
 import type { Artifact, Change, Spec, Store } from './scan.ts';
-
-// Ссылка на страницу сайта от корня (без ведущего «/»): так же строится sidebar,
-// а docsify без relativePath резолвит ссылки от корня сайта.
-export const pageLink = (segments: string[], options: BuildOptions): string =>
-    encodeURIPath(path.posix.join(...segments, options.WEB_FILE_NAME || segments[segments.length - 1]));
 
 const fmtDate = (ms: number): string => new Date(ms).toISOString().slice(0, 10);
 // Прогресс задач: нативный <progress> (docsify рендерит HTML в markdown) + числа и процент.

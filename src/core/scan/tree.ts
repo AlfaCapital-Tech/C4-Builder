@@ -82,6 +82,10 @@ export const diagramBaseName = (name: string): string => {
     return base.slice(0, base.length - entry.ext.length);
 };
 
+// Движок реестра по имени (Diagram.engine — строка); не из реестра — undefined.
+export const registeredEngine = (engine: string): DiagramEngine | undefined =>
+    DIAGRAM_ENGINES.find((e) => e.engine === engine)?.engine;
+
 // Есть ли у движка онлайн-рендер (сервер, как у PlantUML). Для движков без него (D2)
 // сборка при выключенном generateLocalImages невозможна — вывод не из чего собрать.
 export const engineSupportsRemote = (engine: string): boolean =>

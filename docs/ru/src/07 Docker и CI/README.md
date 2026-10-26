@@ -44,7 +44,7 @@ GitLab CI, проверка диаграмм и публикация в GitLab P
 check:
   image: ghcr.io/alfacapital-tech/c4builder:0.9.0
   script:
-    - find src \( -name '*.puml' -o -name '*.d2' -o -name '*.bpmn' -o -name '*.mmd' -o -name '*wireflow.json' \) -exec c4builder check {} +
+    - find src \( -name '*.puml' -o -name '*.d2' -o -name '*.bpmn' -o -name '*.mmd' -o -name '*.wireflow.json' -o -name wireflow.json \) -exec c4builder check {} +
 
 pages:
   image: ghcr.io/alfacapital-tech/c4builder:0.9.0

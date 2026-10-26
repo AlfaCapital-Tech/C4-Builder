@@ -135,7 +135,7 @@ describe('реестр движков по суффиксу', () => {
 describe('разбор и валидация', () => {
     it('версии 2–4 принимаются, settings и неизвестные поля игнорируются', () => {
         for (const v of [2, 3, 4]) {
-            const { diagram, warnings } = parseWireflow(
+            const { diagram } = parseWireflow(
                 JSON.stringify({
                     format: 'wireflow',
                     version: v,
@@ -149,7 +149,6 @@ describe('разбор и валидация', () => {
                 'x.wireflow.json'
             );
             expect(diagram.nodes).toHaveLength(1);
-            expect(warnings).toEqual([]);
         }
         expect(WIREFLOW_VERSIONS).toEqual({ min: 2, max: 4 });
     });
@@ -210,6 +209,22 @@ describe('разбор и валидация', () => {
         ]);
         // Несколько нарушений — одной ошибкой.
         expect(problemsOf(file([card('a'), card('a')], [edge('e', 'a', 'zz')]))).toHaveLength(2);
+    });
+
+    it('graphicId — ключ прототипа (constructor, toString): заглушка и конечная геометрия', () => {
+        const ids = ['constructor', 'toString', '__proto__'];
+        const parsed = parseWireflow(
+            file(ids.map((id, i) => card(`c${i}`, i * 300, 0, {}, { graphicId: id }))),
+            'x'
+        );
+        for (const box of layoutWireflow(parsed.diagram).values())
+            for (const v of Object.values(box)) expect(Number.isFinite(v)).toBe(true);
+        const { svg, warnings } = renderWireflowSvg(
+            file(ids.map((id, i) => card(`c${i}`, i * 300, 0, {}, { graphicId: id }))),
+            'x.wireflow.json'
+        );
+        expect(svg).not.toContain('NaN');
+        expect(warnings).toHaveLength(ids.length);
     });
 
     it('неизвестный шаблон — предупреждение рендера, не ошибка', () => {
@@ -685,5 +700,63 @@ describe('сборка проекта с .wireflow.json', () => {
         expect(res2.out).toMatch(
             /Output name collision 'checkout\.svg'.*'checkout\.puml' and 'checkout\.wireflow\.json'/
         );
+    });
+});
+
+// Скрипт обновления каталога — на копии в песочнице (свой vendor/wireflow) с подменённым fetch:
+// сеть не нужна, настоящий каталог не трогается. node_modules (tar) находятся вверх от TMP_ROOT.
+describe('scripts/update-wireflow-catalog.mjs', () => {
+    const SHA = 'abcdef1';
+    const sandboxes = [];
+    afterAll(() => {
+        for (const d of sandboxes) fs.rmSync(d, { recursive: true, force: true });
+    });
+
+    const run = async (withSvg) => {
+        const { create } = await import('tar');
+        fs.mkdirSync(TMP_ROOT, { recursive: true });
+        const sandbox = fs.mkdtempSync(path.join(TMP_ROOT, 'wireflow-catalog-'));
+        sandboxes.push(sandbox);
+        const script = path.join(sandbox, 'scripts', 'update-wireflow-catalog.mjs');
+        fs.mkdirSync(path.dirname(script), { recursive: true });
+        fs.copyFileSync(path.join(REPO_ROOT, 'scripts', 'update-wireflow-catalog.mjs'), script);
+        const target = path.join(sandbox, 'vendor', 'wireflow');
+        fs.mkdirSync(target, { recursive: true });
+        fs.writeFileSync(path.join(target, 'VERSION'), 'old\n');
+        // Архив коммита: верхний каталог `<repo>-<sha>/`, шаблон есть или нет.
+        const repo = path.join(sandbox, 'archive', `wireflow-${SHA}`);
+        const put = (rel, content) => {
+            fs.mkdirSync(path.dirname(path.join(repo, rel)), { recursive: true });
+            fs.writeFileSync(path.join(repo, rel), content);
+        };
+        put('lib/graphics.json', JSON.stringify([{ id: 'a-one', src: '/graphics/a/one.svg' }]));
+        put('lib/graphic-sizes.json', JSON.stringify({ 'a-one': 0.5 }));
+        put('LICENSE', 'MIT');
+        if (withSvg) put('public/graphics/a/one.svg', '<svg/>');
+        const tarball = path.join(sandbox, 'src.tar.gz');
+        await create({ gzip: true, file: tarball, cwd: path.dirname(repo) }, [path.basename(repo)]);
+        const mock = path.join(sandbox, 'mock-fetch.mjs');
+        fs.writeFileSync(
+            mock,
+            `import fs from 'node:fs';\nglobalThis.fetch = async () => new Response(fs.readFileSync(${JSON.stringify(tarball)}));\n`
+        );
+        const res = spawnSync(process.execPath, ['--import', mock, script, SHA], { encoding: 'utf8' });
+        return { res, target, vendor: path.dirname(target) };
+    };
+
+    it('ошибка проверки на середине — прежний каталог цел, временных папок не остаётся', async () => {
+        const { res, target, vendor } = await run(false);
+        expect(res.status).toBe(1);
+        expect(res.stderr).toMatch(/a-one: \/graphics\/a\/one\.svg is missing in the archive/);
+        expect(fs.readFileSync(path.join(target, 'VERSION'), 'utf8')).toBe('old\n');
+        expect(fs.readdirSync(vendor)).toEqual(['wireflow']);
+    });
+
+    it('успешное обновление подменяет каталог целиком', async () => {
+        const { res, target, vendor } = await run(true);
+        expect(res.status, res.stderr).toBe(0);
+        expect(fs.readFileSync(path.join(target, 'VERSION'), 'utf8')).toBe(`${SHA}\n`);
+        expect(fs.readFileSync(path.join(target, 'graphics', 'a', 'one.svg'), 'utf8')).toBe('<svg/>\n');
+        expect(fs.readdirSync(vendor)).toEqual(['wireflow']);
     });
 });

@@ -4,14 +4,12 @@
 // Единственный плагин, страницы которого грузят внешний сервис в браузере читателя: ни
 // ассетов, ни executeScript, сама сборка в сеть не ходит. Вся логика ссылок — в одной функции
 // нормализации.
-import path from 'node:path';
 import chalk from 'chalk';
 import { z } from 'zod';
 
-import { mapOutsideFences } from '../../core/scan/fences.ts';
-import { isLinkSegment } from '../../core/plugins/tree.ts';
+import { isLinkSegment, pageLink } from '../../core/plugins/tree.ts';
+import { mapOutsideCode } from '../../core/scan/fences.ts';
 import { definePlugin } from '../../core/plugins/types.ts';
-import { encodeURIPath } from '../../util/utils.ts';
 
 const EMBED_HOST = 'embed.figma.com';
 // `file` — старое имя типа `design`: Figma переименовала его, а Embed Kit 2.0 эмбед `file` не
@@ -40,7 +38,8 @@ export const figmaEmbedUrl = (raw: string, embedHost: string): string => {
         throw new Error(`not a Figma link, expected ${EXPECTED}`);
     }
     const [kind, key] = url.pathname.split('/').filter(Boolean);
-    const type = FIGMA_TYPES[kind ?? ''];
+    // hasOwn: сегмент пути вроде `constructor` не должен находить член прототипа.
+    const type = kind && Object.hasOwn(FIGMA_TYPES, kind) ? FIGMA_TYPES[kind] : undefined;
     if (!FIGMA_HOSTS.has(url.hostname) || !type || !key || !/^[\w-]+$/.test(key))
         throw new Error(`not a Figma link, expected ${EXPECTED}`);
     const embed = new URL(`https://${EMBED_HOST}/${type}/${key}`);
@@ -129,7 +128,7 @@ const FIGMA_URL_RE = /^https:\/\/(?:www\.|embed\.)?figma\.com\//i;
 /**
  * Картинки-ссылки на Figma в markdown страницы → эмбеды. Картинка одна на строке — блок
  * «ссылка + iframe» (HTML-блок отделён пустыми строками, иначе markdown его не распознает);
- * внутри текста iframe не встанет — там обычная ссылка. Код в ``` не трогается. Ссылка, которую
+ * внутри текста iframe не встанет — там обычная ссылка. Код (```, `…`, отступ) не трогается. Ссылка, которую
  * не удалось разобрать, остаётся как есть и попадает в `bad`.
  */
 export const embedFigmaImages = (
@@ -139,28 +138,23 @@ export const embedFigmaImages = (
     bad: string[] = []
 ): { md: string; count: number } => {
     let count = 0;
-    const out = mapOutsideFences(md, (text) =>
-        text
-            .split('\n')
-            .map((line) => {
-                const alone = /^\s*!\[[^\]]*\]\(\S+?(?:\s+"[^"]*")?\)\s*$/.test(line);
-                return line.replace(IMAGE_RE, (whole, alt: string, url: string) => {
-                    if (!FIGMA_URL_RE.test(url)) return whole;
-                    let embed: string;
-                    try {
-                        embed = figmaEmbedUrl(url, embedHost);
-                    } catch {
-                        bad.push(url);
-                        return whole;
-                    }
-                    count++;
-                    const label = alt.trim() ? `Open in Figma: ${alt.trim()}` : 'Open in Figma';
-                    if (!alone) return `[${alt.trim() || 'Figma'}](${url})`;
-                    return `\n[${label}](${url})\n\n${iframe(embed, height)}\n`;
-                });
-            })
-            .join('\n')
-    );
+    const out = mapOutsideCode(md, (line) => {
+        const alone = /^\s*!\[[^\]]*\]\(\S+?(?:\s+"[^"]*")?\)\s*$/.test(line);
+        return line.replace(IMAGE_RE, (whole, alt: string, url: string) => {
+            if (!FIGMA_URL_RE.test(url)) return whole;
+            let embed: string;
+            try {
+                embed = figmaEmbedUrl(url, embedHost);
+            } catch {
+                bad.push(url);
+                return whole;
+            }
+            count++;
+            const label = alt.trim() ? `Open in Figma: ${alt.trim()}` : 'Open in Figma';
+            if (!alone) return `[${alt.trim() || 'Figma'}](${url})`;
+            return `\n[${label}](${url})\n\n${iframe(embed, height)}\n`;
+        });
+    });
     return { md: out, count };
 };
 
@@ -171,10 +165,7 @@ export default definePlugin<Opts>({
     afterScan(ctx, o) {
         const { mount, height } = o;
         if (o.frames.length) {
-            const link = (segments: string[]): string =>
-                encodeURIPath(
-                    path.posix.join(mount, ...segments, ctx.options.WEB_FILE_NAME || segments.at(-1) || '')
-                );
+            const link = (segments: string[]): string => pageLink([mount, ...segments], ctx.options);
             // Сводка — в порядке списка, а не по алфавиту: порядок фреймов задаёт пользователь.
             ctx.addPage({
                 path: [mount],

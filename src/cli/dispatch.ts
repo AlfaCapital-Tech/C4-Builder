@@ -381,15 +381,24 @@ export default async () => {
         // dev-сервере BPMN и mermaid рендерятся в worker-потоке, сервер не замирает.
         const failedRenders = new Map<string, string>();
         const offThread = !!opts.site;
-        const rebuild = async (): Promise<void> => {
-            do {
+        // Ошибку сборки печатает и гасит (false): watch и сервер живы, прежний result в силе.
+        const rebuild = async (): Promise<boolean> => {
+            try {
+                do {
+                    attemptedWatchBuild = false;
+                    result = await build(options, cacheConf, plugins, {
+                        softErrors: true,
+                        failedRenders,
+                        offThread
+                    });
+                } while (attemptedWatchBuild);
+                return true;
+            } catch (err) {
                 attemptedWatchBuild = false;
-                result = await build(options, cacheConf, plugins, {
-                    softErrors: true,
-                    failedRenders,
-                    offThread
-                });
-            } while (attemptedWatchBuild);
+                const e = err as Error;
+                console.log(chalk.red(`build failed: ${e?.stack ? e.stack : e}`));
+                return false;
+            }
         };
         if (opts.watch) {
             // node-watch: CJS-рантайм при ESM-.d.ts (export default) — дефолт-импорт
@@ -429,7 +438,7 @@ export default async () => {
                 }
 
                 isBuilding = true;
-                let buildOk = true;
+                let buildOk = false;
                 try {
                     // Лок на всю серию ребилдов: параллельная ручная сборка в этом же
                     // каталоге не потопчет dist_bk и не потеряет чексуммы кеша. Занят другим
@@ -439,12 +448,12 @@ export default async () => {
                         console.log(chalk.gray(`waiting for another build: ${e.message}`))
                     );
                     try {
-                        await rebuild();
+                        buildOk = await rebuild();
                     } finally {
                         release();
                     }
                 } catch (err) {
-                    buildOk = false;
+                    // Сюда — только ошибки лока: ошибку сборки rebuild гасит сам.
                     attemptedWatchBuild = false;
                     if (err instanceof BuildLockHeldError) {
                         // Соседняя сборка ещё идёт — ребилд пропущен, watch жив.
@@ -480,6 +489,10 @@ export default async () => {
                 ...(deferImages ? { failedRenders, offThread } : {})
             });
             ({ pending } = result);
+            // Правка во время первой сборки: watch только взвёл attemptedWatchBuild — ребилд
+            // за ним делает ждущая сторона. При фоновой очереди это её финальная пересборка,
+            // без очереди — здесь, пока лок ещё наш. Иначе правка терялась до следующей.
+            if (!pending && attemptedWatchBuild) await rebuild();
         } finally {
             // Лок и флаг сборки держим, пока фоновый рендер пишет в dist (снимаются ниже).
             if (!pending) release();
@@ -529,14 +542,9 @@ export default async () => {
             }
             pending = undefined;
             console.log(`rendered ${queue.size} diagrams in ${(Date.now() - started) / 1000} s`);
-            let buildOk = true;
+            let buildOk = false;
             try {
-                await rebuild();
-            } catch (err) {
-                buildOk = false;
-                attemptedWatchBuild = false;
-                const e = err as Error;
-                console.log(chalk.red(`build failed: ${e?.stack ? e.stack : e}`));
+                buildOk = await rebuild();
             } finally {
                 release();
                 isBuilding = false;

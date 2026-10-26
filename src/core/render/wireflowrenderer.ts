@@ -107,7 +107,8 @@ const HEADER_MAX_CHARS = 23; // flow-node.tsx: длиннее — 20 симво�
 
 interface Catalog {
     version: string;
-    sizes: Record<string, number>;
+    // Map, а не объект: graphicId из файла вроде `constructor` иначе нашёл бы член прототипа.
+    sizes: Map<string, number>;
     files: Map<string, string>;
 }
 
@@ -118,7 +119,7 @@ const loadCatalog = (): Catalog => {
     const graphics = JSON.parse(read('graphics.json')) as { id: string; src: string }[];
     catalog = {
         version: read('VERSION').trim(),
-        sizes: JSON.parse(read('graphic-sizes.json')) as Record<string, number>,
+        sizes: new Map(Object.entries(JSON.parse(read('graphic-sizes.json')) as Record<string, number>)),
         files: new Map(graphics.map((g) => [g.id, path.join(WIREFLOW_DIR, g.src.replace(/^\//, ''))]))
     };
     return catalog;
@@ -187,12 +188,11 @@ const RESAVE = 'open and re-save the file in the current Wireflow editor (wirefl
 
 export interface Parsed {
     diagram: WireflowDiagram;
-    warnings: string[];
 }
 
 // Разбор файла с проверкой структуры (design §7): все нарушения собираются в одну ошибку с id
 // элементов. Неизвестные поля игнорируются — формат молодой и растёт. Неизвестный шаблон и
-// картинка не из файла — предупреждения, не ошибки (карточка-заглушка).
+// картинка не из файла — предупреждения рендера (cardImage), не ошибки разбора.
 export const parseWireflow = (text: string, file: string): Parsed => {
     const fail = (...problems: string[]): never => {
         throw new WireflowError(file, problems);
@@ -226,7 +226,6 @@ export const parseWireflow = (text: string, file: string): Parsed => {
     if (!Array.isArray(rawEdges)) return fail('"diagram.edges" must be an array');
 
     const problems: string[] = [];
-    const warnings: string[] = [];
     const ids = new Set<string>();
     const nodes: WireflowNode[] = [];
     const parents = new Map<string, string>();
@@ -374,7 +373,7 @@ export const parseWireflow = (text: string, file: string): Parsed => {
     });
 
     if (problems.length) fail(...problems);
-    return { diagram: { nodes, edges }, warnings };
+    return { diagram: { nodes, edges } };
 };
 
 // --- раскладка ----------------------------------------------------------------------------
@@ -384,7 +383,7 @@ const cardRatio = (card: Card): number => {
         return card.ratio === undefined
             ? DEFAULT_RATIO
             : Math.min(IMAGE_RATIO.max, Math.max(IMAGE_RATIO.min, card.ratio));
-    return loadCatalog().sizes[card.graphicId] ?? DEFAULT_RATIO;
+    return loadCatalog().sizes.get(card.graphicId) ?? DEFAULT_RATIO;
 };
 
 // Размер карточки не хранится в файле (model.ts cardSize): ширина от шаблона, высота — рамка,
@@ -749,7 +748,8 @@ export interface Rendered {
  * рамка всех элементов с полями экспорта редактора, фон белый.
  */
 export const renderWireflowSvg = (source: string, file: string, options: RenderOptions = {}): Rendered => {
-    const { diagram, warnings } = parseWireflow(source, file);
+    const { diagram } = parseWireflow(source, file);
+    const warnings: string[] = [];
     const boxes = layoutWireflow(diagram);
     const bounds: Bounds = { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity };
     for (const b of boxes.values()) {

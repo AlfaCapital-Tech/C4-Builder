@@ -85,7 +85,7 @@ folder.
   one): it leads to the page of the active change, for a nested one by its full id
   (`#/change/dig-1-root-ios`), and after archiving to the newest archived change with that id; the
   browser swaps it for the real page path, so relative links, images and the sidebar highlight work
-  as usual and "back" does not return to the short address. An unknown id shows the standard docsify
+  as usual and "back" does not return to the short address; a section anchor `?id=…` is kept. An unknown id shows the standard docsify
   "not found" page. An id with `#` or `?`, or one already taken by another `openspec` instance (the
   first one wins), gets no short address — the build prints a warning and goes on. The address map lives in `index.html` (`$docsify.c4builder.redirects`) together
   with the local script `vendor/c4builder-redirects.js`, so the address works on a published site
@@ -193,10 +193,10 @@ link.
 - An embed in a page is an image link to Figma on a line of its own:
   `![Payment screen](https://www.figma.com/design/<key>/<name>?node-id=…)` in a section README or
   in the `design.md` of an OpenSpec change. It is replaced by `Open in Figma: Payment screen` and the
-  iframe. Inside a line of text such an image becomes a regular link, inside a code block it stays as
-  is; a link that cannot be parsed is left alone with a warning. Regular `[text](…)` links to Figma
-  do not change. Pages of other plugins are processed when `figma` comes after them in `plugins` —
-  put it last.
+  iframe. Inside a line of text such an image becomes a regular link, inside code (a code block,
+  indented too, or inline `…`) it stays as is; a link that cannot be parsed is left alone with a
+  warning. Regular `[text](…)` links to Figma do not change. Pages of other plugins are processed
+  when `figma` comes after them in `plugins` — put it last.
 
 - `url` is the regular "Share" link from Figma: `https://www.figma.com/<type>/<key>/<name>?node-id=…`
   with the type `design`, `file`, `proto`, `board`, `slides` or `deck` (`https://embed.figma.com/…`

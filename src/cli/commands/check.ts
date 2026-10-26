@@ -71,7 +71,8 @@ const checkPlantUml = async (abs: string): Promise<void> => {
 const relative = (abs: string): string => path.relative(process.cwd(), abs);
 
 // Суффикс имени файла (с точкой) → проверка. Суффиксы из нескольких расширений
-// (`.wireflow.json`) совпадают и точным именем файла (`wireflow.json`), как в scan.
+// (`.wireflow.json`) совпадают и точным именем файла (`wireflow.json`), как в scan;
+// файл `puml`/`d2`/`mmd` без расширения диаграммой не считается — тоже как в scan.
 const CHECKERS: Record<string, (abs: string) => Promise<unknown>> = {
     '.puml': checkPlantUml,
     '.iuml': checkPlantUml,
@@ -85,7 +86,8 @@ const EXPECTED = `${EXTENSIONS.slice(0, -1).join(', ')} or ${EXTENSIONS[EXTENSIO
 
 const checkerFor = (abs: string): ((abs: string) => Promise<unknown>) | undefined => {
     const lower = path.basename(abs).toLowerCase();
-    const ext = EXTENSIONS.filter((e) => lower.endsWith(e) || lower === e.slice(1)).sort(
+    const isExactName = (e: string): boolean => e.indexOf('.', 1) !== -1 && lower === e.slice(1);
+    const ext = EXTENSIONS.filter((e) => lower.endsWith(e) || isExactName(e)).sort(
         (a, b) => b.length - a.length
     )[0];
     return ext === undefined ? undefined : CHECKERS[ext];

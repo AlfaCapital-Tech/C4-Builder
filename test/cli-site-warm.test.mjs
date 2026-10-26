@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -168,6 +169,49 @@ describe('холодный старт site -w', () => {
         });
         expect(out).not.toContain('in background');
         expect(out).toContain('processed 1 images');
+    }, 240_000);
+});
+
+// Без фоновой очереди (обычный `-w`) правку во время первой сборки подхватывает ребилд сразу
+// после неё — раньше она терялась до следующей правки.
+describe('watch: правка во время первой сборки', () => {
+    it('без очереди — после первой сборки ещё одна, правка в выходе', async () => {
+        const names = ['D1', 'D2', 'D3', 'D4', 'D5'];
+        const root = project('first-edit', Object.fromEntries(names.map((n) => [n, puml(n)])));
+        const pageMd = path.join(root, 'src', 'D1', 'page.md');
+        // Один процесс PlantUML за раз — окно рендера в несколько секунд, правка попадает в него.
+        const child = spawn(process.execPath, [path.join(REPO_ROOT, 'dist', 'index.js'), '-w'], {
+            cwd: root,
+            env: { ...env, C4BUILDER_RENDER_CONCURRENCY: '1' }
+        });
+        let out = '';
+        const built = () => out.match(/built in [\d.]+ seconds/g)?.length ?? 0;
+        try {
+            await new Promise((resolve, reject) => {
+                const timer = setTimeout(() => reject(new Error(`нет второй сборки:\n${out}`)), 90_000);
+                let edited = false;
+                const onData = (d) => {
+                    out += d;
+                    // Страницы уже прочитаны, диаграммы рендерятся — правим исходник.
+                    if (!edited && out.includes('generating images')) {
+                        edited = true;
+                        fs.writeFileSync(pageMd, '# D1\n\nEdited during first build.\n');
+                    }
+                    if (built() >= 2) {
+                        clearTimeout(timer);
+                        resolve();
+                    }
+                };
+                child.stdout.on('data', onData);
+                child.stderr.on('data', onData);
+                child.on('exit', (code) => reject(new Error(`процесс завершился (exit=${code}):\n${out}`)));
+            });
+        } finally {
+            child.kill('SIGTERM');
+        }
+        expect(out.indexOf('generating images')).toBeLessThan(out.indexOf('changed. Rebuilding...'));
+        const page = fs.readFileSync(path.join(root, 'docs', 'D1', 'README.md'), 'utf8');
+        expect(page).toContain('Edited during first build.');
     }, 240_000);
 });
 

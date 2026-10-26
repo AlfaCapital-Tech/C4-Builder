@@ -75,14 +75,15 @@ const diagramNameAlternation = (): string =>
 // Ссылка на диаграмму в markdown: ![alt](path.puml|d2) и с title в кавычках —
 // `![alt](x.puml "T")`, `![alt](x.puml ':size=600')` (группа 2). Путь ленивый и не пересекает ')',
 // иначе две ссылки на одной строке склеились бы в один матч и не заменились; title — только
-// в кавычках, как в CommonMark: `(x.puml lol)` ссылкой не считается. Свежий объект на вызов —
-// чтобы matchAll не тянул чужой lastIndex.
+// в кавычках, как в CommonMark: `(x.puml lol)` ссылкой не считается. Без учёта регистра: scan
+// считает `C.PUML` диаграммой (engineForFile), значит и ссылка на неё должна находиться.
+// Свежий объект на вызов — чтобы matchAll не тянул чужой lastIndex.
 export const diagramRefRegex = (): RegExp => {
     const names = diagramNameAlternation();
     const byName = names ? `|(?:[^)]*/)?(?:${names})` : '';
     return new RegExp(
         `!\\[.*?\\]\\(([^)]*?\\.(?:${diagramExtAlternation()})${byName})(?:\\s+("[^"\\n]*"|'[^'\\n]*'))?\\)`,
-        'g'
+        'gi'
     );
 };
 
@@ -539,13 +540,9 @@ export const generateWebMD = async (
         // Тема — без ведущего @import Google Fonts (у её шрифтов есть системный fallback).
         // Правим копию, а не vendor/: повторное вендорение вернуло бы @import.
         const theme = path.join(vendorDist, 'vue.css');
-        // Скрипты c4builder (`c4builder-*.js`) копирует injectRedirects — только когда они нужны
-        // странице; иначе в dist каждого проекта лежал бы лишний файл.
         filePromises.push(
             fsextra
-                .copy(docsifyVendorSrc, vendorDist, {
-                    filter: (src) => !path.basename(src).startsWith('c4builder-')
-                })
+                .copy(docsifyVendorSrc, vendorDist)
                 .then(async () =>
                     writeFile(theme, (await readFile(theme)).toString().replace(/^@import url\([^)]*\);/, ''))
                 )

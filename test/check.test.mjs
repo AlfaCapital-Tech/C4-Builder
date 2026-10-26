@@ -34,6 +34,8 @@ beforeAll(() => {
     write('ok.d2', 'a -> b\n');
     write('bad.d2', 'a -> \n');
     write('what.txt', 'x');
+    // Имя совпадает с расширением, но расширения нет — не диаграмма (как в scan).
+    for (const name of ['d2', 'mmd', 'puml']) write(name, 'a -> b\n');
     const wf = (nodes, edges = []) =>
         JSON.stringify({ format: 'wireflow', version: 4, diagram: { nodes, edges } });
     const wfCard = (id, graphicId = 'e-commerce-cart') => ({
@@ -122,6 +124,10 @@ describe('c4builder check', () => {
             /✗ what\.txt: unsupported extension \(expected \.puml, \.iuml, \.d2, \.bpmn, \.mmd or \.wireflow\.json\)/
         );
         expect(res.stderr).toMatch(/✗ missing\.puml: ENOENT/);
+        const bare = check('d2', 'mmd', 'puml');
+        expect(bare.status).toBe(1);
+        for (const name of ['d2', 'mmd', 'puml'])
+            expect(bare.stderr).toMatch(new RegExp(`^✗ ${name}: unsupported extension`, 'm'));
         const usage = check();
         expect(usage.status).toBe(1);
         expect(usage.stdout).toMatch(/usage: c4builder check .*\| \.mmd \| \.wireflow\.json\)/);

@@ -25,10 +25,12 @@ beforeAll(() => {
     fs.mkdirSync(path.join(dir, 'src'), { recursive: true });
     fs.writeFileSync(
         path.join(dir, 'src', 'index.md'),
-        `## Section\nSome text.\n\n![${ALT}](a.puml)\n\n![${ALT} (reply)](b.puml)\n\n## Next\n`
+        `## Section\nSome text.\n\n![${ALT}](a.puml)\n\n![${ALT} (reply)](b.puml)\n\n## Next\n\n## Upper\n\n![upper](C.PUML)\n`
     );
     fs.writeFileSync(path.join(dir, 'src', 'a.puml'), '@startuml\nAlice -> Bob : hello\n@enduml\n');
     fs.writeFileSync(path.join(dir, 'src', 'b.puml'), '@startuml\nBob -> Alice : hi\n@enduml\n');
+    // Расширение в верхнем регистре: scan считает файл диаграммой — ссылка тоже должна найтись.
+    fs.writeFileSync(path.join(dir, 'src', 'C.PUML'), '@startuml\nCarol -> Bob : hey\n@enduml\n');
     fs.writeFileSync(
         path.join(dir, '.c4builder'),
         // Полный набор ключей — иначе визард переспросил бы недостающее и завис на EOF.
@@ -72,8 +74,8 @@ afterAll(() => {
 
 describe('issue #12: соседние ссылки на диаграммы', () => {
     it('обе ссылки заменены, сырых .puml не осталось', () => {
-        expect(readme).not.toMatch(/\.puml\)/);
-        expect(readme.match(/!\[diagram\]\(/g)?.length).toBe(2);
+        expect(readme).not.toMatch(/\.puml\)/i);
+        expect(readme.match(/!\[diagram\]\(/g)?.length).toBe(3);
     });
 
     it('диаграммы стоят на своих местах в порядке документа', () => {
@@ -85,6 +87,12 @@ describe('issue #12: соседние ссылки на диаграммы', () 
         expect(text).toBeLessThan(first);
         expect(first).toBeLessThan(second);
         expect(second).toBeLessThan(next);
+    });
+
+    it('ссылка на C.PUML (расширение в верхнем регистре) заменена на своём месте', () => {
+        const upper = readme.indexOf('## Upper');
+        expect(readme.indexOf('![diagram](', upper)).toBeGreaterThan(upper);
+        expect(readme.slice(0, readme.indexOf('## Section'))).not.toContain('![diagram](');
     });
 });
 

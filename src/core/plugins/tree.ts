@@ -21,13 +21,6 @@ const subtreeEnd = (tree: TreeItem[], parent: TreeItem): number => {
     return i;
 };
 
-/**
- * Добавляет виртуальную страницу в дерево сборки: считает `dir`/`level`/`parent` как
- * scan (dir = ROOT_FOLDER/сегменты), дополняет `descendants` родителя, вставляет в конец
- * поддерева родителя; недостающие промежуточные сегменты создаёт пустыми узлами
- * (авто-заголовок, как папка без README). Каталог в dist создаётся здесь же — compose
- * пишет страницы без mkdir, полагаясь на scan.
- */
 // Сегмент пути страницы или короткого адреса: не пустой, без разделителей, не «.»/«..».
 const badSegment = (s: string): boolean => !s || /[\\/]/.test(s) || s === '.' || s === '..';
 const badSegments = (segments: string[]): boolean => !segments.length || segments.some(badSegment);
@@ -39,6 +32,13 @@ const badSegments = (segments: string[]): boolean => !segments.length || segment
  */
 export const isLinkSegment = (s: string): boolean => !badSegment(s) && !/[#?]/.test(s);
 
+/**
+ * Добавляет виртуальную страницу в дерево сборки: считает `dir`/`level`/`parent` как
+ * scan (dir = ROOT_FOLDER/сегменты), дополняет `descendants` родителя, вставляет в конец
+ * поддерева родителя; недостающие промежуточные сегменты создаёт пустыми узлами
+ * (авто-заголовок, как папка без README). Каталог в dist создаётся здесь же — compose
+ * пишет страницы без mkdir, полагаясь на scan.
+ */
 export const addPage = (tree: TreeItem[], options: BuildOptions, page: PageSpec): TreeItem => {
     const segments = page.path;
     if (badSegments(segments)) throw new Error(`addPage: invalid page path ${JSON.stringify(segments)}`);
@@ -114,6 +114,14 @@ export const addPage = (tree: TreeItem[], options: BuildOptions, page: PageSpec)
  */
 export type Redirects = Map<string, string>;
 
+/**
+ * Ссылка на страницу сайта от корня (без ведущего «/»): так же строится sidebar, а docsify без
+ * relativePath резолвит ссылки от корня сайта. Сегменты — как у addPage; одна функция для
+ * сводок плагинов и переадресаций, чтобы ссылки не разъехались с путями страниц.
+ */
+export const pageLink = (segments: string[], options: BuildOptions): string =>
+    encodeURIPath(path.posix.join(...segments, options.WEB_FILE_NAME || segments[segments.length - 1]));
+
 /** Ключ карты переадресаций для короткого пути: `['change', 'x']` → `/change/x`. */
 export const redirectKey = (from: string[]): string => `/${encodeURIPath(from.join('/'))}`;
 
@@ -134,6 +142,5 @@ export const addRedirect = (
     const key = redirectKey(from);
     if (redirects.has(key))
         throw new Error(`addRedirect: redirect path ${from.join('/')} is already declared`);
-    const page = options.WEB_FILE_NAME || to[to.length - 1];
-    redirects.set(key, `/${encodeURIPath(path.posix.join(...to, page))}`);
+    redirects.set(key, `/${pageLink(to, options)}`);
 };

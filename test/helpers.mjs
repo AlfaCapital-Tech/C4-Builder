@@ -100,7 +100,11 @@ export const serveSite = (cwd, args, { env = process.env, onReady = async () => 
                 .then(() => resolve(out), reject)
                 .finally(() => child.kill('SIGTERM'));
         });
-        child.stderr.on('data', (d) => (out += d));
+        // stderr — в тот же поток для waitFor: предупреждения CLI (agent, --open-change) идут туда.
+        child.stderr.on('data', (d) => {
+            out += d;
+            check();
+        });
         child.on('exit', (code) => {
             clearTimeout(done);
             if (!ready)

@@ -24,6 +24,41 @@ export const mapOutsideFences = (md: string, fn: (text: string) => string): stri
     return out + fn(md.slice(last));
 };
 
+// Пункт списка: продолжение пункта с отступом — абзац списка, а не блок кода с отступом.
+const LIST_ITEM_RE = /^[ \t]*(?:[-*+]|\d+[.)])[ \t]/;
+// Code span CommonMark: серия обратных кавычек и закрывающая серия той же длины.
+const CODE_SPAN_RE = /(`+)[^`][\s\S]*?(?<!`)\1(?!`)/g;
+
+/**
+ * Применить fn к каждой строке прозы: fenced-блоки и блоки кода с отступом (≥4 пробела или
+ * таб после пустой строки, не продолжение пункта списка) не трогаются, code span внутри
+ * строки на время вызова fn подменяется заглушкой из символов Private Use — так переписывание
+ * ссылок не заденет пример кода, а проверка «ссылка одна на строке» видит, что строка не пуста.
+ */
+export const mapOutsideCode = (md: string, fn: (line: string) => string): string =>
+    mapOutsideFences(md, (text) => {
+        let inCode = false;
+        let prevBlank = true;
+        let inList = false;
+        return text
+            .split('\n')
+            .map((line) => {
+                const blank = !line.trim();
+                const indented = /^(?: {4}|\t)/.test(line);
+                if (inCode && (blank || indented)) return line;
+                inCode = !blank && indented && prevBlank && !inList;
+                prevBlank = blank;
+                if (inCode) return line;
+                if (LIST_ITEM_RE.test(line)) inList = true;
+                else if (!blank && !/^[ \t]/.test(line)) inList = false;
+                const spans: string[] = [];
+                const masked = line.replace(CODE_SPAN_RE, (span) => `\uE000${spans.push(span) - 1}\uE001`);
+                if (!spans.length) return fn(line);
+                return fn(masked).replace(/\uE000(\d+)\uE001/g, (_, i: string) => spans[Number(i)]);
+            })
+            .join('\n');
+    });
+
 /**
  * Экстрактор диаграмм одной страницы; извлекаются только блоки языков `langs` (из
  * plantuml/puml/d2/mermaid), остальные остаются кодом. Имя файла — `<base>-<sha1 контента>`: не

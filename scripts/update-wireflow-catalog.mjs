@@ -41,6 +41,10 @@ const cleanSvg = (svg) =>
         .trim()}\n`;
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'wireflow-catalog-'));
+// Новый каталог собирается рядом с прежним и подменяет его только после всех проверок:
+// ошибка на середине (нет файла шаблона, размера) не должна оставить пакет без каталога.
+// Рядом, а не в tmp: rename между файловыми системами невозможен (EXDEV).
+const staging = fs.mkdtempSync(path.join(path.dirname(TARGET), '.wireflow-'));
 try {
     const url = `https://codeload.github.com/${REPO}/tar.gz/${sha}`;
     console.log(`downloading ${url}`);
@@ -60,8 +64,7 @@ try {
     const sizes = JSON.parse(fs.readFileSync(path.join(tmp, 'lib', 'graphic-sizes.json'), 'utf8'));
     if (!Array.isArray(graphics) || !graphics.length) throw new Error('lib/graphics.json: no graphics');
 
-    fs.rmSync(TARGET, { recursive: true, force: true });
-    fs.mkdirSync(path.join(TARGET, 'graphics'), { recursive: true });
+    fs.mkdirSync(path.join(staging, 'graphics'), { recursive: true });
     let copied = 0;
     for (const g of graphics) {
         // src вида /graphics/<category>/<slug>.svg — тот же относительный путь в каталоге.
@@ -69,16 +72,21 @@ try {
         const from = path.join(tmp, 'public', rel);
         if (!fs.existsSync(from)) throw new Error(`${g.id}: ${g.src} is missing in the archive`);
         if (typeof sizes[g.id] !== 'number') throw new Error(`${g.id}: no entry in lib/graphic-sizes.json`);
-        const to = path.join(TARGET, rel);
+        const to = path.join(staging, rel);
         fs.mkdirSync(path.dirname(to), { recursive: true });
         fs.writeFileSync(to, cleanSvg(fs.readFileSync(from, 'utf8')));
         copied++;
     }
-    fs.copyFileSync(path.join(tmp, 'lib', 'graphics.json'), path.join(TARGET, 'graphics.json'));
-    fs.copyFileSync(path.join(tmp, 'lib', 'graphic-sizes.json'), path.join(TARGET, 'graphic-sizes.json'));
-    fs.copyFileSync(path.join(tmp, 'LICENSE'), path.join(TARGET, 'LICENSE'));
-    fs.writeFileSync(path.join(TARGET, 'VERSION'), `${sha}\n`);
+    fs.copyFileSync(path.join(tmp, 'lib', 'graphics.json'), path.join(staging, 'graphics.json'));
+    fs.copyFileSync(path.join(tmp, 'lib', 'graphic-sizes.json'), path.join(staging, 'graphic-sizes.json'));
+    fs.copyFileSync(path.join(tmp, 'LICENSE'), path.join(staging, 'LICENSE'));
+    fs.writeFileSync(path.join(staging, 'VERSION'), `${sha}\n`);
+    // mkdtemp создаёт 0700 — без chmod каталог в docker-образе (USER node) не читается.
+    fs.chmodSync(staging, 0o755);
+    fs.rmSync(TARGET, { recursive: true, force: true });
+    fs.renameSync(staging, TARGET);
     console.log(`vendor/wireflow: ${copied} graphics, VERSION ${sha}`);
 } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
+    fs.rmSync(staging, { recursive: true, force: true });
 }
