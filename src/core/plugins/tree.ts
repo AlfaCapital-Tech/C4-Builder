@@ -21,6 +21,10 @@ const subtreeEnd = (tree: TreeItem[], parent: TreeItem): number => {
     return i;
 };
 
+// Сегменты пути страницы или короткого адреса: не пустые, без разделителей, не «.»/«..».
+const badSegments = (segments: string[]): boolean =>
+    !segments.length || segments.some((s) => !s || /[\\/]/.test(s) || s === '.' || s === '..');
+
 /**
  * Добавляет виртуальную страницу в дерево сборки: считает `dir`/`level`/`parent` как
  * scan (dir = ROOT_FOLDER/сегменты), дополняет `descendants` родителя, вставляет в конец
@@ -28,10 +32,6 @@ const subtreeEnd = (tree: TreeItem[], parent: TreeItem): number => {
  * (авто-заголовок, как папка без README). Каталог в dist создаётся здесь же — compose
  * пишет страницы без mkdir, полагаясь на scan.
  */
-// Сегменты пути страницы или короткого адреса: не пустые, без разделителей, не «.»/«..».
-const badSegments = (segments: string[]): boolean =>
-    !segments.length || segments.some((s) => !s || /[\\/]/.test(s) || s === '.' || s === '..');
-
 export const addPage = (tree: TreeItem[], options: BuildOptions, page: PageSpec): TreeItem => {
     const segments = page.path;
     if (badSegments(segments)) throw new Error(`addPage: invalid page path ${JSON.stringify(segments)}`);
