@@ -696,9 +696,27 @@ describe('плагин openspec: файлы диаграмм в артефакт
                     '![I](imp.d2)',
                     '![T](titled.mmd "Titled")',
                     "![S](sized.mmd ':size=600')",
+                    // экспорт редактора Wireflow называется `wireflow.json` — два из разных папок
+                    '![W1](a/wireflow.json)',
+                    '![W2](b/wireflow.json)',
+                    // fenced-блок импортирует соседний файл артефакта
+                    '```d2\n...@lib\nfenced -> imported\n```',
                     ''
                 ].join('\n\n')
             );
+            const flow = fs.readFileSync(
+                path.join(
+                    import.meta.dirname,
+                    '..',
+                    'template',
+                    'src',
+                    '7 Wireflow Example',
+                    'checkout.wireflow.json'
+                ),
+                'utf8'
+            );
+            write(c, 'a/wireflow.json', flow);
+            write(c, 'b/wireflow.json', flow);
             write(c, 'flow.d2', 'fromD2 -> other\n');
             write(c, 'flow.mmd', 'flowchart LR\n  A[fromMermaid] --> B\n');
             write(c, 'ctx.puml', '@startuml\n!include styles.iuml\nAlice -> Bob\n@enduml\n');
@@ -737,6 +755,12 @@ describe('плагин openspec: файлы диаграмм в артефакт
             expect(readD('OpenSpec/Changes/dig-3/design/seq.svg')).toContain('topSeq');
             expect(readD(`OpenSpec/Changes/dig-3/design/${hashed}`)).toContain('backSeq');
             expect(out).not.toContain("collision 'seq.svg'");
+        });
+
+        it('два wireflow.json из разных папок — две картинки, сборка не падает', () => {
+            const page = readD('OpenSpec/Changes/dig-3/dig-3.md');
+            expect(page).toContain('![diagram](wireflow.svg)');
+            expect(page).toMatch(/!\[diagram\]\([0-9a-f]{8}-wireflow\.svg\)/);
         });
 
         it('!include PlantUML и импорт D2 находят соседние файлы', () => {

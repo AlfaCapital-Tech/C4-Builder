@@ -7,7 +7,7 @@ import chalk from 'chalk';
 import type { BuildOptions } from '../../config/options.ts';
 import type { PageDiagram } from '../../core/plugins/types.ts';
 import { createFenceExtractor, mapOutsideFences } from '../../core/scan/fences.ts';
-import { diagramOutputName, engineForFile } from '../../core/scan/tree.ts';
+import { diagramBaseName, diagramExt, diagramOutputName, engineForFile } from '../../core/scan/tree.ts';
 import { encodeURIPath } from '../../util/utils.ts';
 import { groupNames, type Layout, pageOrder } from './layout.ts';
 import type { Artifact, Change, Spec, Store } from './scan.ts';
@@ -240,8 +240,12 @@ export const renderMarkdown = (
     }
 ): RenderedPage => {
     const extracted = createFenceExtractor(FENCE_LANGS).extract(content, base, source);
-    // Имя fenced-блока — хэш содержимого: совпадение имени означает тот же блок.
-    for (const d of extracted.diagrams) if (!diagrams.some((x) => x.file === d.file)) diagrams.push(d);
+    // Имя fenced-блока — хэш содержимого: совпадение имени означает тот же блок. origin — в папке
+    // исходника: `!include` и импорты D2 блока ищутся рядом с файлом, а не в папке страницы,
+    // которой на диске нет (сам файл с этим именем не нужен — контент берётся из блока).
+    for (const d of extracted.diagrams)
+        if (!diagrams.some((x) => x.file === d.file))
+            diagrams.push({ ...d, origin: path.join(srcRoot, fromDir, d.file) });
     const files: PageFile[] = [];
     const sources: string[] = source ? [source] : [];
     const rewrite = (t: string): string =>
@@ -256,7 +260,8 @@ export const renderMarkdown = (
                 return whole; // битый %-escape — не ссылка на файл, оставляем как есть
             }
             const rel = path.posix.normalize(path.posix.join(fromDir, decoded));
-            if (rel.startsWith('../')) return whole;
+            // `\` — разделитель на Windows: `..\x.puml` прошёл бы проверку выхода за папку.
+            if (rel.startsWith('../') || decoded.includes('\\')) return whole;
             const page = target(rel);
             if (page)
                 return `${bang}[${inner}](${pageLink(page, options)}${hash ? `?id=${hash}` : ''}${title})`;
@@ -283,7 +288,9 @@ export const renderMarkdown = (
                         // Картинки страницы лежат в одной папке выхода: одноимённые файлы из разных
                         // папок (подфайл `:include`) и `flow.d2` + `flow.mmd` рядом дали бы один
                         // `flow.svg`. Второй получает имя с хэшем пути — показываются обе.
-                        diagram.file = `${createHash('sha1').update(rel).digest('hex').slice(0, 8)}-${name}`;
+                        // Хэш — перед суффиксом движка: `wireflow.json` → `<хэш>-wireflow.wireflow.json`,
+                        // а не `<хэш>-wireflow.json`, у которого движок уже не определяется.
+                        diagram.file = `${createHash('sha1').update(rel).digest('hex').slice(0, 8)}-${diagramBaseName(name)}${diagramExt(name)}`;
                         // Рядом лежащие файлы с одним именем выхода в папке проекта — ошибка
                         // `Output name collision`; здесь сборка не падает (как и на битой
                         // диаграмме артефакта), но о путанице предупреждаем.
