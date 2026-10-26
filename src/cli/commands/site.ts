@@ -296,6 +296,10 @@ export default (
             const host = localHost(req);
             return !!host && req.get('origin') === `http://${host}`;
         };
+        // Запрос команды `c4builder feedback`, а не страницы: нестандартный заголовок вынуждает
+        // браузер к preflight, на который сервер не отвечает (design D6), Origin у неё нет.
+        const fromFeedbackCommand = (req: express.Request): boolean =>
+            !!localHost(req) && !req.get('origin') && req.get(FEEDBACK_HEADER) === '1';
         // Общая часть POST/DELETE: проверка Origin и исходный файл страницы из тела запроса.
         // Ошибка уже отправлена клиенту, когда возвращается undefined.
         const resolveTarget = (
@@ -456,7 +460,7 @@ export default (
         // Нестандартный заголовок вынуждает браузер к preflight, на который сервер не отвечает:
         // чужая страница не может ни прочитать, ни «съесть» очередь простым запросом (design D6).
         app.get(`${FEEDBACK_PATH}/next`, (req, res) => {
-            if (!localHost(req) || req.get('origin') || req.get(FEEDBACK_HEADER) !== '1') {
+            if (!fromFeedbackCommand(req)) {
                 res.status(403).json({ error: 'feedback is served only to the c4builder feedback command' });
                 return;
             }
@@ -524,7 +528,7 @@ export default (
         // feedback --as <name>` печатает его в stderr. Защита — как у /next: чужой странице
         // список change'ей ни к чему.
         app.get(PAGE_PATH, (req, res) => {
-            if (!localHost(req) || req.get('origin') || req.get(FEEDBACK_HEADER) !== '1') {
+            if (!fromFeedbackCommand(req)) {
                 res.status(403).json({ error: 'served only to the c4builder feedback command' });
                 return;
             }
