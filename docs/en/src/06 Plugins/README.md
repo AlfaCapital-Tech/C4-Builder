@@ -199,8 +199,12 @@ link.
   only `node-id` is kept from the query, tracking `t=`, `p=` are dropped. Any other link or a
   repeated frame name is an error before the build starts, naming the frame index. Without `frames`
   there is no section — the plugin only embeds in pages (`"plugins": ["openspec", "figma"]`).
-- `/` in a name makes a nested subsection: `Mobile/Login` is the page `Login` under `Mobile`. The
-  summary lists pages in the order of `frames`.
+- `/` in a name makes a nested subsection: `Mobile/Login` is the page `Login` under `Mobile`.
+  Spaces around `/` are ignored: `Mobile / Login` and `Mobile/Home` share one subsection `Mobile`,
+  and `Mobile / Login` next to `Mobile/Login` is a repeated name. A name segment cannot be empty,
+  `.` or `..` or contain `#`, `?` or `\` — the sidebar link to such a page would not open; this is
+  an error before the build starts, naming the frame index and name. The summary lists pages in the
+  order of `frames`.
 - `description` is markdown shown above the link; its first line goes to the summary.
 - The embed shows the file only to readers who have access to it: share the file as "Anyone with
   the link can view", or expect the reader to sign in to Figma inside the iframe.

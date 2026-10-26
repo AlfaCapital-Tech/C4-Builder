@@ -89,7 +89,8 @@ their relative layout, so relative `$ref`s keep working. Archive download fails 
 
 One page per frame listed in the options (a live `embed.figma.com` iframe with an
 `Open in Figma` link above it) plus a summary in list order. `name` with `/` nests
-(`Mobile/Login`). `url` is the Figma "Share" link
+(`Mobile/Login`; spaces around `/` are trimmed, so `Mobile / Login` is the same page); a name
+segment that is empty, `.`, `..` or contains `#`, `?` or `\` fails before the build. `url` is the Figma "Share" link
 `https://www.figma.com/<design|file|proto|board|slides|deck>/<key>/<name>?node-id=…`; it is
 normalised at load (`file` → `design`, only `node-id` kept), and a non-Figma link or a duplicate
 name fails before the build. `frames` is optional. An image link to Figma on a line of its own

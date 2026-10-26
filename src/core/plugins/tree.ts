@@ -28,9 +28,16 @@ const subtreeEnd = (tree: TreeItem[], parent: TreeItem): number => {
  * (авто-заголовок, как папка без README). Каталог в dist создаётся здесь же — compose
  * пишет страницы без mkdir, полагаясь на scan.
  */
-// Сегменты пути страницы или короткого адреса: не пустые, без разделителей, не «.»/«..».
-const badSegments = (segments: string[]): boolean =>
-    !segments.length || segments.some((s) => !s || /[\\/]/.test(s) || s === '.' || s === '..');
+// Сегмент пути страницы или короткого адреса: не пустой, без разделителей, не «.»/«..».
+const badSegment = (s: string): boolean => !s || /[\\/]/.test(s) || s === '.' || s === '..';
+const badSegments = (segments: string[]): boolean => !segments.length || segments.some(badSegment);
+
+/**
+ * Сегмент, годный и для addPage, и для ссылки: `#` и `?` encodeURI не кодирует — ссылка в
+ * sidebar или короткий адрес оборвались бы на якоре или запросе. Плагинам — для проверки
+ * значений из опций и метаданных, которые становятся сегментами пути страницы.
+ */
+export const isLinkSegment = (s: string): boolean => !badSegment(s) && !/[#?]/.test(s);
 
 export const addPage = (tree: TreeItem[], options: BuildOptions, page: PageSpec): TreeItem => {
     const segments = page.path;
@@ -120,7 +127,7 @@ export const addRedirect = (
     from: string[],
     to: string[]
 ): void => {
-    if (badSegments(from) || from.some((s) => /[#?]/.test(s)))
+    if (!from.length || !from.every(isLinkSegment))
         throw new Error(`addRedirect: invalid redirect path ${JSON.stringify(from)}`);
     if (badSegments(to)) throw new Error(`addRedirect: invalid page path ${JSON.stringify(to)}`);
     const key = redirectKey(from);

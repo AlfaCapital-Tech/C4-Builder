@@ -25,7 +25,9 @@ const FRAMES = [
         description: 'First launch\n\nSecond paragraph.'
     },
     { name: 'Checkout', url: 'https://www.figma.com/file/AbC123xyz/App' },
-    { name: 'Mobile/Login', url: 'https://www.figma.com/proto/PrO456/Flow?node-id=1-2&scaling=fit' }
+    // Пробелы вокруг `/` не входят в сегмент: оба фрейма — в одном разделе Mobile.
+    { name: 'Mobile / Login', url: 'https://www.figma.com/proto/PrO456/Flow?node-id=1-2&scaling=fit' },
+    { name: 'Mobile/Home', url: 'https://www.figma.com/design/PrO456/Flow?node-id=3-4' }
 ];
 
 const write = (root, rel, content) => {
@@ -70,12 +72,14 @@ beforeAll(async () => {
 afterAll(() => fs.rmSync(dir, { recursive: true, force: true }));
 
 describe('плагин figma', () => {
-    it('раздел Figma: сводка в порядке списка, вложенный Mobile/Login — подраздел', () => {
-        expect(read('_sidebar.md')).toContain(
-            '  * [Figma](Figma/Figma)\n    * [Onboarding](Figma/Onboarding/Onboarding)\n    * [Checkout](Figma/Checkout/Checkout)\n    * [Mobile](Figma/Mobile/Mobile)\n      * [Login](Figma/Mobile/Login/Login)'
+    it('раздел Figma: сводка в порядке списка, Mobile / Login и Mobile/Home — один подраздел', () => {
+        const sidebar = read('_sidebar.md');
+        expect(sidebar).toContain(
+            '  * [Figma](Figma/Figma)\n    * [Onboarding](Figma/Onboarding/Onboarding)\n    * [Checkout](Figma/Checkout/Checkout)\n    * [Mobile](Figma/Mobile/Mobile)\n      * [Login](Figma/Mobile/Login/Login)\n      * [Home](Figma/Mobile/Home/Home)'
         );
+        expect(sidebar).not.toContain('Mobile%20');
         expect(read('Figma/Figma.md')).toContain(
-            '- [Onboarding](Figma/Onboarding/Onboarding) — First launch\n- [Checkout](Figma/Checkout/Checkout)\n- [Mobile/Login](Figma/Mobile/Login/Login)'
+            '- [Onboarding](Figma/Onboarding/Onboarding) — First launch\n- [Checkout](Figma/Checkout/Checkout)\n- [Mobile / Login](Figma/Mobile/Login/Login)\n- [Mobile/Home](Figma/Mobile/Home/Home)'
         );
     });
 
@@ -102,7 +106,7 @@ describe('плагин figma', () => {
         expect(fs.existsSync(path.join(dir, 'docs/vendor/plugins/figma'))).toBe(false);
         expect(
             log.match(
-                /figma: 3 frame page\(s\), 2 embed\(s\) in pages load embed\.figma\.com — readers need network access to Figma/g
+                /figma: 4 frame page\(s\), 2 embed\(s\) in pages load embed\.figma\.com — readers need network access to Figma/g
             )
         ).toHaveLength(1);
         expect(log).not.toContain('requires executeScript');
@@ -197,6 +201,56 @@ describe('плагин figma: ошибки схемы (до старта сбо�
         await expect(load({ frames: [frame('https://www.figma.com/design/K/A', '/a')] })).rejects.toThrow(
             /empty segment/
         );
+        await expect(load({ frames: [frame('https://www.figma.com/design/K/A', 'a/ /b')] })).rejects.toThrow(
+            /frames\.0\.name — empty segment in frame name "a\/ \/b"/
+        );
+    });
+
+    it('дубль после trim сегментов — ошибка с обоими именами', async () => {
+        await expect(
+            load({
+                frames: [
+                    frame('https://www.figma.com/design/K/A', 'Mobile/Login'),
+                    frame('https://www.figma.com/board/B', ' Mobile / Login ')
+                ]
+            })
+        ).rejects.toThrow(
+            /frames\.1\.name — duplicate frame name " Mobile \/ Login " \(same page as "Mobile\/Login"\)/
+        );
+    });
+
+    it('сегмент с #, ?, \\, . или .. — ошибка с индексом и именем фрейма', async () => {
+        for (const [name, seg] of [
+            ['Screen #2', 'Screen #2'],
+            ['Search?v2', 'Search?v2'],
+            ['Flows/../Checkout', '..'],
+            ['Flows / . / Checkout', '.'],
+            ['Flows/a\\b', 'a\\b']
+        ]) {
+            await expect(
+                load({
+                    frames: [
+                        frame('https://www.figma.com/design/K/A'),
+                        frame('https://www.figma.com/design/K/B', name)
+                    ]
+                })
+            ).rejects.toThrow(
+                `plugins[0] figma: frames.1.name — invalid segment "${seg}" in frame name "${name}": a segment cannot be "." or ".." or contain "#", "?" or "\\"`
+            );
+        }
+    });
+
+    it('trim сегментов: Mobile / Login и Mobile/Home — сегменты без пробелов', async () => {
+        const [{ opts: o }] = await load({
+            frames: [
+                frame('https://www.figma.com/design/K/A', ' Mobile / Login '),
+                frame('https://www.figma.com/design/K/B', 'Mobile/Home')
+            ]
+        });
+        expect(o.frames.map((f) => f.segments)).toEqual([
+            ['Mobile', 'Login'],
+            ['Mobile', 'Home']
+        ]);
     });
 
     it('нормализация: все типы, embed.figma.com, figma.com без www, node-id сохраняется', async () => {
