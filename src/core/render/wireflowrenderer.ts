@@ -179,12 +179,11 @@ const RESAVE = 'open and re-save the file in the current Wireflow editor (wirefl
 
 export interface Parsed {
     diagram: WireflowDiagram;
-    warnings: string[];
 }
 
 // Разбор файла с проверкой структуры (design §7): все нарушения собираются в одну ошибку с id
 // элементов. Неизвестные поля игнорируются — формат молодой и растёт. Неизвестный шаблон и
-// картинка не из файла — предупреждения, не ошибки (карточка-заглушка).
+// картинка не из файла — предупреждения рендера (cardImage), не ошибки разбора.
 export const parseWireflow = (text: string, file: string): Parsed => {
     const fail = (...problems: string[]): never => {
         throw new WireflowError(file, problems);
@@ -218,7 +217,6 @@ export const parseWireflow = (text: string, file: string): Parsed => {
     if (!Array.isArray(rawEdges)) return fail('"diagram.edges" must be an array');
 
     const problems: string[] = [];
-    const warnings: string[] = [];
     const ids = new Set<string>();
     const nodes: WireflowNode[] = [];
     const parents = new Map<string, string>();
@@ -362,7 +360,7 @@ export const parseWireflow = (text: string, file: string): Parsed => {
     });
 
     if (problems.length) fail(...problems);
-    return { diagram: { nodes, edges }, warnings };
+    return { diagram: { nodes, edges } };
 };
 
 // --- раскладка ----------------------------------------------------------------------------
@@ -737,7 +735,8 @@ export interface Rendered {
  * рамка всех элементов с полями экспорта редактора, фон белый.
  */
 export const renderWireflowSvg = (source: string, file: string, options: RenderOptions = {}): Rendered => {
-    const { diagram, warnings } = parseWireflow(source, file);
+    const { diagram } = parseWireflow(source, file);
+    const warnings: string[] = [];
     const boxes = layoutWireflow(diagram);
     const bounds: Bounds = { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity };
     for (const b of boxes.values()) {

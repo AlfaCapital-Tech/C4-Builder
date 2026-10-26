@@ -135,7 +135,7 @@ describe('реестр движков по суффиксу', () => {
 describe('разбор и валидация', () => {
     it('версии 2–4 принимаются, settings и неизвестные поля игнорируются', () => {
         for (const v of [2, 3, 4]) {
-            const { diagram, warnings } = parseWireflow(
+            const { diagram } = parseWireflow(
                 JSON.stringify({
                     format: 'wireflow',
                     version: v,
@@ -149,7 +149,6 @@ describe('разбор и валидация', () => {
                 'x.wireflow.json'
             );
             expect(diagram.nodes).toHaveLength(1);
-            expect(warnings).toEqual([]);
         }
         expect(WIREFLOW_VERSIONS).toEqual({ min: 2, max: 4 });
     });
