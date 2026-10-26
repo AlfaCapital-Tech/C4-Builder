@@ -3,7 +3,7 @@
 User-facing changes of C4-Builder. Every pull request that changes behaviour adds a line to
 `## Unreleased`; the release commit renames it to `## vX.Y.Z`.
 
-## Unreleased
+## v0.10.0
 
 - The `figma` plugin embeds Figma right inside pages: an image link to Figma on a line of its own
   (`![Payment screen](https://www.figma.com/design/<key>/<name>?node-id=…)`) in a project page or an
