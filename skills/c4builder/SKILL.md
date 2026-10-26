@@ -39,7 +39,8 @@ How the source tree becomes pages:
 - All `.md` files of a folder are concatenated into its page.
 - Every `.puml` / `.d2` / `.bpmn` / `.mmd` / `.wireflow.json` in a folder is rendered and attached to the page (on top by
   default, `diagramsOnTop`), unless the markdown places it explicitly with
-  `![name](container.puml)` — then it appears exactly there.
+  `![name](container.puml)` — then it appears exactly there (a quoted title such as
+  `':size=600'` is kept on the image).
 - Files and folders starting with `_` are skipped (use it for shared libraries and drafts);
   `CLAUDE.md` is skipped too. Other files (images, `.iuml`) are copied next to the page —
   keep their names unique across the project.

@@ -50,7 +50,12 @@ folder.
 - An image link to a diagram file next to an artifact — `![Flow](flow.wireflow.json)`,
   `![](context.puml)`, `.d2`, `.bpmn`, `.mmd` — is rendered as a diagram, like a block in the text:
   the page shows the picture, the source is not copied to the output, a broken file gets a
-  placeholder and a warning.
+  placeholder and a warning. PlantUML `!include` and D2 imports resolve from the diagram's own
+  folder, as in the project folder; editing an included file re-renders the picture. The link
+  title (`![](flow.mmd ':size=600')`) is carried over to the picture. Same-named files from
+  different folders (e.g. from an `:include` subfile) give different pictures; `flow.d2` and
+  `flow.mmd` in one folder are both shown too, but the build warns about the name collision — in
+  the project folder such a pair would be an error.
 - In `-w` mode the store folder is watched too.
 - With `parentKey`, changes form a tree. A change whose `.openspec.yaml` key `parentKey` points at
   another change (e.g. `x-parent: dig-1-root`) gets a page under it: in the sidebar after the

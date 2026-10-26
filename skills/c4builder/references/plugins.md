@@ -30,6 +30,9 @@ artifacts and spec deltas as subpages), the specs tree and the archive. `plantum
 `mermaid` fenced blocks in artifacts and image links to diagram files next to them
 (`![](flow.wireflow.json)`, `.puml`, `.d2`, `.bpmn`, `.mmd`) are rendered by the local engines; a
 broken one gets a placeholder image and a warning naming the file instead of failing the build.
+`!include` / D2 imports of such files resolve from the file's own folder. Same-named diagram files
+from different folders get distinct images; `flow.d2` + `flow.mmd` in one folder both render but
+print an `Output name collision` warning — rename one.
 
 | Option | Default | Meaning |
 |---|---|---|
