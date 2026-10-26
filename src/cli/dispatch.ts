@@ -376,12 +376,21 @@ export default async () => {
         // протоколы не расходились. softErrors: упавшая диаграмма не кэшируется и упала бы на
         // каждом ребилде — обычная сборка оставила бы сайт без страниц, пока её не починят;
         // здесь она получает заглушку с ошибкой. Правки во время сборки — ещё один проход.
+        // failedRenders — упавшие за сессию: без изменений входа они не рендерятся снова (иначе
+        // каждая битая .puml — лишний JVM под локом на каждом ребилде). offThread: при живом
+        // dev-сервере BPMN и mermaid рендерятся в worker-потоке, сервер не замирает.
+        const failedRenders = new Map<string, string>();
+        const offThread = !!opts.site;
         // Ошибку сборки печатает и гасит (false): watch и сервер живы, прежний result в силе.
         const rebuild = async (): Promise<boolean> => {
             try {
                 do {
                     attemptedWatchBuild = false;
-                    result = await build(options, cacheConf, plugins, { softErrors: true });
+                    result = await build(options, cacheConf, plugins, {
+                        softErrors: true,
+                        failedRenders,
+                        offThread
+                    });
                 } while (attemptedWatchBuild);
                 return true;
             } catch (err) {
@@ -474,8 +483,10 @@ export default async () => {
         // в переменной, чтобы dev-сервер мог поднимать диаграммы открытой страницы в её голову.
         let pending: DiagramQueue | undefined;
         try {
+            const deferImages = !!(opts.site && opts.watch);
             result = await build(options, cacheConf, plugins, {
-                deferImages: !!(opts.site && opts.watch)
+                deferImages,
+                ...(deferImages ? { failedRenders, offThread } : {})
             });
             ({ pending } = result);
             // Правка во время первой сборки: watch только взвёл attemptedWatchBuild — ребилд

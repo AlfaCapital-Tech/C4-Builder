@@ -14,8 +14,18 @@ export const X_HEIGHT = 0.516;
 
 const widthMemo = new Map<string, number>();
 
+// Символы, запрещённые в XML 1.0: управляющие C0, кроме \t \n \r, U+FFFE/U+FFFF и одиночные
+// суррогаты (JSON.parse пропускает их из `\uD800`). resvg на любом из них отвергает весь SVG.
+// biome-ignore lint/suspicious/noControlCharactersInRegex: управляющие символы — ровно то, что ищем
+const INVALID_XML_RE = /[\0-\x08\x0B\x0C\x0E-\x1F\uFFFE\uFFFF]|\p{Cs}/gu;
+
+export const stripInvalidXml = (s: string): string => s.replace(INVALID_XML_RE, '');
+
+// Вырезание недопустимых символов — здесь, а не у вызывающих: этой же функцией текст идёт и
+// в замер (inkWidth), и в выход, поэтому ширина всегда считается по той строке, что попадёт
+// в SVG, и ни один текст не может сделать SVG невалидным.
 export const escapeXml = (s: string): string =>
-    s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c] as string);
+    stripInvalidXml(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c] as string);
 
 const inkWidth = (text: string, size: number, bold: boolean): number => {
     const { Resvg } = getResvg();

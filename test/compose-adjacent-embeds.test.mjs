@@ -4,6 +4,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { diagramRefRegex } from './dist.mjs';
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.join(__dirname, '..');
 const CLI = path.join(REPO_ROOT, 'dist', 'index.js');
@@ -91,5 +93,26 @@ describe('issue #12: соседние ссылки на диаграммы', () 
         const upper = readme.indexOf('## Upper');
         expect(readme.indexOf('![diagram](', upper)).toBeGreaterThan(upper);
         expect(readme.slice(0, readme.indexOf('## Section'))).not.toContain('![diagram](');
+    });
+});
+
+describe('diagramRefRegex: ссылка на диаграмму с title', () => {
+    const refs = (md) => [...md.matchAll(diagramRefRegex())].map((m) => [m[1], m[2]]);
+
+    it('title в двойных и одинарных кавычках — путь и title отдельно', () => {
+        expect(refs('![x](flow.mmd "T (draft)")')).toEqual([['flow.mmd', '"T (draft)"']]);
+        expect(refs("![x](a/flow.puml ':size=600')")).toEqual([['a/flow.puml', "':size=600'"]]);
+        expect(refs('![x](wireflow.json "W")')).toEqual([['wireflow.json', '"W"']]);
+    });
+
+    it('без title — как раньше; две ссылки на строке не склеиваются', () => {
+        expect(refs('![a](a.puml "A") and ![b](b.d2)')).toEqual([
+            ['a.puml', '"A"'],
+            ['b.d2', undefined]
+        ]);
+    });
+
+    it('незакавыченный хвост — не title, ссылка не диаграмма', () => {
+        expect(refs('![x](flow.mmd lol)')).toEqual([]);
     });
 });

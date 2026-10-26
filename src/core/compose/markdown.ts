@@ -11,6 +11,7 @@ import { VENDOR_DIR } from '../../util/paths.ts';
 import {
     getFolderName,
     diagramBaseName,
+    diagramEntryPath,
     diagramOutputFormat,
     DIAGRAM_ENGINES,
     engineSupportsRemote,
@@ -26,7 +27,13 @@ import type { BuildOptions } from '../../config/options.ts';
 import type { Redirects } from '../plugins/tree.ts';
 
 // Стратегия подстановки диаграммы в markdown (embed/link/img) — задаётся вызывающим.
-type GetDiagram = (item: TreeItem, diagram: Diagram, options: BuildOptions) => Promise<string>;
+// title — title ссылки на диаграмму (`"T"`, `':size=600'`), если был: переносится на картинку.
+type GetDiagram = (
+    item: TreeItem,
+    diagram: Diagram,
+    options: BuildOptions,
+    title?: string
+) => Promise<string>;
 
 // docsifyTemplate можно переопределить пользовательским шаблоном (см. generateWebMD),
 // поэтому это mutable-локаль, а не const-импорт; user-шаблон грузим синхронно через createRequire.
@@ -65,14 +72,19 @@ const diagramNameAlternation = (): string =>
         .map((e) => escapeRe(e.ext.slice(1)))
         .join('|');
 
-// Ссылка на диаграмму в markdown: ![alt](path.puml|d2). Путь ленивый и не пересекает ')',
-// иначе две ссылки на одной строке склеились бы в один матч и не заменились. Свежий объект
-// на вызов — чтобы matchAll не тянул чужой lastIndex. Без учёта регистра: scan считает
-// `C.PUML` диаграммой (engineForFile), значит и ссылка на неё должна находиться.
-const diagramRefRegex = (): RegExp => {
+// Ссылка на диаграмму в markdown: ![alt](path.puml|d2) и с title в кавычках —
+// `![alt](x.puml "T")`, `![alt](x.puml ':size=600')` (группа 2). Путь ленивый и не пересекает ')',
+// иначе две ссылки на одной строке склеились бы в один матч и не заменились; title — только
+// в кавычках, как в CommonMark: `(x.puml lol)` ссылкой не считается. Без учёта регистра: scan
+// считает `C.PUML` диаграммой (engineForFile), значит и ссылка на неё должна находиться.
+// Свежий объект на вызов — чтобы matchAll не тянул чужой lastIndex.
+export const diagramRefRegex = (): RegExp => {
     const names = diagramNameAlternation();
     const byName = names ? `|(?:[^)]*/)?(?:${names})` : '';
-    return new RegExp(`!\\[.*?\\]\\(([^)]*?\\.(?:${diagramExtAlternation()})${byName})\\)`, 'gi');
+    return new RegExp(
+        `!\\[.*?\\]\\(([^)]*?\\.(?:${diagramExtAlternation()})${byName})(?:\\s+("[^"\\n]*"|'[^'\\n]*'))?\\)`,
+        'gi'
+    );
 };
 
 // Кеш base64 отрендеренных диаграмм на время ОДНОЙ сборки: один файл читают все три
@@ -108,7 +120,8 @@ const buildDiagramMarkdown = async (
     item: TreeItem,
     diagram: Diagram,
     options: BuildOptions,
-    variant: 'page' | 'complete'
+    variant: 'page' | 'complete',
+    title?: string
 ): Promise<string> => {
     const isComplete = variant === 'complete';
     const name = diagramBaseName(diagram.dir);
@@ -138,18 +151,21 @@ const buildDiagramMarkdown = async (
             ? encodeURIPath(path.join(item.dir.replace(options.ROOT_FOLDER, ''), rawPath))
             : diagramUrl;
 
+    // Title ссылки-исходника (`"T"`, docsify `':size=600'`) переносится на картинку.
+    const titleSuffix = title ? ` ${title}` : '';
     if (options.EMBED_DIAGRAM) {
         const imgContent = options.GENERATE_LOCAL_IMAGES
             ? await readDiagramBase64(
                   path.join(options.DIST_FOLDER, item.dir.replace(options.ROOT_FOLDER, ''), rawPath)
               )
             : await readRemoteDiagramBase64(diagramUrl);
-        const diagramImage = `\n![${name}](data:${getMime(format)};base64,${imgContent})\n`;
+        const diagramImage = `\n![${name}](data:${getMime(format)};base64,${imgContent}${titleSuffix})\n`;
         const diagramLink = `${isComplete ? '\n' : ''}[Download ${name} diagram](${localHref} ':ignore')`;
         return diagramImage + diagramLink;
     }
 
-    const diagramImage = `![diagram](${localHref})`;
+    const diagramImage = `![diagram](${localHref}${titleSuffix})`;
+    // Ссылке «Go to …» title картинки (`:size=…` docsify) не нужен — только картинке.
     if (!options.INCLUDE_LINK_TO_DIAGRAM) return diagramImage;
     return `[Go to ${name} diagram](${localHref})`;
 };
@@ -178,7 +194,7 @@ const compileDocument = async (
             const diagram = item.diagrams.find((x) => x.dir === ref);
             if (!diagram) continue; // ссылка без соответствующей диаграммы — оставляем сырой markdown
             alreadyIncluded.push(ref);
-            result += content.slice(lastIndex, m.index) + (await getDiagram(item, diagram, options));
+            result += content.slice(lastIndex, m.index) + (await getDiagram(item, diagram, options, m[2]));
             lastIndex = m.index + m[0].length;
         }
         result += content.slice(lastIndex);
@@ -243,7 +259,7 @@ const compilePage = async (item: TreeItem, options: BuildOptions, chrome = ''): 
     const name = getFolderName(item.dir, options.ROOT_FOLDER, options.HOMEPAGE_NAME);
     const ownH1 = hasOwnH1(item);
     let MD = ownH1 ? '' : `# ${name}${chrome}`;
-    MD = await compileDocument(MD, item, options, (i, d, o) => buildDiagramMarkdown(i, d, o, 'page'));
+    MD = await compileDocument(MD, item, options, (i, d, o, t) => buildDiagramMarkdown(i, d, o, 'page', t));
     if (ownH1) MD = injectAfterFirstH1(MD, chrome);
     return MD.trimStart();
 };
@@ -283,7 +299,7 @@ export const generateCompleteMD = async (tree: TreeItem[], options: BuildOptions
     writeFile(
         path.join(options.DIST_FOLDER, `${options.PROJECT_NAME}.md`),
         // complete: ссылки на диаграммы префиксуются папкой элемента.
-        await composeComplete(tree, options, (i, d, o) => buildDiagramMarkdown(i, d, o, 'complete'))
+        await composeComplete(tree, options, (i, d, o, t) => buildDiagramMarkdown(i, d, o, 'complete', t))
     );
 
 // llms.txt (llmstxt.org): плоский список — парсеры читают строки `- [..](..)` от начала
@@ -339,12 +355,12 @@ export const generateLlmsFull = async (tree: TreeItem[], options: BuildOptions):
     for (const item of tree) {
         for (const diagram of item.diagrams) {
             const body = `${diagram.content}`;
+            const entry = diagramEntryPath(item, diagram);
             if (diagram.engine === 'd2') {
-                for (const [abs, content] of d2LocalImports(path.join(item.dir, diagram.dir), body))
-                    deps.set(abs, content);
+                for (const [abs, content] of d2LocalImports(entry, body)) deps.set(abs, content);
             } else if (diagram.engine === 'plantuml') {
-                for (const inc of collectIncludes(body, item.dir, item.dir, new Set()))
-                    deps.set(inc.abs, inc.content);
+                const dir = path.dirname(entry);
+                for (const inc of collectIncludes(body, dir, dir, new Set())) deps.set(inc.abs, inc.content);
             }
         }
     }

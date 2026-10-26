@@ -290,6 +290,68 @@ describe('плагин openapi: раскладка страниц по папк�
     });
 });
 
+describe('плагин openapi: формы записи спеки', () => {
+    let d;
+    let log;
+    const page = (rel) => fs.readFileSync(path.join(d, 'docs', rel), 'utf8');
+    beforeAll(() => {
+        d = makeFixture('forms', [['openapi', { dir: 'contracts', glob: 'forms/*.{yaml,json}' }]]);
+        write(d, 'contracts/forms/quoted.yaml', '"openapi": "3.0.3"\n"info":\n  "title": "Quoted API"\n');
+        write(d, 'contracts/forms/single.yaml', "'asyncapi': '2.6.0'\n'info':\n  'title': Single API\n");
+        write(
+            d,
+            'contracts/forms/flow.yaml',
+            '\uFEFF\n  {"openapi":"3.0.3","info":{"title":"Flow API"},"paths":{}}\n'
+        );
+        write(d, 'contracts/forms/plain.json', '{ "swagger": "2.0", "info": { "title": "Json API" } }');
+        write(
+            d,
+            'contracts/forms/crlf.yaml',
+            'openapi: 3.0.0\r\ninfo:\r\n  version: "1"\r\n  title: CRLF API\r\npaths: {}\r\n'
+        );
+        write(d, 'contracts/forms/broken.yaml', '{"openapi": "3.0.3",\n');
+        write(d, 'contracts/forms/broken.json', '{ "openapi": ');
+        log = runBuild(d);
+    });
+    afterAll(() => fs.rmSync(d, { recursive: true, force: true }));
+
+    it('ключ в кавычках, JSON в .yaml, .json и CRLF — спеки с заголовками в оглавлении', () => {
+        expect(page('API/forms/forms.md')).toBe(
+            [
+                '# forms',
+                '',
+                '- [crlf.yaml](API/forms/crlf/crlf) — CRLF API',
+                '- [flow.yaml](API/forms/flow/flow) — Flow API',
+                '- [plain.json](API/forms/plain/plain) — Json API',
+                '- [quoted.yaml](API/forms/quoted/quoted) — Quoted API',
+                '- [single.yaml](API/forms/single/single) — Single API'
+            ].join('\n')
+        );
+        expect(page('API/forms/single/single.md')).toContain('<div id="asyncapi-forms_single"></div>');
+        expect(page('API/forms/quoted/quoted.md')).toContain('SwaggerUIBundle');
+    });
+
+    it('битый JSON — не спека: предупреждение и пропуск без падения сборки', () => {
+        for (const rel of ['forms/broken.yaml', 'forms/broken.json']) {
+            expect(log).toContain(
+                `openapi: ${rel}: not an OpenAPI or AsyncAPI document (no openapi/swagger/asyncapi key), skipped`
+            );
+            expect(fs.existsSync(path.join(d, 'docs/API/_specs', rel))).toBe(true);
+        }
+        expect(page('API/API.md')).not.toContain('broken');
+    });
+
+    it('единственная спека с ключом в кавычках — страница, а не «no specs match»', () => {
+        const one = makeFixture('quoted-only', [['openapi', { dir: 'contracts', glob: 'a/openapi.yaml' }]]);
+        write(one, 'contracts/a/openapi.yaml', '"openapi": "3.0.3"\n');
+        runBuild(one);
+        expect(fs.readFileSync(path.join(one, 'docs/API/a/a.md'), 'utf8')).toContain(
+            '<div id="swagger-a"></div>'
+        );
+        fs.rmSync(one, { recursive: true, force: true });
+    });
+});
+
 describe('плагин openapi: layout tree', () => {
     let d;
     const page = (rel) => fs.readFileSync(path.join(d, 'docs', rel), 'utf8');

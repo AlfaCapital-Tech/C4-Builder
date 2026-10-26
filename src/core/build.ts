@@ -36,7 +36,7 @@ import type { LoadedPlugin } from './plugins/types.ts';
 
 /**
  * Итог сборки для `site -w`: карта страниц сайта → исходные файлы (пустая без website) — для
- * комментариев; переадресации плагинов — для `--open <id>` и адреса страницы в `feedback`.
+ * комментариев; переадресации плагинов — для `--open-change <id>` и адреса страницы в `feedback`.
  */
 export interface BuildResult {
     pages: PageSources;

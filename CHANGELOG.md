@@ -5,11 +5,40 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
 
 ## Unreleased
 
+- `--site -w` background rendering: the queue follows the page you navigate to rather than every
+  `.md` request (the docsify search fetches all pages for its index); a page you come back to shows
+  the finished images instead of the cached `rendering…` placeholder; a diagram that failed is not
+  rendered again by the rebuilds of the same session until its input changes (the log says
+  `unchanged since it failed, not re-rendered`), while a failure of the environment (no Java, a
+  crashed render worker) is retried by the next rebuild; BPMN and mermaid diagrams render in a worker
+  thread, so the server keeps answering requests and live-reload events meanwhile
+- `-w`: an edit made while the first build is running is picked up by a rebuild right after it,
+  instead of waiting for the next edit
+- The `openspec` plugin, diagram files in artifacts: PlantUML `!include` and D2 imports resolve from
+  the file's own folder — for diagram code blocks of artifacts too — and are part of the image cache
+  checksum; same-named files from different folders (including `:include` subfiles, and two
+  `wireflow.json` exports) give distinct pictures, and two files in one folder rendering to the same
+  image name (`flow.d2` + `flow.mmd`) are both shown with an `Output name collision` warning
+- An inline diagram link with a quoted title — `![x](flow.puml "Flow")`, `![x](flow.mmd ':size=600')` —
+  is replaced by the picture with the title kept; before, the link stayed broken and the diagram was
+  appended to the end of the page
+- A link to a diagram with an upper-case extension (`![](Context.PUML)`) is replaced by the diagram
+  in place, as with a lower-case one, instead of staying raw while the diagram is added to the page
+  separately
+- The short address `#/change/<id>` keeps a `?id=…` section anchor
+- The `figma` plugin leaves Figma links in code alone: fenced and indented blocks and inline code
+- The `openapi` plugin: a `'` in a spec path no longer breaks the script of the swagger-ui and
+  AsyncAPI pages — the spec URL carries it as `%27`
+- PNG placeholders (`rendering…`, a render error) are rasterised with the bundled font even with
+  `useSystemFonts`, without scanning the system fonts — up to several seconds per placeholder
+
+## v0.10.0
+
 - The `figma` plugin embeds Figma right inside pages: an image link to Figma on a line of its own
   (`![Payment screen](https://www.figma.com/design/<key>/<name>?node-id=…)`) in a project page or an
   OpenSpec artifact becomes an `Open in Figma: Payment screen` link plus the `embed.figma.com`
   iframe (same normalisation, `height` and `embedHost` as frame pages); inline it becomes a plain
-  link, code (fenced and indented blocks, inline code) is untouched, an unparsable link stays with a warning. Pages of plugins listed
+  link, code blocks are untouched, an unparsable link stays with a warning. Pages of plugins listed
   before `figma` are processed, so put it last. `frames` is now optional — without it there is no
   section; the log line counts frame pages and embeds
 - OpenSpec artifacts render image links to diagram files next to them — `![Flow](flow.wireflow.json)`,
@@ -51,16 +80,18 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
 - New built-in plugin `figma`: the frames listed in its options (`name`, Figma "Share" `url`,
   optional `description`) become a site section (`mount`, `Figma` by default) with a summary page and
   one page per frame — a live `embed.figma.com` iframe (`height`, `embedHost`) with an `Open in Figma`
-  link above it. `/` in a name nests pages. Links are validated and normalised when the plugin loads
+  link above it. `/` in a name nests pages, spaces around `/` are ignored (`Mobile / Login` and
+  `Mobile/Home` share the `Mobile` section). Links are validated and normalised when the plugin loads
   (`design`/`file`/`proto`/`board`/`slides`/`deck`, `node-id` kept; `file` → `design`); a non-Figma
-  link, a duplicate name or an empty list fails before the build. The build stays offline and prints
+  link, a duplicate name (after trimming), a name segment that is empty, `.`, `..` or contains `#`,
+  `?` or `\` (it would break the sidebar link) or an empty list fails before the build, naming the
+  frame. The build stays offline and prints
   one line that readers need network access to Figma; `executeScript` and assets are not needed
 - Short permanent address of an OpenSpec change page: `#/change/<id>` (`<id>` — the change folder
   name, without the archive date prefix; a nested change by its full id) opens the change page
   whatever the `mount`, `groupKey` and `nameKey` of the `openspec` plugin are, and after archiving
-  leads to the newest archived change with that id; the browser swaps it for the real page path
-  (keeping a `?id=…` section anchor), so relative links, images and the sidebar highlight work and
-  "back" skips the short address. Plugins
+  leads to the newest archived change with that id; the browser swaps it for the real page path, so
+  relative links, images and the sidebar highlight work and "back" skips the short address. Plugins
   declare such redirects with `ctx.addRedirect(from, to)` in `afterScan` (a repeated short path
   fails the build naming the path and the plugin); the map goes to `$docsify.c4builder.redirects` in
   `index.html` with the local script `vendor/c4builder-redirects.js`, so it works on a published
@@ -114,27 +145,22 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
   re-save them in the editor. Other `.json` files are copied as before. `c4builder check` accepts
   `.wireflow.json` and `wireflow.json` (`✗` per problem with the element id, `⚠` for an unknown
   template or an external image); `llms-full.txt` carries the source as a `json` block with embedded
-  images replaced by `"<embedded image>"`. The project template gets a `7 Wireflow Example` section
+  images replaced by `"<embedded image>"`. The project template gets a `7 Wireflow Example` section.
+  Control characters not allowed in XML in texts and edge colours do not break the render: U+000B
+  (the Word line break) and U+000C become line breaks, the rest are dropped
 - The `openapi` plugin gives every spec of a folder its own page: a folder with several specs
   (`billing/openapi.yaml`, `billing/openapi-admin.yaml`) becomes an index page `billing` with links
   and `info.title`, plus `billing/openapi`, `billing/openapi-admin` pages, instead of the
   `two specs give the same page name` error. New option `layout`: `flat` (default) names the folder
   page by the folder name as before, so existing addresses do not change; `tree` nests pages by the
   source folder path (`billing/v2`, `ledger/v2`), and the error for same-named folders in `flat`
-  now suggests it. Only a matched file with a top-level `openapi` or `swagger` key is a spec: other
+  now suggests it. Only a matched file with a top-level `openapi` or `swagger` key is a spec — YAML
+  with a quoted or bare key and LF or CRLF line endings, or JSON (a `.yaml` file starting with `{` is
+  read as JSON, invalid JSON is not a spec); `info.title` is found in CRLF files too. Other
   matched files (schema fragments, AsyncAPI, configs) get no page and a warning each, so a wide
   `glob` like `*/*.{yaml,yml,json}` is safe. The summary lists spec pages with their full path. A
   folder that gains a second spec turns its page into the index; a file named `openapi.yaml`
   without the key loses its page and is reported in the log
-- The `openapi` plugin: a `'` in a spec path no longer breaks the script of the swagger-ui and
-  AsyncAPI pages — the spec URL carries it as `%27`
-- A link to a diagram with an upper-case extension (`![](Context.PUML)`) is replaced by the
-  diagram in place, as with a lower-case one, instead of staying raw while the diagram is added
-  to the page separately
-- PNG placeholders (`rendering…`, a render error) are rasterised with the bundled font even with
-  `useSystemFonts`, without scanning the system fonts — up to several seconds per placeholder
-- `-w`: an edit made while the first build is running is picked up by a rebuild right after it,
-  instead of waiting for the next edit
 
 ## v0.9.0
 

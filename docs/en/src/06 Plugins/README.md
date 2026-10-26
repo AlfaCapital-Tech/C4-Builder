@@ -50,7 +50,12 @@ folder.
 - An image link to a diagram file next to an artifact — `![Flow](flow.wireflow.json)`,
   `![](context.puml)`, `.d2`, `.bpmn`, `.mmd` — is rendered as a diagram, like a block in the text:
   the page shows the picture, the source is not copied to the output, a broken file gets a
-  placeholder and a warning.
+  placeholder and a warning. PlantUML `!include` and D2 imports resolve from the diagram's own
+  folder, as in the project folder; editing an included file re-renders the picture. The link
+  title (`![](flow.mmd ':size=600')`) is carried over to the picture. Same-named files from
+  different folders (e.g. from an `:include` subfile) give different pictures; `flow.d2` and
+  `flow.mmd` in one folder are both shown too, but the build warns about the name collision — in
+  the project folder such a pair would be an error.
 - In `-w` mode the store folder is watched too.
 - With `parentKey`, changes form a tree. A change whose `.openspec.yaml` key `parentKey` points at
   another change (e.g. `x-parent: dig-1-root`) gets a page under it: in the sidebar after the
@@ -106,9 +111,10 @@ over HTTP (`archive` — for example, a GitLab or GitHub repository archive URL)
 spec, plus a section summary linking every spec page.
 
 - Only a file matched by `glob` that has a top-level `openapi` or `swagger` (OpenAPI) or
-  `asyncapi` (AsyncAPI) key is a spec. Other matched files (schema fragments, configs) get no
-  page — the build prints a `⚠ openapi: <path>: not an OpenAPI or AsyncAPI document` warning for
-  each. So `glob: "*/*.{yaml,yml,json}"` safely picks up every spec of a folder.
+  `asyncapi` (AsyncAPI) key is a spec — in YAML (quoted or bare key, LF or CRLF line endings) or
+  in JSON, JSON in a `.yaml` file included. Other matched files (schema fragments, configs,
+  invalid JSON) get no page — the build prints a `⚠ openapi: <path>: not an OpenAPI or AsyncAPI
+  document` warning for each. So `glob: "*/*.{yaml,yml,json}"` safely picks up every spec of a folder.
 - Pages follow the source folders. A folder with one spec is that spec's page (`billing`). A
   folder with several specs (`billing/openapi.yaml`, `billing/openapi-admin.yaml`,
   `billing/payouts.yaml`) becomes an index page `billing` with links (`openapi.*` first, the rest
@@ -198,8 +204,12 @@ link.
   only `node-id` is kept from the query, tracking `t=`, `p=` are dropped. Any other link or a
   repeated frame name is an error before the build starts, naming the frame index. Without `frames`
   there is no section — the plugin only embeds in pages (`"plugins": ["openspec", "figma"]`).
-- `/` in a name makes a nested subsection: `Mobile/Login` is the page `Login` under `Mobile`. The
-  summary lists pages in the order of `frames`.
+- `/` in a name makes a nested subsection: `Mobile/Login` is the page `Login` under `Mobile`.
+  Spaces around `/` are ignored: `Mobile / Login` and `Mobile/Home` share one subsection `Mobile`,
+  and `Mobile / Login` next to `Mobile/Login` is a repeated name. A name segment cannot be empty,
+  `.` or `..` or contain `#`, `?` or `\` — the sidebar link to such a page would not open; this is
+  an error before the build starts, naming the frame index and name. The summary lists pages in the
+  order of `frames`.
 - `description` is markdown shown above the link; its first line goes to the summary.
 - The embed shows the file only to readers who have access to it: share the file as "Anyone with
   the link can view", or expect the reader to sign in to Figma inside the iframe.

@@ -18,6 +18,8 @@ export interface Diagram {
     source?: string;
     /** Виртуальные страницы: ошибка рендера не валит сборку (см. render/diagrams). */
     soft?: boolean;
+    /** Виртуальные страницы: абсолютный путь файла диаграммы на диске (см. PageDiagram.origin). */
+    origin?: string;
 }
 
 export interface TreeItem {
@@ -97,8 +99,18 @@ export const getFolderName = (dir: string, root: string, homepage: string): stri
 // иначе — выбранный DIAGRAM_FORMAT. При png не-ditaa рендерится в SVG и растеризуется
 // (см. рендер ниже), поэтому D2 тоже честно поддерживает png (раньше молча оставался SVG).
 // Живёт рядом с Diagram: имя выхода из него нужно scan для проверки коллизий (см. generateTree).
-export const diagramOutputFormat = (diagram: Diagram, options: BuildOptions): string =>
+export const diagramOutputFormat = (diagram: Pick<Diagram, 'isDitaa'>, options: BuildOptions): string =>
     diagram.isDitaa ? 'png' : options.DIAGRAM_FORMAT;
+
+// Имя картинки диаграммы в выходе: по нему ловятся коллизии (scan, плагины) и пишется файл.
+export const diagramOutputName = (diagram: Pick<Diagram, 'dir' | 'isDitaa'>, options: BuildOptions): string =>
+    `${diagramBaseName(diagram.dir)}.${diagramOutputFormat(diagram, options)}`;
+
+// Файл диаграммы на диске: от его каталога резолвятся `!include` PlantUML и импорты D2 (рендер,
+// чексумма, llms-full.txt). Диаграмма виртуальной страницы из файла (origin) — сам этот файл:
+// каталога страницы на диске нет, соседние файлы лежат рядом с исходником.
+export const diagramEntryPath = (item: TreeItem, diagram: Diagram): string =>
+    diagram.origin ?? path.join(item.dir, diagram.dir);
 
 export const generateTree = async (dir: string, options: BuildOptions): Promise<TreeItem[]> => {
     const tree: TreeItem[] = [];
@@ -231,7 +243,7 @@ export const generateTree = async (dir: string, options: BuildOptions): Promise<
     for (const item of tree) {
         const seen = new Map<string, string>();
         for (const d of item.diagrams) {
-            const out = `${diagramBaseName(d.dir)}.${diagramOutputFormat(d, options)}`;
+            const out = diagramOutputName(d, options);
             if (seen.has(out))
                 throw new Error(
                     `Output name collision '${out}' in ${item.dir}: '${seen.get(out)}' and '${d.dir}' ` +

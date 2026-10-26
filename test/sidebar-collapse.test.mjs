@@ -57,9 +57,9 @@ beforeAll(async () => {
     dirs.off = makeFixture('off', { sidebarCollapse: false });
     dirs.template = makeFixture('template', { docsifyTemplate: 'tpl.mjs' });
     write(dirs.template, 'tpl.mjs', TEMPLATE.replace('%EXTRA%', ''));
-    // Шаблон, подключавший плагин руками до этого релиза: дубля быть не должно.
+    // Шаблон, подключавший плагин и страховку руками: дубля быть не должно, файлы — в dist.
     dirs.manual = makeFixture('manual', { docsifyTemplate: 'tpl.mjs' });
-    write(dirs.manual, 'tpl.mjs', TEMPLATE.replace('%EXTRA%', `${LINK}${SCRIPT}`));
+    write(dirs.manual, 'tpl.mjs', TEMPLATE.replace('%EXTRA%', `${GUARD}${LINK}${SCRIPT}`));
     for (const dir of Object.values(dirs)) runBuild(dir);
 });
 afterAll(() => {
@@ -171,5 +171,6 @@ describe('пользовательский docsifyTemplate', () => {
         expect(page.match(/sidebar-collapse\.css/g)).toHaveLength(1);
         expect(page.match(/docsify-sidebar-collapse\.min\.js/g)).toHaveLength(1);
         expect(page.match(/c4builder-storage-guard\.js/g)).toHaveLength(1);
+        expect(inDist('manual', 'vendor/c4builder-storage-guard.js')).toBe(true);
     });
 });

@@ -64,10 +64,10 @@ describe('холодный старт site -w', () => {
                 expect(svg.status).toBe(200);
                 expect(svg.body).toContain('rendering…');
                 expect((await text(`${base}/`)).status).toBe(200);
-                // Страница сайта: сниппет с обработчиком image и подменой src
+                // Страница сайта: сниппет с обработчиком image и сигналом открытой страницы
                 const html = (await text(`${base}/`)).body;
                 expect(html).toContain("addEventListener('image'");
-                expect(html).toContain("'v=' + Date.now()");
+                expect(html).toContain("fetch('/__c4builder/open'");
 
                 // Правка страницы во время фонового рендера.
                 fs.writeFileSync(pageMd, '# B Folder\n\nEdited during render.\n');
@@ -112,9 +112,8 @@ describe('холодный старт site -w', () => {
             env,
             onReady: async ({ waitFor }) => {
                 await waitFor(/rendered 2 diagrams in [\d.]+ s/, 120_000);
-                // Финальная пересборка: битая диаграмма не в кэше → рендерится снова и снова
-                // падает, но сборка не прерывается (softErrors) — сайт целый, на месте
-                // диаграммы заглушка с ошибкой.
+                // Финальная пересборка: битая диаграмма не в кэше, но вход не менялся — заглушка
+                // с ошибкой переносится без рендера, сборка не прерывается (softErrors).
                 await waitFor(/built in [\d.]+ seconds/, 60_000);
                 await new Promise((r) => setTimeout(r, 300));
                 expect((await text(`${base}/`)).status).toBe(200);
@@ -125,7 +124,7 @@ describe('холодный старт site -w', () => {
                 expect((await text(`${base}/Good/diagram.svg`)).body).not.toContain('rendering…');
 
                 // Правка соседней страницы, Bad ещё битая: ребилд по правке тоже мягкий —
-                // сайт не теряет страниц, на месте Bad снова заглушка.
+                // сайт не теряет страниц, на месте Bad та же заглушка.
                 fs.writeFileSync(path.join(root, 'src', 'Good', 'page.md'), '# Good\n\nEdited.\n');
                 await waitFor(/built in [\d.]+ seconds/, 120_000);
                 await new Promise((r) => setTimeout(r, 300));
@@ -142,7 +141,12 @@ describe('холодный старт site -w', () => {
                 expect(fixed.body).toContain('Fixed');
             }
         });
-        expect(out).toMatch(/✗ Diagram "diagram\.svg": PlantUML exited with code 200/);
+        // Битая диаграмма рендерится один раз за вход: финальная пересборка и ребилд по правке
+        // соседней страницы её не трогают (серое напоминание), правка самого файла — рендер.
+        expect(out.match(/✗ Diagram "diagram\.svg": PlantUML exited with code 200/g)).toHaveLength(1);
+        expect(out.match(/Diagram "diagram\.svg": unchanged since it failed, not re-rendered/g)).toHaveLength(
+            2
+        );
         expect(out).toContain('serving your docsify site');
     }, 240_000);
 
@@ -264,7 +268,7 @@ describe('site -w: событие image и приоритет страницы',
         }
     });
 
-    it('клиент: событие image меняет src совпавших <img> на путь с ?v=, остальные не трогает', async () => {
+    it('клиент: событие image меняет src совпавших <img> на путь с ?v=, остальные не трогает; после навигации версия проставляется снова', async () => {
         const { url, close } = await start(3268);
         let html;
         try {
@@ -278,6 +282,7 @@ describe('site -w: событие image и приоритет страницы',
         expect(script).not.toBeNull();
         const { JSDOM } = await import('jsdom');
         const sources = [];
+        const posts = [];
         const dom = new JSDOM(
             `<!DOCTYPE html><html><body>
 <img id="rel" src="A b/diagram.svg"><img id="enc" src="/A%20b/diagram.svg?v=1">
@@ -287,6 +292,12 @@ ${script[0]}</body></html>`,
                 url: 'http://localhost:3268/#/A%20b/Page',
                 runScripts: 'dangerously',
                 beforeParse(window) {
+                    // Конфиг docsify — до сниппета, как в шаблоне сайта; fetch — запись вызовов.
+                    window.$docsify = { plugins: [] };
+                    window.fetch = (url, init) => {
+                        posts.push({ url, init });
+                        return Promise.resolve({});
+                    };
                     // EventSource в jsdom нет — подставляем управляемый.
                     window.EventSource = class {
                         constructor() {
@@ -309,28 +320,67 @@ ${script[0]}</body></html>`,
         expect(src('enc')).not.toBe('/A%20b/diagram.svg?v=1');
         expect(src('other')).toBe('A b/other.svg');
         expect(src('ext')).toBe('https://example.com/A%20b/diagram.svg');
+
+        // Плагин docsify: beforeEach шлёт сигнал открытой страницы, doneEach проставляет
+        // версию готовым картинкам, которые docsify нарисовал заново (возврат на страницу).
+        const plugin = dom.window.$docsify.plugins.at(-1);
+        const hooks = {};
+        const vm = { route: { file: 'A%20b/Page.md' } };
+        plugin({ beforeEach: (fn) => (hooks.beforeEach = fn), doneEach: (fn) => (hooks.doneEach = fn) }, vm);
+        expect(hooks.beforeEach('# md')).toBe('# md');
+        expect(posts).toHaveLength(1);
+        expect(posts[0].url).toBe('/__c4builder/open');
+        expect(posts[0].init.method).toBe('POST');
+        expect(JSON.parse(posts[0].init.body)).toEqual({ page: 'A%20b/Page.md' });
+
+        const version = src('rel');
+        dom.window.document.body.insertAdjacentHTML(
+            'beforeend',
+            '<img id="back" src="A b/diagram.svg"><img id="fresh" src="A b/other.svg">'
+        );
+        hooks.doneEach();
+        expect(src('back')).toBe(version);
+        expect(src('fresh')).toBe('A b/other.svg');
         dom.window.close();
     });
 
-    it('GET <страница>.md зовёт prioritize с декодированным путём; служебные _*.md и не-md — нет', async () => {
+    it('приоритет — только по сигналу навигации POST /__c4builder/open, а не по GET *.md (поиск docsify)', async () => {
         const calls = [];
-        const { url, close } = await start(3266, (page) => calls.push(page));
+        const port = 3266;
+        const { url, close } = await start(port, (page) => calls.push(page));
+        const open = (page, origin = `http://127.0.0.1:${port}`) =>
+            fetch(`${url}/__c4builder/open`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Origin: origin },
+                body: JSON.stringify({ page })
+            });
         try {
+            // Поиск docsify запрашивает .md всех страниц — очередь не трогается.
             expect((await fetch(`${url}/A%20b/Page.md`)).status).toBe(200);
             expect((await fetch(`${url}/Overview.md`)).status).toBe(200);
-            expect((await fetch(`${url}/_sidebar.md`)).status).toBe(200);
-            expect((await fetch(`${url}/`)).status).toBe(200);
-            expect((await fetch(`${url}/Missing.md`)).status).toBe(404); // очередь всё равно узнаёт о странице
-            expect(calls).toEqual(['A b/Page.md', 'Overview.md', 'Missing.md']);
+            expect(calls).toEqual([]);
+            expect((await open('A%20b/Page.md')).status).toBe(204);
+            expect((await open('/Overview.md')).status).toBe(204);
+            expect((await open('http://127.0.0.1:3266/A%20b/Page.md')).status).toBe(204);
+            expect((await open('100%.md')).status).toBe(204); // не percent-encoding — как есть
+            expect((await open('A b/Page.md', 'http://evil.example')).status).toBe(403);
+            expect(calls).toEqual(['A b/Page.md', 'Overview.md', 'A b/Page.md', '100%.md']);
         } finally {
             await close();
         }
     });
 
-    it('без prioritize (обычный site) запросы .md проходят как раньше', async () => {
-        const { url, close } = await start(3267);
+    it('без prioritize (очереди нет) запросы .md и сигнал навигации проходят как раньше', async () => {
+        const port = 3267;
+        const { url, close } = await start(port);
         try {
             expect((await fetch(`${url}/A%20b/Page.md`)).status).toBe(200);
+            const res = await fetch(`${url}/__c4builder/open`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Origin: `http://127.0.0.1:${port}` },
+                body: JSON.stringify({ page: 'A b/Page.md' })
+            });
+            expect(res.status).toBe(204);
         } finally {
             await close();
         }

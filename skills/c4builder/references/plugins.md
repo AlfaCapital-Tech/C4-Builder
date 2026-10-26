@@ -30,6 +30,9 @@ artifacts and spec deltas as subpages), the specs tree and the archive. `plantum
 `mermaid` fenced blocks in artifacts and image links to diagram files next to them
 (`![](flow.wireflow.json)`, `.puml`, `.d2`, `.bpmn`, `.mmd`) are rendered by the local engines; a
 broken one gets a placeholder image and a warning naming the file instead of failing the build.
+`!include` / D2 imports of such files resolve from the file's own folder. Same-named diagram files
+from different folders get distinct images; `flow.d2` + `flow.mmd` in one folder both render but
+print an `Output name collision` warning — rename one.
 
 | Option | Default | Meaning |
 |---|---|---|
@@ -58,7 +61,8 @@ network. Exactly one source — `dir` **or** `archive` — is required. It force
 `executeScript: true`.
 
 - A matched file is a spec only with a top-level `openapi`/`swagger` (OpenAPI, swagger-ui page) or
-  `asyncapi` (AsyncAPI, page rendered by the bundled AsyncAPI component) key; other matched files
+  `asyncapi` (AsyncAPI, page rendered by the bundled AsyncAPI component) key — YAML (quoted or bare
+  key, LF or CRLF) or JSON, also JSON in a `.yaml` file; other matched files (invalid JSON too)
   get no page and a `⚠ openapi: <path>: not an OpenAPI or AsyncAPI document` warning each, so
   `glob: "*/*.{yaml,yml,json}"` is safe.
 - Pages follow the source folders: a folder with one spec is that spec's page (`billing`); a
@@ -88,7 +92,8 @@ their relative layout, so relative `$ref`s keep working. Archive download fails 
 
 One page per frame listed in the options (a live `embed.figma.com` iframe with an
 `Open in Figma` link above it) plus a summary in list order. `name` with `/` nests
-(`Mobile/Login`). `url` is the Figma "Share" link
+(`Mobile/Login`; spaces around `/` are trimmed, so `Mobile / Login` is the same page); a name
+segment that is empty, `.`, `..` or contains `#`, `?` or `\` fails before the build. `url` is the Figma "Share" link
 `https://www.figma.com/<design|file|proto|board|slides|deck>/<key>/<name>?node-id=…`; it is
 normalised at load (`file` → `design`, only `node-id` kept), and a non-Figma link or a duplicate
 name fails before the build. `frames` is optional. An image link to Figma on a line of its own

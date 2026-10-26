@@ -3,6 +3,7 @@
 // так корневое изменение задачи и его подзадачи (по платформам, сервисам) читаются деревом,
 // а не плоским списком длинных id с одинаковым началом. Группа (опция `groupKey`, например
 // команда) — промежуточная папка раздела: `Changes/<группа>/<id>`.
+import { isLinkSegment } from '../../core/plugins/tree.ts';
 import type { Change } from './scan.ts';
 
 export interface Placement {
@@ -59,11 +60,10 @@ export const layoutChanges = (
         const p = parentOf(c);
         return !p || parentOf(p);
     });
-    // Значение ключа как сегмент пути: addPage отвергает `/`, `\`, `.`, `..` и пустые, а `#` и
-    // `?` encodeURI оставляет как есть — ссылка в sidebar оборвалась бы на якоре или запросе.
+    // Значение ключа — сегмент пути страницы и ссылки в sidebar; недопустимое — как не заданное.
     const segment = (key: string | undefined, c: Change): string | undefined => {
         const v = key ? c.meta[key]?.trim() : undefined;
-        return v && !/[\\/#?]/.test(v) && v !== '.' && v !== '..' ? v : undefined;
+        return v && isLinkSegment(v) ? v : undefined;
     };
     // Имя, совпадающее с id другого change'а, дало бы тот же путь — остаётся id.
     const ids = new Set(changes.map((c) => c.id));

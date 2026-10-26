@@ -81,6 +81,8 @@ try {
     fs.copyFileSync(path.join(tmp, 'lib', 'graphic-sizes.json'), path.join(staging, 'graphic-sizes.json'));
     fs.copyFileSync(path.join(tmp, 'LICENSE'), path.join(staging, 'LICENSE'));
     fs.writeFileSync(path.join(staging, 'VERSION'), `${sha}\n`);
+    // mkdtemp создаёт 0700 — без chmod каталог в docker-образе (USER node) не читается.
+    fs.chmodSync(staging, 0o755);
     fs.rmSync(TARGET, { recursive: true, force: true });
     fs.renameSync(staging, TARGET);
     console.log(`vendor/wireflow: ${copied} graphics, VERSION ${sha}`);

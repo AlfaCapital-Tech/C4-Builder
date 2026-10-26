@@ -7,7 +7,7 @@
 import chalk from 'chalk';
 import { z } from 'zod';
 
-import { pageLink } from '../../core/plugins/tree.ts';
+import { isLinkSegment, pageLink } from '../../core/plugins/tree.ts';
 import { mapOutsideCode } from '../../core/scan/fences.ts';
 import { definePlugin } from '../../core/plugins/types.ts';
 
@@ -69,22 +69,39 @@ const optionsSchema = z
     })
     .strict()
     .transform((o, ctx) => {
-        const seen = new Set<string>();
+        // Ключ дубля — нормализованный путь: `Mobile / Login` и `Mobile/Login` — одна страница.
+        const seen = new Map<string, string>();
         const frames = o.frames.map((frame, i) => {
-            const segments = frame.name.split('/');
-            if (segments.some((s) => !s.trim()))
+            // Пробелы вокруг `/` — оформление имени, а не часть сегмента: иначе `Mobile / Login`
+            // рядом с `Mobile/Home` дал бы в sidebar два раздела, `Mobile ` и `Mobile`.
+            const segments = frame.name.split('/').map((s) => s.trim());
+            const bad = segments.find((s) => s && !isLinkSegment(s));
+            if (segments.some((s) => !s))
                 ctx.addIssue({
                     code: 'custom',
                     path: ['frames', i, 'name'],
                     message: `empty segment in frame name "${frame.name}"`
                 });
-            if (seen.has(frame.name))
+            // Проверка здесь, а не в addPage: оттуда ошибка пришла бы без имени фрейма, а `#` и
+            // `?` addPage пропускает — сборка прошла бы с битой ссылкой в sidebar.
+            else if (bad !== undefined)
                 ctx.addIssue({
                     code: 'custom',
                     path: ['frames', i, 'name'],
-                    message: `duplicate frame name "${frame.name}"`
+                    message: `invalid segment "${bad}" in frame name "${frame.name}": a segment cannot be "." or ".." or contain "#", "?" or "\\"`
                 });
-            seen.add(frame.name);
+            const key = segments.join('/');
+            const first = seen.get(key);
+            if (first !== undefined)
+                ctx.addIssue({
+                    code: 'custom',
+                    path: ['frames', i, 'name'],
+                    message:
+                        first === frame.name
+                            ? `duplicate frame name "${frame.name}"`
+                            : `duplicate frame name "${frame.name}" (same page as "${first}")`
+                });
+            else seen.set(key, frame.name);
             let embed = '';
             try {
                 embed = figmaEmbedUrl(frame.url, o.embedHost);

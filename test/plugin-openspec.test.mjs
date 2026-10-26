@@ -676,4 +676,116 @@ describe('плагин openspec: файлы диаграмм в артефакт
     it('битый файл диаграммы — заглушка вместо картинки, сборка проходит', () => {
         expect(read('OpenSpec/Changes/dig-2-beta/broken.svg')).toContain('diagram not rendered');
     });
+
+    // Отдельный store: коллизии имён, include/импорты соседних файлов, ссылки с title.
+    describe('имена, зависимости и title', () => {
+        let d;
+        let out;
+        const readD = (rel) => fs.readFileSync(path.join(d, 'docs', rel), 'utf8');
+        const svgs = (rel) => fs.readdirSync(path.join(d, 'docs', rel)).filter((f) => f.endsWith('.svg'));
+        beforeAll(() => {
+            d = makeFixture('diagram-files', ['openspec'], false);
+            const c = path.join(d, 'openspec/changes/dig-3');
+            write(
+                c,
+                'proposal.md',
+                [
+                    '![D](flow.d2)',
+                    '![M](flow.mmd)',
+                    '![P](ctx.puml)',
+                    '![I](imp.d2)',
+                    '![T](titled.mmd "Titled")',
+                    "![S](sized.mmd ':size=600')",
+                    // экспорт редактора Wireflow называется `wireflow.json` — два из разных папок
+                    '![W1](a/wireflow.json)',
+                    '![W2](b/wireflow.json)',
+                    // fenced-блок импортирует соседний файл артефакта
+                    '```d2\n...@lib\nfenced -> imported\n```',
+                    ''
+                ].join('\n\n')
+            );
+            const flow = fs.readFileSync(
+                path.join(
+                    import.meta.dirname,
+                    '..',
+                    'template',
+                    'src',
+                    '7 Wireflow Example',
+                    'checkout.wireflow.json'
+                ),
+                'utf8'
+            );
+            write(c, 'a/wireflow.json', flow);
+            write(c, 'b/wireflow.json', flow);
+            write(c, 'flow.d2', 'fromD2 -> other\n');
+            write(c, 'flow.mmd', 'flowchart LR\n  A[fromMermaid] --> B\n');
+            write(c, 'ctx.puml', '@startuml\n!include styles.iuml\nAlice -> Bob\n@enduml\n');
+            write(c, 'styles.iuml', 'Carol -> Dave : fromInclude\n');
+            write(c, 'imp.d2', '...@lib\nx -> imported\n');
+            write(c, 'lib.d2', 'imported: fromImport\n');
+            write(c, 'titled.mmd', 'flowchart LR\n  A --> B\n');
+            write(c, 'sized.mmd', 'flowchart LR\n  C --> D\n');
+            // одноимённый файл из подфайла `:include` — другая папка, другая диаграмма
+            write(c, 'design.md', "![A](seq.mmd)\n\n[B](_back/back.md ':include')\n");
+            write(c, 'seq.mmd', 'flowchart LR\n  A[topSeq] --> B\n');
+            write(c, '_back/back.md', '![B](seq.mmd)\n');
+            write(c, '_back/seq.mmd', 'flowchart LR\n  A[backSeq] --> B\n');
+            out = runBuild(d);
+        });
+        afterAll(() => fs.rmSync(d, { recursive: true, force: true }));
+
+        it('flow.d2 + flow.mmd рядом — две картинки и предупреждение о коллизии', () => {
+            const page = readD('OpenSpec/Changes/dig-3/dig-3.md');
+            const hashed = page.match(/!\[diagram\]\(([0-9a-f]{8}-flow\.svg)\)/)?.[1];
+            expect(page).toContain('![diagram](flow.svg)');
+            expect(hashed).toBeDefined();
+            expect(readD('OpenSpec/Changes/dig-3/flow.svg')).toContain('fromD2');
+            expect(readD(`OpenSpec/Changes/dig-3/${hashed}`)).toContain('fromMermaid');
+            expect(out).toContain(
+                "Output name collision 'flow.svg': 'openspec/changes/dig-3/flow.d2' and 'openspec/changes/dig-3/flow.mmd'"
+            );
+        });
+
+        it('одноимённые диаграммы страницы и её :include-подфайла — разные картинки, без предупреждения', () => {
+            const page = readD('OpenSpec/Changes/dig-3/design/design.md');
+            const hashed = page.match(/!\[diagram\]\(([0-9a-f]{8}-seq\.svg)\)/)?.[1];
+            expect(page).toContain('![diagram](seq.svg)');
+            expect(hashed).toBeDefined();
+            expect(svgs('OpenSpec/Changes/dig-3/design')).toHaveLength(2);
+            expect(readD('OpenSpec/Changes/dig-3/design/seq.svg')).toContain('topSeq');
+            expect(readD(`OpenSpec/Changes/dig-3/design/${hashed}`)).toContain('backSeq');
+            expect(out).not.toContain("collision 'seq.svg'");
+        });
+
+        it('два wireflow.json из разных папок — две картинки, сборка не падает', () => {
+            const page = readD('OpenSpec/Changes/dig-3/dig-3.md');
+            expect(page).toContain('![diagram](wireflow.svg)');
+            expect(page).toMatch(/!\[diagram\]\([0-9a-f]{8}-wireflow\.svg\)/);
+        });
+
+        it('!include PlantUML и импорт D2 находят соседние файлы', () => {
+            expect(readD('OpenSpec/Changes/dig-3/ctx.svg')).toContain('fromInclude');
+            expect(readD('OpenSpec/Changes/dig-3/imp.svg')).toContain('fromImport');
+            expect(out).not.toMatch(/cannot include|failed to import|not rendered/);
+        });
+
+        it('правка включённого и импортированного файла перерисовывает картинку (чексумма)', () => {
+            const c = path.join(d, 'openspec/changes/dig-3');
+            write(c, 'styles.iuml', 'Carol -> Dave : changedInclude\n');
+            write(c, 'lib.d2', 'imported: changedImport\n');
+            runBuild(d);
+            expect(readD('OpenSpec/Changes/dig-3/ctx.svg')).toContain('changedInclude');
+            expect(readD('OpenSpec/Changes/dig-3/imp.svg')).toContain('changedImport');
+        });
+
+        it('ссылка с title — картинка на месте ссылки, title сохранён', () => {
+            const page = readD('OpenSpec/Changes/dig-3/dig-3.md');
+            expect(page).toContain('![diagram](titled.svg "Titled")');
+            expect(page).toContain("![diagram](sized.svg ':size=600')");
+            expect(page).not.toMatch(/\.mmd\b/);
+            // не дописаны второй раз в конец страницы как «неупомянутые»
+            expect(page.match(/titled\.svg/g)).toHaveLength(1);
+            expect(page.match(/sized\.svg/g)).toHaveLength(1);
+        });
+    });
 });

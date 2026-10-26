@@ -48,6 +48,17 @@ beforeAll(() => {
     write('wireflow.json', wf([wfCard('a')]));
     write('bad.wireflow.json', wf([wfCard('a')], [{ id: 'e1', source: 'a', target: 'x9' }]));
     write('warn.wireflow.json', wf([wfCard('a', 'no-such-template')]));
+    // Разрыв строки из Word (U+000B) в заметке и U+0001 в цвете ребра — не ошибка рендера.
+    write(
+        'ctrl.wireflow.json',
+        wf(
+            [
+                wfCard('a'),
+                { id: 'n', type: 'note', position: { x: 300, y: 0 }, data: { text: 'Первая\u000bвторая' } }
+            ],
+            [{ id: 'e1', source: 'a', target: 'n', style: { stroke: '#e8590c\u0001' } }]
+        )
+    );
     write('ok.mmd', 'flowchart LR\n  A[Клиент] --> B\n');
     write('bad.mmd', 'flowchart LR\n  A -->> ((B\n');
     write('mind.mmd', 'mindmap\n  root\n');
@@ -156,7 +167,7 @@ describe('c4builder check', () => {
         expect(res.stderr).toMatch(/^✗ mind\.mmd: line 1: unsupported mermaid diagram type 'mindmap'$/m);
     });
 
-    it('wireflow: валидный файл и wireflow.json → 0; ребро в никуда → ✗ с id ребра, 1; неизвестный шаблон → ⚠, 0', () => {
+    it('wireflow: валидный файл и wireflow.json → 0; ребро в никуда → ✗ с id ребра, 1; неизвестный шаблон → ⚠, 0; управляющие символы → ✓', () => {
         const ok = check('ok.wireflow.json', 'wireflow.json');
         expect(ok.status, ok.stderr).toBe(0);
         expect(ok.stdout).toMatch(/✓ ok\.wireflow\.json/);
@@ -168,5 +179,8 @@ describe('c4builder check', () => {
         expect(warn.status, warn.stderr).toBe(0);
         expect(warn.stdout).toMatch(/⚠ warn\.wireflow\.json: .*no-such-template/);
         expect(warn.stdout).toMatch(/✓ warn\.wireflow\.json/);
+        const ctrl = check('ctrl.wireflow.json');
+        expect(ctrl.status, ctrl.stderr).toBe(0);
+        expect(ctrl.stdout).toMatch(/✓ ctrl\.wireflow\.json/);
     });
 });

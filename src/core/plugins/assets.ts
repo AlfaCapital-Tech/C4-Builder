@@ -83,7 +83,9 @@ export const injectSiteAssets = async (plugins: LoadedPlugin[], options: BuildOp
     const styles: string[] = core.styles.filter((f) => !linked(f));
     const scripts: string[] = core.scripts.filter((f) => !linked(f));
     const headScripts: string[] = core.headScripts.filter((f) => !linked(f));
-    for (const file of headScripts) writeSiteScript(options, path.basename(file));
+    // Скрипты c4builder общая копия vendor/docsify пропускает — кладём сами, даже если шаблон
+    // подключил их руками: иначе тег есть, а файла в dist нет.
+    for (const file of core.headScripts) writeSiteScript(options, path.basename(file));
     for (const { plugin } of plugins) {
         if (!plugin.assets) continue;
         const rel = path.posix.join('vendor', 'plugins', plugin.name);
