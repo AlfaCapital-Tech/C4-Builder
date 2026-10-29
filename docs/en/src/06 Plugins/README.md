@@ -73,10 +73,21 @@ folder.
   `x-name: DIG-12 Card payment`) instead of its id; the name is also the page path segment, so the
   address stays stable as long as the name is unchanged. A value with `/`, `#`, `?` or a duplicate in
   the same folder (group) keeps the id. Nested changes are still labelled with the id tail.
-- The `columns` option adds `.openspec.yaml` columns to the Changes table (also the summary and the
-  group pages) after the standard ones — e.g. the assignee:
-  `"columns": [{ "key": "x-assignee", "title": "Assignee" }]`. A missing value is shown as `—`. A value
-  containing ` #` is quoted (`x-assignee: "Alice #1"`), otherwise the rest is a comment.
+- The Changes tables (summary, the Changes page, group pages) share one column layout across the page:
+  service columns have fixed widths, the Change column takes the rest and only text that does not fit
+  wraps; a task progress bar with every task done is drawn in the theme colour; the stylesheet
+  `vendor/plugins/openspec/changes.css` is linked like other plugin assets (with
+  a custom `docsifyTemplate` — as long as the template allows asset injection).
+- The `columns` option adds columns to the Changes table (also the summary and the group pages)
+  after the standard ones. From `.openspec.yaml` — e.g. the assignee:
+  `"columns": [{ "key": "x-assignee", "title": "Assignee" }]`; a value containing ` #` is quoted
+  (`x-assignee: "Alice #1"`), otherwise the rest is a comment. From a markdown table of an artifact —
+  e.g. who has not reviewed yet, by the status table of `review.md` (`| Reviewer | Status | Who | Date |`):
+  `` { "title": "Awaiting review", "artifact": "review", "column": "Who", "whenEmpty": "Status", "exclude": "`" } `` —
+  the values of the `column` column of the first table of the artifact that has these columns, from
+  the rows whose `whenEmpty` cell is empty (blank, `—` or `-`; without `whenEmpty` — all rows),
+  each on its own line; values matching the `exclude` regular expression (here — tool names in
+  backticks) are left out. A missing value, artifact or table is shown as `—`.
 - The address of a change page depends on the layout: `#/<mount>/Changes/<group>/<name or id>/<name or id>`,
   for a nested change `…/<parent>/<id tail>/<id tail>`, for an archived one
   `#/<mount>/Archive/<date>-<id>/<date>-<id>`; with non-Latin letters in `mount` or the name it
@@ -102,7 +113,7 @@ folder.
 | `parentKey` | — | `.openspec.yaml` key that points at the parent change (e.g. `x-parent`); when set, child changes are nested under their parent |
 | `groupKey` | — | `.openspec.yaml` key with the change's group (e.g. `x-team`); when set, top-level changes are placed into group folders |
 | `nameKey` | — | `.openspec.yaml` key with the change's name (e.g. `x-name`); when set, top-level changes are labelled and addressed by that name |
-| `columns` | — | extra Changes table columns: `[{ "key": "<.openspec.yaml key>", "title": "<header>" }]` |
+| `columns` | — | extra Changes table columns: `{ "key": "<.openspec.yaml key>", "title": "<header>" }` or `{ "title": "<header>", "artifact": "<artifact>", "column": "<table column>", "whenEmpty": "<column that must be empty>", "exclude": "<regex of values to leave out>" }` |
 
 ## `openapi` — swagger-ui and AsyncAPI for a set of specs
 
