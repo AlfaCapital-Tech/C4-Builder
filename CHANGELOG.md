@@ -9,6 +9,17 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
   the width is remembered in the browser, a double click restores the theme's width
 - Site: the sidebar scrolls to the active page when it is below the visible area of a long tree
 
+## v0.11.0
+
+- The `openspec` plugin, `columns`: a column can come from a markdown table of an artifact —
+  `{ "title": "Awaiting review", "artifact": "review", "column": "Who", "whenEmpty": "Status" }` lists
+  the `Who` cells of the rows whose `Status` is empty, one per line (e.g. who has not reviewed the change yet);
+  `exclude` — a regex of values to leave out (e.g. tool names)
+- The `openspec` plugin: the Changes tables (summary, Changes, group pages) share one column layout —
+  service columns have fixed widths, the Change column takes the rest and only text that does not
+  fit wraps; a task progress bar with every task done is drawn in the theme colour; the stylesheet
+  `vendor/plugins/openspec/changes.css` is linked like other plugin assets
+
 ## v0.10.1
 
 - `--site -w` background rendering: the queue follows the page you navigate to rather than every

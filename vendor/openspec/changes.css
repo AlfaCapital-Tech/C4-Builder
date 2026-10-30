@@ -1,0 +1,48 @@
+/* Changes tables of the openspec plugin (wrapper .c4b-openspec-changes): one column layout for
+   every section of the page. Service columns (Schema, Tasks, Updated) never wrap and have a
+   common minimum width, the columns of the `columns` option have one too; the Change column takes
+   the rest, so only a change name (or a long value) that does not fit wraps. On a narrow screen
+   the wrapper scrolls instead of squeezing the columns. */
+.markdown-section .c4b-openspec-changes {
+    margin-bottom: 1rem;
+    overflow-x: auto;
+}
+.markdown-section .c4b-openspec-changes table {
+    display: table;
+    margin-bottom: 0;
+    overflow: visible;
+    width: 100%;
+}
+/* with the `columns` option: minimum width, below it the wrapper scrolls instead of squeezing */
+.markdown-section .c4b-openspec-changes--extra table {
+    min-width: 60em;
+}
+.c4b-openspec-changes th:nth-child(2),
+.c4b-openspec-changes td:nth-child(2),
+.c4b-openspec-changes th:nth-child(3),
+.c4b-openspec-changes td:nth-child(3),
+.c4b-openspec-changes th:nth-child(4),
+.c4b-openspec-changes td:nth-child(4) {
+    white-space: nowrap;
+}
+/* `width` of a cell in an auto table layout is its minimum: the column grows for longer content */
+.c4b-openspec-changes th:nth-child(2) {
+    width: 8em; /* Schema */
+}
+.c4b-openspec-changes th:nth-child(3) {
+    width: 14em; /* Tasks */
+}
+.c4b-openspec-changes th:nth-child(4) {
+    width: 8em; /* Updated */
+}
+.c4b-openspec-changes th:nth-child(n + 5) {
+    width: 12em; /* columns option */
+}
+.c4b-openspec-changes progress {
+    vertical-align: middle;
+    width: 6em;
+}
+/* all tasks done (Changes tables, summary, change page): theme colour instead of the browser's */
+.markdown-section progress.c4b-progress-done {
+    accent-color: var(--theme-color, #42b983);
+}

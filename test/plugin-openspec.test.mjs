@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { artifactColumnValues } from './dist.mjs';
 import { TMP_ROOT, ensureManagedJre, runBuild } from './helpers.mjs';
 
 // Встроенный плагин openspec на мини-фикстуре store: 2 активных change'а (tasks, дельты,
@@ -248,7 +249,9 @@ describe('плагин openspec', () => {
             '- [2026-08-01-dig-0-old](OpenSpec/Archive/2026-08-01-dig-0-old/2026-08-01-dig-0-old)'
         );
         const md = read('OpenSpec/Archive/2026-08-01-dig-0-old/2026-08-01-dig-0-old.md');
-        expect(md).toContain('**Tasks:** <progress value="2" max="2"></progress> 2/2 (100%)');
+        expect(md).toContain(
+            '**Tasks:** <progress class="c4b-progress-done" value="2" max="2"></progress> 2/2 (100%)'
+        );
         expect(md).toContain('## Why'); // proposal inline
         expect(read('OpenSpec/Archive/2026-08-01-dig-0-old/tasks/tasks.md')).toContain('- [x] a');
     });
@@ -630,7 +633,15 @@ describe('плагин openspec: опция columns', () => {
                     parentKey: 'x-parent',
                     columns: [
                         { key: 'x-assignee', title: 'Assignee' },
-                        { key: 'x-jira', title: 'Jira' }
+                        { key: 'x-jira', title: 'Jira' },
+                        // из таблицы статусов review.md: кто ещё не поставил статус
+                        {
+                            title: 'Awaiting',
+                            artifact: 'review',
+                            column: 'Who',
+                            whenEmpty: 'Status',
+                            exclude: '`'
+                        }
                     ]
                 }
             ]
@@ -645,22 +656,96 @@ describe('плагин openspec: опция columns', () => {
         );
         // `|` в значении экранируется, иначе строка таблицы развалится
         write(s, 'changes/dig-3-root-ios/.openspec.yaml', 'x-parent: dig-3-root\nx-assignee: Bob | Carol\n');
+        // все задачи закрыты — бар с классом c4b-progress-done
+        write(s, 'changes/dig-3-root-ios/tasks.md', '- [x] a\n- [x] b\n');
+        // таблица статусов: пустой статус — ожидает; `—` в имени — не значение; первая таблица
+        // без нужных колонок пропускается; `\|` в ячейке — текст; значение по `exclude` (инструмент
+        // в обратных кавычках) — не выводится
+        write(
+            s,
+            'changes/dig-3-root/review.md',
+            [
+                '# Review',
+                '',
+                '| Item | Note |',
+                '|---|---|',
+                '| 1 | n/a |',
+                '',
+                '| Reviewer | Status | Who | Date |',
+                '|---|---|---|---|',
+                '| AI | Approved | — | 2026-10-29 |',
+                '| Analyst | | Dana | |',
+                '| Tester | — | Eve \\| Frank | |',
+                '| Lead | Approved | Gus | 2026-10-29 |',
+                '| AI code | | `/code-review` | |',
+                '',
+                'text'
+            ].join('\n')
+        );
         runBuild(d);
     });
     afterAll(() => fs.rmSync(d, { recursive: true, force: true }));
 
+    it('таблица в обёртке раскладки, стиль плагина подключён', () => {
+        const md = readD('OpenSpec/Changes/Changes.md');
+        // с columns — модификатор минимальной ширины
+        expect(md).toContain('<div class="c4b-openspec-changes c4b-openspec-changes--extra">');
+        expect(md).toMatch(
+            /<div class="c4b-openspec-changes c4b-openspec-changes--extra">\n\n\| Change \|[\s\S]*\|\n\n<\/div>/
+        );
+        // без columns (основная фикстура) — обёртка без модификатора
+        expect(read('OpenSpec/Changes/Changes.md')).toContain('<div class="c4b-openspec-changes">');
+        expect(read('OpenSpec/Changes/Changes.md')).not.toContain('--extra');
+        expect(readD('index.html')).toContain('vendor/plugins/openspec/changes.css');
+        expect(fs.existsSync(path.join(d, 'docs', 'vendor/plugins/openspec/changes.css'))).toBe(true);
+    });
+
     it('заголовок и значения колонок; нет значения — прочерк', () => {
         const md = readD('OpenSpec/Changes/Changes.md');
         expect(md).toContain(
-            '| Change | Schema | Tasks | Updated | Assignee | Jira |\n|---|---|---|---|---|---|'
+            '| Change | Schema | Tasks | Updated | Assignee | Jira | Awaiting |\n|---|---|---|---|---|---|---|'
         );
         expect(md).toMatch(
-            /\| \[dig-3-root\]\(OpenSpec\/Changes\/dig-3-root\/dig-3-root\) \| spec-driven \| .* \| Alice #1 \| DIG-3 \|/
+            /\| \[dig-3-root\]\(OpenSpec\/Changes\/dig-3-root\/dig-3-root\) \| spec-driven \| .* \| Alice #1 \| DIG-3 \| Dana<br>Eve \\\| Frank \|/
         );
+        // у ios нет review.md — прочерк; задачи 2/2 — бар с классом «всё выполнено»
         expect(md).toMatch(
-            /\| ↳ \[ios\]\(OpenSpec\/Changes\/dig-3-root\/ios\/ios\) \| — \| .* \| Bob \\\| Carol \| — \|/
+            /\| ↳ \[ios\]\(OpenSpec\/Changes\/dig-3-root\/ios\/ios\) \| — \| <progress class="c4b-progress-done" value="2" max="2"><\/progress> 2\/2 \(100%\) \| .* \| Bob \\\| Carol \| — \| — \|/
         );
-        expect(readD('OpenSpec/OpenSpec.md')).toContain('| Assignee | Jira |');
+        expect(md).toMatch(/\[dig-1-alpha\].*\| <progress value="1" max="3">/);
+        expect(readD('OpenSpec/OpenSpec.md')).toContain('| Assignee | Jira | Awaiting |');
+    });
+});
+
+// Разбор markdown-таблицы артефакта для колонки из таблицы артефакта.
+describe('плагин openspec: artifactColumnValues', () => {
+    const col = { title: 'W', artifact: 'review', column: 'Who', whenEmpty: 'Status' };
+    const table = '| Reviewer | Status | Who |\n|---|---|---|\n| A | | Dana |\n| B | Approved | Eve |\n';
+
+    it('строки с пустым статусом; завершённые и пустые имена пропускаются', () => {
+        expect(artifactColumnValues(table, col)).toEqual(['Dana']);
+        expect(artifactColumnValues(table.replace('Approved', '—'), col)).toEqual(['Dana', 'Eve']);
+    });
+    it('CRLF, выравнивание :---:, таблица без тела', () => {
+        expect(artifactColumnValues(table.replace(/\n/g, '\r\n'), col)).toEqual(['Dana']);
+        expect(artifactColumnValues(table.replace('|---|---|---|', '|:--|:-:|--:|'), col)).toEqual(['Dana']);
+        expect(artifactColumnValues('| Status | Who |\n|---|---|\n', col)).toEqual([]);
+    });
+    it('пример в fenced-блоке не читается, настоящая таблица ниже — читается', () => {
+        const md = '```md\n| Reviewer | Status | Who |\n|---|---|---|\n| X | | Template |\n```\n\n' + table;
+        expect(artifactColumnValues(md, col)).toEqual(['Dana']);
+    });
+    it('--- без | не разделитель таблицы; без нужных колонок — пусто', () => {
+        expect(artifactColumnValues('| Reviewer | Status | Who |\n---\n| A | | Dana |\n', col)).toEqual([]);
+        expect(artifactColumnValues(table, { ...col, column: 'Nope' })).toEqual([]);
+    });
+    it('exclude и `\\|` в ячейке', () => {
+        expect(
+            artifactColumnValues('| Status | Who |\n|---|---|\n| | `/x` |\n| | A \\| B |\n', {
+                ...col,
+                exclude: '`'
+            })
+        ).toEqual(['A | B']);
     });
 });
 

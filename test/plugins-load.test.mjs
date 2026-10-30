@@ -53,6 +53,22 @@ describe('loadPlugins', () => {
         );
     });
 
+    it('openspec columns: оба вида элементов проходят, неизвестный ключ и невалидный exclude — ошибка', async () => {
+        const col = { title: 'W', artifact: 'review', column: 'Who', whenEmpty: 'Status', exclude: '`' };
+        const [p] = await loadPlugins(
+            [['openspec', { columns: [{ key: 'x-a', title: 'A' }, col] }]],
+            tmp,
+            opts()
+        );
+        expect(p.opts.columns).toEqual([{ key: 'x-a', title: 'A' }, col]);
+        await expect(
+            loadPlugins([['openspec', { columns: [{ ...col, whenEmtpy: 'x' }] }]], tmp, opts())
+        ).rejects.toThrow(/openspec: columns/);
+        await expect(
+            loadPlugins([['openspec', { columns: [{ ...col, exclude: '(' }] }]], tmp, opts())
+        ).rejects.toThrow(/openspec: columns/);
+    });
+
     it('неверный тип опции — ошибка называет ключ', async () => {
         await expect(loadPlugins([['openspec', { mount: 5 }]], tmp, opts())).rejects.toThrow(
             /openspec: mount — /

@@ -6,6 +6,7 @@ import chalk from 'chalk';
 import { z } from 'zod';
 
 import { definePlugin } from '../../core/plugins/types.ts';
+import { VENDOR_DIR } from '../../util/paths.ts';
 import { type Layout, layoutChanges, originalId, pageOrder } from './layout.ts';
 import { type Change, scanStore, type Store } from './scan.ts';
 import {
@@ -35,9 +36,41 @@ const optionsSchema = z
         // Ключ `.openspec.yaml` с человеческим именем change'а (например `x-name`): подпись и
         // сегмент пути change'а верхнего уровня вместо id. Не задан — id.
         nameKey: z.string().min(1).optional(),
-        // Дополнительные колонки таблицы Changes из `.openspec.yaml` (например исполнитель):
-        // `[{ key: "x-assignee", title: "Assignee" }]`. Не задана — прежняя таблица.
-        columns: z.array(z.object({ key: z.string().min(1), title: z.string().min(1) }).strict()).optional()
+        // Дополнительные колонки таблицы Changes. Не задана — прежняя таблица. Два вида элемента:
+        // из `.openspec.yaml` (например исполнитель) — `{ key: "x-assignee", title: "Assignee" }`;
+        // из markdown-таблицы артефакта (например кто ещё не сделал ревью по таблице статусов
+        // review.md) — `{ title: "Awaiting review", artifact: "review", column: "Who", whenEmpty: "Status" }`;
+        // `exclude` — regex значений, которые не выводятся (например имена инструментов).
+        columns: z
+            .array(
+                z.union([
+                    z.object({ key: z.string().min(1), title: z.string().min(1) }).strict(),
+                    z
+                        .object({
+                            title: z.string().min(1),
+                            artifact: z.string().min(1),
+                            column: z.string().min(1),
+                            whenEmpty: z.string().min(1).optional(),
+                            exclude: z
+                                .string()
+                                .min(1)
+                                .refine(
+                                    (v) => {
+                                        try {
+                                            new RegExp(v);
+                                            return true;
+                                        } catch {
+                                            return false;
+                                        }
+                                    },
+                                    { message: 'exclude must be a valid regular expression' }
+                                )
+                                .optional()
+                        })
+                        .strict()
+                ])
+            )
+            .optional()
     })
     .strict();
 
@@ -46,6 +79,9 @@ type Opts = z.output<typeof optionsSchema>;
 export default definePlugin<Opts>({
     name: 'openspec',
     options: optionsSchema,
+    // Раскладка таблиц Changes (обёртка `.c4b-openspec-changes` в renderChangesIndex): одинаковые
+    // колонки во всех секциях, перенос только там, где текст не помещается.
+    assets: { styles: [path.join(VENDOR_DIR, 'openspec', 'changes.css')] },
     watchPaths: (o) => [o.dir],
 
     afterScan(ctx, o) {
