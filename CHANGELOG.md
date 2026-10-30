@@ -3,6 +3,15 @@
 User-facing changes of C4-Builder. Every pull request that changes behaviour adds a line to
 `## Unreleased`; the release commit renames it to `## vX.Y.Z`.
 
+## Unreleased
+
+- Site: a click on a diagram or another page image opens a full-screen viewer instead of the
+  fit-to-window zoom (`zoom-image`, no longer loaded by the built-in template) — the wheel or a pinch
+  zooms at the cursor (up to 4× the natural size, less for very large diagrams but never below 1:1),
+  dragging moves the image, a double click toggles fit ↔ 1:1 (2× when the image already fits at its
+  natural size), buttons and keys `+` `-` `0` `1`, arrows, `Esc`; large diagrams (a dependency map of
+  a hundred containers) can now be read
+
 ## v0.12.0
 
 - Site: the border between the sidebar and the content can be dragged (screens wider than 768px);

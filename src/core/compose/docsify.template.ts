@@ -60,7 +60,6 @@ export default (options: DocsifyOptions): string => {
         window.$docsify = ${JSON.stringify(options, null, 2)};
         </script>
         <script src="vendor/docsify.min.js"></script>
-        <script src="vendor/zoom-image.min.js"></script>
         ${options.supportSearch ? `<script src="vendor/search.min.js"></script>` : ''}
         ${options.executeScript ? `<script src="vendor/swagger-ui-bundle.js"></script>` : ''}
     </body>
