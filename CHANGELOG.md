@@ -3,6 +3,12 @@
 User-facing changes of C4-Builder. Every pull request that changes behaviour adds a line to
 `## Unreleased`; the release commit renames it to `## vX.Y.Z`.
 
+## Unreleased
+
+- Site: the border between the sidebar and the content can be dragged (screens wider than 768px);
+  the width is remembered in the browser, a double click restores the theme's width
+- Site: the sidebar scrolls to the active page when it is below the visible area of a long tree
+
 ## v0.11.0
 
 - The `openspec` plugin, `columns`: a column can come from a markdown table of an artifact —

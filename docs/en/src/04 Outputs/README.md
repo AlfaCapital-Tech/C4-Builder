@@ -24,6 +24,11 @@ or `docsifyTemplate` that uses them, external images in page text.
   click on a section expands or collapses it. When the browser blocks site storage (Safari "Block
   All Cookies"), collapsing still works — the state is kept in the tab's memory. Switch it off with
   `sidebarCollapse: false` (the whole tree expanded, as before).
+- The border between the sidebar and the content can be dragged with the mouse (on screens wider
+  than 768px); the width is remembered in the browser, a double click restores the theme's
+  width (300px for the default theme). Until the border is dragged, the theme's width is kept.
+- When the current page of a long tree is below the visible area, the sidebar scrolls to it by
+  itself (like "Select Opened File" in an IDE).
 - Site search is `supportSearch`, the repository link in the corner is `repoUrl`, a custom theme
   is `webTheme`, a custom `index.html` template is `docsifyTemplate`.
 
