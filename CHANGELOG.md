@@ -3,7 +3,7 @@
 User-facing changes of C4-Builder. Every pull request that changes behaviour adds a line to
 `## Unreleased`; the release commit renames it to `## vX.Y.Z`.
 
-## Unreleased
+## v0.11.0
 
 - The `openspec` plugin, `columns`: a column can come from a markdown table of an artifact —
   `{ "title": "Awaiting review", "artifact": "review", "column": "Who", "whenEmpty": "Status" }` lists
