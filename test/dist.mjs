@@ -28,6 +28,7 @@ export { BUILTIN_PLUGINS } from '../dist/plugins/index.js';
 export { REDIRECTS_JS, STORAGE_GUARD_JS } from '../dist/core/compose/site.scripts.js';
 export { createFenceExtractor, mapOutsideCode, mapOutsideFences } from '../dist/core/scan/fences.js';
 export { embedFigmaImages } from '../dist/plugins/figma/index.js';
+export { artifactColumnValues } from '../dist/plugins/openspec/render.js';
 export {
     foldIncludes,
     clearIncludeCache,

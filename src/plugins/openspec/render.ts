@@ -15,8 +15,9 @@ import type { Artifact, Change, Spec, Store } from './scan.ts';
 
 const fmtDate = (ms: number): string => new Date(ms).toISOString().slice(0, 10);
 // Прогресс задач: нативный <progress> (docsify рендерит HTML в markdown) + числа и процент.
+// Всё выполнено — класс для стиля плагина (vendor/openspec/changes.css): бар цветом темы.
 const progressBar = (done: number, total: number): string =>
-    `<progress value="${done}" max="${total}"></progress> ${done}/${total} (${Math.round((done / total) * 100)}%)`;
+    `<progress${done >= total ? ' class="c4b-progress-done"' : ''} value="${done}" max="${total}"></progress> ${done}/${total} (${Math.round((done / total) * 100)}%)`;
 const fmtProgress = (c: Change): string =>
     c.progress ? progressBar(c.progress.done, c.progress.total) : '—';
 
@@ -44,21 +45,98 @@ export interface MetaColumn {
     title: string;
 }
 
+/**
+ * Дополнительная колонка таблицы Changes из markdown-таблицы артефакта: значения колонки `column`
+ * у строк, где колонка `whenEmpty` пуста (без неё — у всех строк), кроме значений по regex
+ * `exclude`, каждое с новой строки. Например, кто ещё не сделал ревью — по таблице статусов
+ * `review.md`: проставленный статус убирает имя из колонки.
+ */
+export interface ArtifactColumn {
+    title: string;
+    artifact: string;
+    column: string;
+    whenEmpty?: string;
+    exclude?: string;
+}
+
+export type TableColumn = MetaColumn | ArtifactColumn;
+
 // Значение ячейки markdown-таблицы: `|` разорвал бы строку на колонки.
 const cell = (v: string | undefined): string => (v ? v.replace(/\|/g, '\\|') : '—');
+
+// Ячейки строки markdown-таблицы: `\|` — часть текста, а не граница колонки.
+const splitRow = (line: string): string[] =>
+    line
+        .trim()
+        .replace(/^\|/, '')
+        .replace(/\|$/, '')
+        .split(/(?<!\\)\|/)
+        .map((c) => c.replace(/\\\|/g, '|').trim());
+// Строка-разделитель таблицы: `---` без `|` — это линия, а не таблица.
+const isSeparatorRow = (line: string): boolean =>
+    line.includes('|') && /^\s*\|?(\s*:?-+:?\s*\|)*\s*:?-+:?\s*\|?\s*$/.test(line);
+// Строки внутри fenced-блоков (```/~~~): пример таблицы в шаблоне не должен читаться как данные.
+const fencedLines = (lines: string[]): boolean[] => {
+    let open = false;
+    return lines.map((l) => {
+        const mark = /^\s*(```|~~~)/.test(l);
+        if (mark) open = !open;
+        return open || mark;
+    });
+};
+// Пустая ячейка: ничего, либо прочерк, которым в таблицах обозначают «нет».
+const isBlank = (v: string | undefined): boolean => !v || v === '—' || v === '-';
+
+/**
+ * Значения колонки `column` первой таблицы артефакта, где есть колонки `column` и `whenEmpty`:
+ * у строк с пустой `whenEmpty` (без неё — у всех); пустые и подходящие под `exclude` пропускаются.
+ * Нет таблицы — пусто.
+ */
+export const artifactColumnValues = (content: string, col: ArtifactColumn): string[] => {
+    const lines = content.split(/\r?\n/);
+    const fenced = fencedLines(lines);
+    const exclude = col.exclude === undefined ? undefined : new RegExp(col.exclude);
+    for (let i = 0; i + 1 < lines.length; i++) {
+        if (fenced[i] || fenced[i + 1]) continue;
+        if (!lines[i].trim().startsWith('|') || !isSeparatorRow(lines[i + 1])) continue;
+        const head = splitRow(lines[i]);
+        const at = head.indexOf(col.column);
+        const empty = col.whenEmpty === undefined ? -1 : head.indexOf(col.whenEmpty);
+        if (at < 0 || (col.whenEmpty !== undefined && empty < 0)) continue;
+        const out: string[] = [];
+        for (let j = i + 2; j < lines.length && lines[j].trim().startsWith('|'); j++) {
+            const row = splitRow(lines[j]);
+            if (empty >= 0 && !isBlank(row[empty])) continue;
+            if (!isBlank(row[at]) && !exclude?.test(row[at])) out.push(row[at]);
+        }
+        return out;
+    }
+    return [];
+};
+
+// Значение дополнительной колонки для change'а: ключ `.openspec.yaml` или таблица артефакта.
+const columnValue = (c: Change, col: TableColumn): string | undefined => {
+    if ('key' in col) return c.meta[col.key];
+    const artifact = c.artifacts.find((a) => a.name === col.artifact);
+    // Каждое значение с новой строки: несколько имён не раздувают колонку в ширину.
+    return artifact ? artifactColumnValues(artifact.content, col).join('<br>') : undefined;
+};
 
 /**
  * Таблица change'ов (сводка и индекс Changes): по дате изменения от новых к старым. С `layout`
  * вложенные change'ы идут сразу под родителем (`↳` + подпись) и ведут на свои вложенные
- * страницы, а при группах таблица делится на секции по группам. `columns` — колонки из
- * `.openspec.yaml` после стандартных (например исполнитель); нет значения — `—`.
+ * страницы, а при группах таблица делится на секции по группам. `columns` — колонки после
+ * стандартных: из `.openspec.yaml` (например исполнитель) или из таблицы артефакта (например
+ * кто ещё не сделал ревью); нет значения — `—`. Таблица обёрнута в `<div class="c4b-openspec-changes">`
+ * (пустые строки вокруг — чтобы docsify разобрал markdown внутри): стиль `vendor/openspec/changes.css`
+ * даёт всем таблицам страницы одну раскладку колонок.
  */
 export const renderChangesIndex = (
     changes: Change[],
     mount: string,
     options: BuildOptions,
     layout?: Layout,
-    { sections = true, columns = [] }: { sections?: boolean; columns?: MetaColumn[] } = {}
+    { sections = true, columns = [] }: { sections?: boolean; columns?: TableColumn[] } = {}
 ): string => {
     if (!changes.length) return '_No changes._';
     const head = ['Change', 'Schema', 'Tasks', 'Updated', ...columns.map((c) => cell(c.title))];
@@ -67,10 +145,15 @@ export const renderChangesIndex = (
         const rows = (layout ? pageOrder(byDate, layout) : byDate).map((c) => {
             const at = layout?.get(c);
             const link = `[${at?.label ?? c.id}](${pageLink(at?.segments ?? [mount, 'Changes', c.id], options)})`;
-            const extra = columns.map((col) => ` ${cell(c.meta[col.key])} |`).join('');
+            const extra = columns.map((col) => ` ${cell(columnValue(c, col))} |`).join('');
             return `| ${at?.parent ? `↳ ${link}` : link} | ${c.schema ?? '—'} | ${fmtProgress(c)} | ${fmtDate(c.mtime)} |${extra}`;
         });
-        return [`| ${head.join(' | ')} |`, `|${'---|'.repeat(head.length)}`, ...rows].join('\n');
+        const table = [`| ${head.join(' | ')} |`, `|${'---|'.repeat(head.length)}`, ...rows].join('\n');
+        // Модификатор --extra: есть дополнительные колонки, таблице нужна минимальная ширина.
+        const cls = columns.length
+            ? 'c4b-openspec-changes c4b-openspec-changes--extra'
+            : 'c4b-openspec-changes';
+        return `<div class="${cls}">\n\n${table}\n\n</div>`;
     };
     return bySections(changes, layout, sections, table);
 };
@@ -81,7 +164,7 @@ export const renderSummary = (
     mount: string,
     options: BuildOptions,
     layout?: Layout,
-    columns: MetaColumn[] = []
+    columns: TableColumn[] = []
 ): string => {
     const withProgress = store.changes.filter((c) => c.progress);
     const done = withProgress.reduce((s, c) => s + (c.progress?.done ?? 0), 0);
