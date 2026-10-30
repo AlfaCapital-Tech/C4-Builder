@@ -3,7 +3,7 @@
 User-facing changes of C4-Builder. Every pull request that changes behaviour adds a line to
 `## Unreleased`; the release commit renames it to `## vX.Y.Z`.
 
-## Unreleased
+## v0.13.0
 
 - Site: a click on a diagram or another page image opens a full-screen viewer instead of the
   fit-to-window zoom (`zoom-image`, no longer loaded by the built-in template) — the wheel or a pinch
