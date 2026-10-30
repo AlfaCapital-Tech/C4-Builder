@@ -89,8 +89,95 @@ export const STORAGE_GUARD_JS = `(function () {
 })();
 `;
 
+/**
+ * Перетаскиваемая граница между sidebar и содержимым: на небольших экранах фиксированные
+ * 300px съедают место и не дают разглядеть глубокую структуру папок. Ширина живёт в
+ * CSS-переменной `--c4-sw` (её читают sidebar, сдвиг `.content` и кнопка сворачивания),
+ * ручка — отдельный элемент поверх границы, потому что sidebar и content создаёт docsify уже
+ * после загрузки скрипта. Действует только шире 768px: на узком экране sidebar — выезжающая
+ * панель. Выбранная ширина хранится в localStorage (в try/catch: хранилище может быть закрыто).
+ * Стили вставляются самим скриптом, чтобы не плодить отдельный css-файл в dist.
+ */
+export const SIDEBAR_RESIZE_JS = `(function () {
+    var KEY = 'c4builder-sidebar-width';
+    var MIN = 180;
+    var root = document.documentElement;
+    var clamp = function (w) {
+        return Math.max(MIN, Math.min(w, Math.round(window.innerWidth * 0.7)));
+    };
+    var apply = function (w) {
+        root.style.setProperty('--c4-sw', w + 'px');
+    };
+    var DEFAULT = 300;
+    var saved = null;
+    try {
+        saved = parseInt(window.localStorage.getItem(KEY), 10);
+    } catch (e) {}
+    if (saved) apply(clamp(saved));
+    var style = document.createElement('style');
+    style.textContent =
+        ':root{--c4-sw:' + DEFAULT + 'px}' +
+        '@media screen and (min-width:769px){' +
+        '.sidebar{width:var(--c4-sw)}' +
+        '.content{left:var(--c4-sw)}' +
+        '.sidebar-toggle{width:calc(var(--c4-sw) - 16px)}' +
+        'body.close .sidebar{transform:translateX(calc(-1 * var(--c4-sw)))}' +
+        'body.close .content{left:0}' +
+        '.c4-resizer{position:fixed;top:0;bottom:0;left:var(--c4-sw);width:6px;cursor:col-resize;z-index:40;touch-action:none}' +
+        '.c4-resizer:hover,.c4-resizer.active{background:rgba(66,185,131,.35)}' +
+        'body.close .c4-resizer{display:none}' +
+        'body.c4-resizing,body.c4-resizing *{transition:none!important;user-select:none!important;cursor:col-resize!important}' +
+        '}' +
+        '@media screen and (max-width:768px){.c4-resizer{display:none}}' +
+        '@media print{.c4-resizer{display:none}}';
+    document.head.appendChild(style);
+    var handle = document.createElement('div');
+    handle.className = 'c4-resizer';
+    handle.setAttribute('role', 'separator');
+    handle.setAttribute('aria-orientation', 'vertical');
+    document.body.appendChild(handle);
+    var width = function () {
+        return parseInt(getComputedStyle(root).getPropertyValue('--c4-sw'), 10) || DEFAULT;
+    };
+    var save = function () {
+        try {
+            window.localStorage.setItem(KEY, String(width()));
+        } catch (e) {}
+    };
+    handle.addEventListener('pointerdown', function (ev) {
+        ev.preventDefault();
+        handle.setPointerCapture(ev.pointerId);
+        handle.classList.add('active');
+        document.body.classList.add('c4-resizing');
+    });
+    handle.addEventListener('pointermove', function (ev) {
+        if (!handle.classList.contains('active')) return;
+        apply(clamp(ev.clientX));
+    });
+    var stop = function () {
+        if (!handle.classList.contains('active')) return;
+        handle.classList.remove('active');
+        document.body.classList.remove('c4-resizing');
+        save();
+    };
+    handle.addEventListener('pointerup', stop);
+    handle.addEventListener('pointercancel', stop);
+    handle.addEventListener('dblclick', function () {
+        root.style.removeProperty('--c4-sw');
+        try {
+            window.localStorage.removeItem(KEY);
+        } catch (e) {}
+    });
+    window.addEventListener('resize', function () {
+        var w = width();
+        if (w > clamp(w)) apply(clamp(w));
+    });
+})();
+`;
+
 /** Скрипты c4builder по имени файла в `dist/vendor/`. */
 export const SITE_SCRIPTS: Record<string, string> = {
     'c4builder-redirects.js': REDIRECTS_JS,
-    'c4builder-storage-guard.js': STORAGE_GUARD_JS
+    'c4builder-storage-guard.js': STORAGE_GUARD_JS,
+    'c4builder-sidebar-resize.js': SIDEBAR_RESIZE_JS
 };

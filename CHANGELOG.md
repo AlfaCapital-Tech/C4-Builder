@@ -3,6 +3,11 @@
 User-facing changes of C4-Builder. Every pull request that changes behaviour adds a line to
 `## Unreleased`; the release commit renames it to `## vX.Y.Z`.
 
+## Unreleased
+
+- Site: the border between the sidebar and the content can be dragged (screens wider than 768px);
+  the width is remembered in the browser, a double click resets it to 300px
+
 ## v0.10.1
 
 - `--site -w` background rendering: the queue follows the page you navigate to rather than every

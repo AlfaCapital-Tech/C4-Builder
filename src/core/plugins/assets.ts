@@ -39,6 +39,8 @@ export const injectHtml = (
     return doc;
 };
 
+const SIDEBAR_RESIZE = 'vendor/c4builder-sidebar-resize.js';
+
 // Ассеты сайта от самого ядра (не плагинов): стили и скрипты вендорных пакетов уже лежат в
 // `dist/vendor/` — туда целиком копируется vendor/docsify (compose/markdown), их только
 // подключают; свои скрипты c4builder (headScripts) пишутся из compose/site.scripts.ts.
@@ -46,16 +48,18 @@ export const injectHtml = (
 // пользовательским docsifyTemplate (включая копии старого встроенного шаблона). Страховка
 // localStorage — раньше всех скриптов: вендорный плагин без неё падает при заблокированном
 // хранилище, и на мобильном в свёрнутом sidebar остаётся только корень.
+// Перетаскиваемая граница sidebar (c4builder-sidebar-resize.js) подключается всегда, в конце
+// body: ей нужен готовый body, а не sidebar.
 const coreSiteAssets = (
     options: BuildOptions
 ): { styles: string[]; scripts: string[]; headScripts: string[] } =>
     options.SIDEBAR_COLLAPSE
         ? {
               styles: ['vendor/sidebar-collapse.css'],
-              scripts: ['vendor/docsify-sidebar-collapse.min.js'],
+              scripts: ['vendor/docsify-sidebar-collapse.min.js', SIDEBAR_RESIZE],
               headScripts: ['vendor/c4builder-storage-guard.js']
           }
-        : { styles: [], scripts: [], headScripts: [] };
+        : { styles: [], scripts: [SIDEBAR_RESIZE], headScripts: [] };
 
 // Свой скрипт c4builder → `dist/vendor/<name>`: только когда его подключают, иначе в dist
 // каждого проекта лежал бы лишний файл.
@@ -85,7 +89,7 @@ export const injectSiteAssets = async (plugins: LoadedPlugin[], options: BuildOp
     const headScripts: string[] = core.headScripts.filter((f) => !linked(f));
     // Скрипты c4builder общая копия vendor/docsify пропускает — кладём сами, даже если шаблон
     // подключил их руками: иначе тег есть, а файла в dist нет.
-    for (const file of core.headScripts) writeSiteScript(options, path.basename(file));
+    for (const file of [...core.headScripts, SIDEBAR_RESIZE]) writeSiteScript(options, path.basename(file));
     for (const { plugin } of plugins) {
         if (!plugin.assets) continue;
         const rel = path.posix.join('vendor', 'plugins', plugin.name);

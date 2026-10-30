@@ -24,6 +24,8 @@ or `docsifyTemplate` that uses them, external images in page text.
   click on a section expands or collapses it. When the browser blocks site storage (Safari "Block
   All Cookies"), collapsing still works — the state is kept in the tab's memory. Switch it off with
   `sidebarCollapse: false` (the whole tree expanded, as before).
+- The border between the sidebar and the content can be dragged with the mouse (on screens wider
+  than 768px); the width is remembered in the browser, a double click restores 300px.
 - Site search is `supportSearch`, the repository link in the corner is `repoUrl`, a custom theme
   is `webTheme`, a custom `index.html` template is `docsifyTemplate`.
 
