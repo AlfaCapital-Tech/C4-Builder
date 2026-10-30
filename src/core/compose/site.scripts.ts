@@ -94,38 +94,66 @@ export const STORAGE_GUARD_JS = `(function () {
  * 300px съедают место и не дают разглядеть глубокую структуру папок. Ширина живёт в
  * CSS-переменной `--c4-sw` (её читают sidebar, сдвиг `.content` и кнопка сворачивания),
  * ручка — отдельный элемент поверх границы, потому что sidebar и content создаёт docsify уже
- * после загрузки скрипта. Действует только шире 768px: на узком экране sidebar — выезжающая
- * панель. Выбранная ширина хранится в localStorage (в try/catch: хранилище может быть закрыто).
- * Стили вставляются самим скриптом, чтобы не плодить отдельный css-файл в dist.
+ * после загрузки скрипта. Правила ширины включаются только атрибутом `data-c4-sw` на `<html>`,
+ * который ставится, когда ширина реально выбрана (сохранена или тянут): наш `<style>` идёт
+ * после CSS темы и иначе перебивал бы ширину пользовательской `webTheme`. Пока ширина не
+ * выбрана, ручка следует за фактической шириной `.sidebar`; dblclick возвращает ширину темы.
+ * Действует только шире 768px: на узком экране sidebar — выезжающая панель. Выбранная ширина
+ * хранится в localStorage (в try/catch: хранилище может быть закрыто). Стили вставляются
+ * самим скриптом, чтобы не плодить отдельный css-файл в dist. Ручка стоит между sidebar (20)
+ * и кнопкой сворачивания (30) и прячется, пока открыт zoom-image (`body.medium-zoom--opened`),
+ * чтобы не торчать поверх увеличенной диаграммы.
+ * Заодно, как «Select Opened File» в IDE, после каждой навигации докручивает sidebar к активной
+ * странице — только если её ссылка ушла за край видимой области, иначе скролл дёргался бы при
+ * каждом клике; меряется ссылка, а не `li`, в который входит всё раскрытое поддерево; с
+ * задержкой, потому что плагин сворачивания раскрывает ветки своим doneEach и высоты известны
+ * позже. Комментариев внутри самой строки нет: она целиком уходит в dist.
  */
 export const SIDEBAR_RESIZE_JS = `(function () {
     var KEY = 'c4builder-sidebar-width';
+    var ATTR = 'data-c4-sw';
     var MIN = 180;
     var root = document.documentElement;
+    var wide = function () {
+        return window.innerWidth > 768;
+    };
     var clamp = function (w) {
         return Math.max(MIN, Math.min(w, Math.round(window.innerWidth * 0.7)));
     };
-    var apply = function (w) {
+    var set = function (w) {
         root.style.setProperty('--c4-sw', w + 'px');
     };
-    var DEFAULT = 300;
+    var choose = function (w) {
+        set(w);
+        root.setAttribute(ATTR, '');
+    };
+    var chosen = function () {
+        return root.hasAttribute(ATTR);
+    };
+    var themeWidth = function () {
+        var bar = document.querySelector('.sidebar');
+        return bar ? Math.round(bar.getBoundingClientRect().width) : 0;
+    };
+    var follow = function () {
+        if (chosen()) return;
+        var w = themeWidth();
+        if (w) set(w);
+    };
     var saved = null;
     try {
         saved = parseInt(window.localStorage.getItem(KEY), 10);
     } catch (e) {}
-    if (saved) apply(clamp(saved));
+    if (saved) choose(wide() ? clamp(saved) : saved);
     var style = document.createElement('style');
     style.textContent =
-        ':root{--c4-sw:' + DEFAULT + 'px}' +
         '@media screen and (min-width:769px){' +
-        '.sidebar{width:var(--c4-sw)}' +
-        '.content{left:var(--c4-sw)}' +
-        '.sidebar-toggle{width:calc(var(--c4-sw) - 16px)}' +
-        'body.close .sidebar{transform:translateX(calc(-1 * var(--c4-sw)))}' +
-        'body.close .content{left:0}' +
-        '.c4-resizer{position:fixed;top:0;bottom:0;left:var(--c4-sw);width:6px;cursor:col-resize;z-index:40;touch-action:none}' +
+        'html[data-c4-sw] .sidebar{width:var(--c4-sw)}' +
+        'html[data-c4-sw] .content{left:var(--c4-sw)}' +
+        'html[data-c4-sw] .sidebar-toggle{width:calc(var(--c4-sw) - 16px)}' +
+        'html[data-c4-sw] body.close .sidebar{transform:translateX(calc(-1 * var(--c4-sw)))}' +
+        '.c4-resizer{position:fixed;top:0;bottom:0;left:var(--c4-sw,-10px);width:6px;cursor:col-resize;z-index:25;touch-action:none}' +
         '.c4-resizer:hover,.c4-resizer.active{background:rgba(66,185,131,.35)}' +
-        'body.close .c4-resizer{display:none}' +
+        'body.close .c4-resizer,body.medium-zoom--opened .c4-resizer{display:none}' +
         'body.c4-resizing,body.c4-resizing *{transition:none!important;user-select:none!important;cursor:col-resize!important}' +
         '}' +
         '@media screen and (max-width:768px){.c4-resizer{display:none}}' +
@@ -137,22 +165,28 @@ export const SIDEBAR_RESIZE_JS = `(function () {
     handle.setAttribute('aria-orientation', 'vertical');
     document.body.appendChild(handle);
     var width = function () {
-        return parseInt(getComputedStyle(root).getPropertyValue('--c4-sw'), 10) || DEFAULT;
+        return parseInt(getComputedStyle(root).getPropertyValue('--c4-sw'), 10) || themeWidth() || 300;
     };
     var save = function () {
+        if (!chosen()) return;
         try {
             window.localStorage.setItem(KEY, String(width()));
         } catch (e) {}
     };
+    var grab = 0;
     handle.addEventListener('pointerdown', function (ev) {
+        if (ev.button !== 0 || !ev.isPrimary) return;
         ev.preventDefault();
-        handle.setPointerCapture(ev.pointerId);
+        try {
+            handle.setPointerCapture(ev.pointerId);
+        } catch (e) {}
+        grab = ev.clientX - width();
         handle.classList.add('active');
         document.body.classList.add('c4-resizing');
     });
     handle.addEventListener('pointermove', function (ev) {
         if (!handle.classList.contains('active')) return;
-        apply(clamp(ev.clientX));
+        choose(clamp(ev.clientX - grab));
     });
     var stop = function () {
         if (!handle.classList.contains('active')) return;
@@ -163,14 +197,33 @@ export const SIDEBAR_RESIZE_JS = `(function () {
     handle.addEventListener('pointerup', stop);
     handle.addEventListener('pointercancel', stop);
     handle.addEventListener('dblclick', function () {
-        root.style.removeProperty('--c4-sw');
+        root.removeAttribute(ATTR);
         try {
             window.localStorage.removeItem(KEY);
         } catch (e) {}
+        follow();
     });
     window.addEventListener('resize', function () {
+        if (!wide()) return;
+        if (!chosen()) return follow();
         var w = width();
-        if (w > clamp(w)) apply(clamp(w));
+        if (w > clamp(w)) set(clamp(w));
+    });
+    var reveal = function () {
+        var item = document.querySelector('.sidebar-nav li.active');
+        var bar = document.querySelector('.sidebar');
+        if (!item || !bar) return;
+        var r = (item.querySelector(':scope > a') || item).getBoundingClientRect();
+        var b = bar.getBoundingClientRect();
+        if (!r.height || (r.top >= b.top && r.bottom <= b.bottom)) return;
+        bar.scrollTop += r.top - b.top - (b.height - r.height) / 2;
+    };
+    var $d = (window.$docsify = window.$docsify || {});
+    $d.plugins = [].concat($d.plugins || [], function (hook) {
+        hook.doneEach(function () {
+            follow();
+            setTimeout(reveal, 50);
+        });
     });
 })();
 `;

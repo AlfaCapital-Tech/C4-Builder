@@ -69,8 +69,9 @@ const writeSiteScript = (options: BuildOptions, name: string): void => {
 };
 
 /**
- * Подключает в `dist/index.html` ассеты сайта: ядра (сворачивание sidebar при
- * `sidebarCollapse`) и плагинов — последние копируются в `dist/vendor/plugins/<name>/`.
+ * Подключает в `dist/index.html` ассеты сайта: ядра (скрипт sidebar — перетаскиваемая
+ * граница и прокрутка к активной странице — всегда, сворачивание при `sidebarCollapse`)
+ * и плагинов — последние копируются в `dist/vendor/plugins/<name>/`.
  * Зовётся после generateWebMD (index.html уже записан).
  */
 export const injectSiteAssets = async (plugins: LoadedPlugin[], options: BuildOptions): Promise<void> => {
