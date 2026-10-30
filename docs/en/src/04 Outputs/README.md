@@ -29,6 +29,14 @@ or `docsifyTemplate` that uses them, external images in page text.
   width (300px for the default theme). Until the border is dragged, the theme's width is kept.
 - When the current page of a long tree is below the visible area, the sidebar scrolls to it by
   itself (like "Select Opened File" in an IDE).
+- A click on a diagram (or another image of the page) opens it full screen: the wheel or a
+  trackpad/touchscreen pinch zooms at the cursor, dragging moves it, a double click switches between
+  "fit to the window" and 1:1 at the clicked point (2× when the image already fits at its natural
+  size). The bottom bar and the keys `+`, `-`, `0` (fit), `1` (1:1), the arrows and `Esc` do the
+  same. It opens fitted to the window, at most at the natural size, and zooms up to 4× of it, so a
+  large diagram stays readable; very large diagrams zoom less (but at least to 1:1) so the browser
+  does not run out of memory. Images inside links, buttons and `<summary>`, and those with
+  `data-no-zoom` are not opened.
 - Site search is `supportSearch`, the repository link in the corner is `repoUrl`, a custom theme
   is `webTheme`, a custom `index.html` template is `docsifyTemplate`.
 

@@ -20,7 +20,6 @@ export default (options) => {
     <div id="app"></div>
     <script>window.$docsify = ${JSON.stringify(config)};</script>
     <script src="vendor/docsify.min.js"></script>
-    <script src="vendor/zoom-image.min.js"></script>
     ${options.supportSearch ? '<script src="vendor/search.min.js"></script>' : ''}
 </body>
 </html>
