@@ -165,7 +165,12 @@ const agentPage = async ({
     session = {},
     body = FLOW,
     language,
-    languages
+    languages,
+    reviewLog = null,
+    questions = true,
+    // Ошибка/ответ fetch с первого запроса страницы (GET журнала), а не выставленные после загрузки.
+    error = '',
+    reply = null
 } = {}) => {
     const { JSDOM } = await import('jsdom');
     const fill = (store, entries) =>
@@ -179,6 +184,8 @@ const agentPage = async ({
                 ? [`Object.defineProperty(navigator, 'languages', { value: ${JSON.stringify(languages)} });`]
                 : []
         )
+        .concat(error ? [`window.__error = ${JSON.stringify(error)};`] : [])
+        .concat(reply ? [`window.__reply = ${JSON.stringify(reply)};`] : [])
         .join('\n');
     const html = `<!DOCTYPE html><html><head></head><body>
 <script>
@@ -187,7 +194,8 @@ window.__calls = [];
 window.__reply = { id: 'b1', queued: true };
 window.__error = '';
 window.fetch = function (url, init) {
-    window.__calls.push({ url: url, method: init.method, body: JSON.parse(init.body) });
+    init = init || {};
+    window.__calls.push({ url: url, method: init.method, body: init.body ? JSON.parse(init.body) : undefined });
     var reply = window.__error ? { error: window.__error } : window.__reply;
     return Promise.resolve({ ok: !window.__error, status: 400, json: function () { return Promise.resolve(reply); } });
 };
@@ -196,7 +204,7 @@ Range.prototype.getBoundingClientRect = function () { return { top: 0, bottom: 1
 ${seed}
 </script>
 <section class="markdown-section">${body}</section>
-${commentsSnippet(H, { agent, mailboxes, project, language })}
+${commentsSnippet(H, { agent, mailboxes, project, language, reviewLog, questions })}
 </body></html>`;
     const { window } = new JSDOM(html, {
         runScripts: 'dangerously',
@@ -644,5 +652,154 @@ describe('язык интерфейса', () => {
         await p.write('t', 'Вопрос', 'Why?', 'Добавить вопрос');
         expect(p.toast()).toBe('Не удалось добавить вопрос: Comment is too long');
         expect(p.window.__calls[0].body.comment).toBe('Why?');
+    });
+});
+
+// Кнопка журнала ревью (change site-review-log): есть только с `reviewLog`, подпись — из
+// конфига или словаря, POST — на свой маршрут с теми же полями, что у вопроса.
+// `questions: false` — кнопки «Вопрос» нет, раздел вопросов не трогается; без агента и журнала
+// панель у выделения не показывается вовсе.
+describe('выключение кнопки «Вопрос»', () => {
+    it('questions: false — только Feedback (и Review при журнале), подсветки вопросов нет', async () => {
+        const body = `<h2>Flow</h2><p id="t">foo bar</p><h2>${H}</h2><ul><li>Why? — «foo bar»</li></ul>`;
+        const p = await agentPage({ languages: ['en'], questions: false, body });
+        expect(p.buttons()).toEqual(['Feedback']);
+        expect(p.doc.querySelectorAll('mark.c4b-hl, .c4b-del').length).toBe(0);
+        const q = await agentPage({
+            languages: ['en'],
+            questions: false,
+            reviewLog: { file: 'review.md', heading: ['Remarks'] }
+        });
+        expect(q.buttons()).toEqual(['Feedback', 'Review']);
+    });
+    it('без агента, вопросов и журнала панель у выделения скрыта', async () => {
+        const p = await agentPage({ languages: ['en'], questions: false, agent: false });
+        const range = p.doc.createRange();
+        range.selectNodeContents(p.doc.getElementById('t'));
+        const sel = p.window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        p.doc.dispatchEvent(new p.window.Event('selectionchange'));
+        await sleep(20);
+        expect(p.doc.querySelector('.c4b-cbtns').hidden).toBe(true);
+    });
+});
+
+describe('кнопка журнала ревью', () => {
+    const LOG = { file: 'review.md', heading: ['Remarks'] };
+
+    it('без reviewLog кнопки нет', async () => {
+        expect((await agentPage({ languages: ['en'] })).buttons()).toEqual(['Feedback', 'Question']);
+    });
+
+    it('с reviewLog — третья кнопка, замечание уходит на /__c4builder/review-log', async () => {
+        const p = await agentPage({ languages: ['en'], reviewLog: LOG });
+        expect(p.buttons()).toEqual(['Feedback', 'Question', 'Review']);
+        expect(p.byText(p.doc.querySelector('.c4b-cbtns'), 'Review').title).toBe(
+            'Add a remark to the Remarks section of review.md'
+        );
+        const pop = await p.openFor('t', 'Review');
+        expect(pop.querySelector('small').textContent).toBe('To: review.md / Remarks / Flow');
+        expect([...pop.querySelectorAll('button')].map((b) => b.textContent)).toEqual([
+            'Cancel',
+            'Add remark'
+        ]);
+        p.window.__reply = { file: 'src/review.md', number: 4 };
+        await p.write('t', 'Review', 'Wrong', 'Add remark');
+        // первый вызов — GET синхронизации страницы с журналом
+        expect(p.window.__calls).toEqual([
+            { url: '/__c4builder/review-log?page=A.md', method: 'GET', body: undefined },
+            {
+                url: '/__c4builder/review-log',
+                method: 'POST',
+                body: { page: 'A.md', quote: 'foo bar', section: 'Flow', comment: 'Wrong' }
+            }
+        ]);
+        expect(p.toast()).toBe('Added to src/review.md as #4');
+    });
+
+    it('label из конфига вместо словаря; ошибка — свой префикс', async () => {
+        const p = await agentPage({ languages: ['ru'], reviewLog: { ...LOG, label: 'В журнал' } });
+        expect(p.buttons()).toEqual(['Замечание', 'Вопрос', 'В журнал']);
+        p.window.__error = 'review.md not found';
+        await p.write('t', 'В журнал', 'Нет', 'Добавить замечание');
+        expect(p.toast()).toBe('Не удалось добавить замечание: review.md not found');
+    });
+
+    it('страница журнала: строки раздела получают «×», DELETE уходит на маршрут журнала', async () => {
+        const body = `<h2>Flow</h2><p id="t">foo bar</p><h2>Remarks</h2>
+<table><thead><tr><th>#</th><th>Where</th><th>What</th></tr></thead><tbody>
+<tr><td>1</td><td>design → Flow</td><td>Why?</td></tr>
+<tr><td>2</td><td>spec → Other</td><td>Really?</td></tr>
+</tbody></table>`;
+        const p = await agentPage({
+            languages: ['en'],
+            reviewLog: LOG,
+            body,
+            reply: { file: 'src/review.md', log: true }
+        });
+        await sleep(50);
+        expect(p.window.__calls).toEqual([
+            { url: '/__c4builder/review-log?page=A.md', method: 'GET', body: undefined }
+        ]);
+        const dels = [...p.doc.querySelectorAll('.c4b-del')];
+        expect(dels.length).toBe(2);
+        expect(dels[0].title).toBe('Remove this remark');
+        expect([...p.doc.querySelectorAll('tr.c4b-qrow')].map((r) => r.id)).toEqual(['c4b-r-1', 'c4b-r-2']);
+        p.window.__reply = { file: 'src/review.md' };
+        dels[1].click();
+        await sleep(20);
+        expect(p.window.__calls[1]).toEqual({
+            url: '/__c4builder/review-log',
+            method: 'DELETE',
+            body: { page: 'A.md', number: 2, text: 'spec → Other', cells: ['2', 'spec → Other', 'Really?'] }
+        });
+        expect(p.toast()).toBe('Removed from src/review.md');
+    });
+
+    it('не страница журнала (GET 404) и без reviewLog — кнопок «×» в разделе нет', async () => {
+        const body = `<h2>Remarks</h2><ul><li>one</li></ul>`;
+        const p = await agentPage({ languages: ['en'], reviewLog: LOG, body, error: 'not the log' });
+        await sleep(50);
+        expect(p.window.__calls.length).toBe(1);
+        expect(p.doc.querySelectorAll('.c4b-del').length).toBe(0);
+        const q = await agentPage({ languages: ['en'], body });
+        await sleep(50);
+        expect(q.window.__calls).toEqual([]);
+        expect(q.doc.querySelectorAll('.c4b-del').length).toBe(0);
+    });
+
+    it('другая страница: цитаты замечаний подсвечены, номер — ссылка на строку журнала', async () => {
+        const reply = {
+            file: 'src/review.md',
+            log: false,
+            logPage: 'Change/review/review.md',
+            remarks: [
+                { number: 7, comment: 'Bad', quote: 'foo bar', section: 'Flow' },
+                { number: 8, comment: 'Nope', quote: 'missing text', section: '' }
+            ]
+        };
+        const p = await agentPage({ languages: ['en'], reviewLog: LOG, reply });
+        await sleep(50);
+        const marks = [...p.doc.querySelectorAll('mark.c4b-rhl')];
+        expect(marks.map((m) => m.textContent)).toEqual(['foo bar']);
+        expect(marks[0].classList.contains('c4b-hl')).toBe(true);
+        const refs = [...p.doc.querySelectorAll('sup.c4b-rref a')];
+        expect(refs.map((a) => a.textContent)).toEqual(['7']);
+        expect(refs[0].getAttribute('href')).toBe('#/Change/review/review?id=c4b-r-7');
+        expect(refs[0].title).toBe('Bad');
+        // повторный проход (doneEach ещё раз) не дублирует подсветку
+        p.window.dispatchEvent(new p.window.Event('hashchange'));
+        await sleep(400);
+        expect(p.doc.querySelectorAll('mark.c4b-rhl').length).toBe(1);
+        expect(p.window.__calls.length).toBe(1);
+    });
+
+    it('без label — подпись словаря по языку', async () => {
+        expect((await agentPage({ languages: ['ru'], reviewLog: LOG })).buttons()).toEqual([
+            'Замечание',
+            'Вопрос',
+            'Ревью'
+        ]);
     });
 });

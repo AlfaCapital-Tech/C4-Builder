@@ -89,6 +89,60 @@ describe('questionsHeading', () => {
     });
 });
 
+describe('questions', () => {
+    it('по умолчанию true, false выключает', () => {
+        expect(configSchema.parse({}).questions).toBe(true);
+        expect(configSchema.parse({ questions: false }).questions).toBe(false);
+        expect(configSchema.safeParse({ questions: 'no' }).success).toBe(false);
+    });
+});
+
+describe('reviewLog', () => {
+    it('нет ключа или null — undefined (кнопки нет)', () => {
+        expect(configSchema.parse({}).reviewLog).toBeUndefined();
+        expect(configSchema.parse({ reviewLog: null }).reviewLog).toBeUndefined();
+    });
+    it('пустой объект — review.md и Review, остальное не задано', () => {
+        expect(configSchema.parse({ reviewLog: {} }).reviewLog).toEqual({
+            enabled: true,
+            file: 'review.md',
+            heading: ['Review']
+        });
+        expect(configSchema.parse({ reviewLog: { enabled: false } }).reviewLog.enabled).toBe(false);
+    });
+    it('heading — строка или список', () => {
+        expect(configSchema.parse({ reviewLog: { heading: 'A' } }).reviewLog.heading).toEqual(['A']);
+        expect(configSchema.parse({ reviewLog: { heading: ['A', 'B'] } }).reviewLog.heading).toEqual([
+            'A',
+            'B'
+        ]);
+        expect(configSchema.safeParse({ reviewLog: { heading: [] } }).success).toBe(false);
+    });
+    it('свои значения сохраняются, cells — строки', () => {
+        expect(
+            configSchema.parse({
+                reviewLog: {
+                    file: 'log.md',
+                    heading: 'Замечания',
+                    cells: ['', '{text}', 1],
+                    author: 'Me',
+                    label: 'Log'
+                }
+            }).reviewLog
+        ).toEqual({
+            enabled: true,
+            file: 'log.md',
+            heading: ['Замечания'],
+            cells: ['', '{text}', '1'],
+            author: 'Me',
+            label: 'Log'
+        });
+    });
+    it('cells не массив — ошибка', () => {
+        expect(configSchema.safeParse({ reviewLog: { cells: 'x' } }).success).toBe(false);
+    });
+});
+
 describe('uiLanguage', () => {
     it('по умолчанию auto, en и ru принимаются', () => {
         expect(configSchema.parse({}).uiLanguage).toBe('auto');

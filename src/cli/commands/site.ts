@@ -1,4 +1,5 @@
 import chalk from 'chalk';
+import { spawnSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -11,6 +12,13 @@ import type { PageSources } from '../../core/compose/markdown.ts';
 import { batchSchema, type FeedbackBatch, formatBatch, LISTENER_NAME } from '../../core/feedback.ts';
 import { redirectKey } from '../../core/plugins/tree.ts';
 import { deleteQuestion, formatQuestion, pickSource, writeQuestion } from '../../core/questions.ts';
+import {
+    deleteRemark,
+    findReviewFile,
+    isReviewFile,
+    parseRemarks,
+    writeRemark
+} from '../../core/reviewlog.ts';
 import { packageJson as pkg } from '../../util/paths.ts';
 import type { AgentMode } from '../agent.ts';
 import { pendingUpdate } from '../update.ts';
@@ -20,7 +28,8 @@ import {
     FEEDBACK_HEADER,
     FEEDBACK_PATH,
     type MailboxState,
-    PAGE_PATH
+    PAGE_PATH,
+    REVIEW_LOG_PATH
 } from './site.comments.ts';
 
 const COMMENT_MAX = 2000;
@@ -293,6 +302,8 @@ export default (
         // Ключ черновиков review в localStorage (design D5): страницы разных проектов на одном
         // localhost:<port> не должны видеть чужой черновик.
         const projectKey = createHash('sha1').update(process.cwd()).digest('hex').slice(0, 8);
+        const reviewLog = currentConfiguration.REVIEW_LOG;
+        const questions = currentConfiguration.QUESTIONS;
         // Кэш проверки обновлений читается на каждую страницу: результат фоновой проверки,
         // запущенной этим же `site -w`, виден со следующей перезагрузки без рестарта сервера.
         const inject = (html: string): string => {
@@ -300,10 +311,16 @@ export default (
             const snippet =
                 LIVERELOAD_SNIPPET +
                 commentsSnippet(currentConfiguration.QUESTIONS_HEADING, {
+                    questions,
                     agent: agent.on,
                     mailboxes: agentState().mailboxes,
                     project: projectKey,
-                    language: currentConfiguration.UI_LANGUAGE
+                    language: currentConfiguration.UI_LANGUAGE,
+                    reviewLog: reviewLog && {
+                        file: reviewLog.file,
+                        heading: reviewLog.heading,
+                        label: reviewLog.label
+                    }
                 }) +
                 (next ? updateBanner(next) : '');
             if (html.includes('</body>')) return html.replace('</body>', `${snippet}</body>`);
@@ -332,88 +349,226 @@ export default (
             !!localHost(req) && !req.get('origin') && req.get(FEEDBACK_HEADER) === '1';
         // Общая часть POST/DELETE: проверка Origin и исходный файл страницы из тела запроса.
         // Ошибка уже отправлена клиенту, когда возвращается undefined.
+        // Страница сайта из тела/запроса → её исходники внутри проекта (путь нормализован, `..` и
+        // неизвестная страница — undefined). Общее для вопросов и журнала ревью.
+        const cwd = process.cwd();
+        const relOf = (file: string): string => path.relative(cwd, file).split(path.sep).join('/');
+        const localSources = (raw: string): { page: string; sources: string[] } | undefined => {
+            const page = path.posix.normalize(raw.replace(/^\/+/, ''));
+            const sources = page.startsWith('..') ? undefined : pages().get(page);
+            return sources && { page, sources: sources.filter((s) => s.startsWith(cwd + path.sep)) };
+        };
         const resolveTarget = (
             req: express.Request,
-            res: express.Response
+            res: express.Response,
+            heading: string
         ): { file: string; rel: string; body: Record<string, unknown> } | undefined => {
             if (!fromSite(req)) {
                 res.status(403).json({ error: 'comments are accepted only from the site itself' });
                 return undefined;
             }
             const body = (req.body ?? {}) as Record<string, unknown>;
-            const page = path.posix.normalize(str(body.page).replace(/^\/+/, ''));
-            const sources = page.startsWith('..') ? undefined : pages().get(page);
-            if (!sources) {
-                res.status(404).json({ error: `unknown page: ${page}` });
+            const found = localSources(str(body.page));
+            if (!found) {
+                res.status(404).json({ error: `unknown page: ${str(body.page)}` });
                 return undefined;
             }
-            const cwd = process.cwd();
-            const file = pickSource(
-                sources.filter((s) => s.startsWith(cwd + path.sep)),
-                heading
-            );
+            const file = pickSource(found.sources, heading);
             if (!file) {
                 res.status(404).json({ error: 'this page has no source file to write to' });
                 return undefined;
             }
-            return { file, rel: path.relative(cwd, file).split(path.sep).join('/'), body };
+            return { file, rel: relOf(file), body };
         };
-
-        app.post(COMMENTS_PATH, express.json({ limit: '64kb' }), (req, res) => {
-            const target = resolveTarget(req, res);
-            if (!target) return;
-            const { file, rel, body } = target;
+        // Тело комментария: текст, цитата и раздел; ошибка уже отправлена, когда undefined.
+        const commentBody = (
+            body: Record<string, unknown>,
+            res: express.Response
+        ): { comment: string; quote: string; section: string } | undefined => {
             const comment = str(body.comment).trim();
             const quote = str(body.quote);
             const section = str(body.section);
             if (!comment) {
                 res.status(400).json({ error: 'comment is empty' });
-                return;
+                return undefined;
             }
             if (comment.length > COMMENT_MAX || quote.length > COMMENT_MAX) {
                 res.status(400).json({
                     error: `comment and quote must be at most ${COMMENT_MAX} characters`
                 });
-                return;
+                return undefined;
             }
-            try {
-                const number = writeQuestion(file, heading, formatQuestion({ comment, quote, section }));
-                console.log(chalk.gray(`comment added to ${rel}${number ? ` as #${number}` : ''}`));
-                res.json({ file: rel, number });
-            } catch (e) {
-                res.status(500).json({ error: `could not write the comment: ${(e as Error).message}` });
-            }
-        });
+            return { comment, quote, section };
+        };
+
+        // `questions: false` — маршрутов нет, как и кнопки.
+        if (questions)
+            app.post(COMMENTS_PATH, express.json({ limit: '64kb' }), (req, res) => {
+                const target = resolveTarget(req, res, heading);
+                if (!target) return;
+                const { file, rel, body } = target;
+                const parsed = commentBody(body, res);
+                if (!parsed) return;
+                const { comment, quote, section } = parsed;
+                try {
+                    const number = writeQuestion(file, heading, formatQuestion({ comment, quote, section }));
+                    console.log(chalk.gray(`comment added to ${rel}${number ? ` as #${number}` : ''}`));
+                    res.json({ file: rel, number });
+                } catch (e) {
+                    res.status(500).json({ error: `could not write the comment: ${(e as Error).message}` });
+                }
+            });
 
         // Удаление вопроса: по номеру (числовая таблица) и тексту, как он виден на странице.
-        app.delete(COMMENTS_PATH, express.json({ limit: '64kb' }), (req, res) => {
-            const target = resolveTarget(req, res);
-            if (!target) return;
-            const { file, rel, body } = target;
-            const text = str(body.text).trim();
-            if (!text) {
-                res.status(400).json({ error: 'question text is empty' });
-                return;
-            }
-            const number = typeof body.number === 'number' ? body.number : Number(str(body.number)) || null;
-            try {
-                const result = deleteQuestion(file, heading, { number, text });
-                if ('error' in result) {
-                    const messages = {
-                        'not-found': `question not found in ${rel} — the page may be stale, reload it`,
-                        ambiguous: `several identical questions in ${rel} — remove it by hand`
-                    };
-                    res.status(result.error === 'not-found' ? 404 : 409).json({
-                        error: messages[result.error]
+        if (questions)
+            app.delete(COMMENTS_PATH, express.json({ limit: '64kb' }), (req, res) => {
+                const target = resolveTarget(req, res, heading);
+                if (!target) return;
+                const { file, rel, body } = target;
+                const text = str(body.text).trim();
+                if (!text) {
+                    res.status(400).json({ error: 'question text is empty' });
+                    return;
+                }
+                const number =
+                    typeof body.number === 'number' ? body.number : Number(str(body.number)) || null;
+                try {
+                    const result = deleteQuestion(file, heading, { number, text });
+                    if ('error' in result) {
+                        const messages = {
+                            'not-found': `question not found in ${rel} — the page may be stale, reload it`,
+                            ambiguous: `several identical questions in ${rel} — remove it by hand`
+                        };
+                        res.status(result.error === 'not-found' ? 404 : 409).json({
+                            error: messages[result.error]
+                        });
+                        return;
+                    }
+                    console.log(chalk.gray(`comment removed from ${rel}`));
+                    res.json({ file: rel });
+                } catch (e) {
+                    res.status(500).json({ error: `could not remove the comment: ${(e as Error).message}` });
+                }
+            });
+
+        // Замечание в журнал ревью (change site-review-log): файл — ближайший `reviewLog.file` от
+        // исходника страницы вверх до корня проекта; автор — из конфига либо git user.name того,
+        // кто запустил `site -w` (журнал правится на машине ревьюера).
+        if (reviewLog) {
+            const gitUser = (): string => {
+                const r = spawnSync('git', ['config', 'user.name'], { encoding: 'utf8' });
+                return r.status === 0 ? r.stdout.trim() : '';
+            };
+            // `author: ""` в конфиге (как в примере документации) — не задан, а не пустой автор.
+            const author = reviewLog.author || gitUser();
+            app.post(REVIEW_LOG_PATH, express.json({ limit: '64kb' }), (req, res) => {
+                // Исходник страницы — тот же, что у вопроса: заголовок журнала в исходниках не ищем.
+                const target = resolveTarget(req, res, heading);
+                if (!target) return;
+                const { file: source, body } = target;
+                const parsed = commentBody(body, res);
+                if (!parsed) return;
+                const file = findReviewFile(path.dirname(source), reviewLog.file, cwd);
+                if (!file) {
+                    res.status(404).json({
+                        error: `${reviewLog.file} not found next to ${target.rel} or above it`
                     });
                     return;
                 }
-                console.log(chalk.gray(`comment removed from ${rel}`));
-                res.json({ file: rel });
-            } catch (e) {
-                res.status(500).json({ error: `could not remove the comment: ${(e as Error).message}` });
-            }
-        });
+                const rel = relOf(file);
+                try {
+                    const number = writeRemark(file, reviewLog, { ...parsed, source, author });
+                    console.log(chalk.gray(`remark added to ${rel}${number ? ` as #${number}` : ''}`));
+                    res.json({ file: rel, number });
+                } catch (e) {
+                    res.status(500).json({ error: `could not write the remark: ${(e as Error).message}` });
+                }
+            });
+            // Страница сайта, исходник которой — файл журнала (ссылка с подсвеченной цитаты на строку).
+            const pageOf = (file: string): string | undefined => {
+                for (const [page, sources] of pages()) if (sources.includes(file)) return page;
+                return undefined;
+            };
+            // Исходник страницы, если она — сам журнал (сниппет общий для всех страниц, страница
+            // спрашивает это перед тем, как показать кнопки удаления у строк раздела).
+            const ownLog = (sources: string[]): string | undefined =>
+                sources.find((s) => isReviewFile(s, reviewLog.file, cwd));
+            // Same-origin GET браузер шлёт без Origin — требуем лишь локальный Host и отвергаем чужой
+            // Origin: это чтение, ответ (путь файла) чужой странице всё равно не отдаётся без CORS.
+            // Страница журнала → `{ file, log: true }`; другая страница → её замечания из журнала
+            // `{ file, log: false, logPage, remarks }` для подсветки цитат; журнала нет — 404.
+            app.get(REVIEW_LOG_PATH, (req, res) => {
+                if (!localHost(req) || (req.get('origin') && !fromSite(req))) {
+                    res.status(403).json({ error: 'comments are accepted only from the site itself' });
+                    return;
+                }
+                const found = localSources(str(req.query.page));
+                const own = found && ownLog(found.sources);
+                if (own) {
+                    res.json({ file: relOf(own), log: true });
+                    return;
+                }
+                const source = found && pickSource(found.sources, heading);
+                const file = source && findReviewFile(path.dirname(source), reviewLog.file, cwd);
+                if (!source || !file) {
+                    res.status(404).json({
+                        error: `${reviewLog.file} not found for page ${str(req.query.page)}`
+                    });
+                    return;
+                }
+                try {
+                    res.json({
+                        file: relOf(file),
+                        log: false,
+                        logPage: pageOf(file) ?? null,
+                        remarks: parseRemarks(file, reviewLog, source)
+                    });
+                } catch (e) {
+                    res.status(500).json({ error: `could not read the review log: ${(e as Error).message}` });
+                }
+            });
+            // Удаление строки журнала — как у вопроса: номер и текст ячейки, видимой на странице, плюс
+            // все ячейки строки (таблицы без номеров: одна ячейка бывает общей у нескольких строк).
+            app.delete(REVIEW_LOG_PATH, express.json({ limit: '64kb' }), (req, res) => {
+                if (!fromSite(req)) {
+                    res.status(403).json({ error: 'comments are accepted only from the site itself' });
+                    return;
+                }
+                const body = (req.body ?? {}) as Record<string, unknown>;
+                const found = localSources(str(body.page));
+                const file = found && ownLog(found.sources);
+                if (!file) {
+                    res.status(404).json({ error: `page ${str(body.page)} is not the review log` });
+                    return;
+                }
+                const rel = relOf(file);
+                const text = str(body.text).trim();
+                if (!text) {
+                    res.status(400).json({ error: 'remark text is empty' });
+                    return;
+                }
+                const number =
+                    typeof body.number === 'number' ? body.number : Number(str(body.number)) || null;
+                const cells = Array.isArray(body.cells) ? body.cells.map(str) : undefined;
+                try {
+                    const result = deleteRemark(file, reviewLog.heading, { number, text }, cells);
+                    if ('error' in result) {
+                        const messages = {
+                            'not-found': `remark not found in ${rel} — the page may be stale, reload it`,
+                            ambiguous: `several identical remarks in ${rel} — remove it by hand`
+                        };
+                        res.status(result.error === 'not-found' ? 404 : 409).json({
+                            error: messages[result.error]
+                        });
+                        return;
+                    }
+                    console.log(chalk.gray(`remark removed from ${rel}`));
+                    res.json({ file: rel });
+                } catch (e) {
+                    res.status(500).json({ error: `could not remove the remark: ${(e as Error).message}` });
+                }
+            });
+        }
 
         // Замечания агенту (change site-agent-feedback): FIFO пачек в памяти (design D3), страница
         // шлёт POST, `c4builder feedback` забирает long-poll'ом (D1). Пачка снимается с очереди,

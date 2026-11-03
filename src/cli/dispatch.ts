@@ -162,7 +162,10 @@ function getOptions(c: Partial<C4ConfigFile>): BuildOptions | Partial<BuildOptio
         EXECUTE_SCRIPT: c.executeScript,
         EXCLUDE_OTHER_FILES: c.excludeOtherFiles,
         USE_SYSTEM_FONTS: c.useSystemFonts,
+        QUESTIONS: c.questions,
         QUESTIONS_HEADING: c.questionsHeading,
+        // Выключенный журнал для сборки равен отсутствующему.
+        REVIEW_LOG: c.reviewLog?.enabled === false ? undefined : c.reviewLog,
         UI_LANGUAGE: c.uiLanguage,
         PLUGINS: c.plugins
     };

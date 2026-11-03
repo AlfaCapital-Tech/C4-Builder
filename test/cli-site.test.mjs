@@ -197,6 +197,154 @@ describe('комментарии в site -w', () => {
     }, 60_000);
 });
 
+// Журнал ревью (change site-review-log): маршрут и кнопка есть только с `reviewLog`; файл —
+// ближайший вверх от исходника страницы; строка — по шаблону cells с автором из конфига.
+describe('журнал ревью в site -w', () => {
+    const rdir = fs.mkdtempSync(path.join(TMP_ROOT, 'cli-site-review-'));
+    afterAll(() => fs.rmSync(rdir, { recursive: true, force: true }));
+    fs.mkdirSync(path.join(rdir, 'src', 'Change'), { recursive: true });
+    fs.writeFileSync(path.join(rdir, 'src', 'README.md'), '# root\n');
+    fs.writeFileSync(path.join(rdir, 'src', 'Change', 'README.md'), '# change\n\n## Flow\n\nfoo bar\n');
+    const TABLE =
+        '# Review\n\n## Remarks\n\n| # | Where | Remark | Author | Status |\n|---|---|---|---|---|\n';
+    const log = path.join(rdir, 'src', 'review.md');
+    fs.writeFileSync(log, TABLE);
+    fs.writeFileSync(
+        path.join(rdir, '.c4builder'),
+        JSON.stringify({
+            ...CONFIG,
+            reviewLog: {
+                heading: 'Remarks',
+                cells: ['', '{artifact} → {section}', '{text}', '{author}', ''],
+                author: 'Reviewer'
+            }
+        })
+    );
+    const post = (port, body, origin = true) =>
+        fetch(`http://127.0.0.1:${port}/__c4builder/review-log`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(origin ? { Origin: `http://127.0.0.1:${port}` } : {})
+            },
+            body: JSON.stringify(body)
+        });
+
+    it('POST дописывает строку в ближайший review.md; без Origin — 403; нет файла выше — 404', async () => {
+        const port = 38326;
+        await serveSite(rdir, ['site', '-w', '-p', String(port)], {
+            onReady: async () => {
+                const html = await (await fetch(`http://127.0.0.1:${port}/`)).text();
+                expect(html).toContain('"review.md"');
+                expect((await post(port, { page: 'Change/Change.md', comment: 'x' }, false)).status).toBe(
+                    403
+                );
+                const ok = await post(port, {
+                    page: 'Change/Change.md',
+                    quote: 'foo bar',
+                    section: 'Flow',
+                    comment: 'Why?'
+                });
+                const okBody = await ok.json();
+                expect(ok.status, JSON.stringify(okBody)).toBe(200);
+                expect(okBody).toEqual({ file: 'src/review.md', number: 1 });
+                expect(fs.readFileSync(log, 'utf8')).toBe(
+                    `${TABLE}| 1 | Change → Flow | Why? — «foo bar» | Reviewer |  |\n`
+                );
+                // исходник страницы не тронут
+                expect(fs.readFileSync(path.join(rdir, 'src', 'Change', 'README.md'), 'utf8')).toBe(
+                    '# change\n\n## Flow\n\nfoo bar\n'
+                );
+                // Страница журнала: `src/review.md` слит в корневую Overview.md, среди её исходников
+                // журнал узнаётся по разделу; GET подтверждает, DELETE удаляет строку по номеру и видимой ячейке.
+                const origin = { Origin: `http://127.0.0.1:${port}` };
+                // GET — без Origin (так шлёт браузер same-origin), чужой Origin — 403
+                const check = (page, headers = {}) =>
+                    fetch(`http://127.0.0.1:${port}/__c4builder/review-log?page=${page}`, { headers });
+                expect((await check('Overview.md', { Origin: 'http://evil.test' })).status).toBe(403);
+                expect((await check('Overview.md', origin)).status).toBe(200);
+                const chk = await check('Overview.md');
+                expect(chk.status, JSON.stringify(await chk.clone().json())).toBe(200);
+                expect(await chk.json()).toEqual({ file: 'src/review.md', log: true });
+                // страница с замечанием: её строки журнала для подсветки цитат
+                const other = await check('Change/Change.md');
+                expect(other.status).toBe(200);
+                expect(await other.json()).toEqual({
+                    file: 'src/review.md',
+                    log: false,
+                    logPage: 'Overview.md',
+                    remarks: [{ number: 1, comment: 'Why?', quote: 'foo bar', section: 'Flow' }]
+                });
+                const del = (body) =>
+                    fetch(`http://127.0.0.1:${port}/__c4builder/review-log`, {
+                        method: 'DELETE',
+                        headers: { 'Content-Type': 'application/json', ...origin },
+                        body: JSON.stringify(body)
+                    });
+                expect(
+                    (await del({ page: 'Change/Change.md', number: 1, text: 'Change → Flow' })).status
+                ).toBe(404);
+                expect((await del({ page: 'Overview.md', number: 1, text: 'nope' })).status).toBe(404);
+                expect((await del({ page: 'Overview.md', number: 1, text: 'Change → Flow' })).status).toBe(
+                    200
+                );
+                expect(fs.readFileSync(log, 'utf8')).toBe(TABLE);
+                fs.renameSync(log, `${log}.bak`);
+                const missing = await post(port, { page: 'Change/Change.md', comment: 'x' });
+                expect(missing.status).toBe(404);
+                expect((await missing.json()).error).toBe(
+                    'review.md not found next to src/Change/README.md or above it'
+                );
+                fs.renameSync(`${log}.bak`, log);
+            }
+        });
+    }, 60_000);
+
+    it('questions: false — кнопки и маршрута вопросов нет; reviewLog.enabled: false — журнала нет', async () => {
+        const port = 38328;
+        const cfg = path.join(rdir, '.c4builder');
+        const saved = fs.readFileSync(cfg, 'utf8');
+        const parsed = JSON.parse(saved);
+        fs.writeFileSync(
+            cfg,
+            JSON.stringify({
+                ...parsed,
+                questions: false,
+                reviewLog: { ...parsed.reviewLog, enabled: false }
+            })
+        );
+        try {
+            await serveSite(rdir, ['site', '-w', '-p', String(port)], {
+                onReady: async () => {
+                    const html = await (await fetch(`http://127.0.0.1:${port}/`)).text();
+                    expect(html).toContain('var QUESTIONS = false');
+                    expect(html).not.toContain('"review.md"');
+                    const origin = { Origin: `http://127.0.0.1:${port}` };
+                    const res = await fetch(`http://127.0.0.1:${port}/__c4builder/comments`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', ...origin },
+                        body: JSON.stringify({ page: 'Change/Change.md', comment: 'x' })
+                    });
+                    expect(res.status).toBe(404);
+                    expect((await post(port, { page: 'Change/Change.md', comment: 'x' })).status).toBe(404);
+                }
+            });
+        } finally {
+            fs.writeFileSync(cfg, saved);
+        }
+    }, 60_000);
+
+    it('без reviewLog маршрута нет', async () => {
+        const port = 38327;
+        await serve(['site', '-w', '-p', String(port)], {
+            onReady: async () => {
+                expect(await (await fetch(`http://127.0.0.1:${port}/`)).text()).not.toContain('"review.md"');
+                expect((await post(port, { page: 'Overview.md', comment: 'x' })).status).toBe(404);
+            }
+        });
+    }, 60_000);
+});
+
 // Агентский режим (change site-agent-feedback, D2): подсказка при старте и флаг в странице.
 describe('агентский режим site -w', () => {
     const run = async (port, args, env) => {

@@ -13,6 +13,8 @@ The human looks at the pages in the browser (`c4builder --site -w`), selects tex
 - **Question** — a question for people: c4builder appends it to the source `.md` under the
   `questionsHeading` section (`Open questions` by default). It is not a task for you — leave it
   alone unless asked.
+- **Review** (only with the `reviewLog` key of `.c4builder`) — a remark for the review log: c4builder
+  appends it as a row of the nearest `reviewLog.file` (`review.md` by default). Not a task for you either.
 
 Invocation: `/c4builder-review [change-id|page]`. The port is `webPort` from `.c4builder`
 (`<port>` below); when the server runs with `-p <n>`, pass the same `-p <n>` to the commands below.

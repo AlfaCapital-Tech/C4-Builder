@@ -119,6 +119,50 @@ question row (shown on hover) removes it from the file; the other numbers
 stay as they are. Pages without a source file
 (summaries, indexes) do not accept questions. Without `-w` and on static hosting there is no button.
 
+### Review log
+
+A remark that belongs in a separate review log rather than in the document itself (for OpenSpec,
+the change's `review.md`) is added with the **Review** button next to **Question**. The button appears
+when `.c4builder` has the `reviewLog` key:
+
+```json
+{
+  "reviewLog": {
+    "file": "review.md",
+    "heading": "Remarks",
+    "cells": ["", "{artifact} → {section}", "{text}", "{author}", "", ""],
+    "author": "",
+    "label": ""
+  }
+}
+```
+
+- `file` — the log file name (`review.md` by default): the nearest one from the page's source
+  directory up the tree to the project root, so a remark on a delta page `specs/<area>/spec.md` lands in
+  the change's `review.md`. A missing file is an error; the log is not created.
+- `heading` — the log section (`Review` by default): a string or a list of variants when log templates
+  differ (`["Remarks", "Design remarks"]`) — the first one found in the file is used, with none present
+  the first is created. The remark is appended like a question: as a table row or a list item.
+- `cells` — the table row cells with placeholders: `{comment}` — the text, `{quote}` — the quote (up
+  to 200 characters), `{text}` — `{comment} — «{quote}»`, `{section}` — the page section, `{artifact}`
+  — the source file name without extension (`design`, `spec`; the folder name for `README.md`),
+  `{page}` — the source relative to the log's directory, `{author}`, `{date}` (YYYY-MM-DD),
+  `{number}` — the row number. A numeric first column gets the number by itself; extra template
+  cells are dropped, missing ones are empty. Without `cells` the row is the same as a question's.
+- `author` — the author; by default `git config user.name` of whoever runs `site -w`.
+- `label` — the button text instead of **Review**.
+- `enabled` — `false` turns the button and the log routes off without removing the rest of the settings.
+
+The **Question** button is always on; `questions: false` turns it off together with question
+highlighting and removal.
+
+On the log's own page (the page whose source is `file`) the rows of the `heading` section have a «×»
+button, as questions do: it removes the row from the file, the other numbers stay. On the page a remark
+was made from, its quote is highlighted in yellow and the number above it links to the log row. Which
+rows belong to a page follows from `cells`: the cell with `{artifact}` or `{page}` is compared with the
+page, the quote comes from `{quote}` or the tail of `{text}`; without such placeholders every row with a
+quote is highlighted.
+
 The page interface is in English or Russian, following the browser language; the `uiLanguage` key
 pins it. The button names here are the English ones; the Russian labels are on the
 [Agents](08%20Agents/08%20Agents.md) page.
@@ -228,7 +272,9 @@ in older versions produce a warning listing them, and the build continues.
 | `executeScript` | `false` | run `<script>` in pages and load swagger-ui |
 | `docsifyTemplate` | empty | path to a module with a custom `index.html` template |
 | `webPort` | `3000` | port of `c4builder site` |
+| `questions` | `true` | the **Question** button of `site -w`; `false` — no button and no question highlighting |
 | `questionsHeading` | `Open questions` | heading of the section where `site -w` appends questions left on the page |
+| `reviewLog` | — | review log for the **Review** button of `site -w`: `enabled`, `file`, `heading`, `cells`, `author`, `label` — see [Review log](#review-log) |
 | `uiLanguage` | `auto` | language of the `site -w` page interface: `auto` (from the browser), `en` or `ru` |
 | `webFileName` | — | one `.md` name for all site pages instead of the folder name |
 | `excludeSidebarFolderByPath` | — | list of paths (from the project folder, e.g. `src/Archive`) hidden from the sidebar |

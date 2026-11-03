@@ -66,6 +66,41 @@ describe('appendQuestion: таблица', () => {
     });
 });
 
+describe('appendQuestion: готовые ячейки', () => {
+    const T = `| # | Where | What | Who | Status |\n|---|---|---|---|---|\n`;
+    it('числовая таблица: номер в первой колонке, ячейки от фабрики по номеру', () => {
+        const md = `## ${H}\n\n${T}| 1 | a | b | c | d |\n`;
+        const { markdown, number } = appendQuestion(md, H, 'ignored', (n) => [
+            '',
+            'design → Flow',
+            `Why? #${n}`,
+            'Me'
+        ]);
+        expect(number).toBe(2);
+        expect(markdown).toBe(
+            `## ${H}\n\n${T}| 1 | a | b | c | d |\n| 2 | design → Flow | Why? #2 | Me |  |\n`
+        );
+    });
+    it('заглушка `...` заменяется: пустые ячейки шаблона берут заполненные ячейки заглушки', () => {
+        const md = `## ${H}\n\n${T}| 1 | ... | ... | ... | Open |\n`;
+        const { markdown, number } = appendQuestion(md, H, 'ignored', ['', 'spec', 'Why?', 'Me', '']);
+        expect(number).toBe(1);
+        expect(markdown).toBe(`## ${H}\n\n${T}| 1 | spec | Why? | Me | Open |\n`);
+    });
+    it('таблица без номеров: фабрика получает null, `|` в ячейке экранируется', () => {
+        const md = `## ${H}\n\n| Where | What |\n|---|---|\n`;
+        const { markdown, number } = appendQuestion(md, H, 'ignored', (n) => [`a${n ?? ''}`, 'x | y']);
+        expect(number).toBeNull();
+        expect(markdown).toBe(`## ${H}\n\n| Where | What |\n|---|---|\n| a | x \\| y |\n`);
+    });
+    it('список и отсутствие раздела — текст, а не ячейки', () => {
+        expect(appendQuestion(`## ${H}\n\n- a\n`, H, 'Why?', ['x', 'y']).markdown).toBe(
+            `## ${H}\n\n- a\n- Why?\n`
+        );
+        expect(appendQuestion('# Doc\n', H, 'Why?', ['x']).markdown).toBe(`# Doc\n\n## ${H}\n\n- Why?\n`);
+    });
+});
+
 describe('appendQuestion: список, проза, нет раздела', () => {
     it('список — пункт после последнего, хвост раздела остаётся', () => {
         const md = `## ${H}\n\n- a\n- b\n\n## Next\n\ntext\n`;
@@ -117,6 +152,46 @@ describe('pickSource', () => {
     it('без раздела — первый существующий', () =>
         expect(pickSource([path.join(dir, 'missing.md'), a], 'Other')).toBe(a));
     it('ничего нет — undefined', () => expect(pickSource([path.join(dir, 'missing.md')], H)).toBeUndefined());
+});
+
+describe('removeQuestion: cells', () => {
+    const md = `## ${H}\n\n| Status | Where | What |\n|---|---|---|\n| open | design → Flow | a |\n| open | design → Flow | b |\n`;
+    it('строка целиком: общая ячейка у двух строк не мешает', () => {
+        expect(removeQuestion(md, H, { number: null, text: 'design → Flow' }, { anyCell: true })).toEqual({
+            error: 'ambiguous'
+        });
+        expect(
+            removeQuestion(
+                md,
+                H,
+                { number: null, text: 'design → Flow' },
+                { anyCell: true, cells: ['open', 'design → Flow', 'b'] }
+            )
+        ).toEqual({
+            markdown: `## ${H}\n\n| Status | Where | What |\n|---|---|---|\n| open | design → Flow | a |\n`
+        });
+        expect(
+            removeQuestion(md, H, { number: null, text: 'x' }, { cells: ['open', 'design → Flow'] })
+        ).toEqual({ error: 'not-found' });
+    });
+});
+
+describe('removeQuestion: anyCell', () => {
+    const md = `## ${H}\n\n| # | Where | What |\n|---|---|---|\n| 1 | design | a |\n| 2 | design | b |\n`;
+    it('текст ищется в любой ячейке, номер выбирает строку', () => {
+        expect(removeQuestion(md, H, { number: 2, text: 'design' }, { anyCell: true })).toEqual({
+            markdown: `## ${H}\n\n| # | Where | What |\n|---|---|---|\n| 1 | design | a |\n`
+        });
+        expect(removeQuestion(md, H, { number: null, text: 'b' }, { anyCell: true })).toEqual({
+            markdown: `## ${H}\n\n| # | Where | What |\n|---|---|---|\n| 1 | design | a |\n`
+        });
+    });
+    it('без номера одинаковый текст в двух строках — ambiguous; без anyCell чужая колонка — not-found', () => {
+        expect(removeQuestion(md, H, { number: null, text: 'design' }, { anyCell: true })).toEqual({
+            error: 'ambiguous'
+        });
+        expect(removeQuestion(md, H, { number: 1, text: 'a' })).toEqual({ error: 'not-found' });
+    });
 });
 
 describe('removeQuestion', () => {
