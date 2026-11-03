@@ -3,6 +3,19 @@
 User-facing changes of C4-Builder. Every pull request that changes behaviour adds a line to
 `## Unreleased`; the release commit renames it to `## vX.Y.Z`.
 
+## Unreleased
+
+- Site: a **Review** button next to **Question** (`site -w`) appends a remark to a review log instead
+  of the page's own section — the `reviewLog` key of `.c4builder`: `file` (`review.md`), the nearest one
+  from the page's source up to the project root; `heading` (`Review`, or a list of variants); `cells` — the table row
+  template with `{comment}`, `{quote}`, `{text}`, `{section}`, `{artifact}`, `{page}`, `{author}`,
+  `{date}`, `{number}`; `author` (default `git config user.name`); `label` — the button text; on the
+  log's own page a «×» next to a row removes it, and on the page a remark was made from its quote is
+  highlighted with the number linking to the log row, as with questions. Without the key there is no button;
+  `enabled: false` turns it off without removing the settings
+- Site: `questions: false` in `.c4builder` turns the **Question** button off (with the question
+  highlighting, removal and routes of `site -w`)
+
 ## v0.13.0
 
 - Site: a click on a diagram or another page image opens a full-screen viewer instead of the

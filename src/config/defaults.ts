@@ -33,6 +33,8 @@ const defaultConfig = {
     d2Layout: 'dagre',
     charset: 'UTF-8',
     useSystemFonts: false,
+    // Кнопка «Вопрос» в `site -w` (false — ни кнопки, ни маршрутов, ни подсветки вопросов).
+    questions: true,
     questionsHeading: 'Open questions',
     uiLanguage: 'auto' as const
 };

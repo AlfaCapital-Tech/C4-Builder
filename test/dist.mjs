@@ -44,6 +44,15 @@ export { default as cmdSite } from '../dist/cli/commands/site.js';
 export { UI_STRINGS } from '../dist/cli/commands/site.i18n.js';
 export { batchSchema, formatBatch } from '../dist/core/feedback.js';
 export {
+    deleteRemark,
+    fillCells,
+    findReviewFile,
+    isReviewFile,
+    parseRemarks,
+    remarkVars,
+    writeRemark
+} from '../dist/core/reviewlog.js';
+export {
     BpmnError,
     BPMN_CACHE_PACKAGES,
     layoutBpmn,

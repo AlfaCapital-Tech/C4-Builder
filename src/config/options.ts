@@ -7,6 +7,7 @@
 // (defaults, dispatch) продолжают импортировать его отсюда.
 import path from 'node:path';
 
+import type { ReviewLogOptions } from '../core/reviewlog.ts';
 import { configSchema } from './schema.ts';
 import type { C4ConfigFile, PluginEntry } from './schema.ts';
 export type { C4ConfigFile, PluginEntry };
@@ -48,7 +49,11 @@ export interface BuildOptions {
     DIAGRAM_FORMAT: string;
     D2_LAYOUT: string;
     MD_FILE_NAME: string;
+    // Кнопка «Вопрос» страницы `site -w`; false — фича выключена целиком.
+    QUESTIONS: boolean;
     QUESTIONS_HEADING: string;
+    // Журнал ревью страницы `site -w` (change site-review-log); undefined — кнопки нет.
+    REVIEW_LOG?: ReviewLogOptions;
     UI_LANGUAGE: 'auto' | 'en' | 'ru';
     // Сырой список плагинов из конфига; загружаются и валидируются в cli/dispatch
     // (core/plugins/load) и передаются в build() отдельным аргументом.

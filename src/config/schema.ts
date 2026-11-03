@@ -70,7 +70,35 @@ export const configSchema = z.object({
     useSystemFonts: bool(defaultConfig.useSystemFonts),
     // Заголовок раздела, куда `site -w` дописывает комментарии к странице (в коде кириллицы
     // быть не может — русский заголовок задаёт сам проект).
+    questions: bool(defaultConfig.questions),
     questionsHeading: str(defaultConfig.questionsHeading),
+    // Журнал ревью (change site-review-log): кнопка на странице `site -w` дописывает замечание
+    // строкой таблицы в раздел `heading` ближайшего `file` от исходника страницы вверх по дереву.
+    // `heading` — один заголовок или список (шаблоны разных схем называют раздел по-разному):
+    // пишется в первый найденный в файле, нет ни одного — создаётся первый. `cells` — шаблон ячеек
+    // с подстановками `{comment}`, `{quote}`, `{text}`, `{section}`, `{artifact}`, `{page}`,
+    // `{author}`, `{date}`, `{number}`; `author` — вместо git user.name; `label` — подпись кнопки;
+    // `enabled: false` выключает кнопку, не удаляя настройку. Нет ключа — кнопки нет.
+    reviewLog: nullish(
+        z
+            .object({
+                enabled: bool(true),
+                file: str('review.md'),
+                heading: z.preprocess(
+                    (v) => (typeof v === 'string' ? [v] : Array.isArray(v) ? v.map(String) : strPre(v)),
+                    z.array(z.string().min(1)).min(1).default(['Review'])
+                ),
+                cells: nullish(
+                    z.preprocess(
+                        (v) => (Array.isArray(v) ? v.map((x) => (x == null ? '' : String(x))) : v),
+                        z.array(z.string()).optional()
+                    )
+                ),
+                author: optStr(),
+                label: optStr()
+            })
+            .optional()
+    ),
     // Язык интерфейса страницы `site -w`; `auto` — по языку браузера (change site-ui-language).
     uiLanguage: z.preprocess(
         strPre,

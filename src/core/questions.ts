@@ -4,7 +4,7 @@
 // чтобы не навязывать проектам одну форму таблицы.
 import fs from 'node:fs';
 
-const QUOTE_MAX = 200;
+export const QUOTE_MAX = 200;
 
 export interface QuestionInput {
     comment: string;
@@ -12,17 +12,22 @@ export interface QuestionInput {
     section?: string;
 }
 
-const collapse = (s: string): string => s.replace(/\s+/g, ' ').trim();
+export const collapse = (s: string): string => s.replace(/\s+/g, ' ').trim();
 
 // docsify рендерит HTML из markdown как есть: без экранирования цитата `List<String>` теряет
 // `<String>` на странице, а `<img onerror>` из комментария становится скриптом и в dist.
-const escapeHtml = (s: string): string =>
+export const escapeHtml = (s: string): string =>
     s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+/** Цитата выделения: схлопнутые пробелы, не длиннее 200 символов (с многоточием). */
+export const clipQuote = (quote: string | undefined): string => {
+    const q = collapse(quote ?? '');
+    return q.length > QUOTE_MAX ? `${q.slice(0, QUOTE_MAX - 1).trimEnd()}…` : q;
+};
 
 /** Текст вопроса: комментарий, цитата (до 200 символов) и раздел страницы, где сделано выделение. */
 export const formatQuestion = ({ comment, quote, section }: QuestionInput): string => {
-    let q = collapse(quote ?? '');
-    if (q.length > QUOTE_MAX) q = `${q.slice(0, QUOTE_MAX - 1).trimEnd()}…`;
+    const q = clipQuote(quote);
     const s = collapse(section ?? '');
     return escapeHtml(`${collapse(comment)}${q ? ` — «${q}»` : ''}${s ? ` (§ ${s})` : ''}`);
 };
@@ -53,7 +58,7 @@ const escapeCell = (s: string): string => s.replace(/\|/g, '\\|');
 // (docsify отрисовал markdown, клиент прислал textContent). Применяется к обеим сторонам:
 // сущности декодируются до срезания тегов, чтобы `&lt;T&gt;` из файла и `<T>` со страницы
 // свелись к одному.
-const plain = (s: string): string =>
+export const plain = (s: string): string =>
     collapse(
         s
             .replace(/&lt;/g, '<')
@@ -119,6 +124,54 @@ const findTable = (lines: string[], start: number, end: number): Table | undefin
     return undefined;
 };
 
+/** Готовые ячейки строки либо их фабрика по номеру строки (номер известен только здесь). */
+export type Cells = string[] | ((number: number | null) => string[]);
+
+// Ячейки новой строки: заготовка `given` (пустые ячейки берут значения заглушки — например
+// «Кому: Аналитик» из строки шаблона) либо текст в колонку вопроса; заглушки `...` очищаются.
+const rowCells = (
+    cells: Cells | undefined,
+    text: string,
+    cols: number,
+    number: number | null,
+    textCol: number,
+    placeholder?: string[]
+): string[] => {
+    const keep = (c: number): string => {
+        const v = placeholder?.[c] ?? '';
+        return isPlaceholder(v) ? '' : v;
+    };
+    const given = typeof cells === 'function' ? cells(number) : cells;
+    const out = Array.from({ length: cols }, (_, c) => {
+        const v = given?.[c] ?? '';
+        return v ? escapeCell(v) : keep(c);
+    });
+    if (number !== null) out[0] = String(number);
+    if (!given) out[textCol] = escapeCell(text);
+    return out;
+};
+
+/** Строка таблицы раздела: номер (числовая первая колонка) и ячейки как в файле. */
+export interface TableRow {
+    number: number | null;
+    cells: string[];
+}
+
+/** Строки таблицы раздела `heading` (пустой список — нет раздела или таблицы). */
+export const tableRows = (markdown: string, heading: string): TableRow[] => {
+    const lines = markdown.split(/\r?\n/);
+    const section = findSection(lines, heading);
+    if (!section) return [];
+    const table = findTable(lines, section.start, section.end);
+    if (!table) return [];
+    const rows: TableRow[] = [];
+    for (let i = table.header + 2; i <= table.last; i++) {
+        const cells = splitRow(lines[i]);
+        rows.push({ number: table.numeric ? Number(cells[0]) : null, cells });
+    }
+    return rows;
+};
+
 /** Результат правки: новый текст и номер строки таблицы (null — список или таблица без номеров). */
 export interface AppendResult {
     markdown: string;
@@ -129,8 +182,16 @@ export interface AppendResult {
  * Дописывает вопрос в раздел `heading`: строкой таблицы (с номером, если первая колонка
  * числовая; заглушка `1 | ... | ...` заменяется), иначе пунктом списка в конце раздела;
  * нет раздела — создаёт его в конце файла. Перевод строки файла сохраняется.
+ * `cells` — готовые ячейки строки таблицы (журнал ревью, change site-review-log) либо фабрика
+ * по номеру строки; числовая первая колонка всё равно получает номер; для списка и
+ * отсутствующего раздела используется `text`.
  */
-export const appendQuestion = (markdown: string, heading: string, text: string): AppendResult => {
+export const appendQuestion = (
+    markdown: string,
+    heading: string,
+    text: string,
+    cells?: Cells
+): AppendResult => {
     const eol = markdown.includes('\r\n') ? '\r\n' : '\n';
     const lines = markdown.split(/\r?\n/);
 
@@ -154,14 +215,7 @@ export const appendQuestion = (markdown: string, heading: string, text: string):
                 ? 1
                 : rows.reduce((max, r) => Math.max(max, Number(r[0])), 0) + 1
             : null;
-        const cells: string[] = placeholder
-            ? Array.from({ length: cols }, (_, c) =>
-                  isPlaceholder(rows[0][c] ?? '') ? '' : (rows[0][c] ?? '')
-              )
-            : new Array(cols).fill('');
-        if (number !== null) cells[0] = String(number);
-        cells[textCol] = escapeCell(text);
-        const row = `| ${cells.join(' | ')} |`;
+        const row = `| ${rowCells(cells, text, cols, number, textCol, placeholder ? rows[0] : undefined).join(' | ')} |`;
         if (placeholder) lines.splice(last, 1, row);
         else lines.splice(last + 1, 0, row);
         return { markdown: lines.join(eol), number };
@@ -196,11 +250,26 @@ export interface QuestionRef {
 export type RemoveResult = { markdown: string } | { error: 'not-found' | 'ambiguous' };
 
 /**
+ * `anyCell` — текст ищется в любой ячейке строки (журнал ревью: колонка текста задана шаблоном);
+ * `cells` — все ячейки строки, как их видит страница: совпасть должна строка целиком (таблицы
+ * без номеров, где одна ячейка повторяется у нескольких строк).
+ */
+export interface RemoveOptions {
+    anyCell?: boolean;
+    cells?: string[];
+}
+
+/**
  * Удаляет вопрос из раздела `heading`: строку таблицы (по номеру и тексту; без совпадения
  * номера — только по тексту) или пункт списка по тексту. Текст сравнивается без inline-разметки.
  * Номера остальных строк не меняются — на них ссылаются другие документы.
  */
-export const removeQuestion = (markdown: string, heading: string, ref: QuestionRef): RemoveResult => {
+export const removeQuestion = (
+    markdown: string,
+    heading: string,
+    ref: QuestionRef,
+    { anyCell = false, cells }: RemoveOptions = {}
+): RemoveResult => {
     const eol = markdown.includes('\r\n') ? '\r\n' : '\n';
     const lines = markdown.split(/\r?\n/);
     const section = findSection(lines, heading);
@@ -214,7 +283,14 @@ export const removeQuestion = (markdown: string, heading: string, ref: QuestionR
         const { header, last, numeric, textCol } = table;
         const rows: { line: number; cells: string[] }[] = [];
         for (let i = header + 2; i <= last; i++) rows.push({ line: i, cells: splitRow(lines[i]) });
-        const byText = rows.filter((r) => plain(r.cells[textCol] ?? '') === want);
+        const wantCells = cells?.map(plain);
+        const byText = rows.filter((r) =>
+            wantCells
+                ? wantCells.length === r.cells.length && wantCells.every((c, i) => plain(r.cells[i]) === c)
+                : anyCell
+                  ? r.cells.some((c) => plain(c) === want)
+                  : plain(r.cells[textCol] ?? '') === want
+        );
         const byNumber =
             numeric && ref.number != null ? byText.filter((r) => Number(r.cells[0]) === ref.number) : [];
         candidates = (byNumber.length ? byNumber : byText).map((r) => r.line);
@@ -229,12 +305,14 @@ export const removeQuestion = (markdown: string, heading: string, ref: QuestionR
     return { markdown: lines.join(eol) };
 };
 
-const hasHeading = (file: string, heading: string): boolean => {
+/** Есть ли в тексте раздел с таким заголовком (любой уровень, без учёта регистра). */
+export const markdownHasHeading = (markdown: string, heading: string): boolean =>
+    markdown.split(/\r?\n/).some((l) => headingLevel(l, heading) > 0);
+
+/** То же для файла; нечитаемый файл — false. */
+export const hasHeading = (file: string, heading: string): boolean => {
     try {
-        return fs
-            .readFileSync(file, 'utf8')
-            .split(/\r?\n/)
-            .some((l) => headingLevel(l, heading) > 0);
+        return markdownHasHeading(fs.readFileSync(file, 'utf8'), heading);
     } catch {
         return false;
     }
@@ -246,16 +324,21 @@ export const pickSource = (files: string[], heading: string): string | undefined
     return existing.find((f) => hasHeading(f, heading)) ?? existing[0];
 };
 
-/** Дописывает вопрос в файл и возвращает номер строки таблицы (null — список). */
-export const writeQuestion = (file: string, heading: string, text: string): number | null => {
-    const { markdown, number } = appendQuestion(fs.readFileSync(file, 'utf8'), heading, text);
+/** Дописывает вопрос (или строку `cells`) в файл и возвращает номер строки таблицы (null — список). */
+export const writeQuestion = (file: string, heading: string, text: string, cells?: Cells): number | null => {
+    const { markdown, number } = appendQuestion(fs.readFileSync(file, 'utf8'), heading, text, cells);
     fs.writeFileSync(file, markdown);
     return number;
 };
 
 /** Удаляет вопрос из файла; ошибка поиска возвращается, не бросается. */
-export const deleteQuestion = (file: string, heading: string, ref: QuestionRef): RemoveResult => {
-    const result = removeQuestion(fs.readFileSync(file, 'utf8'), heading, ref);
+export const deleteQuestion = (
+    file: string,
+    heading: string,
+    ref: QuestionRef,
+    options?: RemoveOptions
+): RemoveResult => {
+    const result = removeQuestion(fs.readFileSync(file, 'utf8'), heading, ref, options);
     if ('markdown' in result) fs.writeFileSync(file, result.markdown);
     return result;
 };

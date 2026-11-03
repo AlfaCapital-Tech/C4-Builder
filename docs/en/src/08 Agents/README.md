@@ -101,7 +101,9 @@ instruction restarts the listener with a name from that message. Code 2, not 1: 
 A feedback comment is an instruction to the agent, not a question: it is never written to the files.
 Questions for people (the **Question** button) go to the `questionsHeading` section of the source
 `.md` and stay in the documentation — the agent should not move feedback there or answer it by
-editing the questions section.
+editing the questions section. The third button, **Review** (the `reviewLog` key), writes a remark as
+a row of the review log next to the source — for example the change's `review.md`; it is a record
+for people and the review process, not addressed to the agent either.
 
 ### Several agents
 
@@ -123,7 +125,7 @@ has (`en` or `ru`), otherwise English. To pin the language for a project, set th
 ```
 
 `auto` (the default) follows the browser, `en` and `ru` always use that language. This page names
-the English buttons; the Russian interface shows **Замечание** (Feedback), **Вопрос** (Question),
+the English buttons; the Russian interface shows **Замечание** (Feedback), **Вопрос** (Question), **Ревью** (Review),
 **Отправить** (Send now), **В ревью** (Add to review), **Отправить ревью** (Submit review),
 **Одобрить** (Approve), **Очистить** (Discard), **Готово, правок нет** (Done — no changes),
 **Кому** (Send to). The

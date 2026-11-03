@@ -93,6 +93,8 @@ How the source tree becomes pages:
    that. `c4builder site` builds and serves without watching (also never exits). In `-w` a
    human can select text on a page and add a question: it lands in the source `.md` under the
    `questionsHeading` section (`Open questions` by default) — read it there, not in `docs/`.
+   With the `reviewLog` key a **Review** button writes a remark as a row of the nearest
+   `reviewLog.file` (`review.md`) instead.
    `C4BUILDER_RENDER_CONCURRENCY=<n>` sets the number of parallel PlantUML processes (default
    `min(4, CPU − 1)`); the output does not depend on it.
 
