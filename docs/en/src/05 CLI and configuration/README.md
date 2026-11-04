@@ -79,6 +79,12 @@ is done leaves placeholders in `distFolder` (they have no checksums, the next bu
 them). A build without `-w` — `c4builder site` included — still waits for every diagram and fails
 if any of them does not render.
 
+The port is fixed: `-p` or `webPort`. When it is taken, the server does not start and exits with
+code 1, suggesting a free one of the next ports: `port 3000 is already in use — pass a different
+one, e.g. -p 3001` (none of them is free — `… with -p <port>`). The server never moves to another
+port by itself: `feedback`, `--open-change` and the agent skills take the port from `-p` or
+`webPort`, so restart with the suggested `-p` and pass the same `-p` to `c4builder feedback`.
+
 ## Updating
 
 Once a day c4builder asks the npm registry in the background whether a new version is out. The

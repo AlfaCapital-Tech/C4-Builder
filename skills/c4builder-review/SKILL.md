@@ -31,7 +31,9 @@ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:<port>/
 
 `200` — the server is up; never start a second one. Otherwise ask the user to start
 `c4builder --site -w`, or ask whether you may start it yourself in the background — many teams
-keep the preview server in the human's hands.
+keep the preview server in the human's hands. If it exits with `port <port> is already in use —
+pass a different one, e.g. -p <n>`, restart it with that `-p <n>`: `<port>` below is then `<n>`,
+and the commands take the same `-p <n>`.
 
 The server answers right after `serving your docsify site`, before the diagrams are rendered: on
 a cold cache the pages show `rendering…` placeholders that turn into images by themselves, the
