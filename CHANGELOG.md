@@ -5,6 +5,9 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
 
 ## Unreleased
 
+- `site` / `--site -w` on a taken port suggests a free one: `port 3000 is already in use — pass a
+  different one, e.g. -p 3001`; the server still exits with code 1 and never moves to another port
+  itself (#64)
 - Site: a **Review** button next to **Question** (`site -w`) appends a remark to a review log instead
   of the page's own section — the `reviewLog` key of `.c4builder`: `file` (`review.md`), the nearest one
   from the page's source up to the project root; `heading` (`Review`, or a list of variants); `cells` — the table row

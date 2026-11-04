@@ -1,6 +1,7 @@
 import chalk from 'chalk';
 import { spawnSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
+import net from 'node:net';
 import path from 'node:path';
 import fs from 'node:fs';
 import express from 'express';
@@ -172,6 +173,24 @@ c4builder ${next} is available (current ${pkg.version}). Run: <code>c4builder up
     };
 })();
 </script>`;
+
+// Только подсказка для ошибки «порт занят»: сам сервер на найденный порт не переходит —
+// feedback, --open-change и скиллы берут порт из -p/webPort (change site-port-busy-hint).
+// Гонка до перезапуска не важна: занят снова — будет новая подсказка.
+const canListen = (port: number, host: string) =>
+    new Promise<boolean>((resolve) => {
+        const probe = net.createServer();
+        // Нет IPv6 на машине — ::1 неприменим, а не занят.
+        probe.once('error', (e: NodeJS.ErrnoException) =>
+            resolve(host === '::1' && (e.code === 'EADDRNOTAVAIL' || e.code === 'EAFNOSUPPORT'))
+        );
+        probe.listen(port, host, () => probe.close(() => resolve(true)));
+    });
+// Печатаем `localhost`, а он часто резолвится в ::1: порт, занятый соседом на ::1, подсказывать нельзя.
+const freePortAfter = async (port: number, tries = 10): Promise<number | undefined> => {
+    for (let p = port + 1; p <= Math.min(port + tries, 65535); p++)
+        if ((await canListen(p, '127.0.0.1')) && (await canListen(p, '::1'))) return p;
+};
 
 export default (
     currentConfiguration: BuildOptions,
@@ -806,15 +825,23 @@ export default (
             resolve(server);
         });
         server.on('close', () => clearInterval(sweeper));
-        server.on('error', (err: NodeJS.ErrnoException) => {
-            if (err.code === 'EADDRINUSE') {
-                console.log(
-                    chalk.red(`port ${port} is already in use — pass a different one with -p <port>`)
-                );
-            } else {
-                console.log(chalk.red(`server error: ${err.message}`));
+        // reject — в finally, а сбой пробы — к прежнему тексту: иначе после await промис запуска
+        // мог не завершиться и код выхода 1 терялся.
+        server.on('error', async (err: NodeJS.ErrnoException) => {
+            try {
+                if (err.code === 'EADDRINUSE') {
+                    const free = await freePortAfter(Number(port)).catch(() => undefined);
+                    console.log(
+                        chalk.red(
+                            `port ${port} is already in use — pass a different one${free ? `, e.g. -p ${free}` : ' with -p <port>'}`
+                        )
+                    );
+                } else {
+                    console.log(chalk.red(`server error: ${err.message}`));
+                }
+            } finally {
+                reject(err);
             }
-            reject(err);
         });
     });
 };

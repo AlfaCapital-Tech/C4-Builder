@@ -84,7 +84,9 @@ How the source tree becomes pages:
    `http://localhost:3000` (`webPort`, or `-p <n>`), rebuilds on save and reloads the
    browser; `-o` opens it, `--open-change <change-id>` opens the OpenSpec change page by its short
    address `#/change/<change-id>` (a warning on stderr when the site has no such change). It
-   never exits — start it in the background or leave it to the user. The server comes up right
+   never exits — start it in the background or leave it to the user. A taken port exits with
+   `port 3000 is already in use — pass a different one, e.g. -p 3001`: restart with that `-p`
+   and pass the same `-p` to `c4builder feedback` (the server never picks another port itself). The server comes up right
    after `serving your docsify site` (and `-o`/`--open-change` opens the browser then), before the diagrams are
    rendered: on a cold cache they show a `rendering…` placeholder and are drawn in the
    background (`rendering N diagrams in background…` → `rendered N diagrams in T s`), the page

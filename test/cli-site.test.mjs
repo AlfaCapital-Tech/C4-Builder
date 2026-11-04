@@ -29,21 +29,39 @@ describe('c4builder site', () => {
     }, 60_000);
 
     // Express 5 зовёт колбэк listen и с ошибкой: раньше печатались «serving»/«go to», а код был 0.
-    it('занятый порт → код 1, без «go to»', async () => {
-        const port = 28330;
-        const busy = http.createServer();
-        await new Promise((resolve) => busy.listen(port, '127.0.0.1', resolve));
+    // Заняты и следующие порты (один — только на ::1, куда ведёт localhost) — подсказка обязана их
+    // пропустить, а сервер — не переходить сам. Диапазон пробы (port+1…port+10) не пересекается
+    // с портами других тестов: файлы идут параллельно.
+    it('занятый порт → код 1, без «go to», с подсказкой свободного порта', async () => {
+        const port = 28380;
+        const busy = [];
+        const hold = (p, host) =>
+            new Promise((resolve, reject) => {
+                const s = http.createServer();
+                s.once('error', reject).listen(p, host, () => resolve(busy.push(s)));
+            });
         try {
+            await hold(port, '127.0.0.1');
+            await hold(port + 1, '127.0.0.1');
+            const v6 = await hold(port + 2, '::1').then(
+                () => true,
+                () => false
+            );
             const res = spawnSync(process.execPath, [CLI, 'site', '-p', String(port)], {
                 cwd: dir,
                 encoding: 'utf8',
                 timeout: 60_000
             });
             expect(res.status, `${res.stdout}${res.stderr}`).toBe(1);
-            expect(res.stdout).toContain(`port ${port} is already in use`);
+            const hint = res.stdout.match(
+                new RegExp(`port ${port} is already in use — pass a different one, e\\.g\\. -p (\\d+)`)
+            );
+            expect(hint, res.stdout).not.toBeNull();
+            expect(Number(hint[1])).toBeGreaterThan(port + (v6 ? 2 : 1));
+            expect(Number(hint[1])).toBeLessThanOrEqual(port + 10);
             expect(res.stdout).not.toContain('go to');
         } finally {
-            busy.close();
+            for (const s of busy) s.close();
         }
     }, 60_000);
 });
