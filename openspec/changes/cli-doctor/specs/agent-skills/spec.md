@@ -45,4 +45,8 @@
 
 #### Scenario: Скиллы старше CLI
 - **WHEN** у `.claude/skills/c4builder/SKILL.md` `metadata.generatedBy` старше версии CLI и агент с `CLAUDECODE=1` запускает `c4builder site -w`
-- **THEN** при старте в stderr одна строка с версией скилла, версией CLI и командой `c4builder skills`
+- **THEN** при старте в stderr одна строка с версией скилла, версией CLI, командой `c4builder skills` и хвостом `Details: c4builder doctor skills`
+
+#### Scenario: Личная копия перекрывает проектные
+- **WHEN** у `~/.claude/skills/c4builder/SKILL.md` нет `metadata.generatedBy` и агент с `CLAUDECODE=1` запускает сборку
+- **THEN** в stderr одна строка о личной копии, перекрывающей проектные скиллы, с хвостом `Details: c4builder doctor skills`

@@ -14,15 +14,17 @@
 
 ## What Changes
 
-- Новая подкоманда `c4builder doctor [group...]` — только чтение: группы проверок `env`,
-  `skills`, `render`, `project`, `runtime`; у каждой проверки статус `ok | warn | error | skipped`
-  и у проблемы — одна строка с командой-исправлением.
-- Флаги: `--json` (стабильные id проверок), `-v` (пути и подробности), `--strict` (код 1 и на
-  предупреждениях), `--full` (пробная сборка шаблонного проекта вместо крошечной диаграммы),
-  `--offline` (без проверки новой версии).
-- Группа `skills`: все скиллы пакета во всех каталогах Claude Code, Codex и `.agents`; версия,
-  полнота набора, совпадение текста с пакетом, перекрытие личной копией, дубли со скиллами
-  плагинов Claude Code (по возможности).
+- Новая подкоманда `c4builder doctor [group...]` — только чтение: ничего не ставит и не
+  скачивает (JRE тоже), файлы пишет только `--full` — во временный каталог, который удаляется
+  при любом исходе. Группы проверок `env`, `skills`, `render`, `project`, `runtime`; у каждой
+  проверки статус `ok | warn | error | skipped`, у ошибки и действенного предупреждения — одна
+  строка с командой-исправлением.
+- Флаги: `--json` (один объект, стабильные id проверок), `-v` (пути и подробности), `--strict`
+  (код 1 и на предупреждениях), `--full` (пробная сборка шаблонного проекта вместо крошечной
+  диаграммы), `--offline` (ни одного сетевого запроса).
+- Группа `skills`: все скиллы пакета в каталогах текущего агента и `.agents` (без агента — во
+  всех каталогах Claude Code, Codex и `.agents`); версия, полнота набора, совпадение текста с
+  пакетом, перекрытие личной копией, дубли со скиллами плагинов Claude Code (по возможности).
 - Вывод без `-v` безопасно вставлять в issue: домашний каталог — `~`, значений переменных
   окружения нет.
 - Скилл `c4builder-setup` начинается с `c4builder doctor`; строка о скиллах под агентом
@@ -41,10 +43,11 @@
 
 ## Impact
 
-- Код: новый `src/cli/commands/doctor.ts`; `src/cli/dispatch.ts` (подкоманда, флаги, текст
-  уведомления о скиллах); переиспользуются `detectAgent`, `stampIn`/`skillsNotice` из
-  `commands/skills.ts`, `newestVersion`/`compareVersions`/`VIEW` из `update.ts`,
-  `resolveJava`/`cachedJava`, `parseConfig`, движок `check`.
+- Код: новый `src/cli/commands/doctor.ts`; `src/cli/dispatch.ts` (подкоманда до проверки
+  терминала, флаги, исключение из фоновой проверки версии, текст уведомления о скиллах);
+  переиспользуются `detectAgent`, `stampIn`/`skillsNotice` из `commands/skills.ts`,
+  `newestVersion`/`compareVersions`/`VIEW` из `update.ts`, `detectSystemJava`/`cachedJava`
+  (не `resolveJava`: он скачивает JRE), `parseConfig`, движки рендера.
 - Тесты: новый `test/cli-doctor.test.mjs`; `test/cli-skills.test.mjs` (текст уведомления),
   `COMMANDS` в `test/skills.test.mjs`.
 - Скиллы: `skills/c4builder-setup`, `skills/c4builder` (раздел о строке про скиллы);
