@@ -69,6 +69,8 @@ const perDirectory = (
     report: Report
 ): (() => void) => {
     const watchers = new Map<string, fs.FSWatcher>();
+    // fs.stat из событий, запущенные до остановки, не должны заводить новые подписки после неё.
+    let stopped = false;
     const unwatch = (dir: string): void => {
         for (const [d, w] of watchers)
             if (d === dir || d.startsWith(dir + path.sep)) {
@@ -77,7 +79,7 @@ const perDirectory = (
             }
     };
     const scan = (dir: string): void => {
-        if (ignore(dir) || watchers.has(dir)) return;
+        if (stopped || ignore(dir) || watchers.has(dir)) return;
         try {
             const w = fs.watch(dir, (event, name) => {
                 const p = name ? path.join(dir, name) : dir;
@@ -89,7 +91,12 @@ const perDirectory = (
                 });
                 emit(p);
             });
-            w.on('error', () => unwatch(dir));
+            // Ошибка подписки (переполнение очереди inotify и т. п.) снимает поддерево с наблюдения —
+            // молча нельзя, иначе правки там пропадают без следа. Удаление папки ошибки не даёт.
+            w.on('error', (err) => {
+                report(err);
+                unwatch(dir);
+            });
             watchers.set(dir, w);
             for (const e of fs.readdirSync(dir, { withFileTypes: true }))
                 if (e.isDirectory()) scan(path.join(dir, e.name));
@@ -100,6 +107,7 @@ const perDirectory = (
     };
     for (const root of roots) scan(root);
     return () => {
+        stopped = true;
         for (const w of watchers.values()) w.close();
         watchers.clear();
     };

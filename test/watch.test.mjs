@@ -18,16 +18,22 @@ const watched = (opts = {}) => {
     const root = fs.mkdtempSync(path.join(base, 'tree-'));
     const batches = [];
     let stop = () => {};
+    // Затишье: за 150 мс (три окна пачки) не пришло ни одной пачки — поздние события прошлого
+    // шага уже выданы и не засчитаются следующему.
+    const quiet = async () => {
+        for (let n = -1; n !== batches.length; await sleep(150)) n = batches.length;
+    };
     return {
         root,
+        batches,
+        quiet,
         start: () => {
             stop = watchTree([root], { delayMs: 50, ...opts }, (paths) => batches.push(paths));
         },
         stop: () => stop(),
-        // Действие после затишья — поздние события прошлого шага не засчитываются этому;
-        // ждёт пачку, в которой есть путь p.
+        // Действие после затишья; ждёт пачку, в которой есть путь p.
         async change(p, act) {
-            await sleep(150);
+            await quiet();
             batches.length = 0;
             act();
             for (const until = Date.now() + 3000; Date.now() < until; await sleep(20)) {
@@ -104,6 +110,8 @@ describe('watchTree', () => {
             });
             expect(batch).toContain(b);
             expect(batch.filter((p) => p.startsWith(out))).toEqual([]);
+            await w.quiet();
+            expect(w.batches).toHaveLength(1);
         } finally {
             w.stop();
         }
