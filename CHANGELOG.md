@@ -3,7 +3,7 @@
 User-facing changes of C4-Builder. Every pull request that changes behaviour adds a line to
 `## Unreleased`; the release commit renames it to `## vX.Y.Z`.
 
-## Unreleased
+## v0.14.0
 
 - `site` / `--site -w` on a taken port suggests a free one: `port 3000 is already in use — pass a
   different one, e.g. -p 3001`; the server still exits with code 1 and never moves to another port
