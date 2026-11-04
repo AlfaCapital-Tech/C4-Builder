@@ -8,6 +8,19 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
 - `site` / `--site -w` on a taken port suggests a free one: `port 3000 is already in use — pass a
   different one, e.g. -p 3001`; the server still exits with code 1 and never moves to another port
   itself (#64)
+- `c4builder doctor [group...]` — read-only diagnostics with a `fix:` line under every problem:
+  `env` (Node.js against `engines`, the version and a newer release, how c4builder is installed,
+  Java, the D2 engine, fonts, proxy variables), `skills` (every package skill in the folders of
+  Claude Code, Codex and `.agents`: version, missing or edited copies, a shadowing personal copy,
+  duplicates in Claude Code plugins), `render` (a tiny C4 diagram; `--full` builds the template
+  project in a temporary folder), `project` (`.c4builder`, a build without the wizard, paths) and
+  `runtime` (the port, the agent). `--json` prints one object with stable check ids, `-v` adds
+  paths, `--strict` fails on warnings, `--offline` makes no network requests; exit code 1 on
+  errors. It downloads no JRE, works outside a project and without a terminal; the output without
+  `-v` shows the home folder as `~` and no variable values, safe to paste into an issue (#68)
+- The skills notice under an agent ends with `Details: c4builder doctor skills`
+- The `c4builder-setup` skill starts with `c4builder doctor` and follows its fixes; the smoke build
+  is `c4builder doctor render --full`
 - Site: a **Review** button next to **Question** (`site -w`) appends a remark to a review log instead
   of the page's own section — the `reviewLog` key of `.c4builder`: `file` (`review.md`), the nearest one
   from the page's source up to the project root; `heading` (`Review`, or a list of variants); `cells` — the table row

@@ -10,12 +10,20 @@ import { PACKAGE_ROOT, packageJson as pkg } from '../util/paths.ts';
 const DAY_MS = 24 * 60 * 60 * 1000;
 const SEMVER = /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
 // Без лимитов npm в сети, молча теряющей пакеты, висит минутами (повторы с паузами до 60 с).
-const VIEW = ['view', pkg.name, 'dist-tags', '--json', '--fetch-retries=0', '--fetch-timeout=5000'];
+export const viewArgs = (fetchTimeoutMs: number): string[] => [
+    'view',
+    pkg.name,
+    'dist-tags',
+    '--json',
+    '--fetch-retries=0',
+    `--fetch-timeout=${fetchTimeoutMs}`
+];
+const VIEW = viewArgs(5000);
 
 // npm на Windows — npm.cmd, а .cmd Node ≥ 20.12 запускает только через shell. Команду склеиваем
 // сами: shell с массивом аргументов Node помечает DEP0190. Аргументы фиксированные или прошли SEMVER.
-const WIN = process.platform === 'win32';
-const npmCommand = (args: string[]): [string, string[]] =>
+export const WIN = process.platform === 'win32';
+export const npmCommand = (args: string[]): [string, string[]] =>
     WIN ? [['npm', ...args].join(' '), []] : ['npm', args];
 const npmSync = (args: string[], options: Pick<SpawnSyncOptions, 'stdio' | 'timeout'>) => {
     const [cmd, argv] = npmCommand(args);

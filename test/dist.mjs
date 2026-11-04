@@ -1,6 +1,6 @@
 // Единая точка импорта собранного dist/ в тестах: будущая смена раскладки сборки
 // (build-split) правится здесь, а не глубокими путями по всем тестам.
-export { cachedJava, resolveJava } from '../dist/core/render/jre.js';
+export { cachedJava, detectSystemJava, resolveJava } from '../dist/core/render/jre.js';
 export { isPathInside } from '../dist/util/archive.js';
 export { watchTree } from '../dist/util/watch.js';
 export { configSchema, isValidPort } from '../dist/config/schema.js';
@@ -41,6 +41,7 @@ export { foldD2Imports, d2LocalImports, clearD2FileCache } from '../dist/core/re
 export { diagramRefRegex, generateLlmsFull, stripEmbeddedImages } from '../dist/core/compose/markdown.js';
 export { compareVersions, newestVersion } from '../dist/cli/update.js';
 export { detectAgent } from '../dist/cli/agent.js';
+export { nodeCheck } from '../dist/cli/commands/doctor.js';
 export { default as cmdSite } from '../dist/cli/commands/site.js';
 export { UI_STRINGS } from '../dist/cli/commands/site.i18n.js';
 export { batchSchema, formatBatch } from '../dist/core/feedback.js';

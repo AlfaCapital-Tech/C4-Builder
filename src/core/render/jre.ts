@@ -346,4 +346,12 @@ const resolveJava = async ({
 // из неё CI берёт путь кеша и материал ключа (см. .github/workflows/ci.yml), не
 // хардкодя путь и не grep'ая константы из исходников. adoptiumOs/adoptiumArch/
 // parseMajor/MAJOR_MIN — module-private.
-export { resolveJava, detectSystemJava, cachedJava, TEMURIN_FEATURE, JRE_CACHE_SCHEMA, jreCacheDir };
+export {
+    resolveJava,
+    detectSystemJava,
+    cachedJava,
+    installedJavaAt,
+    TEMURIN_FEATURE,
+    JRE_CACHE_SCHEMA,
+    jreCacheDir
+};

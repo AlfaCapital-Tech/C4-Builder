@@ -171,7 +171,7 @@ metadata:
 |---|---|
 | `c4builder` | работа с проектом: раскладка `src/` и `.c4builder`, цикл правка → `c4builder check` → сборка, конвенции C4-PlantUML (stdlib-инклюды, общий `.iuml`, офлайн-рендер), D2, BPMN-процессы без координат, mermaid (`.mmd` и блоки, неподдерживаемые типы), wireflow (`.wireflow.json` из редактора, версии формата, заглушки), плагины `openspec` и `openapi`, `llms.txt`, уведомления о новой версии и о скиллах |
 | `c4builder-review` | ревью страниц на `c4builder --site -w`: проверка сервера, ссылка на страницу change или раздела, цикл `c4builder feedback --wait --as <имя>`, отчёт в чате; вызов `/c4builder-review [change-id\|страница]` |
-| `c4builder-setup` | установка и обновление (npm-каналы `latest` и `rc`, зеркало реестра через npmrc или `--registry`, Docker-образ), Java или скачиваемая JRE, проверочная сборка шаблонного проекта, установка скиллов в проект |
+| `c4builder-setup` | диагностика с `c4builder doctor` и его исправлений, установка и обновление (npm-каналы `latest` и `rc`, зеркало реестра через npmrc или `--registry`, Docker-образ), Java или скачиваемая JRE, проверочная сборка шаблонного проекта (`c4builder doctor render --full`), установка скиллов в проект |
 
 ### Уведомление о скиллах
 
@@ -180,9 +180,9 @@ metadata:
 CLI или его перекрывает устаревшая личная копия:
 
 ```text
-c4builder agent skills are not installed here. Ask the user, then run: c4builder skills
-c4builder agent skills here are from 0.9.0 (current 0.10.0). Ask the user, then run: c4builder skills
-~/.claude/skills/c4builder (no version) overrides project skills. Ask the user to remove it, then run: c4builder skills
+c4builder agent skills are not installed here. Ask the user, then run: c4builder skills. Details: c4builder doctor skills
+c4builder agent skills here are from 0.9.0 (current 0.10.0). Ask the user, then run: c4builder skills. Details: c4builder doctor skills
+~/.claude/skills/c4builder (no version) overrides project skills. Ask the user to remove it, then run: c4builder skills. Details: c4builder doctor skills
 ```
 
 Какая копия действует: каталог агента — `.claude/skills` для Claude Code и `.agents/skills` для
@@ -201,6 +201,23 @@ CLI строки не вызывает: в общем репозитории с�
 
 Личную копию обычно оставляет `npx skills add -g`. `c4builder skills` её не удаляет, а
 предупреждает о ней в stderr.
+
+### Что стоит на самом деле: `c4builder doctor skills`
+
+Строка смотрит только основной скилл и только каталог текущего агента. Полную картину даёт
+`c4builder doctor skills` (см. «Диагностика» на странице
+[CLI и конфигурация](05%20CLI%20и%20конфигурация/05%20CLI%20и%20конфигурация.md)): все скиллы пакета в
+каждом найденном каталоге — `.agents/skills`, у Claude Code `.claude/skills` до корня git и
+`~/.claude/skills`, у Codex ещё `.codex/skills`, `~/.agents/skills` и `$CODEX_HOME/skills`:
+
+- части набора нет, отметки версии нет или она новее CLI — `!`; отметка старше CLI — `✗`;
+- текст отличается от пакета той же версии (отметка `generatedBy` не в счёт) — `!` `edited copy`:
+  правки скиллов — в репозиторий c4builder, следующий `c4builder skills` их затрёт;
+- личная копия с проблемой перекрывает проектные — `!` с её путём и командой удаления (с согласия
+  пользователя);
+- плагин Claude Code из кэша `~/.claude/plugins/cache` несёт скилл с тем же именем — `!` без
+  исправления: удалить плагин целиком может быть нельзя, в нём другие скиллы;
+- последняя строка — `–`: какие скиллы загрузила сессия агента, CLI не видит.
 
 ### Альтернатива: npx skills
 

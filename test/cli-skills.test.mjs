@@ -13,7 +13,7 @@ const CONFIG = JSON.parse(
 );
 const VERSION = spawnSync(process.execPath, [CLI, '--version'], { encoding: 'utf8' }).stdout.trim();
 const SKILLS = fs.readdirSync(path.join(REPO_ROOT, 'skills'));
-const RUN = 'Ask the user, then run: c4builder skills';
+const RUN = 'Ask the user, then run: c4builder skills. Details: c4builder doctor skills';
 const NOT_INSTALLED = `c4builder agent skills are not installed here. ${RUN}`;
 const PERSONAL = `~/.claude/skills/c4builder (no version) overrides project skills. Ask the user to remove it`;
 
@@ -172,7 +172,7 @@ describe('уведомление о скиллах под агентом', () =>
         expect(run(['skills'], { CLAUDECODE: '1' }).status).toBe(0);
         writeSkill(path.join(home, '.claude'));
         expect(notices(run([], { CLAUDECODE: '1' }).stderr)).toEqual([
-            `${PERSONAL}, then run: c4builder skills`
+            `${PERSONAL}, then run: c4builder skills. Details: c4builder doctor skills`
         ]);
     });
 

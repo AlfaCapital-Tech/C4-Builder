@@ -12,6 +12,7 @@ c4builder check <file...>    # validate .puml / .iuml / .d2 / .bpmn / .mmd / .wi
 c4builder --site -w          # live preview on http://localhost:3000 - never exits
 c4builder --site -w --open-change <change-id>  # the same, opens the OpenSpec change page #/change/<change-id>
 c4builder feedback --wait --as <name>  # wait for comments from the preview page sent to <name>
+c4builder doctor             # something does not work? run this first: read-only checks, a fix: line per problem
 ```
 
 Not installed: `npm i -g @alfacapital-tech/c4builder` (Node.js 22.17+; Java 17+ is used
@@ -39,9 +40,9 @@ updates it.
    pinned by `uiLanguage`); batches are always in English.
 4. A stderr line `c4builder <new> is available (current <current>). Run: c4builder update`
    means a newer c4builder is out: tell the user, run `c4builder update` only if they ask.
-5. A stderr line ending with `Ask the user, then run: c4builder skills` means the c4builder skills
+5. A stderr line with `Ask the user, then run: c4builder skills` means the c4builder skills
    here are missing, outdated or shadowed by a personal copy: tell the user, run `c4builder skills`
-   (or remove the personal copy) only if they agree.
+   (or remove the personal copy) only if they agree. `c4builder doctor skills` shows the details.
 
 ## Layout
 

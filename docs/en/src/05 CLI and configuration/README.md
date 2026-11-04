@@ -19,8 +19,9 @@
 | `c4builder --docs` | short reference of config keys and the address of this documentation |
 | `c4builder update` | updates a global npm install to the newest version, otherwise prints how to update, see "Updating" below |
 | `c4builder skills` | installs or updates the agent skills of the CLI's own version in the current folder: `.agents/skills/`, under Claude Code also `.claude/skills/`; needs no project config, see "Agent skills" on the [Agents](08%20Agents/08%20Agents.md) page |
+| `c4builder doctor [group...]` | diagnostics: environment, agent skills, a test render, the project and the port; read-only, works outside a project and without a terminal, see "Diagnostics" below |
 
-Positional commands are `check`, `jre`, `site`, `update`, `feedback`, since 0.5.0 also `new` and `config`, since 0.10.0 `skills`. Since
+Positional commands are `check`, `jre`, `site`, `update`, `feedback`, since 0.5.0 also `new` and `config`, since 0.10.0 `skills`, later `doctor`. Since
 0.5.0 any other positional argument is an `unknown command` error with exit code 1: a typo
 (`c4builder nwe`) no longer starts a build.
 
@@ -32,11 +33,12 @@ Flags:
 | `-w, --watch` | rebuild on changes in the sources and plugin folders |
 | `-o, --open` | open the home page of the site in the browser (with `--site`) |
 | `--open-change <id>` | open the page of an OpenSpec change by the short address `#/change/<id>` in the browser (with `--site`, see [Plugins](06%20Plugins/06%20Plugins.md)); when the site has no such address — a warning on stderr, the address is opened anyway |
-| `-p, --port <n>` | port for `--site` and `feedback` (defaults to `webPort` from the config, 3000) |
+| `-p, --port <n>` | port for `--site`, `feedback` and `doctor` (defaults to `webPort` from the config, 3000) |
 | `--agent`, `--no-agent` | turn the agent mode of `site -w` on or off regardless of the environment |
 | `--wait` | for `feedback`: wait for the next batch instead of only checking the queue |
 | `--as <name>` | for `feedback`, required: listener name — the agent's change or task (1–64 characters: Latin letters, digits, `.`, `_`, `-`) |
 | `--system-fonts` | render with system fonts for one run |
+| `--json`, `-v, --verbose`, `--strict`, `--full`, `--offline` | for `doctor`, see "Diagnostics" below |
 | `-V, --version` | version |
 | `-h, --help` | flags and positional commands |
 
@@ -110,6 +112,75 @@ showing npm's output. Otherwise it installs nothing, prints the update command a
 The check and the notices are off when the `CI` variable is set (GitLab CI, GitHub Actions and most
 CI systems set it) or `NO_UPDATE_NOTIFIER` is set, and in the Docker image. To turn them off on your
 machine: `NO_UPDATE_NOTIFIER=1`.
+
+## Diagnostics
+
+`c4builder doctor` shows in one command what gets in the way, with a `fix:` line — a command or a
+link — under every problem. It only reads: it installs and downloads nothing (no JRE either), does
+not touch the config and does not start the wizard. It works in any folder, in CI and under an agent.
+
+```text
+c4builder doctor 0.14.0 (latest)
+Environment
+  ✓ Node.js 24.11.0
+  ✓ c4builder 0.14.0 (latest)
+  ✓ no newer version
+  ✓ global npm
+  ✓ Java 21 (system)
+  – no .d2 files in the project
+  ✓ bundled font Nimbus Sans
+  ✓ no proxy variables set
+Skills (claude-code)
+  ✓ .agents/skills — 0.14.0
+  ✗ .claude/skills — from 0.12.0, CLI 0.14.0
+      fix: c4builder skills   (ask the user first)
+  – what the agent session loaded is not visible to the CLI
+Render
+  ✓ PlantUML with C4 in 0.9 s
+Project
+  ✓ .c4builder valid
+  ✓ non-interactive build ready
+  ✓ rootFolder src and plugin paths exist
+Runtime
+  ✓ port 3000 free
+  ✓ coding agent claude-code, agent mode on
+1 error, 0 warnings
+```
+
+Statuses: `✓` ok, `!` warning, `✗` error, `–` the check does not apply or was not run (no network,
+no `.d2` in the project). `(ask the user first)` — the fix changes project files or removes a
+personal skill copy: an agent runs it only with the human's consent.
+
+| Group | Checks |
+|---|---|
+| `env` | `env.node` — Node.js is not older than the package's `engines`; `env.cli` — version and channel; `env.update` — whether a newer version is out; `env.install` — how c4builder is installed, several `c4builder` on `PATH`; `env.java` — a system Java 17+ or a JRE in the cache; `env.d2` — the D2 engine when the project has `.d2` files; `env.fonts` — `useSystemFonts`; `env.proxy` — whether `HTTPS_PROXY`, `HTTP_PROXY`, `NODE_EXTRA_CA_CERTS` are set and the certificate file exists |
+| `skills` | the package skills in the agent's folders: `skills.<agents\|claude\|codex>.<project\|personal>` — the set, the version, text equal to the package, a shadowing personal copy; `skills.installed` — the agent has no skills; `skills.claude.plugins` — Claude Code plugins with the same skills; `skills.session` — always `–`: the CLI cannot see what the agent session loaded |
+| `render` | `render.plantuml` — a tiny C4 diagram with the build's engine; `render.d2`, `render.mermaid` — when the project has such files; `render.full` — with `--full` |
+| `project` | `project.config` — `.c4builder` is found and valid; `project.complete` — the build runs without the wizard; `project.paths` — `rootFolder` and plugin paths exist |
+| `runtime` | `runtime.port` — the `webPort` (or `-p`) port is free, serves `site -w` or another process; `runtime.agent` — which agent is detected and whether agent mode is on |
+
+`c4builder doctor skills project` runs only the listed groups; an unknown group prints the list of
+groups with exit code 2. Skill folders: under an agent — its own and `.agents/skills`, without one —
+all of them (Claude Code, Codex, `.agents`).
+
+| Flag | Meaning |
+|---|---|
+| `--json` | one JSON object on stdout: `version`, `channel`, `agent`, `checks` (`id`, `status`, `message`, `fix`, `askUser`, `details`), `summary`; check ids do not change between versions |
+| `-v, --verbose` | absolute paths and details (the java path, skill files that differ from the package, the smoke build log) |
+| `--strict` | exit code 1 on warnings too — for CI |
+| `--full` | instead of the tiny diagram, builds the template project (`--new --name doctor -y`) in a temporary folder removed whatever the outcome; without Java — `–` |
+| `--offline` | no network requests at all |
+
+Exit codes: 0 — no errors (warnings are fine), 1 — an error, with `--strict` a warning too, 2 — an
+unknown group. `–` does not affect the code.
+
+doctor checks for a new version itself — `npm view` with a 3 s timeout; no answer is `–`, not an
+error. `CI` and `NO_UPDATE_NOTIFIER` do not turn this check off: doctor is run on purpose. `doctor`
+has no background check and no new version line at the end.
+
+The output without `-v` is safe to paste into an issue: the home folder is shown as `~`, paths inside
+the project are relative, there are no values of environment variables — only whether a variable is
+set.
 
 ## Comments on the site
 
