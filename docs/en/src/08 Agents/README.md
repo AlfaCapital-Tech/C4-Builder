@@ -192,7 +192,7 @@ c4builder agent skills here are from 0.9.0 (current 0.10.0). Ask the user, then 
 Which copy counts: the agent's folder is `.claude/skills` for Claude Code and `.agents/skills` for
 the others. A personal copy (`~/.claude/skills/c4builder`, `~/.agents/skills/…` for other agents)
 wins over the project one; without it the nearest project copy counts — in the current folder or
-above, up to the root of the git repository. A copy without a version stamp or with an older one is
+above, up to the root of the git repository (the home folder is never a project one, even outside git). A copy without a version stamp or with an older one is
 outdated. A copy newer than the CLI prints nothing: in a shared repository with committed skills a
 colleague with an older CLI needs no advice to roll them back — the new version notice tells them
 about the CLI.
@@ -220,8 +220,9 @@ root and `~/.claude/skills`, for Codex also `.codex/skills`, `~/.agents/skills` 
 - the text differs from the package of the same version (the `generatedBy` stamp does not count) —
   `!` `edited copy`: skill edits belong in the c4builder repository, the next `c4builder skills`
   overwrites them;
-- a personal copy with a problem shadows the project ones — `!` with its path and the command to
-  remove it (with the user's consent);
+- under Claude Code a personal copy shadows the project one — `!` with its path and the command to
+  remove it (with the user's consent), even when the personal copy is current; without a project copy
+  the command first installs it (`c4builder skills && rm -r …`);
 - a Claude Code plugin in the `~/.claude/plugins/cache` cache carries a skill with the same name —
   `!` without a fix: removing the whole plugin may be impossible, it has other skills;
 - the last line is `–`: the CLI cannot see which skills the agent session loaded.

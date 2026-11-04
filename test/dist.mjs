@@ -41,7 +41,7 @@ export { foldD2Imports, d2LocalImports, clearD2FileCache } from '../dist/core/re
 export { diagramRefRegex, generateLlmsFull, stripEmbeddedImages } from '../dist/core/compose/markdown.js';
 export { compareVersions, newestVersion } from '../dist/cli/update.js';
 export { detectAgent } from '../dist/cli/agent.js';
-export { nodeCheck } from '../dist/cli/commands/doctor.js';
+export { installKind, nodeCheck } from '../dist/cli/commands/doctor.js';
 export { default as cmdSite } from '../dist/cli/commands/site.js';
 export { UI_STRINGS } from '../dist/cli/commands/site.i18n.js';
 export { batchSchema, formatBatch } from '../dist/core/feedback.js';

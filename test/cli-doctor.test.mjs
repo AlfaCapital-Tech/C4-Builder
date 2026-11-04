@@ -6,7 +6,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { afterAll, describe, expect, it } from 'vitest';
 
-import { cachedJava, detectSystemJava, nodeCheck } from './dist.mjs';
+import { cachedJava, detectSystemJava, installKind, nodeCheck } from './dist.mjs';
 import { agentEnv, REPO_ROOT, serveSite, TMP_ROOT } from './helpers.mjs';
 
 // `c4builder doctor` (change cli-doctor). Сеть не трогаем: фейковый npm в PATH, JRE не скачивается.
@@ -86,6 +86,14 @@ const project = (cwd, config = CONFIG) => {
     fs.writeFileSync(path.join(cwd, '.c4builder'), config);
 };
 const skillFile = (base, name = 'c4builder') => path.join(base, 'skills', name, 'SKILL.md');
+const SKILLS = fs.readdirSync(path.join(REPO_ROOT, 'skills'));
+// Отметку версии всех скиллов каталога `<base>/skills` — на 0.1.0.
+const ageSkills = (base) => {
+    for (const name of SKILLS) {
+        const file = skillFile(base, name);
+        fs.writeFileSync(file, fs.readFileSync(file, 'utf8').replace(VERSION, '0.1.0'));
+    }
+};
 
 describe('команда doctor', () => {
     it('вне проекта без терминала — проверки выполняются, project skipped, каталог пуст', () => {
@@ -170,10 +178,7 @@ describe('скиллы', () => {
 
     it('скиллы старше CLI — ✗ и `fix: c4builder skills` с пометкой о согласии', () => {
         const { cwd, run } = installed();
-        for (const dir of fs.readdirSync(path.join(cwd, '.claude', 'skills'))) {
-            const file = skillFile(path.join(cwd, '.claude'), dir);
-            fs.writeFileSync(file, fs.readFileSync(file, 'utf8').replace(VERSION, '0.1.0'));
-        }
+        ageSkills(path.join(cwd, '.claude'));
         const res = run(['skills'], { CLAUDECODE: '1' });
         expect(res.status).toBe(1);
         expect(res.stdout).toContain(`✗ .claude/skills — from 0.1.0, CLI ${VERSION}`);
@@ -195,6 +200,64 @@ describe('скиллы', () => {
             /^~\/\.claude\/skills — c4builder: no version; .*overrides project skills$/
         );
         expect(res.stdout).not.toContain(home);
+    });
+
+    it('переводы строк CRLF (клон с autocrlf на Windows) — не правка копии', () => {
+        const { cwd, json } = installed();
+        const dir = path.join(cwd, '.claude', 'skills');
+        for (const rel of fs.readdirSync(dir, { recursive: true })) {
+            const file = path.join(dir, rel);
+            if (fs.statSync(file).isFile())
+                fs.writeFileSync(file, fs.readFileSync(file, 'utf8').replace(/\n/g, '\r\n'));
+        }
+        expect(byId(json(['skills'], { CLAUDECODE: '1' }).report, 'skills.claude.project').status).toBe('ok');
+    });
+
+    it('актуальная личная копия при проектной у Claude Code — warn о перекрытии, у .agents — нет', () => {
+        const { home, cwd, cli, json } = installed();
+        expect(cli(['skills'], { CLAUDECODE: '1' }, home).status).toBe(0); // личные копии текущей версии
+        fs.appendFileSync(skillFile(path.join(cwd, '.claude')), 'my note\n');
+        const { report } = json(['skills'], { CLAUDECODE: '1' });
+        expect(byId(report, 'skills.claude.project')).toMatchObject({
+            status: 'warn',
+            fix: 'c4builder skills'
+        });
+        expect(byId(report, 'skills.claude.personal')).toEqual({
+            id: 'skills.claude.personal',
+            status: 'warn',
+            message: '~/.claude/skills — overrides project skills',
+            fix: `rm -r ${SKILLS.map((n) => `~/.claude/skills/${n}`).join(' ')}`,
+            askUser: true
+        });
+        expect(byId(report, 'skills.agents.personal').status).toBe('ok');
+    });
+
+    it('вне git под домашним каталогом — личная копия не считается проектной', () => {
+        const sb = sandbox();
+        // Пробел в домашнем каталоге: пути в `rm -r` — в кавычках, `~` — до кавычки.
+        const home = path.join(sb.dir, 'my home');
+        const notes = path.join(home, 'notes');
+        fs.mkdirSync(notes, { recursive: true });
+        const env = { CLAUDECODE: '1', HOME: home, USERPROFILE: home };
+        expect(sb.cli(['skills'], env, home).status).toBe(0);
+        ageSkills(path.join(home, '.claude'));
+        const report = (args) => JSON.parse(sb.run(['skills', '--json', ...args], env, notes).stdout);
+        const plain = report([]);
+        expect(plain.checks.map((c) => c.id)).toEqual([
+            'skills.agents.personal',
+            'skills.claude.personal',
+            'skills.session'
+        ]);
+        const c = byId(plain, 'skills.claude.personal');
+        expect(c).toMatchObject({
+            status: 'error',
+            message: `~/.claude/skills — from 0.1.0, CLI ${VERSION}`
+        });
+        const rm = (base) => `rm -r ${SKILLS.map((n) => base(`.claude/skills/${n}`)).join(' ')}`;
+        expect(c.fix).toBe(`c4builder skills && ${rm((p) => `~/"${p}"`)}`);
+        expect(byId(report(['-v']), 'skills.claude.personal').fix).toBe(
+            `c4builder skills && ${rm((p) => `"${path.join(home, p)}"`)}`
+        );
     });
 
     it('Codex при скиллах только в .claude — скиллов для Codex нет', () => {
@@ -238,6 +301,23 @@ describe('среда', () => {
         expect(nodeCheck(process.versions.node, ENGINES).status).toBe('ok');
         expect(nodeCheck('22.9.0', '>=22.17')).toMatchObject({ status: 'error', fix: expect.any(String) });
         expect(nodeCheck('22.17.0', '^22.17').status).toBe('skipped');
+    });
+
+    it.skipIf(!POSIX)('способ установки и куда ставить D2 — по пути пакета, pnpm не «global npm»', () => {
+        const kind = (root, cwd = '/work/app') => {
+            const { how, fix } = installKind(cwd, root);
+            return [how, fix('@terrastruct/d2')];
+        };
+        const pkg = 'node_modules/@alfacapital-tech/c4builder';
+        expect(kind(`/work/app/${pkg}`)).toEqual(['project dependency', 'npm i @terrastruct/d2']);
+        expect(kind(`/work/app/node_modules/.pnpm/@alfacapital-tech+c4builder@1.0.0/${pkg}`)).toEqual([
+            'project dependency (pnpm)',
+            'pnpm add @terrastruct/d2'
+        ]);
+        expect(kind(`/usr/lib/${pkg}`)).toEqual(['global npm', 'npm i -g @alfacapital-tech/c4builder']);
+        expect(kind(`/home/u/.npm/_npx/abc/${pkg}`)[0]).toBe('npx');
+        expect(kind(`/home/u/.config/yarn/global/${pkg}`)[0]).toBe('unknown install');
+        expect(kind('/src/C4-Builder')).toEqual(['source checkout', 'npm install']);
     });
 
     it.skipIf(!POSIX)('--offline — npm не запускается ни проверкой, ни фоном', () => {
@@ -331,6 +411,19 @@ describe('проект и запуск', () => {
         const { report } = json(['env', 'render', 'project', '--offline'], { PATH: BIN, JAVA_HOME: '' });
         for (const id of ['project.config', 'project.complete', 'project.paths', 'env.d2', 'render.d2'])
             expect(byId(report, id)?.status, id).toBe('ok');
+    });
+
+    it('плагин печатает в stdout при импорте — `--json` остаётся одним JSON, вывод плагина — в details', () => {
+        const { cwd, json } = sandbox();
+        project(cwd, JSON.stringify({ ...JSON.parse(CONFIG), plugins: ['./plug.mjs'] }));
+        fs.writeFileSync(
+            path.join(cwd, 'plug.mjs'),
+            "console.log('plugin loaded');\nexport default { name: 'plug' };\n"
+        );
+        expect(byId(json(['project', '--offline']).report, 'project.paths')).toMatchObject({ status: 'ok' });
+        expect(byId(json(['project', '--offline', '-v']).report, 'project.paths').details).toBe(
+            'plugin loaded'
+        );
     });
 
     it('битый, неполный конфиг и нет rootFolder — error, warn, error', () => {

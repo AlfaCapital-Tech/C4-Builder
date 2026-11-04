@@ -168,7 +168,7 @@ all of them (Claude Code, Codex, `.agents`).
 | `--json` | one JSON object on stdout: `version`, `channel`, `agent`, `checks` (`id`, `status`, `message`, `fix`, `askUser`, `details`), `summary`; check ids do not change between versions |
 | `-v, --verbose` | absolute paths and details (the java path, skill files that differ from the package, the smoke build log) |
 | `--strict` | exit code 1 on warnings too — for CI |
-| `--full` | instead of the tiny diagram, builds the template project (`--new --name doctor -y`) in a temporary folder removed whatever the outcome; without Java — `–` |
+| `--full` | in addition to the tiny diagram, builds the template project (`--new --name doctor -y`) in a temporary folder removed whatever the outcome; without Java — `–` |
 | `--offline` | no network requests at all |
 
 Exit codes: 0 — no errors (warnings are fine), 1 — an error, with `--strict` a warning too, 2 — an

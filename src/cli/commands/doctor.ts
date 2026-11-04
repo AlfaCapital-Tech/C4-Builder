@@ -10,6 +10,7 @@ import chalk from 'chalk';
 import { detectAgent } from '../agent.ts';
 import { compareVersions, newestVersion, npmCommand, viewArgs, WIN } from '../update.ts';
 import { packageSkills, SKILLS_DIR, skillRoots, stampIn, unstamp } from './skills.ts';
+import { WIZARD_KEYS } from '../wizard/collect.ts';
 import { defaultConfig } from '../../config/defaults.ts';
 import { type BuildOptions, type C4ConfigFile, parseConfig } from '../../config/options.ts';
 import { loadPlugins } from '../../core/plugins/load.ts';
@@ -41,12 +42,19 @@ const check = (id: string, status: Status, message: string, extra: Extra = {}): 
     ...extra
 });
 
-interface Project {
-    file: string;
-    error?: string;
-    raw?: Record<string, unknown>;
-    config?: C4ConfigFile;
-    broken?: Map<string, string>;
+type Project =
+    | { file: string; error: string; config?: undefined }
+    | {
+          file: string;
+          error?: undefined;
+          raw: Record<string, unknown>;
+          config: C4ConfigFile;
+          broken: Map<string, string>;
+      };
+interface Install {
+    how: string;
+    // Как поставить необязательные пакеты c4builder (движки D2 и Mermaid).
+    fix: (pkgs: string) => string;
 }
 interface Ctx {
     cwd: string;
@@ -56,6 +64,7 @@ interface Ctx {
     agent?: string;
     project?: Project;
     java?: { path: string; label: string };
+    install: Install;
     files: string[];
 }
 
@@ -99,18 +108,28 @@ const updateCheck = async (offline: boolean): Promise<Check> => {
     }
 };
 
-const installCheck = (cwd: string): Check => {
-    const nm = PACKAGE_ROOT.lastIndexOf(`${path.sep}node_modules${path.sep}`);
-    const owner = PACKAGE_ROOT.slice(0, nm);
-    const how = process.env.C4BUILDER_DOCKER
-        ? 'Docker image'
-        : nm < 0
-          ? 'source checkout'
-          : owner.includes(`${path.sep}_npx${path.sep}`)
-            ? 'npx'
-            : cwd === owner || cwd.startsWith(owner + path.sep)
-              ? 'project dependency'
-              : 'global npm';
+// `import()` необязательных пакетов резолвится от каталога установки c4builder, а не от cwd: ставить их
+// надо туда же. Первое `node_modules` в пути — проект и у pnpm (`node_modules/.pnpm/…/node_modules/…`),
+// и у вложенной зависимости.
+export const installKind = (cwd: string, root = PACKAGE_ROOT): Install => {
+    const { sep } = path;
+    const nm = root.indexOf(`${sep}node_modules${sep}`);
+    const owner = root.slice(0, nm);
+    const pnpm = root.includes(`${sep}.pnpm${sep}`);
+    const add = pnpm ? 'pnpm add' : 'npm i';
+    // Как в подсказке рендерера Mermaid: переустановить c4builder вместе с необязательными пакетами.
+    const reinstall = (how: string): Install => ({ how, fix: () => `${add} -g ${pkg.name}` });
+    if (process.env.C4BUILDER_DOCKER) return { how: 'Docker image', fix: () => ISSUES };
+    if (nm < 0) return { how: 'source checkout', fix: () => 'npm install' };
+    if (owner.includes(`${sep}_npx${sep}`)) return reinstall('npx');
+    if (cwd === owner || cwd.startsWith(owner + sep))
+        return { how: pnpm ? 'project dependency (pnpm)' : 'project dependency', fix: (p) => `${add} ${p}` };
+    // Глобальный npm — `{prefix}/lib/node_modules`, на Windows — `{prefix}/node_modules` в любом каталоге.
+    if (pnpm || WIN || path.basename(owner) === 'lib') return reinstall(pnpm ? 'global pnpm' : 'global npm');
+    return reinstall('unknown install');
+};
+
+const installCheck = ({ how }: Install): Check => {
     const bin = WIN ? 'c4builder.cmd' : 'c4builder';
     const found = new Set(
         (process.env.PATH ?? '')
@@ -139,7 +158,7 @@ const d2Check = async (ctx: Ctx): Promise<Check> => {
         return check('env.d2', 'ok', 'D2 engine installed');
     } catch {
         return check('env.d2', 'error', 'D2 engine (@terrastruct/d2) is not installed', {
-            fix: 'npm install @terrastruct/d2'
+            fix: ctx.install.fix('@terrastruct/d2')
         });
     }
 };
@@ -166,7 +185,7 @@ const env = async (ctx: Ctx): Promise<Check[]> => {
         nodeCheck(process.versions.node, pkg.engines?.node),
         check('env.cli', 'ok', `c4builder ${pkg.version} (${channel})`),
         await update,
-        installCheck(ctx.cwd),
+        installCheck(ctx.install),
         ctx.java
             ? check('env.java', 'ok', ctx.java.label, { details: ctx.java.path })
             : check('env.java', 'warn', 'no Java 17+ and no managed JRE', { fix: 'c4builder jre install' }),
@@ -211,8 +230,8 @@ const FAMILIES = [
     }
 ];
 
-const sha256 = (data: string | Buffer): string => crypto.createHash('sha256').update(data).digest('hex');
-// Хэши файлов скилла; из SKILL.md вырезана отметка версии, которую вписывает `c4builder skills`.
+// Хэши файлов скилла (в скиллах только markdown); из SKILL.md вырезана отметка версии, которую вписывает
+// `c4builder skills`. CRLF → LF: клон с `core.autocrlf=true` на Windows — не правка копии.
 const digest = (dir: string): Map<string, string> =>
     new Map(
         fs
@@ -220,8 +239,9 @@ const digest = (dir: string): Map<string, string> =>
             .filter((e) => e.isFile())
             .map((e) => {
                 const rel = path.relative(dir, path.join(e.parentPath, e.name));
-                const data = fs.readFileSync(path.join(dir, rel));
-                return [rel, sha256(rel === 'SKILL.md' ? unstamp(data.toString('utf8')) : data)];
+                const text = fs.readFileSync(path.join(dir, rel), 'utf8').replace(/\r\n/g, '\n');
+                const hash = crypto.createHash('sha256').update(rel === 'SKILL.md' ? unstamp(text) : text);
+                return [rel, hash.digest('hex')];
             })
     );
 // Файлы копии, не совпавшие с пакетом (лишние и недостающие тоже).
@@ -230,14 +250,21 @@ const changedFiles = (name: string, copy: string): string[] => {
     return [...new Set([...want.keys(), ...have.keys()])].filter((f) => want.get(f) !== have.get(f));
 };
 
-const copyCheck = (id: string, root: string, personal: boolean, shadows: boolean): Check => {
+// В кавычках, если нужно: с `-v` в путях домашний каталог, а в нём бывают пробелы.
+const quote = (p: string): string => (/^[\w@%+=:,./-]+$/.test(p) ? p : `"${p}"`);
+
+// personal — у личной копии: есть ли рядом проектная и перекрывает ли её личная. Перекрывает только у
+// Claude Code (личная побеждает при одинаковом имени), у Codex порядок не описан (D4).
+const copyCheck = (id: string, root: string, personal?: { project: boolean; shadows: boolean }): Check => {
     const names = packageSkills();
+    const present: string[] = [];
     const problems = new Map<string, string[]>();
     const changed: string[] = [];
     let stale = false;
     let onlyNewer = true;
     for (const name of names) {
         const stamp = stampIn(root, name);
+        if (stamp !== undefined) present.push(name);
         const order = stamp ? compareVersions(stamp, pkg.version) : 0;
         const files = stamp && !order ? changedFiles(name, path.join(root, name)) : [];
         const problem =
@@ -258,22 +285,19 @@ const copyCheck = (id: string, root: string, personal: boolean, shadows: boolean
         changed.push(...files.map((f) => path.join(root, name, f)));
         problems.set(problem, [...(problems.get(problem) ?? []), name]);
     }
-    if (!problems.size) return check(id, 'ok', `${root} — ${pkg.version}`);
     const text = [...problems].map(([p, who]) =>
         who.length === names.length ? p : `${who.join(', ')}: ${p}`
     );
-    if (personal && shadows) text.push('overrides project skills');
-    const fix: Extra = onlyNewer
-        ? { fix: 'c4builder update' }
-        : personal
-          ? {
-                fix: `rm -r ${names
-                    .filter((n) => stampIn(root, n) !== undefined)
-                    .map((n) => path.join(root, n))
-                    .join(' ')}`,
-                askUser: true
-            }
-          : { fix: 'c4builder skills', askUser: true };
+    if (personal?.shadows) text.push('overrides project skills');
+    if (!text.length) return check(id, 'ok', `${root} — ${pkg.version}`);
+    // Без проектной копии сначала ставится она: иначе после удаления личной у агента скиллов нет вовсе.
+    const rm = `rm -r ${present.map((n) => quote(path.join(root, n))).join(' ')}`;
+    const fix: Extra =
+        problems.size && onlyNewer
+            ? { fix: 'c4builder update' }
+            : personal
+              ? { fix: personal.project ? rm : `c4builder skills && ${rm}`, askUser: true }
+              : { fix: 'c4builder skills', askUser: true };
     return check(id, stale ? 'error' : 'warn', `${root} — ${text.join('; ')}`, {
         ...fix,
         details: changed.join('\n') || undefined
@@ -323,8 +347,14 @@ const skills = async (ctx: Ctx): Promise<Check[]> => {
     let readable = false;
     for (const f of FAMILIES.filter((f) => !agent || f.readBy(agent) || f.key === 'agents')) {
         const { personal, project } = skillRoots(f.dir, ctx.cwd, f.personal());
-        if (project) checks.push(copyCheck(`skills.${f.key}.project`, project, false, false));
-        if (personal) checks.push(copyCheck(`skills.${f.key}.personal`, personal, true, !!project));
+        if (project) checks.push(copyCheck(`skills.${f.key}.project`, project));
+        if (personal)
+            checks.push(
+                copyCheck(`skills.${f.key}.personal`, personal, {
+                    project: !!project,
+                    shadows: !!project && f.key === 'claude'
+                })
+            );
         readable ||= !!(personal || project) && (!agent || f.readBy(agent));
     }
     if (!readable)
@@ -443,7 +473,7 @@ const render = async (ctx: Ctx): Promise<Check[]> => {
             'render.d2',
             'D2',
             () => renderD2(path.join(ctx.cwd, 'doctor.d2'), { seed: 'a -> b\n' }).finally(teardownD2),
-            'npm install @terrastruct/d2'
+            ctx.install.fix('@terrastruct/d2')
         );
     const mermaid =
         has('.mmd') &&
@@ -451,32 +481,13 @@ const render = async (ctx: Ctx): Promise<Check[]> => {
             'render.mermaid',
             'Mermaid',
             () => renderMermaid('graph TD\n  a --> b\n', 'doctor.mmd').finally(teardownMermaid),
-            'npm install @mermaid-js/tiny jsdom'
+            ctx.install.fix('@mermaid-js/tiny jsdom')
         );
     const full = ctx.full && fullBuild(ctx);
     return (await Promise.all([plantuml, d2, mermaid, full])).filter((c): c is Check => !!c);
 };
 
 // --- project, runtime ---
-
-// Ключи, без которых мастер (wizard/collect.ts) задаёт вопросы: без терминала сборка на них падает.
-const WIZARD_KEYS = [
-    'projectName',
-    'homepageName',
-    'rootFolder',
-    'distFolder',
-    'generateMD',
-    'generateCompleteMD',
-    'generateWEB',
-    'generateLocalImages',
-    'embedDiagram',
-    'includeBreadcrumbs',
-    'includeLinkToDiagram',
-    'excludeOtherFiles',
-    'plantumlServerUrl',
-    'diagramFormat',
-    'charset'
-] as const;
 
 const readProject = (file: string): Project | undefined => {
     if (!fs.existsSync(file)) return undefined;
@@ -488,35 +499,48 @@ const readProject = (file: string): Project | undefined => {
     }
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { file, error: 'not a JSON object' };
     const parsed = parseConfig(raw as Record<string, unknown>);
-    return parsed.ok
-        ? { file, raw: raw as Record<string, unknown>, config: parsed.value, broken: new Map() }
-        : {
-              file,
-              raw: raw as Record<string, unknown>,
-              config: parsed.salvaged,
-              broken: new Map(parsed.issues.map((i) => [i.key, i.message]))
-          };
+    return {
+        file,
+        raw: raw as Record<string, unknown>,
+        config: parsed.ok ? parsed.value : parsed.salvaged,
+        broken: new Map(parsed.ok ? [] : parsed.issues.map((i) => [i.key, i.message]))
+    };
 };
 
 const pathsCheck = async (ctx: Ctx, config: C4ConfigFile): Promise<Check> => {
     const missing: string[] = [];
     if (!fs.statSync(path.resolve(ctx.cwd, config.rootFolder), { throwIfNoEntry: false })?.isDirectory())
         missing.push(`rootFolder ${config.rootFolder}`);
+    // Код плагинов исполняется при импорте, и его печать в stdout сломала бы `--json`: она уходит в details,
+    // как лог пробной сборки. EXECUTE_SCRIPT: true — иначе загрузчик сам напишет строку о включении executeScript.
+    const write = process.stdout.write;
+    let log = '';
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+        log += String(chunk);
+        return true;
+    }) as typeof write;
+    let failed: string | undefined;
     try {
-        // EXECUTE_SCRIPT: true — иначе загрузчик печатает в stdout строку о включении executeScript.
         const plugins = await loadPlugins(config.plugins, ctx.cwd, { EXECUTE_SCRIPT: true } as BuildOptions);
         for (const { plugin, opts } of plugins)
             for (const p of plugin.watchPaths?.(opts) ?? [])
                 if (!fs.existsSync(path.resolve(ctx.cwd, p))) missing.push(`plugin ${plugin.name}: ${p}`);
     } catch (e) {
-        return check('project.paths', 'error', firstLine(e), { fix: PLUGINS_DOCS });
+        failed = firstLine(e);
+    } finally {
+        process.stdout.write = write;
     }
+    const details = tail(log) || undefined;
+    if (failed) return check('project.paths', 'error', failed, { fix: PLUGINS_DOCS, details });
     if (!missing.length)
-        return check('project.paths', 'ok', `rootFolder ${config.rootFolder} and plugin paths exist`);
+        return check('project.paths', 'ok', `rootFolder ${config.rootFolder} and plugin paths exist`, {
+            details
+        });
     return check('project.paths', 'error', `missing ${missing.join('; ')}`, {
         ...(missing[0].startsWith('rootFolder')
             ? { fix: 'c4builder config', askUser: true }
-            : { fix: PLUGINS_DOCS })
+            : { fix: PLUGINS_DOCS }),
+        details
     });
 };
 
@@ -524,13 +548,13 @@ const project = async (ctx: Ctx): Promise<Check[]> => {
     const p = ctx.project;
     if (!p) return [check('project.config', 'skipped', 'no .c4builder here', { fix: 'c4builder --new' })];
     const name = path.relative(ctx.cwd, p.file);
-    if (!p.raw || !p.config || !p.broken)
+    if (p.error !== undefined)
         return [
             check('project.config', 'error', `${name} is not valid JSON: ${p.error}`, { fix: CONFIG_DOCS })
         ];
     const { raw, config, broken } = p;
     const issues = [...broken].map(([k, m]) => `${k} — ${m}`);
-    const unset = WIZARD_KEYS.filter(
+    const unset = (Object.keys(WIZARD_KEYS) as (keyof typeof WIZARD_KEYS)[]).filter(
         (k) => raw[k] == null || broken.has(k) || config[k] === undefined || config[k] === ''
     );
     return [
@@ -610,6 +634,9 @@ const redact =
         s
             .split(cwd + path.sep)
             .join('')
+            // Путь в кавычках (quote): `~` — до кавычки, иначе оболочка его не раскроет.
+            .split(`"${home}${path.sep}`)
+            .join(`~${path.sep}"`)
             .split(home + path.sep)
             .join(`~${path.sep}`);
 
@@ -657,6 +684,7 @@ export default async (
             : cached
               ? { path: cached, label: 'managed JRE (cache)' }
               : undefined,
+        install: installKind(cwd),
         files
     };
     const results = await Promise.all(

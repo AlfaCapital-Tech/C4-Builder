@@ -78,12 +78,16 @@ CLI SHALL предоставлять подкоманду `c4builder doctor [gro
 - **WHEN** скиллы стоят только в `.claude/skills/`, а `c4builder doctor skills` выполняет Codex (`CODEX_THREAD_ID`)
 - **THEN** проверка сообщает, что скиллов для Codex нет, исправление — `c4builder skills`
 
+#### Scenario: Вне git под домашним каталогом
+- **WHEN** скиллы стоят только в `~/.claude/skills`, а в `~/notes` без `.git` агент с `CLAUDECODE=1` выполняет `c4builder doctor skills`
+- **THEN** `~/.claude/skills` проверяется только как личная копия, исправление сначала ставит проектные скиллы (`c4builder skills`), затем удаляет личную копию
+
 #### Scenario: Оговорка о сессии
 - **WHEN** выполняется `c4builder doctor skills`
 - **THEN** последняя строка группы говорит, что CLI не видит, какие скиллы загрузила сессия агента
 
 ### Requirement: Состояние копии скилла
-Для каждого найденного каталога скиллов группа `skills` MUST сообщать: неполный набор скиллов пакета (`warn`); отметку `metadata.generatedBy` старше CLI (`error`), новее CLI или её отсутствие (`warn`); текст, не совпадающий с файлами пакета той же версии без учёта вписанной отметки (`warn`); перекрытие проектной копии личной у Claude Code (`warn`).
+Для каждого найденного каталога скиллов группа `skills` MUST сообщать: неполный набор скиллов пакета (`warn`); отметку `metadata.generatedBy` старше CLI (`error`), новее CLI или её отсутствие (`warn`); текст, не совпадающий с файлами пакета той же версии без учёта вписанной отметки и переводов строк CRLF/LF (`warn`); перекрытие проектной копии личной у Claude Code (`warn`).
 
 #### Scenario: Скиллы актуальны
 - **WHEN** в проекте выполнен `c4builder skills` той же версией CLI и агент с `CLAUDECODE=1` выполняет `c4builder doctor skills`
@@ -123,7 +127,7 @@ CLI SHALL предоставлять подкоманду `c4builder doctor [gro
 - **THEN** `env.java` — `warn` с исправлением `c4builder jre install`, JRE не скачивается
 
 ### Requirement: Проверки установки и прокси
-Группа `env` SHALL выполнять проверки: `env.install` — способ установки: глобальный npm, зависимость проекта, Docker (`ok`), несколько `c4builder` в `PATH` (`warn`); `env.proxy` — только факт, заданы ли `HTTPS_PROXY`, `HTTP_PROXY`, `NODE_EXTRA_CA_CERTS` (`ok`), `NODE_EXTRA_CA_CERTS` указывает на несуществующий файл (`warn`).
+Группа `env` SHALL выполнять проверки: `env.install` — способ установки: глобальный npm или pnpm, зависимость проекта, npx, Docker, иначе `unknown install` (`ok`), несколько `c4builder` в `PATH` (`warn`); `env.proxy` — только факт, заданы ли `HTTPS_PROXY`, `HTTP_PROXY`, `NODE_EXTRA_CA_CERTS` (`ok`), `NODE_EXTRA_CA_CERTS` указывает на несуществующий файл (`warn`).
 
 #### Scenario: Нет файла сертификатов
 - **WHEN** `NODE_EXTRA_CA_CERTS` указывает на несуществующий файл и выполняется `c4builder doctor env --offline`

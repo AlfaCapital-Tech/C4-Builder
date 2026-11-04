@@ -68,14 +68,16 @@ export default (root = process.cwd()): void => {
 
 // Каталоги `<dir>/skills` с основным скиллом: личный и ближайший проектный от cwd вверх до корня
 // git-репозитория — агента обычно запускают в корне репозитория, а сборку — в подкаталоге документации,
-// и он видит скиллы обоих уровней. Общая для строки о скиллах и `c4builder doctor` (change cli-doctor, D4).
+// и он видит скиллы обоих уровней. Домашний каталог — не проект: вне git подъём дошёл бы до личных
+// скиллов и счёл их проектными. Общая для строки о скиллах и `c4builder doctor` (change cli-doctor, D4).
 export const skillRoots = (
     dir: string,
     cwd = process.cwd(),
     personal = personalRoot(dir)
 ): { personal?: string; project?: string } => {
+    const home = path.resolve(os.homedir());
     let project: string | undefined;
-    for (let d = path.resolve(cwd); project === undefined; d = path.dirname(d)) {
+    for (let d = path.resolve(cwd); project === undefined && d !== home; d = path.dirname(d)) {
         if (stampIn(path.join(d, dir, 'skills')) !== undefined) project = path.join(d, dir, 'skills');
         if (fs.existsSync(path.join(d, '.git')) || path.dirname(d) === d) break;
     }
