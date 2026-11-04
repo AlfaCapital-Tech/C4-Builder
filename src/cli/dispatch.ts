@@ -13,6 +13,7 @@ import cmdList from './commands/list.ts';
 import cmdSite from './commands/site.ts';
 import cmdFeedback from './commands/feedback.ts';
 import cmdSkills, { skillsNotice } from './commands/skills.ts';
+import cmdDoctor from './commands/doctor.ts';
 import { detectAgent } from './agent.ts';
 import { cmdUpdate, pendingUpdate, startUpdateCheck } from './update.ts';
 import cmdCollect from './wizard/collect.ts';
@@ -59,7 +60,8 @@ const COMMANDS: Record<string, [args: string, about: string]> = {
     config: ['', 'setup wizard with the current values (same as --config)'],
     update: ['', 'update a global npm install to the newest version'],
     feedback: ['', 'wait for page feedback from site -w (--wait --as <name>)'],
-    skills: ['', 'install or update the agent skills in the current folder']
+    skills: ['', 'install or update the agent skills in the current folder'],
+    doctor: ['[group...]', 'diagnose env, skills, render, project, runtime (read-only)']
 };
 
 const commandsHelp = (): string => {
@@ -200,6 +202,11 @@ export default async () => {
             '--as <name>',
             'for `feedback`: listener name (your change or task) — the page sends batches to it'
         )
+        .option('--json', 'for `doctor`: one JSON object with stable check ids')
+        .option('-v, --verbose', 'for `doctor`: absolute paths and details')
+        .option('--strict', 'for `doctor`: exit code 1 on warnings too')
+        .option('--full', 'for `doctor`: build the template project in a temporary folder')
+        .option('--offline', 'for `doctor`: no network requests')
         .option('--docs', 'a brief explanation for the available configuration options')
         .option('--system-fonts', 'render with system fonts instead of the bundled one (not deterministic)')
         .option('-p, --port <n>', 'port used for serving the generated site', (v) => {
@@ -224,8 +231,9 @@ export default async () => {
         process.exit(1);
     }
     // --version/--help уже вышли в parse. Уведомление — по кэшу прошлой проверки, до её
-    // перезапуска; exit покрывает и выходы через process.exit. Вывод `feedback` читает агент.
-    if (cmd !== 'update' && cmd !== 'feedback') {
+    // перезапуска; exit покрывает и выходы через process.exit. Вывод `feedback` читает агент; doctor
+    // сообщает о новой версии сам, а фоновый `npm view` ходил бы в сеть и с --offline.
+    if (cmd !== 'update' && cmd !== 'feedback' && cmd !== 'doctor') {
         const next = pendingUpdate();
         if (next)
             process.once('exit', () =>
@@ -246,6 +254,8 @@ export default async () => {
         return cmdFeedback(path.join(process.cwd(), opts.configFile ?? '.c4builder'), opts);
     // Установка скиллов — до Configstore: ставит их и в каталог без проекта.
     if (cmd === 'skills') return cmdSkills();
+    // Диагностика — тоже до Configstore и проверки терминала: работает вне проекта, в CI и под агентом.
+    if (cmd === 'doctor') return cmdDoctor(cmdArgs, opts);
     // `site`/`new`/`config` — позиционные синонимы одноимённых флагов: эту форму печатают
     // подсказки CLI и учат README, шаблон и скиллы.
     if (cmd) opts[cmd] = true;

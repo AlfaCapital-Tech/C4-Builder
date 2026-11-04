@@ -175,7 +175,7 @@ metadata:
 |---|---|
 | `c4builder` | working on a project: layout of `src/` and `.c4builder`, the edit → `c4builder check` → build loop, C4-PlantUML conventions (stdlib includes, shared `.iuml`, offline rendering), D2, BPMN processes without coordinates, mermaid (`.mmd` and blocks, unsupported types), wireflow (`.wireflow.json` from the editor, format versions, placeholders), the `openspec` and `openapi` plugins, `llms.txt`, the new version and skills notices |
 | `c4builder-review` | reviewing pages on `c4builder --site -w`: checking the server, the link to the change or section page, the `c4builder feedback --wait --as <name>` loop, a report in the chat; invoked as `/c4builder-review [change-id\|page]` |
-| `c4builder-setup` | install and update (npm channels `latest` and `rc`, a registry mirror through npmrc or `--registry`, the Docker image), Java or the downloaded JRE, a smoke build of the template project, installing the skills into the project |
+| `c4builder-setup` | diagnostics with `c4builder doctor` and its fixes, install and update (npm channels `latest` and `rc`, a registry mirror through npmrc or `--registry`, the Docker image), Java or the downloaded JRE, a smoke build of the template project (`c4builder doctor render --full`), installing the skills into the project |
 
 ### Skills notice
 
@@ -184,15 +184,15 @@ agent will load, and print one line to stderr when it is missing, older than the
 stale personal copy:
 
 ```text
-c4builder agent skills are not installed here. Ask the user, then run: c4builder skills
-c4builder agent skills here are from 0.9.0 (current 0.10.0). Ask the user, then run: c4builder skills
-~/.claude/skills/c4builder (no version) overrides project skills. Ask the user to remove it, then run: c4builder skills
+c4builder agent skills are not installed here. Ask the user, then run: c4builder skills. Details: c4builder doctor skills
+c4builder agent skills here are from 0.9.0 (current 0.10.0). Ask the user, then run: c4builder skills. Details: c4builder doctor skills
+~/.claude/skills/c4builder (no version) overrides project skills. Ask the user to remove it, then run: c4builder skills. Details: c4builder doctor skills
 ```
 
 Which copy counts: the agent's folder is `.claude/skills` for Claude Code and `.agents/skills` for
 the others. A personal copy (`~/.claude/skills/c4builder`, `~/.agents/skills/…` for other agents)
 wins over the project one; without it the nearest project copy counts — in the current folder or
-above, up to the root of the git repository. A copy without a version stamp or with an older one is
+above, up to the root of the git repository (the home folder is never a project one, even outside git). A copy without a version stamp or with an older one is
 outdated. A copy newer than the CLI prints nothing: in a shared repository with committed skills a
 colleague with an older CLI needs no advice to roll them back — the new version notice tells them
 about the CLI.
@@ -206,6 +206,26 @@ Docker image) and with `C4BUILDER_AGENT=0`. The `--agent`/`--no-agent` flags do 
 
 A personal copy is usually left by `npx skills add -g`. `c4builder skills` does not remove it but
 warns about it on stderr.
+
+### What is really installed: `c4builder doctor skills`
+
+The line looks only at the main skill and only at the current agent's folder. `c4builder doctor
+skills` gives the full picture (see "Diagnostics" on the
+[CLI and configuration](05%20CLI%20and%20configuration/05%20CLI%20and%20configuration.md) page): every
+package skill in every folder found — `.agents/skills`, for Claude Code `.claude/skills` up to the git
+root and `~/.claude/skills`, for Codex also `.codex/skills`, `~/.agents/skills` and `$CODEX_HOME/skills`:
+
+- a part of the set is missing, the version stamp is missing or newer than the CLI — `!`; the stamp is
+  older than the CLI — `✗`;
+- the text differs from the package of the same version (the `generatedBy` stamp does not count) —
+  `!` `edited copy`: skill edits belong in the c4builder repository, the next `c4builder skills`
+  overwrites them;
+- under Claude Code a personal copy shadows the project one — `!` with its path and the command to
+  remove it (with the user's consent), even when the personal copy is current; without a project copy
+  the command first installs it (`c4builder skills && rm -r …`);
+- a Claude Code plugin in the `~/.claude/plugins/cache` cache carries a skill with the same name —
+  `!` without a fix: removing the whole plugin may be impossible, it has other skills;
+- the last line is `–`: the CLI cannot see which skills the agent session loaded.
 
 ### Alternative: npx skills
 

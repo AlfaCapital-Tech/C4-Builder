@@ -200,9 +200,9 @@ for it: it reinstalls the global CLI. The notice changes neither stdout nor the 
 When a build or `c4builder site` run by an agent starts with one of these stderr lines
 
 ```text
-c4builder agent skills are not installed here. Ask the user, then run: c4builder skills
-c4builder agent skills here are from <stamp> (current <version>). Ask the user, then run: c4builder skills
-~/.claude/skills/c4builder (<stamp|no version>) overrides project skills. Ask the user to remove it, then run: c4builder skills
+c4builder agent skills are not installed here. Ask the user, then run: c4builder skills. Details: c4builder doctor skills
+c4builder agent skills here are from <stamp> (current <version>). Ask the user, then run: c4builder skills. Details: c4builder doctor skills
+~/.claude/skills/c4builder (<stamp|no version>) overrides project skills. Ask the user to remove it, then run: c4builder skills. Details: c4builder doctor skills
 ```
 
 the c4builder skills you work with are missing, older than the CLI, or shadowed by a stale personal
@@ -210,7 +210,9 @@ copy (`~/.agents/skills/c4builder` for agents other than Claude Code). Tell the 
 `c4builder skills` only when the user agrees: it writes the skills of the installed CLI into
 `.agents/skills/` of the current folder (and `.claude/skills/` under Claude Code), replacing the
 c4builder skills there. Remove a personal copy only when the user agrees. The notice changes
-neither stdout nor the exit code.
+neither stdout nor the exit code. `c4builder doctor skills` shows the details: every skill folder
+it found, which skill is missing, outdated or edited, and copies in Claude Code plugins — it only
+reads, its `fix:` lines say what to run.
 
 ## Common mistakes
 

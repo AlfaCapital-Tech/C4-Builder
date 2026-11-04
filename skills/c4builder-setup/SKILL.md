@@ -13,29 +13,41 @@ dist-tags and Docker image tags carry the same names.
 
 Every step: check → fix only what is broken.
 
-## 1. Node.js
+## 1. Diagnose
 
 ```bash
-node --version   # needs >= 22.17
+c4builder doctor
 ```
 
-Missing or older → agree with the user on how to install a current LTS (nvm, OS package
-manager, official installer); do not pick a method silently. Docker users skip to step 3.
+It only reads: Node.js against `engines`, the CLI version and a newer release, how c4builder is
+installed, Java, the D2 engine, fonts, proxy variables (only whether they are set), the agent
+skills, a tiny C4 render, the project's `.c4builder` and the port. Each problem has a line
+`fix: <command or link>` under it; `(ask the user first)` marks fixes that change project files or
+remove personal copies. Apply the fixes with the steps below, then run `c4builder doctor` again.
+Exit code 1 — an error is left; warnings keep it 0 (`--strict` makes them 1 too).
 
-## 2. Installed version vs. channel
+`c4builder doctor --json` prints the same as one JSON object with stable check ids (`env.node`,
+`env.java`, `skills.claude.project`, …); `-v` adds paths and details. `c4builder doctor env skills`
+runs only these groups. `c4builder: command not found` → no CLI yet: start with step 3.
+
+## 2. Node.js and the version
+
+`env.node` error → Node.js is older than the package needs. Agree with the user on how to
+install a current LTS (nvm, OS package manager, official installer); do not pick a method
+silently. Docker users skip to step 3.
+
+`env.update` warns about a newer release → `c4builder update` (step 3). `env.update` skipped
+with `registry not reachable` → the public registry may be closed in this network:
 
 ```bash
-c4builder --version
 npm view @alfacapital-tech/c4builder dist-tags
 ```
 
-`npm view` fails with a network or certificate error → the public registry may be closed in
-this network. An organization mirror is configured in the user's npmrc (`npm config get
-registry` shows the current one) or passed per command with `--registry <url>`; ask the user for
-the address, never guess one. The update check of c4builder and `c4builder update` use the same
+An organization mirror is configured in the user's npmrc (`npm config get registry` shows the
+current one) or passed per command with `--registry <url>`; ask the user for the address, never
+guess one. The update check of c4builder, `c4builder update` and `c4builder doctor` use the same
 npmrc.
 
-Installed version equals the channel's tag → skip step 3.
 Installed version is **newer** than the requested channel (an `rc` while `latest` was
 asked for) → that is a downgrade: never do it silently, confirm with the user — they
 probably want the `rc` channel.
@@ -52,60 +64,52 @@ npm install -g @alfacapital-tech/c4builder@rc       # release candidate
   or the Docker image it installs nothing and prints the command to use instead. Switching the
   channel is the `npm install -g` line above.
 - Do not pass `--omit=optional`: the D2 engine (`@terrastruct/d2`) is an optional
-  dependency; without it a project with `.d2` files stops with an install hint.
+  dependency; without it a project with `.d2` files stops with an install hint (`env.d2` error).
 - `c4builder: command not found` after a successful install → the global npm bin folder
   is not on `PATH` (`npm prefix -g` shows the prefix; the binary lives in its `bin`).
+  `env.install` warns about several `c4builder` on `PATH` → the first one runs; `-v` lists them.
 
 **Docker instead of npm** — the image ships Node, a JRE, the PlantUML jar, fonts and D2,
-so steps 1 and 4 are not needed. Mount the project into `/pwd`:
+so steps 2 and 4 are not needed. Mount the project into `/pwd`:
 
 ```bash
 docker run --rm -v "$PWD:/pwd" ghcr.io/alfacapital-tech/c4builder:latest c4builder
 ```
 
 Image tags: `latest`, `rc`, `X.Y.Z`, `edge` (last master commit). The same image works as a
-CI job image — `c4builder` is on `PATH`.
+CI job image — `c4builder` is on `PATH`, so `c4builder doctor` runs inside it too.
 
 ## 4. Java for PlantUML
 
 Diagrams are rendered by the bundled PlantUML jar → Java 17+ is needed (`JAVA_HOME` is
-checked first, then `PATH`). Graphviz is **not** needed.
+checked first, then `PATH`). Graphviz is **not** needed. `env.java` warns when there is
+neither a system Java 17+ nor a managed JRE; doctor itself never downloads one:
 
 ```bash
-java -version
 c4builder jre install
 ```
 
-`c4builder jre install` reports a suitable system java and stops; otherwise it downloads a
-private Temurin JRE into the user cache once — tell the user it did. A broken system java
-can be bypassed with `c4builder jre install --force` (downloads even when java is present).
+It reports a suitable system java and stops; otherwise it downloads a private Temurin JRE into
+the user cache once — tell the user it did. A broken system java (`render.plantuml` error) can be
+bypassed with `c4builder jre install --force` (downloads even when java is present).
 `c4builder jre info` prints the managed JRE parameters as JSON (Temurin major, cache
 folder) — use it to key a CI cache.
 
 Download fails with a certificate error (TLS-intercepting proxy) → set
 `NODE_EXTRA_CA_CERTS` to the proxy's CA bundle; Node reads neither the system store nor
-`SSL_CERT_FILE`.
+`SSL_CERT_FILE`. `env.proxy` warns when it points to a missing file.
 
 ## 5. Smoke build
 
-Build the bundled template project in a temporary folder:
-
 ```bash
-cd "$(mktemp -d)"
-c4builder --new --name smoke -y
-cd smoke
-c4builder
-ls docs/index.html docs/context.svg
+c4builder doctor render --full
 ```
 
-`--new --name smoke -y` creates the project with default settings and no prompts; the
-plain `c4builder` run is a one-off build. Both files listed → Node, CLI, Java/PlantUML and
-the site generator work. `index.html` without `context.svg`, or a non-zero exit code →
-rendering problem: read the error, return to step 4 (Java) or step 3 (D2 hint). Remove the
-temporary folder afterwards.
-
-With Docker, run the same two commands through the image: `c4builder --new --name smoke -y`
-in the temporary folder, then the plain build with `smoke` mounted as `/pwd`.
+It creates the bundled template project in a temporary folder, builds it with the installed
+CLI and removes the folder whatever the outcome. `render.full` ok → Node, CLI, Java/PlantUML
+and the site generator work. Error → the tail of the build log is printed under it: read it,
+return to step 4 (Java) or step 3 (D2 hint). Skipped → no Java, step 4. The build log of a
+successful run is shown with `-v`.
 
 ## 6. Skills in the working project
 
@@ -118,13 +122,14 @@ c4builder skills
 It installs the skills of the installed CLI version into `.agents/skills/` (and `.claude/skills/`
 under Claude Code or when `.claude/` exists), replacing only the c4builder skills there; each
 installed `SKILL.md` carries `metadata.generatedBy: <version>`. These are files in the user's
-repository — run it when the user asked for the setup of this project, otherwise ask first. A
-stderr line `~/.claude/skills/c4builder (…) overrides project skills` means a stale personal copy
-(for example from `npx skills add -g`) shadows them: tell the user, remove it only with their
-consent. A project created with `c4builder --new` already has the skills.
+repository — run it when the user asked for the setup of this project, otherwise ask first.
+`c4builder doctor skills` shows what is installed where: missing, outdated or edited copies, a
+stale personal copy that shadows the project skills (for example from `npx skills add -g`; remove
+it only with the user's consent) and copies in Claude Code plugins (informational, no fix). A
+project created with `c4builder --new` already has the skills.
 
 ## Report
 
-One short summary: Node version / c4builder version and channel / Java (system or managed
-JRE) / smoke build / skills in the project — each OK or fixed. For working on the diagrams
-themselves, use the `c4builder` skill.
+The output of `c4builder doctor` (without `-v`: it shows the home folder as `~` and no variable
+values, safe to paste into an issue) and what was fixed. For working on the diagrams themselves,
+use the `c4builder` skill.

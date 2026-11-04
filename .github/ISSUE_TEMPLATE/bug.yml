@@ -1,0 +1,22 @@
+name: Bug report
+description: c4builder does not work as described
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: The command you ran, what you expected and what you got instead.
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of c4builder doctor
+      description: >-
+        Run `c4builder doctor` in the project folder and paste its output. Without `-v` it shows the
+        home folder as `~` and no values of environment variables, so it is safe to publish. If
+        c4builder does not start at all, paste the error instead.
+      render: text
+    validations:
+      required: true

@@ -3,7 +3,7 @@ import { z } from 'zod';
 import fs from 'node:fs';
 import path from 'node:path';
 import { defaultConfig } from '../../config/defaults.ts';
-import type { BuildOptions } from '../../config/options.ts';
+import type { BuildOptions, C4ConfigFile } from '../../config/options.ts';
 
 // Ответы inquirer.prompt — динамический словарь (Record<string, any> в типах inquirer).
 type PromptAnswers = Awaited<ReturnType<typeof inquirer.prompt>>;
@@ -25,6 +25,26 @@ const validate =
 const checkedKey = (current: boolean | undefined, dflt: boolean, key: string): string | null =>
     (current === undefined ? dflt : current) ? key : null;
 
+// Ключи `.c4builder`, которые мастер спрашивает, пока они не заданы, и их опции сборки. По ним же
+// `c4builder doctor` судит, пройдёт ли сборка без мастера (без терминала она на вопросе падает).
+export const WIZARD_KEYS = {
+    projectName: 'PROJECT_NAME',
+    homepageName: 'HOMEPAGE_NAME',
+    rootFolder: 'ROOT_FOLDER',
+    distFolder: 'DIST_FOLDER',
+    generateMD: 'GENERATE_MD',
+    generateCompleteMD: 'GENERATE_COMPLETE_MD_FILE',
+    generateWEB: 'GENERATE_WEBSITE',
+    generateLocalImages: 'GENERATE_LOCAL_IMAGES',
+    embedDiagram: 'EMBED_DIAGRAM',
+    includeBreadcrumbs: 'INCLUDE_BREADCRUMBS',
+    includeLinkToDiagram: 'INCLUDE_LINK_TO_DIAGRAM',
+    excludeOtherFiles: 'EXCLUDE_OTHER_FILES',
+    plantumlServerUrl: 'PLANTUML_SERVER_URL',
+    diagramFormat: 'DIAGRAM_FORMAT',
+    charset: 'CHARSET'
+} as const satisfies Partial<Record<keyof C4ConfigFile, keyof BuildOptions>>;
+
 export default async (
     currentConfiguration: Partial<BuildOptions>,
     conf: { set(key: string, value: unknown): void },
@@ -33,7 +53,14 @@ export default async (
     // ESM исполняется в strict mode: под CommonJS `responses` был неявным глобалом,
     // здесь объявляем его явно (иначе присваивание бросит ReferenceError).
     let responses: PromptAnswers;
-    if (!currentConfiguration.PROJECT_NAME || program.config) {
+    // Пустая строка — тоже «не задан»: мастер переспрашивает её, как отсутствующий ключ.
+    const ask = (...keys: (keyof typeof WIZARD_KEYS)[]): boolean =>
+        !!program.config ||
+        keys.some((k) => {
+            const value = currentConfiguration[WIZARD_KEYS[k]];
+            return value === undefined || value === '';
+        });
+    if (ask('projectName')) {
         responses = await inquirer.prompt({
             type: 'input',
             name: 'projectName',
@@ -44,7 +71,7 @@ export default async (
         conf.set('projectName', responses.projectName);
     }
 
-    if (!currentConfiguration.HOMEPAGE_NAME || program.config) {
+    if (ask('homepageName')) {
         responses = await inquirer.prompt({
             type: 'input',
             name: 'homepageName',
@@ -55,7 +82,7 @@ export default async (
         conf.set('homepageName', responses.homepageName);
     }
 
-    if (!currentConfiguration.ROOT_FOLDER || program.config) {
+    if (ask('rootFolder')) {
         responses = await inquirer.prompt({
             type: 'input',
             name: 'rootFolder',
@@ -79,7 +106,7 @@ export default async (
         conf.set('rootFolder', responses.rootFolder);
     }
 
-    if (!currentConfiguration.DIST_FOLDER || program.config) {
+    if (ask('distFolder')) {
         responses = await inquirer.prompt({
             type: 'input',
             name: 'distFolder',
@@ -98,12 +125,7 @@ export default async (
         conf.set('distFolder', responses.distFolder);
     }
 
-    if (
-        currentConfiguration.GENERATE_MD === undefined ||
-        currentConfiguration.GENERATE_COMPLETE_MD_FILE === undefined ||
-        currentConfiguration.GENERATE_WEBSITE === undefined ||
-        program.config
-    ) {
+    if (ask('generateMD', 'generateCompleteMD', 'generateWEB')) {
         const defaults = [
             checkedKey(currentConfiguration.GENERATE_MD, defaultConfig.generateMD, 'generateMD'),
             checkedKey(
@@ -227,12 +249,13 @@ export default async (
     }
 
     if (
-        currentConfiguration.GENERATE_LOCAL_IMAGES === undefined ||
-        currentConfiguration.EMBED_DIAGRAM === undefined ||
-        currentConfiguration.INCLUDE_BREADCRUMBS === undefined ||
-        currentConfiguration.INCLUDE_LINK_TO_DIAGRAM === undefined ||
-        currentConfiguration.EXCLUDE_OTHER_FILES === undefined ||
-        program.config
+        ask(
+            'generateLocalImages',
+            'embedDiagram',
+            'includeBreadcrumbs',
+            'includeLinkToDiagram',
+            'excludeOtherFiles'
+        )
     ) {
         const defaults = [
             checkedKey(
@@ -300,7 +323,7 @@ export default async (
         conf.set('generateLocalImages', responses.generate.includes('generateLocalImages'));
     }
 
-    if (!currentConfiguration.PLANTUML_SERVER_URL || program.config) {
+    if (ask('plantumlServerUrl')) {
         responses = await inquirer.prompt({
             type: 'input',
             name: 'plantumlServerUrl',
@@ -311,7 +334,7 @@ export default async (
         conf.set('plantumlServerUrl', responses.plantumlServerUrl);
     }
 
-    if (!currentConfiguration.DIAGRAM_FORMAT || program.config) {
+    if (ask('diagramFormat')) {
         responses = await inquirer.prompt({
             type: 'input',
             name: 'diagramFormat',
@@ -322,7 +345,7 @@ export default async (
         conf.set('diagramFormat', responses.diagramFormat);
     }
 
-    if (!currentConfiguration.CHARSET || program.config) {
+    if (ask('charset')) {
         responses = await inquirer.prompt({
             type: 'input',
             name: 'charset',
