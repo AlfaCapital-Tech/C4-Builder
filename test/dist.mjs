@@ -2,6 +2,7 @@
 // (build-split) правится здесь, а не глубокими путями по всем тестам.
 export { cachedJava, resolveJava } from '../dist/core/render/jre.js';
 export { isPathInside } from '../dist/util/archive.js';
+export { watchTree } from '../dist/util/watch.js';
 export { configSchema, isValidPort } from '../dist/config/schema.js';
 export { parseConfig } from '../dist/config/options.js';
 export { defaultConfig } from '../dist/config/defaults.js';

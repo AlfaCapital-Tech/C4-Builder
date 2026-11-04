@@ -15,6 +15,10 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
   `enabled: false` turns it off without removing the settings
 - Site: `questions: false` in `.c4builder` turns the **Question** button off (with the question
   highlighting, removal and routes of `site -w`)
+- `-w` on Linux keeps watching a file replaced by a rename — `sed -i`, safe write of editors and
+  IDEs — and a folder deleted and created again under the same path; before, edits of such a file
+  no longer triggered a rebuild until restart (#53, Node's recursive `fs.watch` before 24.22 / 26.9).
+  One save is one rebuild; the `node-watch` dependency is gone
 
 ## v0.13.0
 

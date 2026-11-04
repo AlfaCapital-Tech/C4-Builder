@@ -20,11 +20,11 @@ import { build, type BuildResult } from '../core/build.ts';
 import type { DiagramQueue } from '../core/render/diagrams.ts';
 import { loadPlugins, pluginWatchPaths } from '../core/plugins/load.ts';
 import fs from 'node:fs';
-import watch from 'node-watch';
 import { EventEmitter } from 'node:events';
 
 import { clearConsole } from '../util/utils.ts';
 import { acquireBuildLock, BuildLockHeldError, waitBuildLock } from '../util/lock.ts';
+import { watchTree } from '../util/watch.ts';
 // teardownD2 живёт здесь, а не в finally build(): в watch-режиме D2-воркер должен
 // переживать ребилды (его пересоздание — секунды), гасим его только когда сборок
 // больше не будет (одиночный запуск).
@@ -404,12 +404,9 @@ export default async () => {
             }
         };
         if (opts.watch) {
-            // node-watch: CJS-рантайм при ESM-.d.ts (export default) — дефолт-импорт
-            // типизируется как namespace. Каст к реальной сигнатуре, рантайм не меняется.
-            const watchDir = watch as unknown as typeof import('node-watch').default;
             const inside = (p: string, dir: string): boolean => p === dir || p.startsWith(dir + path.sep);
-            // Пути наблюдения — абсолютные и без вложенных друг в друга: node-watch дедуплицирует
-            // события по имени, а один файл под двумя корнями приходил бы дважды.
+            // Пути наблюдения — абсолютные и без вложенных друг в друга: вложенный корень на
+            // macOS/Windows дал бы второй рекурсивный наблюдатель на то же дерево.
             const candidates = [
                 path.resolve(options.ROOT_FOLDER),
                 ...pluginWatchPaths(plugins, process.cwd(), fs.existsSync)
@@ -420,12 +417,13 @@ export default async () => {
             // Собственные записи сборки (dist, dist_bk, .c4builder*) не должны триггерить
             // ребилд — при dir плагина, накрывающем cwd, это бесконечная петля.
             const output = outputDirs(options);
-            const filter = (name: string, skip: symbol): boolean | symbol =>
-                output.some((d) => inside(name, d)) || name.startsWith(configPath) ? skip : true;
-            watchDir(watchPaths, { recursive: true, filter }, async (_evt, name) => {
-                // clearConsole();
-                // intro();
-                console.log(chalk.gray(`\n${name} changed. Rebuilding...`));
+            const ignore = (p: string): boolean =>
+                output.some((d) => inside(p, d)) || p.startsWith(configPath);
+            watchTree(watchPaths, { ignore }, async (paths) => {
+                // Временный файл sed -i к моменту пачки уже исчез — в лог идёт живой путь.
+                const name = paths.find((p) => fs.existsSync(p)) ?? paths[0];
+                const more = paths.length > 1 ? ` (+${paths.length - 1} more)` : '';
+                console.log(chalk.gray(`\n${name}${more} changed. Rebuilding...`));
                 if (isBuilding) {
                     attemptedWatchBuild = true;
                     if (options.GENERATE_LOCAL_IMAGES)
