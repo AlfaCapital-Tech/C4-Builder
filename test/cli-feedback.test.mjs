@@ -21,7 +21,7 @@ afterAll(() => fs.rmSync(dir, { recursive: true, force: true }));
 const project = path.join(dir, 'project');
 fs.mkdirSync(path.join(project, 'src'), { recursive: true });
 fs.writeFileSync(path.join(project, 'src', 'README.md'), '# root\n\nfoo bar\n');
-fs.writeFileSync(path.join(project, '.c4builder'), JSON.stringify({ ...CONFIG, webPort: '38350' }));
+fs.writeFileSync(path.join(project, '.c4builder'), JSON.stringify({ ...CONFIG, webPort: '28350' }));
 
 const feedback = (cwd, ...args) =>
     new Promise((resolve) => {
@@ -38,16 +38,16 @@ const AS_REQUIRED = '--as <name> is required';
 describe('c4builder feedback', () => {
     it('без сервера — код 1 и адрес сервера, каталог пуст', async () => {
         const empty = fs.mkdtempSync(path.join(dir, 'empty-'));
-        const res = await feedback(empty, '--wait', '--as', 'foo', '-p', '38359');
+        const res = await feedback(empty, '--wait', '--as', 'foo', '-p', '28359');
         expect(res.code).toBe(1);
-        expect(res.stderr).toContain('no c4builder site -w on http://localhost:38359');
+        expect(res.stderr).toContain('no c4builder site -w on http://localhost:28359');
         expect(res.stdout).toBe('');
         expect(fs.readdirSync(empty)).toEqual([]);
     });
 
     it('без --as или с недопустимым именем — код 2 и пример команды, без обращения к серверу', async () => {
         for (const args of [[], ['--as', 'a b'], ['--as', 'x'.repeat(65)]]) {
-            const res = await feedback(dir, '--wait', '-p', '38359', ...args);
+            const res = await feedback(dir, '--wait', '-p', '28359', ...args);
             expect(res.code, args.join(' ')).toBe(2);
             expect(res.stderr).toContain(AS_REQUIRED);
             expect(res.stderr).toContain('c4builder feedback --wait --as add-dark-mode');
@@ -58,7 +58,7 @@ describe('c4builder feedback', () => {
     });
 
     it('с site -w: пустой ящик без --wait — пустой stdout и код 0; --wait печатает отправленную пачку', async () => {
-        const base = 'http://127.0.0.1:38350';
+        const base = 'http://127.0.0.1:28350';
         await serveSite(project, ['site', '-w'], {
             env: agentEnv(),
             onReady: async () => {
@@ -95,12 +95,12 @@ describe('c4builder feedback', () => {
     }, 60_000);
 
     it('сервер с --no-agent — код 1 и сообщение про --no-agent', async () => {
-        await serveSite(project, ['site', '-w', '--no-agent', '-p', '38351'], {
+        await serveSite(project, ['site', '-w', '--no-agent', '-p', '28351'], {
             env: agentEnv({ CLAUDECODE: '1' }),
             onReady: async () => {
-                const res = await feedback(project, '--wait', '--as', 'foo', '-p', '38351');
+                const res = await feedback(project, '--wait', '--as', 'foo', '-p', '28351');
                 expect(res.code).toBe(1);
-                expect(res.stderr).toContain('http://localhost:38351');
+                expect(res.stderr).toContain('http://localhost:28351');
                 expect(res.stderr).toContain('--no-agent');
             }
         });
@@ -181,7 +181,7 @@ describe('ящики feedback в site -w', () => {
             names.every((n) => d.mailboxes.some((m) => m.name === n && m.state === 'listening'));
 
     it('пачка до подключения ждёт без адресата и выдаётся первому слушателю; пустой ящик с wait=0 → 204', async () => {
-        const s = await start(38340);
+        const s = await start(28340);
         try {
             const posted = await s.post();
             expect(posted.status).toBe(200);
@@ -204,7 +204,7 @@ describe('ящики feedback в site -w', () => {
     });
 
     it('два ожидающих с одним именем — пачку получает самый ранний, второй ждёт дальше; оборванный не считается', async () => {
-        const s = await start(38341, { pollMs: 1500 });
+        const s = await start(28341, { pollMs: 1500 });
         try {
             const aborted = new AbortController();
             s.next('', undefined, aborted.signal).catch(() => {});
@@ -227,7 +227,7 @@ describe('ящики feedback в site -w', () => {
     });
 
     it('защита: next без заголовка, с Origin или чужим Host и POST без Origin — 403, очередь не трогается; первый next включает режим', async () => {
-        const s = await start(38342);
+        const s = await start(28342);
         try {
             expect((await s.post()).status).toBe(200);
             expect((await s.next('&wait=0', {})).status).toBe(403);
@@ -236,9 +236,9 @@ describe('ящики feedback в site -w', () => {
                 http.get(
                     {
                         host: '127.0.0.1',
-                        port: 38342,
+                        port: 28342,
                         path: '/__c4builder/feedback/next?as=foo&wait=0',
-                        headers: { Host: 'evil.test:38342', ...FB }
+                        headers: { Host: 'evil.test:28342', ...FB }
                     },
                     (res) => resolve(res.resume().statusCode)
                 ).on('error', reject);
@@ -262,7 +262,7 @@ describe('ящики feedback в site -w', () => {
     });
 
     it('явно выключенный режим — оба эндпоинта 404', async () => {
-        const s = await start(38343, { agent: { on: false, name: '', explicit: true } });
+        const s = await start(28343, { agent: { on: false, name: '', explicit: true } });
         try {
             expect((await s.post()).status).toBe(404);
             expect((await s.next('&wait=0')).status).toBe(404);
@@ -272,7 +272,7 @@ describe('ящики feedback в site -w', () => {
     });
 
     it('SSE: agent с ящиками при подключении и смене слушателя, delivered с id и адресатом', async () => {
-        const s = await start(38344, { pollMs: 60_000, idleMs: 300 });
+        const s = await start(28344, { pollMs: 60_000, idleMs: 300 });
         try {
             const next = await sse(s.url);
             expect(await next('agent')).toEqual({ on: false, mailboxes: [] });
@@ -298,7 +298,7 @@ describe('ящики feedback в site -w', () => {
     });
 
     it('два агента: пачка на bar только у bar и ждёт его между запусками, пока foo слушает', async () => {
-        const s = await start(38345, { pollMs: 60_000 });
+        const s = await start(28345, { pollMs: 60_000 });
         try {
             const next = await sse(s.url);
             const foo = s.listen('foo');
@@ -326,7 +326,7 @@ describe('ящики feedback в site -w', () => {
     }, 30_000);
 
     it('без имени: /next — 400, CLI — код 2; пачка остаётся и достаётся первому --as foo', async () => {
-        const s = await start(38346);
+        const s = await start(28346);
         try {
             expect((await s.post()).status).toBe(200);
             for (const query of ['?wait=0', '?as=&wait=0', '?as=a%20b&wait=0']) {
@@ -334,7 +334,7 @@ describe('ящики feedback в site -w', () => {
                 expect(res.status, query).toBe(400);
                 expect((await res.json()).error).toContain(AS_REQUIRED);
             }
-            const old = await feedback(dir, '--wait', '-p', '38346');
+            const old = await feedback(dir, '--wait', '-p', '28346');
             expect(old.code).toBe(2);
             expect(old.stderr).toContain(AS_REQUIRED);
             const got = await s.listen('foo');
@@ -347,7 +347,7 @@ describe('ящики feedback в site -w', () => {
 
     // Адрес страницы change'а (change site-agent-review, D6): эндпоинт и строка `Change page` в stderr.
     it("/page: 200 с адресом для change'а, 404 для чужого имени, 403 с Origin или без заголовка, 400 без имени", async () => {
-        const s = await start(38348);
+        const s = await start(28348);
         try {
             const page = (query, headers = FB) => fetch(`${s.url}/__c4builder/page${query}`, { headers });
             const ok = await page('?as=add-dark-mode');
@@ -364,7 +364,7 @@ describe('ящики feedback в site -w', () => {
     });
 
     it('feedback --wait --as <change>: строка Change page в stderr, stdout — только пачка; не change — без строки', async () => {
-        const s = await start(38349, { pollMs: 60_000 });
+        const s = await start(28349, { pollMs: 60_000 });
         try {
             const next = await sse(s.url);
             const dark = s.listen('add-dark-mode');
@@ -374,7 +374,7 @@ describe('ящики feedback в site -w', () => {
             await s.post(batchFor('review-2'));
             const [got, none] = await Promise.all([dark, other]);
             expect(got.code, got.stderr).toBe(0);
-            expect(got.stderr).toBe('Change page: http://localhost:38349/#/change/add-dark-mode\n');
+            expect(got.stderr).toBe('Change page: http://localhost:28349/#/change/add-dark-mode\n');
             expect(got.stdout).toMatch(/^# Page feedback \(c4builder\)\n/);
             expect(got.stdout).toContain('> for add-dark-mode');
             expect(got.stdout).not.toContain('Change page');
@@ -387,7 +387,7 @@ describe('ящики feedback в site -w', () => {
     }, 30_000);
 
     it('пустой ящик пропадает по mailboxTtlMs, ящик с пачкой остаётся', async () => {
-        const s = await start(38347, { idleMs: 50, mailboxTtlMs: 300 });
+        const s = await start(28347, { idleMs: 50, mailboxTtlMs: 300 });
         try {
             const next = await sse(s.url);
             expect((await s.next('&wait=0')).status).toBe(204);
