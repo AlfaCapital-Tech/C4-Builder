@@ -153,7 +153,7 @@ describe('уведомление о скиллах под агентом', () =>
         const { cwd, env } = sandbox();
         project(cwd);
         writeSkill(path.join(cwd, '.claude'), '0.1.0');
-        const out = await serveSite(cwd, ['site', '-w', '-p', '38360'], { env: env({ CLAUDECODE: '1' }) });
+        const out = await serveSite(cwd, ['site', '-w', '-p', '28360'], { env: env({ CLAUDECODE: '1' }) });
         const line = `c4builder agent skills here are from 0.1.0 (current ${VERSION}). ${RUN}`;
         expect(out).toContain(line);
         expect(out.indexOf(line)).toBeLessThan(out.indexOf('serving your docsify site'));

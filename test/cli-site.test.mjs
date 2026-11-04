@@ -18,7 +18,7 @@ const dir = fs.mkdtempSync(path.join(TMP_ROOT, 'cli-site-'));
 afterAll(() => fs.rmSync(dir, { recursive: true, force: true }));
 fs.mkdirSync(path.join(dir, 'src'), { recursive: true });
 fs.writeFileSync(path.join(dir, 'src', 'README.md'), '# root\n');
-fs.writeFileSync(path.join(dir, '.c4builder'), JSON.stringify({ ...CONFIG, webPort: '38321' }));
+fs.writeFileSync(path.join(dir, '.c4builder'), JSON.stringify({ ...CONFIG, webPort: '28321' }));
 
 const serve = (args, opts) => serveSite(dir, args, opts);
 const CLI = path.join(REPO_ROOT, 'dist', 'index.js');
@@ -30,7 +30,7 @@ describe('c4builder site', () => {
 
     // Express 5 зовёт колбэк listen и с ошибкой: раньше печатались «serving»/«go to», а код был 0.
     it('занятый порт → код 1, без «go to»', async () => {
-        const port = 38330;
+        const port = 28330;
         const busy = http.createServer();
         await new Promise((resolve) => busy.listen(port, '127.0.0.1', resolve));
         try {
@@ -66,7 +66,7 @@ describe('плашка о новой версии в site -w', () => {
     };
 
     it('в отдаче dev-сервера — плашка с обеими версиями, в файлах сборки её нет', async () => {
-        const html = await page(38322);
+        const html = await page(28322);
         expect(html).toContain('id="c4builder-update"');
         expect(html).toContain(`c4builder 99.0.0 is available (current ${CURRENT})`);
         expect(html).toContain('c4builder update');
@@ -76,7 +76,7 @@ describe('плашка о новой версии в site -w', () => {
     }, 60_000);
 
     it('с NO_UPDATE_NOTIFIER=1 плашки нет', async () => {
-        const html = await page(38323, { NO_UPDATE_NOTIFIER: '1' });
+        const html = await page(28323, { NO_UPDATE_NOTIFIER: '1' });
         expect(html).toContain('</body>');
         expect(html).not.toContain('c4builder-update');
     }, 60_000);
@@ -94,7 +94,7 @@ describe('комментарии в site -w', () => {
     const readme = path.join(dir, 'src', 'README.md');
 
     it('POST с Origin сайта дописывает раздел в исходник; чужой Origin, пустой комментарий и неизвестная страница отклоняются', async () => {
-        const port = 38324;
+        const port = 28324;
         const before = fs.readFileSync(readme, 'utf8');
         try {
             await serve(['site', '-w', '-p', String(port)], {
@@ -180,7 +180,7 @@ describe('комментарии в site -w', () => {
     }, 60_000);
 
     it('без -w нет ни скрипта, ни маршрута', async () => {
-        const port = 38325;
+        const port = 28325;
         await serve(['site', '-p', String(port)], {
             onReady: async () => {
                 expect(await (await fetch(`http://127.0.0.1:${port}/`)).text()).not.toContain(
@@ -231,7 +231,7 @@ describe('журнал ревью в site -w', () => {
         });
 
     it('POST дописывает строку в ближайший review.md; без Origin — 403; нет файла выше — 404', async () => {
-        const port = 38326;
+        const port = 28326;
         await serveSite(rdir, ['site', '-w', '-p', String(port)], {
             onReady: async () => {
                 const html = await (await fetch(`http://127.0.0.1:${port}/`)).text();
@@ -301,7 +301,7 @@ describe('журнал ревью в site -w', () => {
     }, 60_000);
 
     it('questions: false — кнопки и маршрута вопросов нет; reviewLog.enabled: false — журнала нет', async () => {
-        const port = 38328;
+        const port = 28328;
         const cfg = path.join(rdir, '.c4builder');
         const saved = fs.readFileSync(cfg, 'utf8');
         const parsed = JSON.parse(saved);
@@ -335,7 +335,7 @@ describe('журнал ревью в site -w', () => {
     }, 60_000);
 
     it('без reviewLog маршрута нет', async () => {
-        const port = 38327;
+        const port = 28327;
         await serve(['site', '-w', '-p', String(port)], {
             onReady: async () => {
                 expect(await (await fetch(`http://127.0.0.1:${port}/`)).text()).not.toContain('"review.md"');
@@ -372,9 +372,9 @@ describe('агентский режим site -w', () => {
     };
 
     it('с CLAUDECODE=1 — подсказка про feedback --wait --as и режим в странице', async () => {
-        const res = await run(38326, [], agentEnv({ CLAUDECODE: '1' }));
+        const res = await run(28326, [], agentEnv({ CLAUDECODE: '1' }));
         expect(res.out).toContain(
-            'agent mode (claude-code): page feedback goes to "c4builder feedback --wait --as <name> -p 38326"'
+            'agent mode (claude-code): page feedback goes to "c4builder feedback --wait --as <name> -p 28326"'
         );
         // Лог фонового процесса (спека build-pipeline): подсказка — отдельной строкой, без `\r`-прогресса.
         expect(res.out).toMatch(/^agent mode \(claude-code\): /m);
@@ -384,7 +384,7 @@ describe('агентский режим site -w', () => {
     }, 60_000);
 
     it('--no-agent при CLAUDECODE=1 — без подсказки и режима, эндпоинты feedback — 404', async () => {
-        const res = await run(38327, ['--no-agent'], agentEnv({ CLAUDECODE: '1' }));
+        const res = await run(28327, ['--no-agent'], agentEnv({ CLAUDECODE: '1' }));
         expect(res.out).not.toContain('agent mode');
         expect(res.html).toContain('var AGENT = { on: false');
         expect(res.next).toBe(404);
@@ -392,7 +392,7 @@ describe('агентский режим site -w', () => {
     }, 60_000);
 
     it('без переменных агента режим выключен, но страница уже со сниппетом', async () => {
-        const res = await run(38328, [], agentEnv());
+        const res = await run(28328, [], agentEnv());
         expect(res.out).not.toContain('agent mode (');
         expect(res.html).toContain('var AGENT = { on: false');
     }, 60_000);
@@ -402,7 +402,7 @@ describe('агентский режим site -w', () => {
 // несуществующую папку должна давать 404, а не главную со статусом 200.
 describe('неизвестные пути в site -w', () => {
     it('корень и реальный файл — 200, несуществующий каталог — 404', async () => {
-        const port = 38329;
+        const port = 28329;
         await serve(['site', '-w', '-p', String(port)], {
             onReady: async () => {
                 const base = `http://127.0.0.1:${port}`;
@@ -421,7 +421,7 @@ describe('неизвестные пути в site -w', () => {
 describe('--open / --open-change <id> в site', () => {
     const env = agentEnv({ BROWSER: 'none' });
     it('неизвестный id — предупреждение в stderr, сервер работает; без переадресаций index.html прежний', async () => {
-        const port = 38331;
+        const port = 28331;
         const out = await serve(['site', '-w', '-p', String(port), '--open-change', 'nope'], {
             env,
             onReady: async () => {
@@ -449,7 +449,7 @@ describe('--open / --open-change <id> в site', () => {
             path.join(project, '.c4builder'),
             JSON.stringify({ ...CONFIG, generateLocalImages: false, plugins: ['openspec'] })
         );
-        const port = 38332;
+        const port = 28332;
         const out = await serveSite(
             project,
             ['site', '-w', '-p', String(port), '--open-change', 'add-dark-mode'],
@@ -472,7 +472,7 @@ describe('--open / --open-change <id> в site', () => {
     }, 60_000);
 
     it('--open без значения — главная, как раньше', async () => {
-        const port = 38333;
+        const port = 28333;
         // serveSite резолвится по строке «serving» — «go to» приходит следом, ждём её запросом.
         const out = await serve(['site', '-p', String(port), '--open'], {
             env,
@@ -485,7 +485,7 @@ describe('--open / --open-change <id> в site', () => {
     }, 60_000);
 
     it('-o не забирает следующий аргумент: `-o site -wp <port>` поднимает сайт', async () => {
-        const port = 38334;
+        const port = 28334;
         const out = await serve(['-o', 'site', '-wp', String(port)], {
             env,
             onReady: async () => {
