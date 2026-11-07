@@ -42,10 +42,10 @@ export const COMMAND_HELP: Record<string, CommandHelp> = {
         options: [],
         output: [
             ['✓ <file>', 'stdout: the file is valid'],
-            ['✗ <file>: line <N>: <message>', 'stderr: a PlantUML error (.puml, .iuml)'],
+            ['✗ <file>: line <N>: <message>', 'stderr: a .puml error, line from the start of the file'],
             [
                 '✗ <file>: <message>',
-                'stderr: other errors; BPMN and wireflow print a line per problem, mermaid starts with line <N>'
+                'stderr: other errors (.iuml without a line); BPMN and wireflow print a line per problem, mermaid starts with line <N>'
             ]
         ],
         exit: [
