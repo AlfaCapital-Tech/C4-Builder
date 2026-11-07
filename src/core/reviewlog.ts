@@ -5,6 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { escapeRegExp } from '../util/text.ts';
 import {
     clipQuote,
     collapse,
@@ -117,8 +118,6 @@ export interface RemarkRef {
     quote: string;
     section: string;
 }
-
-const escapeRegExp = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 // Регэксп из ячейки шаблона: литералы как есть, подстановки — именованные группы (повтор имени —
 // безымянная группа, RegExp не падает). Пробелы по краям литерала необязательны: ячейки в файле

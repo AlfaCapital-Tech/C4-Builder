@@ -11,7 +11,7 @@
 | `c4builder site` | builds and serves the site locally (same as `--site`) |
 | `c4builder --site -w` | the same, rebuilding on every save and reloading the browser |
 | `c4builder feedback --wait --as <name>` | waits for the next batch of page feedback for the agent `<name>` from `site -w` and prints it, see "Feedback to the agent" below |
-| `c4builder check <files...>` | checks `.puml`, `.iuml`, `.d2`, `.bpmn`, `.mmd`, `.wireflow.json` diagrams without a build, exit code 0 or 1; `--strict` — 1 on warnings too, see [Diagrams](03%20Diagrams/03%20Diagrams.md) |
+| `c4builder check <files...>` | checks `.puml`, `.iuml`, `.d2`, `.bpmn`, `.mmd`, `.wireflow.json` diagrams without a build, exit code 0 or 1; `--strict` — 1 on warnings too; `--format json\|github\|gitlab` — a report for agents and CI, `--files-from <file>` — a list of paths from a file or stdin (see "Checking diagrams" below and [Diagrams](03%20Diagrams/03%20Diagrams.md)) |
 | `c4builder jre info` | which Java will be used (JSON) |
 | `c4builder jre install [--force]` | download a JRE into the cache in advance; `--force` — even if system Java exists |
 | `c4builder --list` | print the current config; since 0.5.0 outside a project — an error with exit code 1, no files created |
@@ -39,7 +39,10 @@ Flags:
 | `--as <name>` | for `feedback`, required: listener name — the agent's change or task (1–64 characters: Latin letters, digits, `.`, `_`, `-`) |
 | `--system-fonts` | render with system fonts for one run |
 | `--strict` | for `doctor` and `check`: exit code 1 on warnings too |
-| `--json`, `-v, --verbose`, `--full`, `--offline` | for `doctor`, see "Diagnostics" below |
+| `--format <format>` | for `check`: `text` (default), `json`, `github`, `gitlab`, see "Checking diagrams" below |
+| `--json` | for `doctor` (see "Diagnostics" below) and `check` (same as `--format json`) |
+| `--files-from <file>` | for `check`: also the paths from a file, one per line; `-` — stdin |
+| `-v, --verbose`, `--full`, `--offline` | for `doctor`, see "Diagnostics" below |
 | `-V, --version` | version |
 | `-h, --help` | flags and positional commands |
 
@@ -113,6 +116,73 @@ showing npm's output. Otherwise it installs nothing, prints the update command a
 The check and the notices are off when the `CI` variable is set (GitLab CI, GitHub Actions and most
 CI systems set it) or `NO_UPDATE_NOTIFIER` is set, and in the Docker image. To turn them off on your
 machine: `NO_UPDATE_NOTIFIER=1`.
+
+## Checking diagrams
+
+`c4builder check <files...>` checks diagrams with the same engine as the build, without a project
+or `.c4builder`. The default output is text: `✓ <file>` on stdout, `✗ <file>: <problem>` on
+stderr, warnings as `⚠ <file>: <message>`. Each engine has its own problem shape (see
+[Diagrams](03%20Diagrams/03%20Diagrams.md)). Agents and CI get machine formats:
+
+| `--format` | Output on stdout |
+|---|---|
+| `text` | default, the output above |
+| `json` | a JSON array of findings for all files in check order; no findings — `[]`; paths relative to the current folder |
+| `github` | one workflow command `::error` / `::warning` per finding; GitHub Actions shows them as annotations in the PR diff; paths relative to `GITHUB_WORKSPACE` |
+| `gitlab` | a GitLab Code Quality report (`description`, `check_name`, `fingerprint`, `severity`, `location`) for `artifacts: reports: codequality`; paths relative to `CI_PROJECT_DIR` |
+
+`--json` is the same as `--format json`. Any other `--format` value is an error listing the
+formats, exit code 1. `--format` and `--files-from` belong to `check` only: with another command
+or a build they are an error with exit code 1 (`doctor` has `--json` for machine output).
+
+`--files-from <file>` adds the paths from a file to the arguments, one per line; `-` is stdin,
+empty lines are skipped. This way the list of changed files from `git diff` reaches `check` in
+one call — and one report. `xargs` does not fit a machine format: it splits a long list into
+several calls, and stdout would get several JSON arrays in a row. An empty list is an empty
+report and exit code 0; in `text` — exit code 0 too, with no output. `--format` and
+`--files-from` — since c4builder 0.15.0.
+
+A `json` finding has the same fields for every engine; a field the engine does not provide is
+`null`:
+
+```json
+[
+  {
+    "file": "src/context.puml",
+    "line": 6,
+    "column": null,
+    "engine": "plantuml",
+    "severity": "warning",
+    "rule": "undeclared-element",
+    "element": "nope",
+    "message": "Rel to undeclared element \"nope\""
+  }
+]
+```
+
+| Field | Value |
+|---|---|
+| `file` | path with `/`; for a D2 error in an imported file — the path of that file |
+| `line`, `column` | the 1-based position the engine reported — also when it writes it into the error text (BPMN XML, wireflow JSON, mermaid). For a BPMN or wireflow element finding the engine gives only the id — `check` finds the position from the `id` declaration in the source |
+| `engine` | `plantuml`, `d2`, `bpmn`, `mermaid`, `wireflow`; `null` — unsupported extension |
+| `severity` | `error` or `warning` |
+| `rule` | the rule: bpmnlint (`no-disconnected`), BPMN layout (`layout:…`), `undeclared-element` for a C4 relation to an undeclared alias |
+| `element` | BPMN element id, wireflow node or edge id, C4 relation alias |
+| `message` | the finding text without a position: no `line N:` prefix and no line and column the engine wrote into the text. A BPMN element id is only in `element`; for wireflow (`edge "e1": …`) and a C4 relation the id stays in the text: the node kind and the macro matter for reading |
+
+A `github` annotation: `::error file=src/context.puml,line=6,title=c4builder plantuml::Syntax Error`.
+`title` has the engine and the rule in brackets; the text is the message, prefixed with `<id>: `
+when the id is not part of it by the engine's shape (bpmnlint). The `gitlab` `fingerprint` does
+not depend on the line number: the position is neither in the hash nor in `message`, so a line
+inserted above does not make a finding new in the MR widget. Identical findings — for example,
+an error in a shared imported `.d2` when several files are checked — appear in the report once.
+
+In machine formats stdout has only the report: no `✓`/`✗`/`⚠` lines and no colour; messages
+about choosing and downloading a JRE go to stderr. The exit code does not depend on the format:
+0 or 1 as in `text`, `--strict` works the same. Without files a machine format prints an empty
+report (`[]`, nothing for `github`) and exits with 0, so a job over the list of changed files
+passes when no diagrams changed. `text` without files and without `--files-from` still prints
+the usage line and exits with 1.
 
 ## Diagnostics
 

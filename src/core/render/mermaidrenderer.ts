@@ -2,8 +2,10 @@ import crypto from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
+import { positionAt } from '../../util/text.ts';
 import { DEFAULT_FONT_NAME } from './fonts.ts';
 import { getResvg, resvgFontOptions } from './pngraster.ts';
+import { DiagramError, type DiagramProblem, fileError } from './problem.ts';
 import { ASCENT, DESCENT, X_HEIGHT, clearTextWidths, textWidth } from './textmetrics.ts';
 
 // Четвёртый бэкенд рендера: настоящий mermaid (официальная однофайловая сборка
@@ -14,12 +16,11 @@ import { ASCENT, DESCENT, X_HEIGHT, clearTextWidths, textWidth } from './textmet
 // Версия пакета идёт в ключ кэша (render/diagrams): апгрейд mermaid обязан перерисовать.
 export const MERMAID_PACKAGE = '@mermaid-js/tiny';
 
-// problems — строка без пути файла (check печатает `✗ <file>: <problem>`), message — с путём.
-export class MermaidError extends Error {
-    readonly problems: string[];
-    constructor(file: string, problem: string) {
-        super(`${file}: ${problem}`);
-        this.problems = [problem];
+// details — замечание структурой, problems — его печатная строка без пути файла (check печатает
+// `✗ <file>: <problem>`), message — с путём.
+export class MermaidError extends DiagramError {
+    constructor(file: string, problem: DiagramProblem) {
+        super(...fileError(file, [problem]));
     }
 }
 
@@ -456,25 +457,41 @@ const parsedLines = (source: string): number[] => {
 const UNSUPPORTED = /^(mindmap|architecture[\w-]*)$/;
 const oneLine = (s: string): string => s.replace(/\s*\n\s*/g, '; ').trim();
 
-// Ошибка движка → `line N: …` с номером строки файла (design §7). Ошибки из окна — объекты
-// другого realm, instanceof Error для них ложен.
-const problemOf = (err: unknown, lines: number[], type: string): string => {
+// Ошибка движка → замечание со строкой файла (design §7). Ошибки из окна — объекты другого
+// realm, instanceof Error для них ложен. Позицию, которую движок вписал в текст (`Lexer error
+// on line 2, column 8: …`, `at offset: 11`), переносим в line/column и убираем из message;
+// печатный text — прежний, со строками файла внутри.
+const INLINE_AT = /\bline (\d+)(?:, column (\d+))?/;
+const problemOf = (err: unknown, lines: number[], type: string): DiagramProblem => {
     const raw = String((err as { message?: unknown } | undefined)?.message ?? err);
     const toFile = (n: string): number => lines[Number(n) - 1] ?? Number(n);
     if (/No diagram type detected/.test(raw))
-        return `line ${lines[0] ?? 1}: unknown mermaid diagram type '${type || '(empty)'}'`;
+        return { line: lines[0] ?? 1, message: `unknown mermaid diagram type '${type || '(empty)'}'` };
     // jison: «Parse error on line N:», фрагмент, строка-указатель «---^», ожидаемые токены.
     const jison = /^Parse error on line (\d+):\n([\s\S]*)$/.exec(raw);
     if (jison)
-        return `line ${toFile(jison[1])}: ${oneLine(
-            jison[2]
-                .split('\n')
-                .filter((l) => !/^-*\^$/.test(l.trim()))
-                .join('\n')
-        )}`;
-    const at = /\bline (\d+)/.exec(raw);
-    const message = oneLine(raw.replace(/\bline (\d+)/g, (_, n: string) => `line ${toFile(n)}`));
-    return at ? `line ${toFile(at[1])}: ${message}` : message;
+        return {
+            line: toFile(jison[1]),
+            message: oneLine(
+                jison[2]
+                    .split('\n')
+                    .filter((l) => !/^-*\^$/.test(l.trim()))
+                    .join('\n')
+            )
+        };
+    const text = oneLine(raw.replace(/\bline (\d+)/g, (_, n: string) => `line ${toFile(n)}`));
+    const at = INLINE_AT.exec(raw);
+    if (!at) return { message: text };
+    return {
+        line: toFile(at[1]),
+        column: at[2] === undefined ? undefined : Number(at[2]),
+        message: oneLine(
+            raw
+                .replace(/,?\s*\b(?:on |at )?line \d+(?:, column \d+)?/g, '')
+                .replace(/\s*\bat offset:? \d+/g, '')
+        ),
+        text: `line ${toFile(at[1])}: ${text}`
+    };
 };
 
 // Постобработка SVG: id внутри документа — по порядку появления от корня (счётчики mermaid
@@ -518,8 +535,6 @@ const resvgCss = (css: string): string =>
             return list.length > 1 ? list.map((s) => `${s.trim()}{${body}}`).join('') : whole;
         });
 
-const lineOf = (source: string, index: number): number => source.slice(0, index).split('\n').length;
-
 // Полный конвейер одного источника — общий для сборки и `c4builder check`. file — путь для
 // сообщений (у блока в markdown — его страница).
 export const renderMermaid = async (source: string, file: string): Promise<Buffer> => {
@@ -529,13 +544,16 @@ export const renderMermaid = async (source: string, file: string): Promise<Buffe
     // tiny-сборка не включает эти типы и KaTeX: без проверки — невнятное «No diagram type
     // detected» или формула сырым текстом на картинке.
     if (UNSUPPORTED.test(type))
-        throw new MermaidError(file, `line ${lines[0]}: unsupported mermaid diagram type '${type}'`);
+        throw new MermaidError(file, {
+            line: lines[0] ?? 1,
+            message: `unsupported mermaid diagram type '${type}'`
+        });
     const math = /\$\$[\s\S]+?\$\$/.exec(text);
     if (math)
-        throw new MermaidError(
-            file,
-            `line ${lineOf(text, math.index)}: unsupported mermaid feature 'KaTeX math' ($$...$$)`
-        );
+        throw new MermaidError(file, {
+            ...positionAt(text, math.index),
+            message: "unsupported mermaid feature 'KaTeX math' ($$...$$)"
+        });
     const { window } = await getEngine();
     const hash = crypto.createHash('sha1').update(text).digest('hex');
     const id = `m${hash.slice(0, 8)}`;
@@ -547,9 +565,8 @@ export const renderMermaid = async (source: string, file: string): Promise<Buffe
     }
     // Тип, который игнорирует htmlLabels, дал бы в PNG пустые подписи.
     if (svg.includes('<foreignObject'))
-        throw new MermaidError(
-            file,
-            `diagram type '${type}' uses HTML labels, which cannot be rendered offline`
-        );
+        throw new MermaidError(file, {
+            message: `diagram type '${type}' uses HTML labels, which cannot be rendered offline`
+        });
     return Buffer.from(finalizeSvg(svg, id), 'utf8');
 };
