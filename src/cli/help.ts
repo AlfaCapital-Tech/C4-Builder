@@ -12,8 +12,8 @@ interface CommandHelp {
     args: string;
     // Строка в списке команд общей справки.
     summary: string;
-    // Абзац в справке команды; без него — summary.
-    about?: string;
+    // Абзац в справке команды.
+    about: string;
     // Длинные имена опций, зарегистрированных в commander.
     options: string[];
     // [образец строки, пояснение]
@@ -41,8 +41,14 @@ export const COMMAND_HELP: Record<string, CommandHelp> = {
         about: `Checks diagram files without a project or a build: ${EXTENSIONS.join(', ')}. A file with another extension is an error.`,
         options: [],
         output: [
-            ['✓ <file>', 'stdout: the file is valid'],
-            ['✗ <file>: line <N>: <message>', 'stderr: a .puml error, line from the start of the file'],
+            [
+                '✓ <file>',
+                'stdout: the file is valid; the first run may print Java resolve/download lines before it'
+            ],
+            [
+                '✗ <file>: line <N>: <message>',
+                'stderr: a .puml error; the line within the diagram (the file line for one @startuml block)'
+            ],
             [
                 '✗ <file>: <message>',
                 'stderr: other errors (.iuml without a line); BPMN and wireflow print a line per problem, mermaid starts with line <N>'
@@ -61,7 +67,11 @@ export const COMMAND_HELP: Record<string, CommandHelp> = {
         options: ['--force'],
         output: [
             ['{"feature":…,"schema":…,"cacheDir":"…"}', 'jre info: one JSON line, stdout'],
-            ['JRE ready (<source>): <path>', 'jre install: the Java that builds will use']
+            [
+                'system java is suitable (v<N>): <path>',
+                'jre install: system java will be used, no download (--force downloads anyway)'
+            ],
+            ['JRE ready (<source>): <path>', 'jre install: otherwise, the JRE that builds will use']
         ],
         exit: [
             [0, 'success'],
@@ -165,6 +175,7 @@ export const COMMAND_HELP: Record<string, CommandHelp> = {
     list: {
         args: '',
         summary: 'print the current configuration',
+        about: 'Prints the configuration of the project in the current folder and warns about invalid keys of .c4builder.',
         options: ['--config-file'],
         exit: [
             [0, 'success'],
@@ -252,7 +263,7 @@ export const generalHelp = (program: Command): string =>
 
 export const commandHelp = (program: Command, name: string): string => {
     const h = COMMAND_HELP[name];
-    const blocks = [usage(name, h), wrap(h.about ?? `${h.summary[0].toUpperCase()}${h.summary.slice(1)}.`)];
+    const blocks = [usage(name, h), wrap(h.about)];
     if (h.options.length) blocks.push(`Options:\n${table(optionRows(program, h.options))}`);
     if (h.output) blocks.push(`Output:\n${table(h.output)}`);
     blocks.push(`Exit codes:\n${table(h.exit.map(([code, meaning]) => [String(code), meaning]))}`);

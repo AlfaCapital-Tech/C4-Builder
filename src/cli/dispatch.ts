@@ -1,5 +1,5 @@
 import figlet from 'figlet';
-import { type Command, InvalidArgumentError, program } from 'commander';
+import { program } from 'commander';
 import chalk from 'chalk';
 import path from 'node:path';
 
@@ -15,7 +15,8 @@ import cmdFeedback from './commands/feedback.ts';
 import cmdSkills, { skillsNotice } from './commands/skills.ts';
 import cmdDoctor from './commands/doctor.ts';
 import { detectAgent } from './agent.ts';
-import { COMMAND_HELP, commandHelp, generalHelp } from './help.ts';
+import { COMMAND_HELP, commandHelp, FLAG_ALIASES, generalHelp } from './help.ts';
+import { defineOptions } from './options.ts';
 import { cmdUpdate, pendingUpdate, startUpdateCheck } from './update.ts';
 import cmdCollect from './wizard/collect.ts';
 import { build, type BuildResult } from '../core/build.ts';
@@ -36,7 +37,6 @@ import { teardownMermaid } from '../core/render/mermaidrenderer.ts';
 import { packageJson as pkg } from '../util/paths.ts';
 import type { BuildOptions, C4ConfigFile, ConfigIssue } from '../config/options.ts';
 import { outputDirs, parseConfig } from '../config/options.ts';
-import { isValidPort } from '../config/schema.ts';
 
 // Configstore-подобное хранилище конфига/кэша. Реальный инстанс — Configstore;
 // заглушки (режим --new, где проектного конфига ещё нет) кастуются к нему.
@@ -151,52 +151,6 @@ function getOptions(c: Partial<C4ConfigFile>): BuildOptions | Partial<BuildOptio
     };
 }
 
-// Регистрация опций — отдельно от запуска: тест полноты справки сверяет с ней таблицы help.ts.
-// Описания без «for `x`:» — к какой команде относится опция, видно по справке команды.
-export const defineOptions = (cmd: Command): Command =>
-    cmd
-        .name('c4builder')
-        .usage('[command] [options]')
-        .version(pkg.version, '-V, --version', 'print the version')
-        // Встроенная справка commander срабатывала внутри parse() и на `check --help` печатала
-        // справку программы целиком; своя опция оставляет выбор справки диспетчеру.
-        .helpOption(false)
-        .option('-h, --help', 'show help (c4builder <command> --help for a command)')
-        .option('--new', 'same as c4builder new')
-        .option('--name <name>', 'project name (skips the name prompt)')
-        .option('-y, --yes', 'non-interactive: defaults, no prompts (requires --name)')
-        .option('--force', 'with install: download a JRE even if system java is suitable')
-        .option('--config', 'same as c4builder config')
-        .option('-c, --config-file <path>', 'configuration file relative to the current folder (.c4builder)')
-        .option('--list', 'same as c4builder list')
-        .option('--reset', 'same as c4builder reset')
-        .option('--site', 'same as c4builder site')
-        .option('-w, --watch', 'watch for changes and rebuild')
-        .option('-o, --open', 'open the site in the browser')
-        // Отдельная опция, а не `--open [id]`: необязательное значение забирало бы следующий
-        // токен (`-o site`, `-ow`, `-wop 3918` меняли смысл).
-        .option(
-            '--open-change <id>',
-            'open the page of the OpenSpec change <id> (#/change/<id>) in the browser'
-        )
-        .option('--agent', 'with -w: accept page feedback for a coding agent (c4builder feedback)')
-        .option('--no-agent', 'with -w: no agent feedback even when run by a coding agent')
-        .option('--wait', 'wait for the next batch of page feedback')
-        .option('--as <name>', 'listener name (your change or task) — the page sends batches to it')
-        .option('--json', 'one JSON object with stable check ids')
-        .option('-v, --verbose', 'absolute paths and details')
-        .option('--strict', 'exit code 1 on warnings too')
-        .option('--full', 'build the template project in a temporary folder')
-        .option('--offline', 'no network requests')
-        .option('--docs', 'same as c4builder docs')
-        .option('--system-fonts', 'render with system fonts instead of the bundled one (not deterministic)')
-        .option('-p, --port <n>', 'port of the local site (default: webPort of .c4builder)', (v) => {
-            // parseInt молча резал бы опечатку ('30OO' → 30) — валидируем строго.
-            if (!isValidPort(v)) throw new InvalidArgumentError('expected a TCP port: an integer 1..65535');
-            return Number(v);
-        })
-        .allowExcessArguments(); // позиционные аргументы подкоманд `jre <action>` и `check <file...>`
-
 const unknownCommand = (name: string): never => {
     console.error(chalk.red(`unknown command: ${name}`));
     console.error(
@@ -206,7 +160,7 @@ const unknownCommand = (name: string): never => {
 };
 
 // Флаговая форма команды вместе с --help (`c4builder --site --help`) — справка этой команды.
-const ALIAS_COMMANDS = ['site', 'new', 'config', 'list', 'reset', 'docs'];
+const ALIAS_COMMANDS = FLAG_ALIASES.map((f) => f.slice(2));
 
 export default async () => {
     defineOptions(program).parse(process.argv);
@@ -220,11 +174,11 @@ export default async () => {
     // Справка — до уведомления о версии, Configstore и проверки терминала: она не должна ни создавать
     // файлов, ни скачивать JRE (`jre install --help`), ни проверять файл (`check x.puml --help`).
     if (opts.help || cmd === 'help') {
-        // `help <cmd>` — как `<cmd> --help`; `help --help` — справка самой команды help.
+        // `help <cmd>` и `help --site` — как `<cmd> --help` и `--site --help`; `help --help` —
+        // справка самой команды help.
+        const alias = ALIAS_COMMANDS.find((c) => opts[c]);
         const topic =
-            cmd === 'help'
-                ? (cmdArgs[0] ?? (opts.help ? 'help' : undefined))
-                : (cmd ?? ALIAS_COMMANDS.find((c) => opts[c]));
+            cmd === 'help' ? (cmdArgs[0] ?? alias ?? (opts.help ? 'help' : undefined)) : (cmd ?? alias);
         if (topic !== undefined && !Object.hasOwn(COMMAND_HELP, topic)) unknownCommand(topic);
         process.stdout.write(topic === undefined ? generalHelp(program) : commandHelp(program, topic));
         return;

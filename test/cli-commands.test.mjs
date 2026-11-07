@@ -200,6 +200,13 @@ describe('справка', () => {
         expect(helpIn('help', cmd).stdout).toBe(long.stdout);
     });
 
+    it.each(FLAG_ALIASES)('`help %s` — справка команды, как `%s --help`', (alias) => {
+        const res = helpIn('help', alias);
+        expect(res.status, res.stderr).toBe(0);
+        expect(res.stdout).toBe(helpIn(alias, '--help').stdout);
+        expect(res.stdout).toContain(`Usage: c4builder ${alias.slice(2)}`);
+    });
+
     it('`check --help` — без чужих флагов, формат вывода и коды', () => {
         const { stdout } = helpIn('check', '--help');
         expect(stdout).toContain('Usage: c4builder check <files...>');
