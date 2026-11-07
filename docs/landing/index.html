@@ -42,7 +42,7 @@
             <pre><code>npm i -g @alfacapital-tech/c4builder</code></pre>
         </div>
 
-        <div class="rel"><b>Собирает</b><code>[c4builder --site -w]</code></div>
+        <div class="rel"><b>Собирает</b><code>[c4builder site -w]</code></div>
 
         <div class="outputs">
             <a class="box" href="ru/">
@@ -67,7 +67,7 @@
                 <li><strong>Проверка.</strong> <code>c4builder check</code> рендерит диаграмму тем же
                     движком, что и сборка, и возвращает код выхода и номер строки с ошибкой. Без сети
                     и без человека.</li>
-                <li><strong>Сборка.</strong> <code>c4builder --site -w</code> пересобирает сайт на
+                <li><strong>Сборка.</strong> <code>c4builder site -w</code> пересобирает сайт на
                     каждое сохранение, и человек видит результат в браузере.</li>
             </ol>
             <pre class="term" aria-label="Пример сессии в терминале"><code><span class="p">$ </span>c4builder check src/context.puml
@@ -109,9 +109,9 @@ built in 1.9 seconds</code></pre>
             <div>
                 <h3>npm</h3>
                 <pre><code>npm i -g @alfacapital-tech/c4builder
-c4builder --new --name demo -y
+c4builder new --name demo -y
 cd demo
-c4builder --site -w</code></pre>
+c4builder site -w</code></pre>
                 <p class="note">Node.js 22.17+. Java 17+ по желанию: если её нет, c4builder скачает
                     JRE сам. Graphviz не нужен.</p>
             </div>
@@ -155,7 +155,7 @@ c4builder --site -w</code></pre>
                 заметки, группы и переходы — рендерится при сборке без браузера и сети, шаблоны
                 экранов вендорены в пакет.</dd>
             <dt>Ревью со страницы</dt>
-            <dd>В <code>c4builder --site -w</code> выделенный текст становится вопросом в исходном
+            <dd>В <code>c4builder site -w</code> выделенный текст становится вопросом в исходном
                 <code>.md</code> или замечанием агенту: <code>c4builder feedback --wait</code> отдаёт
                 пачку агенту, страница обновляется с его правками.</dd>
             <dt>Поддержка</dt>

@@ -43,7 +43,7 @@ TypeScript, ESM, Node 22.17+. Тесты запускают собранный C
 
 ```bash
 npm run build
-cd docs/ru && NO_UPDATE_NOTIFIER=1 node ../../dist/index.js --site -w
+cd docs/ru && NO_UPDATE_NOTIFIER=1 node ../../dist/index.js site -w
 ```
 
 ## Процесс: OpenSpec

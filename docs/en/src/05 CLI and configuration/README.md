@@ -5,46 +5,68 @@
 | Command | What it does |
 |---|---|
 | `c4builder` | builds the project in the current folder; without a config it runs the wizard first, without a terminal — an error with exit code 1 |
-| `c4builder --new` | creates a project from the template in a new folder; since 0.5.0 also `c4builder new` |
-| `c4builder --new --name demo -y` | the same without questions: a full config with default values |
-| `c4builder --config` | setup wizard with the current values; since 0.5.0 also `c4builder config` |
-| `c4builder site` | builds and serves the site locally (same as `--site`) |
-| `c4builder --site -w` | the same, rebuilding on every save and reloading the browser |
+| `c4builder new` | creates a project from the template in a new folder |
+| `c4builder new --name demo -y` | the same without questions: a full config with default values |
+| `c4builder config` | setup wizard with the current values |
+| `c4builder site` | builds and serves the site locally |
+| `c4builder site -w` | the same, rebuilding on every save and reloading the browser |
 | `c4builder feedback --wait --as <name>` | waits for the next batch of page feedback for the agent `<name>` from `site -w` and prints it, see "Feedback to the agent" below |
 | `c4builder check <files...>` | checks `.puml`, `.iuml`, `.d2`, `.bpmn`, `.mmd`, `.wireflow.json` diagrams without a build, exit code 0 or 1 |
-| `c4builder jre info` | which Java will be used (JSON) |
+| `c4builder jre info` | managed JRE parameters for external caches in CI (JSON) |
 | `c4builder jre install [--force]` | download a JRE into the cache in advance; `--force` — even if system Java exists |
-| `c4builder --list` | print the current config; since 0.5.0 outside a project — an error with exit code 1, no files created |
-| `c4builder --reset` | clear the project config; since 0.5.0 outside a project — an error with exit code 1 |
-| `c4builder --docs` | short reference of config keys and the address of this documentation |
+| `c4builder list` | print the current config; since 0.5.0 outside a project — an error with exit code 1, no files created |
+| `c4builder reset` | clear the project config; since 0.5.0 outside a project — an error with exit code 1 |
+| `c4builder docs` | short reference of config keys and the address of this documentation |
 | `c4builder update` | updates a global npm install to the newest version, otherwise prints how to update, see "Updating" below |
 | `c4builder skills` | installs or updates the agent skills of the CLI's own version in the current folder: `.agents/skills/`, under Claude Code also `.claude/skills/`; needs no project config, see "Agent skills" on the [Agents](08%20Agents/08%20Agents.md) page |
 | `c4builder doctor [group...]` | diagnostics: environment, agent skills, a test render, the project and the port; read-only, works outside a project and without a terminal, see "Diagnostics" below |
 
-Positional commands are `check`, `jre`, `site`, `update`, `feedback`, since 0.5.0 also `new` and `config`, since 0.10.0 `skills`, later `doctor`. Since
-0.5.0 any other positional argument is an `unknown command` error with exit code 1: a typo
-(`c4builder nwe`) no longer starts a build.
+| `c4builder help [command]` | general help, or the help of a command, see "Help" below |
 
-Flags:
+The canonical form is positional commands: `check`, `jre`, `site`, `new`, `config`, `update`,
+`feedback`, `skills`, `doctor`, `list`, `reset`, `docs`, `help`. The flag forms `--site`, `--new`,
+`--config`, `--list`, `--reset`, `--docs` still work as aliases but are not shown in the help (0.4.0
+has only them). Any other positional argument is an `unknown command` error with exit code 1: a
+typo (`c4builder nwe`) does not start a build.
+
+### Help
+
+`c4builder --help` (`-h`, `c4builder help`) prints what a run without a command does, the list of
+commands and the global flags only. `c4builder <command> --help` (`-h`, `c4builder help <command>`)
+prints the help of that command: purpose, usage line, its flags, output format, exit codes and
+examples. Help goes to stdout with exit code 0, works in any folder and without a terminal, creates
+and downloads nothing (`c4builder jre install --help` does not download a JRE) and prints no
+new-version notice; for an unknown command (`c4builder help serve`) it is an `unknown command`
+error with exit code 1.
+
+Global flags:
 
 | Flag | Meaning |
 |---|---|
 | `-c, --config-file <path>` | a different config file instead of `.c4builder` |
 | `-w, --watch` | rebuild on changes in the sources and plugin folders |
-| `-o, --open` | open the home page of the site in the browser (with `--site`) |
-| `--open-change <id>` | open the page of an OpenSpec change by the short address `#/change/<id>` in the browser (with `--site`, see [Plugins](06%20Plugins/06%20Plugins.md)); when the site has no such address — a warning on stderr, the address is opened anyway |
-| `-p, --port <n>` | port for `--site`, `feedback` and `doctor` (defaults to `webPort` from the config, 3000) |
-| `--agent`, `--no-agent` | turn the agent mode of `site -w` on or off regardless of the environment |
-| `--wait` | for `feedback`: wait for the next batch instead of only checking the queue |
-| `--as <name>` | for `feedback`, required: listener name — the agent's change or task (1–64 characters: Latin letters, digits, `.`, `_`, `-`) |
+| `-p, --port <n>` | port of the local site for `site`, `feedback` and `doctor` (defaults to `webPort` from the config, 3000) |
 | `--system-fonts` | render with system fonts for one run |
-| `--json`, `-v, --verbose`, `--strict`, `--full`, `--offline` | for `doctor`, see "Diagnostics" below |
 | `-V, --version` | version |
-| `-h, --help` | flags and positional commands |
+| `-h, --help` | help; with a command — the help of that command |
 
-## The `--site -w` dev server
+Command flags:
 
-`c4builder --site -w` serves the site as soon as the pages are composed, without waiting for the
+| Command | Flag | Meaning |
+|---|---|---|
+| `site` | `-o, --open` | open the home page of the site in the browser |
+| `site` | `--open-change <id>` | open the page of an OpenSpec change by the short address `#/change/<id>` in the browser (see [Plugins](06%20Plugins/06%20Plugins.md)); when the site has no such address — a warning on stderr, the address is opened anyway |
+| `site` | `--agent`, `--no-agent` | turn the agent mode of `site -w` on or off regardless of the environment |
+| `new` | `--name <name>` | project name, skips the name question |
+| `new` | `-y, --yes` | no questions: default values (requires `--name`) |
+| `jre install` | `--force` | download a JRE even if a suitable system Java exists |
+| `feedback` | `--wait` | wait for the next batch instead of only checking the queue |
+| `feedback` | `--as <name>` | required: listener name — the agent's change or task (1–64 characters: Latin letters, digits, `.`, `_`, `-`) |
+| `doctor` | `--json`, `-v, --verbose`, `--strict`, `--full`, `--offline` | see "Diagnostics" below |
+
+## The `site -w` dev server
+
+`c4builder site -w` serves the site as soon as the pages are composed, without waiting for the
 diagrams. Diagrams missing from the cache (a fresh clone, the first build in a CI preview) get a
 `rendering…` placeholder image in their place, and the rendering goes on in the background after
 the `serving your docsify site` line:
@@ -168,7 +190,7 @@ all of them (Claude Code, Codex, `.agents`).
 | `--json` | one JSON object on stdout: `version`, `channel`, `agent`, `checks` (`id`, `status`, `message`, `fix`, `askUser`, `details`), `summary`; check ids do not change between versions |
 | `-v, --verbose` | absolute paths and details (the java path, skill files that differ from the package, the smoke build log) |
 | `--strict` | exit code 1 on warnings too — for CI |
-| `--full` | in addition to the tiny diagram, builds the template project (`--new --name doctor -y`) in a temporary folder removed whatever the outcome; without Java — `–` |
+| `--full` | in addition to the tiny diagram, builds the template project (`new --name doctor -y`) in a temporary folder removed whatever the outcome; without Java — `–` |
 | `--offline` | no network requests at all |
 
 Exit codes: 0 — no errors (warnings are fine), 1 — an error, with `--strict` a warning too, 2 — an
@@ -313,7 +335,7 @@ with code 1. A `.c4builder` that is not valid JSON is an error naming the file a
 the file is left as it is.
 
 Keys are validated against a schema. A value of the wrong type stops the build with an error
-naming the key, and `c4builder --config` lets you fix it. Unknown keys are silently dropped — this
+naming the key, and `c4builder config` lets you fix it. Unknown keys are silently dropped — this
 way an older c4builder does not fail on a config written by a newer one. Keys of features removed
 in older versions produce a warning listing them, and the build continues.
 

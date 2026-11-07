@@ -40,6 +40,8 @@ export {
 export { foldD2Imports, d2LocalImports, clearD2FileCache } from '../dist/core/render/d2renderer.js';
 export { diagramRefRegex, generateLlmsFull, stripEmbeddedImages } from '../dist/core/compose/markdown.js';
 export { compareVersions, newestVersion } from '../dist/cli/update.js';
+export { defineOptions } from '../dist/cli/options.js';
+export { COMMAND_HELP, FLAG_ALIASES, GLOBAL_OPTIONS } from '../dist/cli/help.js';
 export { detectAgent } from '../dist/cli/agent.js';
 export { installKind, nodeCheck } from '../dist/cli/commands/doctor.js';
 export { default as cmdSite } from '../dist/cli/commands/site.js';

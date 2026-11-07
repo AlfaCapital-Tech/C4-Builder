@@ -546,7 +546,7 @@ const pathsCheck = async (ctx: Ctx, config: C4ConfigFile): Promise<Check> => {
 
 const project = async (ctx: Ctx): Promise<Check[]> => {
     const p = ctx.project;
-    if (!p) return [check('project.config', 'skipped', 'no .c4builder here', { fix: 'c4builder --new' })];
+    if (!p) return [check('project.config', 'skipped', 'no .c4builder here', { fix: 'c4builder new' })];
     const name = path.relative(ctx.cwd, p.file);
     if (p.error !== undefined)
         return [
@@ -611,6 +611,8 @@ const runtime = async (ctx: Ctx): Promise<Check[]> => {
 
 const GROUPS = { env, skills, render, project, runtime };
 type Group = keyof typeof GROUPS;
+// Для справки `doctor --help`: перечень групп берётся отсюда, а не пишется в тексте второй раз.
+export const GROUP_NAMES = Object.keys(GROUPS) as Group[];
 const TITLES: Record<Group, string> = {
     env: 'Environment',
     skills: 'Skills',

@@ -44,7 +44,7 @@ silences the version and skills notices, which make no sense in the c4builder re
 
 ```bash
 npm run build
-cd docs/en && NO_UPDATE_NOTIFIER=1 node ../../dist/index.js --site -w
+cd docs/en && NO_UPDATE_NOTIFIER=1 node ../../dist/index.js site -w
 ```
 
 ## Process: OpenSpec

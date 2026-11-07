@@ -16,7 +16,7 @@ System_Ext(figma, "Figma", "Макеты интерфейсов: фреймы, �
 System_Ext(site, "Docsify-сайт", "Статика без CDN: GitHub Pages, GitLab Pages, любой веб-сервер")
 System_Ext(md, "Markdown", "README по папкам или один файл для репозитория")
 
-Rel(dev, c4b, "Собирает и смотрит", "c4builder --site -w")
+Rel(dev, c4b, "Собирает и смотрит", "c4builder site -w")
 Rel(agent, c4b, "Проверяет правки", "c4builder check")
 Rel(c4b, engines, "Рендерит диаграммы", "локально, без сети")
 Rel(c4b, openspec, "Публикует раздел", "плагин openspec")

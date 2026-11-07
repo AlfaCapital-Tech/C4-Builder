@@ -102,7 +102,7 @@
   адресов лежит в `index.html` (`$docsify.c4builder.redirects`) вместе с локальным скриптом
   `vendor/c4builder-redirects.js`, поэтому адрес работает и на опубликованном сайте; с собственным
   `docsifyTemplate` — если шаблон выводит переданные опции в `window.$docsify` целиком. Этим адресом
-  пользуются `c4builder --site -w --open-change <id>` и строка `Change page` команды `feedback`, см.
+  пользуются `c4builder site -w --open-change <id>` и строка `Change page` команды `feedback`, см.
   [CLI и конфигурация](05%20CLI%20и%20конфигурация/05%20CLI%20и%20конфигурация.md).
 
 | Опция | По умолчанию | Значение |
