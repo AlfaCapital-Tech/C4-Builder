@@ -86,6 +86,10 @@
 - **WHEN** выполняется `c4builder check --format github bad.puml`
 - **THEN** stdout содержит строку `::error file=bad.puml,line=3,title=c4builder plantuml::<сообщение>`
 
+#### Scenario: Замечание без движка
+- **WHEN** выполняется `c4builder check --format github notes.txt`
+- **THEN** аннотация имеет `title=c4builder` без имени движка
+
 #### Scenario: Многострочное сообщение
 - **WHEN** сообщение замечания содержит перевод строки или `%`
 - **THEN** они выводятся как `%0A` и `%25`, и вся аннотация остаётся одной строкой
@@ -95,7 +99,7 @@
 - **THEN** в аннотации `file=docs/src/a.puml`
 
 ### Requirement: Формат gitlab
-`--format gitlab` SHALL печатать в stdout JSON-массив GitLab Code Quality. Каждое замечание содержит `description`, `check_name` (`<engine>` или `<engine>/<rule>`), `fingerprint`, `severity` (`major` для ошибки, `minor` для предупреждения), `location.path` и `location.lines.begin` (без строки — 1). Путь — относительно `CI_PROJECT_DIR`, если переменная задана, иначе относительно текущего каталога.
+`--format gitlab` SHALL печатать в stdout JSON-массив GitLab Code Quality. Каждое замечание содержит `description`, `check_name` (`<engine>` или `<engine>/<rule>`; без движка — `c4builder`), `fingerprint`, `severity` (`major` для ошибки, `minor` для предупреждения), `location.path` и `location.lines.begin` (без строки — 1). Путь — относительно `CI_PROJECT_DIR`, если переменная задана, иначе относительно текущего каталога.
 
 #### Scenario: Отчёт для артефакта codequality
 - **WHEN** выполняется `c4builder check --format gitlab bad.puml > gl-code-quality-report.json`

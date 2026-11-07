@@ -167,7 +167,7 @@ const commonAncestor = (files: string[]): string => {
 const buildCompileRequest = (
     entryAbs: string,
     seed?: string
-): { fs: Record<string, string>; inputPath: string } => {
+): { fs: Record<string, string>; inputPath: string; root: string } => {
     const files = collectFilesCached(entryAbs, seed);
     // Пустой граф = не прочитался сам входной файл (удалён/недоступен — гонка в watch).
     // Без guard'а commonAncestor([]) давал бы сырой TypeError (Math.min()=Infinity).
@@ -178,7 +178,7 @@ const buildCompileRequest = (
     const toKey = (abs: string): string => path.relative(root, abs).split(path.sep).join('/');
     const fsMap: Record<string, string> = {};
     for (const [abs, content] of files) fsMap[toKey(abs)] = content;
-    return { fs: fsMap, inputPath: toKey(path.resolve(entryAbs)) };
+    return { fs: fsMap, inputPath: toKey(path.resolve(entryAbs)), root };
 };
 
 // Рендер .d2 → SVG (Buffer). Ошибки компиляции пробрасываются с путём файла.
@@ -193,18 +193,64 @@ const d2ErrorText = (message: string): string => {
     return message;
 };
 
+/** Позиция ошибки компиляции: file — абсолютный путь, line/column — с 1 (null — движок не дал). */
+export interface D2Problem {
+    file: string;
+    line: number | null;
+    column: number | null;
+    message: string;
+}
+
+// Ошибка компиляции со структурными позициями для `check --format`. Текст message прежний
+// (его печатают сборка и `check` в тексте), а problems восстановить из него нельзя: путь в
+// errmsg отсчитан от корня виртуальной fs, который знает только renderD2.
+export class D2Error extends Error {
+    readonly problems: D2Problem[];
+    constructor(message: string, problems: D2Problem[]) {
+        super(message);
+        this.problems = problems;
+    }
+}
+
+// range движка — `<ключ fs>,L:C:B-L:C:B`, позиции с 0. Ключ может содержать запятые, поэтому
+// он — всё до последней запятой перед позицией. errmsg дублирует позицию префиксом
+// `<ключ>:L:C: ` — отрезаем его, текст остаётся без пути.
+const RANGE = /^(.*),(\d+):(\d+):\d+-/;
+const d2Problems = (raw: string, root: string, entryAbs: string): D2Problem[] => {
+    try {
+        const parsed: unknown = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length && parsed.every((x) => typeof x?.errmsg === 'string'))
+            return parsed.map(({ range, errmsg }: { range?: unknown; errmsg: string }) => {
+                const m = typeof range === 'string' ? range.match(RANGE) : null;
+                if (!m) return { file: entryAbs, line: null, column: null, message: errmsg };
+                const [line, column] = [Number(m[2]) + 1, Number(m[3]) + 1];
+                const prefix = `${m[1]}:${line}:${column}: `;
+                return {
+                    file: path.resolve(root, m[1]),
+                    line,
+                    column,
+                    message: errmsg.startsWith(prefix) ? errmsg.slice(prefix.length) : errmsg
+                };
+            });
+    } catch {}
+    return [{ file: entryAbs, line: null, column: null, message: raw }];
+};
+
 const renderD2 = async (
     entryAbs: string,
     { layout = 'dagre', seed }: { layout?: string; seed?: string } = {}
 ): Promise<Buffer> => {
     const d2 = await getD2();
-    const { fs: fsMap, inputPath } = buildCompileRequest(entryAbs, seed);
+    const { fs: fsMap, inputPath, root } = buildCompileRequest(entryAbs, seed);
     let result: D2Compiled;
     try {
         result = await d2.compile({ fs: fsMap, inputPath, options: { layout } });
     } catch (err) {
-        const e = err as Error;
-        throw new Error(`D2 compile error (${entryAbs}):\n${d2ErrorText(e.message || String(e))}`);
+        const raw = (err as Error).message || String(err);
+        throw new D2Error(
+            `D2 compile error (${entryAbs}):\n${d2ErrorText(raw)}`,
+            d2Problems(raw, root, path.resolve(entryAbs))
+        );
     }
     let svg: string;
     try {

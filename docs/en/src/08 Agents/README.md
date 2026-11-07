@@ -29,6 +29,12 @@ locally, without a network and without a human.
    A warning `⚠ <file>: line N: Rel to undeclared element "<alias>"` with exit code 0 means a
    typo in a relation alias: PlantUML drew an empty circle instead of the element. Fix it too;
    `check --strict` turns warnings into exit code 1.
+
+   Parsing five line shapes is optional: `c4builder check --format json <files>` prints a JSON
+   array of findings on stdout with the same fields for every engine — `file`, `line`,
+   `column`, `engine`, `severity`, `rule`, `element`, `message` (see
+   [CLI and configuration](05%20CLI%20and%20configuration/05%20CLI%20and%20configuration.md)).
+   For BPMN and wireflow `check` finds the element's line from its `id` itself.
 3. **Build.** `c4builder` builds the whole project; `c4builder --site -w` keeps the site open for
    the human and rebuilds it on every save the agent makes. It comes up right away, without
    waiting for the rendering: diagrams missing from the cache show a `rendering…` placeholder and

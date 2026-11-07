@@ -5,6 +5,15 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
 
 ## Unreleased
 
+- `c4builder check --format <text|json|github|gitlab>`: `json` prints one JSON array of findings
+  (`file`, `line`, `column`, `engine`, `severity`, `rule`, `element`, `message`) for all engines;
+  `github` prints workflow commands that GitHub Actions shows as annotations in the PR diff;
+  `gitlab` prints a GitLab Code Quality report for `artifacts: reports: codequality`. BPMN and
+  wireflow findings get the line of the element `id`, a D2 error in an imported file points to
+  that file. In these formats stdout holds only the report (JRE messages go to stderr), and
+  without files they print an empty report with exit code 0. `--json` is the same as
+  `--format json`; the text output and exit codes do not change. The site page "Docker and CI"
+  has ready jobs for GitHub Actions and GitLab CI (#65)
 - A C4 relation to an undeclared alias (`Rel(u, nope, …)` with a typo — PlantUML silently draws an
   empty circle) is a warning in `c4builder check` and in the build:
   `⚠ <file>: line <N>: Rel to undeclared element "nope"`; covers `Rel*`, `BiRel*`, `RelIndex*` and

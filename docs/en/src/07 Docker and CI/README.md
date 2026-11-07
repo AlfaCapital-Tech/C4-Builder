@@ -41,9 +41,14 @@ GitLab CI, checking diagrams and publishing to GitLab Pages (`.c4builder` has
 
 ```yaml
 check:
-  image: ghcr.io/alfacapital-tech/c4builder:0.9.0
+  image: ghcr.io/alfacapital-tech/c4builder:latest
   script:
-    - find src \( -name '*.puml' -o -name '*.d2' -o -name '*.bpmn' -o -name '*.mmd' -o -name '*.wireflow.json' -o -name wireflow.json \) -exec c4builder check --strict {} +
+    - find src \( -name '*.puml' -o -name '*.d2' -o -name '*.bpmn' -o -name '*.mmd' -o -name '*.wireflow.json' -o -name wireflow.json \) -print0
+      | xargs -0 c4builder check --strict --format gitlab > gl-code-quality-report.json
+  artifacts:
+    when: always
+    reports:
+      codequality: gl-code-quality-report.json
 
 pages:
   image: ghcr.io/alfacapital-tech/c4builder:0.9.0
@@ -52,6 +57,35 @@ pages:
   artifacts:
     paths: [public]
 ```
+
+The `check` job puts findings into a GitLab Code Quality report: they show up in the MR widget
+and in the diff on the right line, not only in the job log. `when: always` keeps the report when
+the job fails. `--format` appeared after 0.14.0, hence `latest` for `check` here; in your CI pin the tag of a
+release that has `--format`.
+
+GitHub Actions, checking the diagrams changed in a PR with annotations in the diff:
+
+```yaml
+on: pull_request
+jobs:
+  diagrams:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - run: npm i -g @alfacapital-tech/c4builder
+      - run: >
+          git diff -z --name-only --diff-filter=d "origin/${{ github.base_ref }}...HEAD"
+          -- '*.puml' '*.iuml' '*.d2' '*.bpmn' '*.mmd' '*wireflow.json'
+          | xargs -0 c4builder check --strict --format github
+```
+
+If no diagrams changed in the PR, `xargs` runs `check` without files: a machine format prints an
+empty report and exits with 0. The step needs no Java up front — c4builder downloads a JRE
+itself, and its messages go to stderr without mixing with the annotations. The format and the
+finding fields are in [CLI and configuration](05%20CLI%20and%20configuration/05%20CLI%20and%20configuration.md).
 
 GitHub Actions without Docker: Node from `setup-node`, Java from `setup-java` (or let c4builder
 download a JRE itself):
@@ -118,7 +152,8 @@ registry requests, a build without internet takes as long as before.
 The build behaves in CI just like locally: the exit code is not 0 if even one diagram fails to
 render. A separate quick `c4builder check` step on changed files reports a clear error before the
 full build. With `--strict` the step fails on warnings too — for example, on a C4 relation to an
-undeclared element, which the build only prints.
+undeclared element, which the build only prints. With `--format github` or `--format gitlab`
+errors and warnings go straight into the PR/MR diff (snippets above).
 
 ## How this site is built
 

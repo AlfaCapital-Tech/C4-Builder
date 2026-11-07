@@ -37,7 +37,15 @@ export {
     diagramBaseName,
     diagramExt
 } from '../dist/core/scan/tree.js';
-export { foldD2Imports, d2LocalImports, clearD2FileCache } from '../dist/core/render/d2renderer.js';
+export {
+    foldD2Imports,
+    d2LocalImports,
+    clearD2FileCache,
+    D2Error,
+    renderD2
+} from '../dist/core/render/d2renderer.js';
+export { locate, parseProblem } from '../dist/cli/commands/check.problems.js';
+export { formatGithub, formatGitlab, formatJson, reportBase } from '../dist/cli/commands/check.report.js';
 export { diagramRefRegex, generateLlmsFull, stripEmbeddedImages } from '../dist/core/compose/markdown.js';
 export { compareVersions, newestVersion } from '../dist/cli/update.js';
 export { detectAgent } from '../dist/cli/agent.js';

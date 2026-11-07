@@ -1,5 +1,5 @@
 import figlet from 'figlet';
-import { InvalidArgumentError, program } from 'commander';
+import { InvalidArgumentError, Option, program } from 'commander';
 import chalk from 'chalk';
 import path from 'node:path';
 
@@ -9,6 +9,7 @@ import cmdHelp from './commands/help.ts';
 import cmdNewProject from './commands/new.ts';
 import cmdJre from './commands/jre.ts';
 import cmdCheck from './commands/check.ts';
+import { FORMATS } from './commands/check.report.ts';
 import cmdList from './commands/list.ts';
 import cmdSite from './commands/site.ts';
 import cmdFeedback from './commands/feedback.ts';
@@ -202,7 +203,15 @@ export default async () => {
             '--as <name>',
             'for `feedback`: listener name (your change or task) — the page sends batches to it'
         )
-        .option('--json', 'for `doctor`: one JSON object with stable check ids')
+        .option('--json', 'for `doctor` and `check`: JSON output (`check`: same as --format json)')
+        // choices: опечатку (`--format jsno`) commander отклоняет со списком значений и кодом 1,
+        // а не молча печатает текст, который CI не разберёт.
+        .addOption(
+            new Option(
+                '--format <format>',
+                'for `check`: output format, json/github/gitlab for agents and CI'
+            ).choices(FORMATS)
+        )
         .option('-v, --verbose', 'for `doctor`: absolute paths and details')
         .option('--strict', 'for `doctor` and `check`: exit code 1 on warnings too')
         .option('--full', 'for `doctor`: build the template project in a temporary folder')

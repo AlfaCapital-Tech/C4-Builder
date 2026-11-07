@@ -107,6 +107,14 @@ const svgEntities = (svg: string): { implicit: Set<string>; declared: string[] }
     return { implicit, declared };
 };
 
+// Текст предупреждения — контракт: его печатает `⚠`, а `check --format` разбирает обратно в
+// правило и элемент. Шаблон и разбор живут рядом, чтобы правка одного не сломала другое молча.
+export const UNDECLARED_REL_RULE = 'undeclared-element';
+const undeclaredRelMessage = (macro: string, alias: string): string =>
+    `${macro} to undeclared element "${alias}"`;
+/** Разбор `undeclaredRelMessage` (без префикса `line N: `): [, macro, alias]. */
+export const UNDECLARED_REL_RE = /^(\w+) to undeclared element "(.*)"$/;
+
 /**
  * `line N: <Macro> to undeclared element "alias"` — по одной на каждый вызов с таким алиасом.
  * N — строка source с 1 плюс lineOffset (блок в markdown: строка страницы, см. fences.ts).
@@ -130,7 +138,7 @@ export const undeclaredRelWarnings = (source: string, svg: string, lineOffset = 
     for (const { line, macro, aliases } of calls)
         for (const alias of aliases)
             if (ALIAS.test(alias) && isUndeclared(alias))
-                warnings.push(`line ${line + lineOffset}: ${macro} to undeclared element "${alias}"`);
+                warnings.push(`line ${line + lineOffset}: ${undeclaredRelMessage(macro, alias)}`);
     return warnings;
 };
 
