@@ -1,7 +1,6 @@
 import chalk from 'chalk';
-import fs from 'node:fs';
-import { parseConfig } from '../../config/options.ts';
 import { LISTENER_NAME } from '../../core/feedback.ts';
+import { resolvePort } from '../server-state.ts';
 import { FEEDBACK_HEADER, FEEDBACK_PATH, PAGE_PATH } from './site.comments.ts';
 
 // `c4builder feedback` (change site-agent-feedback, design D9): забирает пачку замечаний у `site -w`.
@@ -23,12 +22,9 @@ export default async (
         process.exitCode = 2;
         return;
     }
-    let raw: unknown;
-    try {
-        raw = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    } catch {}
-    const config = parseConfig(raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {});
-    const port = opts.port ?? (config.ok ? config.value : config.salvaged).webPort;
+    // Порт: `-p` → живой файл состояния сервера → `webPort` (change site-server-state, D6): сайт мог
+    // подняться на другом `-p`, когда порт из конфига занят.
+    const { port } = await resolvePort(configPath, opts.port);
     const shown = `http://localhost:${port}`;
     const fail = (message: string): void => {
         console.error(chalk.red(message));

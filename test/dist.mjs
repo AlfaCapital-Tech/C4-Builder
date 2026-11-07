@@ -43,6 +43,13 @@ export { compareVersions, newestVersion } from '../dist/cli/update.js';
 export { detectAgent } from '../dist/cli/agent.js';
 export { installKind, nodeCheck } from '../dist/cli/commands/doctor.js';
 export { default as cmdSite } from '../dist/cli/commands/site.js';
+export {
+    readServerState,
+    removeServerState,
+    resolvePort,
+    stateFile,
+    writeServerState
+} from '../dist/cli/server-state.js';
 export { UI_STRINGS } from '../dist/cli/commands/site.i18n.js';
 export { batchSchema, formatBatch } from '../dist/core/feedback.js';
 export {
