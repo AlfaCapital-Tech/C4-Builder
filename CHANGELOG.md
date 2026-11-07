@@ -3,6 +3,16 @@
 User-facing changes of C4-Builder. Every pull request that changes behaviour adds a line to
 `## Unreleased`; the release commit renames it to `## vX.Y.Z`.
 
+## Unreleased
+
+- A C4 relation to an undeclared alias (`Rel(u, nope, …)` with a typo — PlantUML silently draws an
+  empty circle) is a warning in `c4builder check` and in the build:
+  `⚠ <file>: line <N>: Rel to undeclared element "nope"`; covers `Rel*`, `BiRel*`, `RelIndex*` and
+  `Lay_*` called in the diagram file, plain `A --> B` arrows are not affected. The exit code does
+  not change; a diagram restored from the build cache is not re-checked (#60)
+- `c4builder check --strict` exits with code 1 on any warning (PlantUML, BPMN, wireflow) and prints
+  `✗ <file>: <K> warning(s), failing with --strict` — for CI and coding agents
+
 ## v0.14.0
 
 - `site` / `--site -w` on a taken port suggests a free one: `port 3000 is already in use — pass a

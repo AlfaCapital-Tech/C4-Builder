@@ -43,7 +43,7 @@ GitLab CI, checking diagrams and publishing to GitLab Pages (`.c4builder` has
 check:
   image: ghcr.io/alfacapital-tech/c4builder:0.9.0
   script:
-    - find src \( -name '*.puml' -o -name '*.d2' -o -name '*.bpmn' -o -name '*.mmd' -o -name '*.wireflow.json' -o -name wireflow.json \) -exec c4builder check {} +
+    - find src \( -name '*.puml' -o -name '*.d2' -o -name '*.bpmn' -o -name '*.mmd' -o -name '*.wireflow.json' -o -name wireflow.json \) -exec c4builder check --strict {} +
 
 pages:
   image: ghcr.io/alfacapital-tech/c4builder:0.9.0
@@ -117,7 +117,8 @@ registry requests, a build without internet takes as long as before.
 
 The build behaves in CI just like locally: the exit code is not 0 if even one diagram fails to
 render. A separate quick `c4builder check` step on changed files reports a clear error before the
-full build.
+full build. With `--strict` the step fails on warnings too — for example, on a C4 relation to an
+undeclared element, which the build only prints.
 
 ## How this site is built
 

@@ -10,13 +10,16 @@ import { renderD2, teardownD2 } from '../../core/render/d2renderer.ts';
 import { BpmnError, renderBpmn, teardownBpmn } from '../../core/render/bpmnrenderer.ts';
 import { MermaidError, renderMermaid, teardownMermaid } from '../../core/render/mermaidrenderer.ts';
 import { WireflowError, renderWireflow } from '../../core/render/wireflowrenderer.ts';
+import { warnUndeclaredRels } from '../../core/render/plantumllint.ts';
+import { diagramWarningCount } from '../../core/render/warnings.ts';
 
 // `c4builder check <file...>` — валидация отдельных диаграмм ТЕМ ЖЕ движком, что и
 // сборка (вендорный PlantUML jar + системная/managed java, бандл D2, конвейер BPMN, mermaid,
 // wireflow), без проекта и
 // `.c4builder`. Рендер идёт в память и выбрасывается: проверяем ровно то, что упало бы
 // в сборке (системный `plantuml` может отличаться версией). Код выхода 0 — все файлы ок,
-// 1 — есть ошибка (движка, неизвестного расширения или чтения файла).
+// 1 — есть ошибка (движка, неизвестного расширения или чтения файла), а с `--strict` —
+// и предупреждение (для CI и pre-commit).
 
 // stderr PlantUML в -pipe: `ERROR` / позиция / описание. Позиция — 0-based строка
 // диаграммы, для файла с одной диаграммой это file:N+1.
@@ -48,7 +51,7 @@ const checkPlantUml = async (abs: string): Promise<void> => {
     for (const [i, content] of attempts.entries()) {
         const isDitaa = /@startditaa/i.test(content.toString());
         try {
-            await renderDiagram(content, {
+            const svg = await renderDiagram(content, {
                 javaBin: await getJava(),
                 jarPath: JAR_PATH,
                 includePath: path.dirname(abs),
@@ -57,6 +60,9 @@ const checkPlantUml = async (abs: string): Promise<void> => {
                 isDitaa,
                 useSystemFonts: false
             });
+            // .iuml сам связей не рисует — проверяем только диаграммы; у ditaa нет SVG. Кэша
+            // здесь нет и формат всегда SVG — в отличие от сборки (см. render/diagrams.ts).
+            if (!isLib && !isDitaa) warnUndeclaredRels(relative(abs), content.toString(), svg.toString());
             return;
         } catch (e) {
             const m = (e as Error).message.match(PUML_ERROR);
@@ -93,9 +99,9 @@ const checkerFor = (abs: string): ((abs: string) => Promise<unknown>) | undefine
     return ext === undefined ? undefined : CHECKERS[ext];
 };
 
-export default async (files: string[]): Promise<void> => {
+export default async (files: string[], opts: { strict?: boolean } = {}): Promise<void> => {
     if (files.length === 0) {
-        console.log(chalk.red(`usage: c4builder check <file...>  (${EXTENSIONS.join(' | ')})`));
+        console.log(chalk.red(`usage: c4builder check [--strict] <file...>  (${EXTENSIONS.join(' | ')})`));
         process.exit(1);
     }
     let failed = 0;
@@ -103,10 +109,15 @@ export default async (files: string[]): Promise<void> => {
     for (const file of files) {
         const abs = path.resolve(file);
         const check = checkerFor(abs);
+        const warningsBefore = diagramWarningCount();
         try {
             if (!check) throw new Error(`unsupported extension (expected ${EXPECTED})`);
             await check(abs);
-            console.log(chalk.green(`✓ ${file}`));
+            const warnings = diagramWarningCount() - warningsBefore;
+            if (opts.strict && warnings) {
+                failed++;
+                console.error(chalk.red(`✗ ${file}: ${warnings} warning(s), failing with --strict`));
+            } else console.log(chalk.green(`✓ ${file}`));
         } catch (e) {
             failed++;
             // BPMN и wireflow: по строке на нарушение — агент правит их по id элемента;

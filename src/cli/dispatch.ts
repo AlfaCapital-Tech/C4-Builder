@@ -204,7 +204,7 @@ export default async () => {
         )
         .option('--json', 'for `doctor`: one JSON object with stable check ids')
         .option('-v, --verbose', 'for `doctor`: absolute paths and details')
-        .option('--strict', 'for `doctor`: exit code 1 on warnings too')
+        .option('--strict', 'for `doctor` and `check`: exit code 1 on warnings too')
         .option('--full', 'for `doctor`: build the template project in a temporary folder')
         .option('--offline', 'for `doctor`: no network requests')
         .option('--docs', 'a brief explanation for the available configuration options')
@@ -246,7 +246,7 @@ export default async () => {
     // Прогрев JRE — до загрузки конфига проекта и intro: команда самостоятельна.
     if (cmd === 'jre') return cmdJre(cmdArgs, { force: opts.force });
     // Проверка отдельных диаграмм — тоже без конфига проекта.
-    if (cmd === 'check') return cmdCheck(cmdArgs);
+    if (cmd === 'check') return cmdCheck(cmdArgs, opts);
     // Обновление CLI — до Configstore, чтобы не создавать .c4builder в любом каталоге.
     if (cmd === 'update') return cmdUpdate();
     // Замечания со страницы `site -w` — тоже до Configstore: команду запускают в любом каталоге.

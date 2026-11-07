@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import chalk from 'chalk';
 
 import { DEFAULT_FONT_NAME } from './fonts.ts';
+import { warnDiagram } from './warnings.ts';
 import { ASCENT, DESCENT, clearTextWidths, textWidth } from './textmetrics.ts';
 
 // Третий бэкенд рендера: BPMN 2.0 XML без координат → валидация (bpmnlint) → раскладка
@@ -586,10 +586,10 @@ const renderSvg = async (xml: string): Promise<string> => {
 export const renderBpmn = async (xml: string, file: string): Promise<Buffer> => {
     const definitions = await parseBpmn(xml, file);
     const lint = await lintBpmn(definitions);
-    for (const w of lint.warnings) console.log(chalk.yellow(`⚠ ${file}: ${w}`));
+    for (const w of lint.warnings) warnDiagram(file, w);
     if (lint.errors.length) throw new BpmnError(file, lint.errors);
     const laidOut = await layoutBpmn(definitions, file);
-    for (const w of laidOut.warnings) console.log(chalk.yellow(`⚠ ${file}: ${w}`));
+    for (const w of laidOut.warnings) warnDiagram(file, w);
     let svg: string;
     try {
         svg = await renderSvg(laidOut.xml);

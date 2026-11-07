@@ -1,10 +1,10 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import chalk from 'chalk';
 
 import { VENDOR_DIR } from '../../util/paths.ts';
 import { DEFAULT_FONT_NAME } from './fonts.ts';
+import { warnDiagram } from './warnings.ts';
 import { ASCENT, DESCENT, escapeXml, stripInvalidXml, textWidth } from './textmetrics.ts';
 import { type EdgePath, getBezierPath, getSmoothStepPath } from './xyflowpaths.ts';
 
@@ -799,6 +799,6 @@ export const renderWireflow = async (
     options: RenderOptions = {}
 ): Promise<Buffer> => {
     const { svg, warnings } = renderWireflowSvg(source, file, options);
-    for (const w of warnings) console.log(chalk.yellow(`⚠ ${file}: ${w}`));
+    for (const w of warnings) warnDiagram(file, w);
     return Buffer.from(svg, 'utf8');
 };
