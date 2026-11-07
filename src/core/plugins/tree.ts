@@ -101,6 +101,7 @@ export const addPage = (tree: TreeItem[], options: BuildOptions, page: PageSpec)
             isDitaa: engine === 'plantuml' && /@startditaa/i.test(d.content),
             source: d.source,
             soft: d.soft,
+            lineOffset: d.lineOffset,
             origin: d.origin && path.resolve(d.origin)
         });
     }

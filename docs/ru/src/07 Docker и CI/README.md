@@ -44,7 +44,7 @@ GitLab CI, проверка диаграмм и публикация в GitLab P
 check:
   image: ghcr.io/alfacapital-tech/c4builder:0.9.0
   script:
-    - find src \( -name '*.puml' -o -name '*.d2' -o -name '*.bpmn' -o -name '*.mmd' -o -name '*.wireflow.json' -o -name wireflow.json \) -exec c4builder check {} +
+    - find src \( -name '*.puml' -o -name '*.d2' -o -name '*.bpmn' -o -name '*.mmd' -o -name '*.wireflow.json' -o -name wireflow.json \) -exec c4builder check --strict {} +
 
 pages:
   image: ghcr.io/alfacapital-tech/c4builder:0.9.0
@@ -118,7 +118,8 @@ GitHub Actions:
 
 Сборка ведёт себя в CI так же, как локально: код выхода не 0, если не собралась хотя бы одна
 диаграмма. Отдельный быстрый шаг `c4builder check` на изменённых файлах даёт понятную ошибку
-раньше полной сборки.
+раньше полной сборки. С `--strict` шаг падает и на предупреждениях — например, на связи C4 к
+необъявленному элементу, которую сборка только печатает.
 
 ## Как собирается этот сайт
 

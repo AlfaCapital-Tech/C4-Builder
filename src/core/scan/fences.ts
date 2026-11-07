@@ -70,9 +70,13 @@ export const createFenceExtractor = (langs: readonly string[]) => {
     return {
         extract(md: string, base: string, source?: string): { markdown: string; diagrams: PageDiagram[] } {
             const diagrams: PageDiagram[] = [];
+            // Строка открывающей fence (с 1) — для номеров строк в предупреждениях о блоке:
+            // считаем инкрементально, совпадения идут по возрастанию позиции.
+            let fenceLine = 1;
+            let counted = 0;
             const markdown = md.replace(
                 FENCE_RE,
-                (whole, indent: string, _fence, info: string, body: string) => {
+                (whole, indent: string, _fence, info: string, body: string, at: number) => {
                     const lang = info.trim().split(/\s+/)[0]?.toLowerCase() ?? '';
                     const ext = langs.includes(lang) ? ENGINE_EXT[lang] : undefined;
                     if (!ext) return whole;
@@ -83,8 +87,11 @@ export const createFenceExtractor = (langs: readonly string[]) => {
                         .map((l) => (l.startsWith(indent) ? l.slice(indent.length) : l))
                         .join('\n');
                     // PlantUML требует @startuml/@enduml; в артефактах их часто опускают.
-                    const content =
-                        ext === '.puml' && !/@start\w+/.test(src) ? `@startuml\n${src}\n@enduml` : src;
+                    const wrap = ext === '.puml' && !/@start\w+/.test(src);
+                    const content = wrap ? `@startuml\n${src}\n@enduml` : src;
+                    for (; counted < at; counted++) if (md[counted] === '\n') fenceLine++;
+                    // Тело начинается строкой после fence; обёртка — лишняя первая строка content.
+                    const lineOffset = wrap ? fenceLine - 1 : fenceLine;
                     const hash = crypto.createHash('sha1').update(content).digest('hex').slice(0, 8);
                     const file = `${base}-${hash}${ext}`;
                     if (!seen.has(file)) {
@@ -92,7 +99,7 @@ export const createFenceExtractor = (langs: readonly string[]) => {
                         // soft: блок в markdown — не файл диаграммы; синтаксическая
                         // ошибка в нём не должна ронять весь сайт (раньше такие блоки
                         // рендерил браузер и показывал картинку с ошибкой).
-                        diagrams.push({ file, content, source, soft: true });
+                        diagrams.push({ file, content, source, soft: true, lineOffset });
                     }
                     return `${indent}![${file}](${file})`;
                 }

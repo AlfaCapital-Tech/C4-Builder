@@ -11,7 +11,7 @@
 | `c4builder site` | builds and serves the site locally (same as `--site`) |
 | `c4builder --site -w` | the same, rebuilding on every save and reloading the browser |
 | `c4builder feedback --wait --as <name>` | waits for the next batch of page feedback for the agent `<name>` from `site -w` and prints it, see "Feedback to the agent" below |
-| `c4builder check <files...>` | checks `.puml`, `.iuml`, `.d2`, `.bpmn`, `.mmd`, `.wireflow.json` diagrams without a build, exit code 0 or 1 |
+| `c4builder check <files...>` | checks `.puml`, `.iuml`, `.d2`, `.bpmn`, `.mmd`, `.wireflow.json` diagrams without a build, exit code 0 or 1; `--strict` — 1 on warnings too, see [Diagrams](03%20Diagrams/03%20Diagrams.md) |
 | `c4builder jre info` | which Java will be used (JSON) |
 | `c4builder jre install [--force]` | download a JRE into the cache in advance; `--force` — even if system Java exists |
 | `c4builder --list` | print the current config; since 0.5.0 outside a project — an error with exit code 1, no files created |
@@ -38,7 +38,8 @@ Flags:
 | `--wait` | for `feedback`: wait for the next batch instead of only checking the queue |
 | `--as <name>` | for `feedback`, required: listener name — the agent's change or task (1–64 characters: Latin letters, digits, `.`, `_`, `-`) |
 | `--system-fonts` | render with system fonts for one run |
-| `--json`, `-v, --verbose`, `--strict`, `--full`, `--offline` | for `doctor`, see "Diagnostics" below |
+| `--strict` | for `doctor` and `check`: exit code 1 on warnings too |
+| `--json`, `-v, --verbose`, `--full`, `--offline` | for `doctor`, see "Diagnostics" below |
 | `-V, --version` | version |
 | `-h, --help` | flags and positional commands |
 
