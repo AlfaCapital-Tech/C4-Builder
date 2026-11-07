@@ -12,13 +12,18 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
   (the `c4builder new` template has it) (#64)
 - `c4builder status [--json]` — whether the site of this project is running: address, pid, version,
   watch, agent mode, `feedback` listeners and their queues; exit code 0 — running, 1 — not. It only
-  reads and works outside a project (#64)
+  reads and works outside a project. A c4builder server of another project on the port (a sibling
+  worktree with the same `webPort`) is not taken for this one: `running: false`, `busy: true` and
+  `otherProject` in JSON; a server that is alive but did not answer in time is
+  `running: true, responding: false` (#64)
 - `c4builder feedback` and `c4builder doctor runtime` find the running site by its state file:
-  without `-p` they take its port, otherwise `webPort` as before (#64)
+  without `-p` they take its port, otherwise `webPort` as before; `feedback` refuses a server of
+  another project, `doctor` warns about it (#64)
 - A second `site` / `--site -w` for the same config no longer builds and starts another server: it
   prints `c4builder site is already running for this project at <url> (pid N)` and exits with code
   1; with `--open` / `--open-change <id>` it opens that address of the running server and exits
-  with code 0 (#64)
+  with code 0; asked for `-w` (or `--agent`) while the running server has no `-w`, it exits with
+  code 1 and advises to restart it with `-w`. `SIGHUP` is not caught: `nohup` works as before (#64)
 - The `c4builder-review` and `c4builder` skills check the server with `c4builder status` instead of
   `curl` and no longer pass `-p` to `feedback`
 

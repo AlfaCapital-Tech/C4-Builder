@@ -104,7 +104,8 @@ config (`other.c4builder.server.json` for `-c other.c4builder`):
 }
 ```
 
-The file is removed when the server stops — Ctrl+C, `SIGTERM`, a normal exit. A file left by a
+The file is removed when the server stops — Ctrl+C, `SIGTERM`, a normal exit (the server does not
+catch `SIGHUP`: under `nohup` it survives a closed terminal as before). A file left by a
 killed process (`kill -9`, a crash) is not valid: only the server on its port answering with the
 same `pid` makes it valid, and the next start overwrites it. The file does not trigger `-w`
 rebuilds. Add `.c4builder.server.json` to the project's `.gitignore`; the `c4builder new` template
@@ -119,7 +120,10 @@ One server per config: while the server runs, another `c4builder site` or `--sit
 builds the site nor starts a second server — it prints `c4builder site is already running for this
 project at http://localhost:3001 (pid 12345)` and exits with code 1. With `--open` or
 `--open-change <id>` it opens that address of the running server in the browser and exits with
-code 0. A server with another config (`-c`) starts as usual.
+code 0. A server with another config (`-c`) starts as usual, while another `-p` with the same
+config does not start a second server: both would write to one `distFolder`. When `-w` (or
+`--agent`) is asked for and the running server has no `-w`, the second start exits with code 1 and
+advises to stop it and start `c4builder site -w` — even with `--open`.
 
 `c4builder status` tells whether the server of this project is running:
 
@@ -134,7 +138,15 @@ Exit code 0 — the server runs, 1 — it does not (`no c4builder site on http:/
 `--json` prints one object `{ running, url, port, source, pid, version, watch, agent, listeners,
 unaddressed }`, without a server `{ running: false, port, source, busy }`: `source` is where the
 port came from (`flag`, `state`, `config`), `busy` means another process holds the port. A server
-of an older version (no state file) gives `site is running at …` without details. The command
+of an older version (no state file) gives `site is running at …` without details.
+
+A server on the port counts as the server of the project only when it reports the same config (the
+realpath of `.c4builder`): a sibling worktree with the same `webPort` sees the other site as
+`no c4builder site of this project on http://localhost:3000 — the port is used by the c4builder site
+of another project (<path>)` with exit code 1 (`busy: true` and `otherProject` in JSON), `feedback`
+does not connect to it, and `doctor runtime` warns. A server from the state file that is alive but
+did not answer within a second (busy building) gives `site is running at … but did not answer in
+time`, exit code 0, `"responding": false` in JSON. The command
 only reads: outside a project it checks the default port and creates no files.
 
 ## Updating

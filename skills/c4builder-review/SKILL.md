@@ -35,6 +35,13 @@ with `c4builder site is already running for this project`). `listeners:` shows t
 reviewing on the same site and their queues; `c4builder status --json` prints the same as one
 JSON object (`running`, `url`, `port`, `listeners`).
 
+`… but did not answer in time` (exit code 0) — the server is busy, usually with a build: wait a few
+seconds and run `c4builder status` again; never start a second one.
+
+`no c4builder site of this project on … — the port is used by the c4builder site of another
+project` (exit code 1) — another worktree's site holds the port: do not review on it; start this
+project's site on a free port, `c4builder --site -w -p <n>`.
+
 Exit code 1 (`no c4builder site on …`) — ask the user to start `c4builder --site -w`, or ask whether
 you may start it yourself in the background — many teams keep the preview server in the human's
 hands. If it exits with `port <port> is already in use — pass a different one, e.g. -p <n>`,

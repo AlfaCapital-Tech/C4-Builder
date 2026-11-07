@@ -54,6 +54,23 @@
   сервера, `feedback`/`doctor` находят сервер без `-p`; совет добавить `.c4builder.server.json` в
   `.gitignore` существующих проектов. Проверка: строка есть в диффе PR.
 
+## 5. Правки по ревью
+
+- [x] 5.1 Идентичность проекта: `project` (realpath конфига) в `/__c4builder/status`, сверка во всех
+  клиентах (`findServer`); c4builder другого проекта — `running: false`, `busy: true`, `otherProject`.
+  Проверка: worktree-сценарий в `test/cli-status.test.mjs` (status код 1, feedback не подключается,
+  doctor — warn), юнит в `test/server-state.test.mjs`.
+- [x] 5.2 Повторный запуск с `-w`/`--agent` при работающем сервере без `-w` — код 1 и совет, даже с
+  `--open*`. Проверка: тест в `test/cli-site.test.mjs`.
+- [x] 5.3 `SIGHUP` не перехватывается (D3). Проверка: тест — процесс гибнет сигналом, файл остаётся.
+- [x] 5.4 Живой `pid` и таймаут пробы — сервер работает (`unresponsive`): D7 отказывает, `status` —
+  `running: true, responding: false`; `ECONNREFUSED` при живом `pid` — файл недействителен.
+  Проверка: юнит и `test/cli-status.test.mjs`.
+- [x] 5.5 Классификация порта — одна функция `findServer` для `status`, `feedback`, `doctor`.
+- [x] 5.6 Обработчик `exit` снимается при `close` сервера. Проверка: юнит — число слушателей `exit`.
+- [x] 5.7 Упрощения: общий хелпер анонса (`go to`, страница change'а, браузер), `ownerAlive` из
+  `util/lock.ts` (pid <= 0 — не жив), `shownUrl` в feedback, doctor не разбирает конфиг дважды.
+
 ## Workflow follow-up
 
 - Архив change'а (`/opsx:archive`) после реализации — спеки `dev-server`, `site-agent-feedback`,
