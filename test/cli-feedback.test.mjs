@@ -126,7 +126,7 @@ describe('ящики feedback в site -w', () => {
 
     const start = async (port, { agent, pollMs = 10_000, idleMs = 30_000, mailboxTtlMs } = {}) => {
         const server = await cmdSite(
-            { DIST_FOLDER: distDir, WEB_PORT: String(port), QUESTIONS_HEADING: 'Open questions' },
+            { DIST_FOLDER: distDir, WEB_PORT: String(port) },
             { port, watch: true, agent, pollMs, idleMs, mailboxTtlMs },
             new EventEmitter(),
             () => ({ pages: PAGES, redirects: REDIRECTS })

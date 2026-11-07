@@ -1,9 +1,8 @@
 import { UI_STRINGS } from './site.i18n.ts';
 
-export const COMMENTS_PATH = '/__c4builder/comments';
 export const FEEDBACK_PATH = '/__c4builder/feedback';
 export const FEEDBACK_HEADER = 'X-C4builder-Feedback';
-// Замечание в журнал ревью (change site-review-log): POST с теми же полями, что у вопроса.
+// Комментарий в журнал ревью (change site-review-log): POST с цитатой, разделом и текстом.
 export const REVIEW_LOG_PATH = '/__c4builder/review-log';
 // Адрес страницы change'а по имени слушателя (change site-agent-review): читает `c4builder feedback`.
 export const PAGE_PATH = '/__c4builder/page';
@@ -63,41 +62,44 @@ const jsValue = (v: unknown): string =>
 
 // Ящик слушателя `c4builder feedback --as <name>` в событии `agent` (change feedback-mailboxes, D4).
 export type MailboxState = { name: string; state: 'listening' | 'reconnecting'; queued: number };
-// Журнал ревью для страницы (change site-review-log): файл и раздел — в подсказках, `label` —
-// подпись кнопки вместо словаря; null — кнопки нет.
-export type ReviewLogState = { file: string; heading: string[]; label?: string };
+// Журнал ревью для страницы (change site-review-log): файл и раздел — в подсказке поля ввода;
+// null — кнопки нет.
+export type ReviewLogState = { file: string; heading: string[] };
+// Свои подписи кнопок у выделения (ключ `buttons`, change site-button-names); пусто — словарь.
+export type ButtonLabels = { agent?: string; comment?: string };
+// `reviewLog.label` — прежний способ подписать кнопку журнала: остаётся ради старых конфигов,
+// `buttons.comment` его перекрывает. Пустые строки — «не задано», подпись берётся из словаря.
+export const buttonLabels = (buttons?: ButtonLabels, reviewLogLabel?: string): ButtonLabels => ({
+    agent: buttons?.agent || undefined,
+    comment: buttons?.comment || reviewLogLabel || undefined
+});
 
 // Начальное состояние агентского режима и ключ проекта вставляет сервер, дальше его обновляют
 // события `c4builder:agent` от сниппета livereload (change site-agent-feedback, design D4, D8).
 // Язык выбирает сам скрипт: при `auto` — по navigator.languages (change site-ui-language, D1).
-export const commentsSnippet = (
-    heading: string,
-    {
-        agent = false,
-        mailboxes = [],
-        project = '',
-        language = 'auto',
-        reviewLog = null,
-        questions = true
-    }: {
-        questions?: boolean;
-        agent?: boolean;
-        mailboxes?: MailboxState[];
-        project?: string;
-        language?: string;
-        reviewLog?: ReviewLogState | null;
-    } = {}
-): string => `
+export const commentsSnippet = ({
+    agent = false,
+    mailboxes = [],
+    project = '',
+    language = 'auto',
+    reviewLog = null,
+    labels = {}
+}: {
+    agent?: boolean;
+    mailboxes?: MailboxState[];
+    project?: string;
+    language?: string;
+    reviewLog?: ReviewLogState | null;
+    labels?: ButtonLabels;
+} = {}): string => `
 <script>
 (function () {
     if (window.__c4builderComments) return;
     window.__c4builderComments = true;
-    var ENDPOINT = '${COMMENTS_PATH}';
     var FEEDBACK = '${FEEDBACK_PATH}';
     var REVIEW_LOG_URL = '${REVIEW_LOG_PATH}';
-    var HEADING = ${jsValue(heading)};
     var REVIEW_LOG = ${jsValue(reviewLog)};
-    var QUESTIONS = ${questions};
+    var LABELS = ${jsValue(labels)};
     var TOAST_KEY = '__c4builderCommentToast';
     var DRAFT_KEY = '__c4builderReview:' + ${jsValue(project)};
     var TARGET_KEY = '__c4builderTarget:' + ${jsValue(project)};
@@ -161,21 +163,11 @@ export const commentsSnippet = (
         return null;
     };
 
-    var SEP = ' \\u2014 \\u00ab';
-    var parseQuestions = function (text) {
-        var s = collapse(text), out = [];
-        for (var at = s.indexOf(SEP); at >= 0; at = s.indexOf(SEP, at + 1)) {
-            var m = s.slice(at + SEP.length).match(/^([\\s\\S]*)\\u00bb(?: \\(\\u00a7 (.*)\\))?$/);
-            var quote = m ? m[1].replace(/\\u2026$/, '').trim() : '';
-            if (quote) out.push({ comment: s.slice(0, at), quote: quote, section: m[2] || '' });
-        }
-        return out;
-    };
-    var textIndex = function (roots, skip) {
+    var textIndex = function (roots) {
         var chars = [], map = [], lastBlock = null, prevSpace = true;
         var walk = function (node) {
             if (node.nodeType === 1) {
-                if (skip.indexOf(node) >= 0 || (node.tagName === 'SUP' && node.classList.contains('c4b-ref'))) return;
+                if (node.tagName === 'SUP' && node.classList.contains('c4b-ref')) return;
                 if (/^(SCRIPT|STYLE)$/.test(node.tagName)) return;
                 for (var c = node.firstChild; c; c = c.nextSibling) walk(c);
                 return;
@@ -214,7 +206,7 @@ export const commentsSnippet = (
             var end = n === last.node ? last.offset + 1 : n.nodeValue.length;
             if (end < n.nodeValue.length) n.splitText(end);
             var mid = start > 0 ? n.splitText(start) : n;
-            // Overlapping quotes: the number link of a question is not part of the text.
+            // Overlapping quotes: the number link of a remark is not part of the text.
             if (!mid.nodeValue.trim() || mid.parentNode.closest('sup.c4b-ref')) continue;
             var mark = document.createElement('mark');
             mark.className = cls;
@@ -231,13 +223,13 @@ export const commentsSnippet = (
         return marks && marks.length ? marks : null;
     };
     // The quote is searched in its own section first: the same words may repeat on the page.
-    var locate = function (root, q, skip, cls, title) {
+    var locate = function (root, q, cls, title) {
         var marks = null;
         if (q.section) {
             var sh = findHeading(root, q.section);
-            if (sh && skip.indexOf(sh) < 0) marks = tryIn(textIndex(sectionOf(sh), skip), q.quote, cls, title);
+            if (sh) marks = tryIn(textIndex(sectionOf(sh)), q.quote, cls, title);
         }
-        return marks || tryIn(textIndex([root], skip), q.quote, cls, title);
+        return marks || tryIn(textIndex([root]), q.quote, cls, title);
     };
     var flash = function (row) {
         row.scrollIntoView({ block: 'center', behavior: 'smooth' });
@@ -278,9 +270,9 @@ export const commentsSnippet = (
             e.preventDefault();
             e.stopPropagation();
             del.disabled = true;
-            // Cells (captured before the "×" is added) go to the review log only: questions keep their protocol.
+            // Cells are captured before the "×" is added: its text is not part of the row.
             var body = { page: pageFile(), number: Number(item.number) || null, text: collapse(item.text) };
-            if (url !== ENDPOINT && item.cells) body.cells = item.cells;
+            if (item.cells) body.cells = item.cells;
             send(body, 'DELETE', url).then(function (r) {
                 var msg = t('removed', { file: r.file });
                 try { sessionStorage.setItem(TOAST_KEY, msg); } catch (e) {}
@@ -292,44 +284,11 @@ export const commentsSnippet = (
         });
         item.cell.appendChild(del);
     };
-    var highlight = function () {
-        var root = content();
-        if (!QUESTIONS || !root || root.querySelector('mark.c4b-hl, .c4b-qrow')) return;
-        var h = findHeading(root, HEADING);
-        if (!h) return;
-        var section = sectionOf(h);
-        var items = sectionItems(section);
-        var skip = [h].concat(section);
-        items.forEach(function (item) {
-            item.row.classList.add('c4b-qrow');
-            item.row.id = item.row.id || 'c4b-q-' + item.number;
-            addDelete(item, ENDPOINT, 'removeQuestion');
-            // Index is rebuilt per try: wrapping splits text nodes and stales the previous map.
-            var q = null, marks = null;
-            parseQuestions(item.text).some(function (c) {
-                marks = locate(root, c, skip, 'c4b-hl', c.comment);
-                q = marks ? c : null;
-                return !!marks;
-            });
-            if (!marks) return;
-            var sup = document.createElement('sup');
-            sup.className = 'c4b-ref';
-            var a = document.createElement('a');
-            a.setAttribute('role', 'button');
-            a.tabIndex = 0;
-            a.textContent = item.number;
-            a.title = q.comment;
-            a.addEventListener('click', function (e) { e.preventDefault(); flash(item.row); });
-            sup.appendChild(a);
-            var lastMark = marks[marks.length - 1];
-            lastMark.parentNode.insertBefore(sup, lastMark.nextSibling);
-        });
-    };
     // The review log page: rows of the log section get a "×" and an id for links from quotes;
     // "?id=c4b-r-N" in the hash scrolls to that row (set after decoration: docsify is too early).
     var decorateLog = function (root) {
         var h = null;
-        REVIEW_LOG.heading.some(function (name) { return !same(name, HEADING) && (h = findHeading(root, name)); });
+        REVIEW_LOG.heading.some(function (name) { return !!(h = findHeading(root, name)); });
         if (!h) return;
         var section = sectionOf(h);
         if (section.some(function (el) { return !!el.querySelector('.c4b-del'); })) return;
@@ -341,14 +300,12 @@ export const commentsSnippet = (
             if (want && want[1] === item.number) flash(item.row);
         });
     };
-    // Any other page: quotes of its remarks are highlighted like questions, the number links to
-    // the row of the log page.
+    // Any other page: quotes of its remarks are highlighted, the number links to the row of the
+    // log page.
     var highlightRemarks = function (root, data) {
         if (!data.remarks || root.querySelector('mark.c4b-rhl')) return;
-        var h = findHeading(root, HEADING);
-        var skip = h ? [h].concat(sectionOf(h)) : [];
         data.remarks.forEach(function (r) {
-            var marks = locate(root, { quote: collapse(r.quote), section: r.section }, skip, 'c4b-hl c4b-rhl', r.comment);
+            var marks = locate(root, { quote: collapse(r.quote), section: r.section }, 'c4b-hl c4b-rhl', r.comment);
             if (!marks) return;
             var sup = document.createElement('sup');
             sup.className = 'c4b-ref c4b-rref';
@@ -385,7 +342,6 @@ export const commentsSnippet = (
     };
     var schedule = function () {
         setTimeout(function () {
-            try { highlight(); } catch (e) {}
             try { syncLog(); } catch (e) {}
             try { highlightDraft(); } catch (e) {}
         }, 50);
@@ -411,19 +367,14 @@ export const commentsSnippet = (
     var btns = document.createElement('div');
     btns.className = 'c4b-cbtns';
     btns.hidden = true;
-    var fbBtn = button(t('feedback'), null, 'c4b-fb');
+    // Buttons are named by recipient (agent / review log); a project may relabel them (key "buttons").
+    var fbBtn = button(LABELS.agent || t('feedback'), null, 'c4b-fb');
     fbBtn.title = t('feedbackTitle');
     btns.appendChild(fbBtn);
-    var qBtn = null;
-    if (QUESTIONS) {
-        qBtn = button(t('question'));
-        qBtn.title = t('questionTitle', { heading: HEADING });
-        btns.appendChild(qBtn);
-    }
     var rvBtn = null;
     if (REVIEW_LOG) {
-        rvBtn = button(REVIEW_LOG.label || t('review'), null, 'c4b-rv');
-        rvBtn.title = t('reviewTitle', { file: REVIEW_LOG.file, heading: REVIEW_LOG.heading[0] });
+        rvBtn = button(LABELS.comment || t('review'), null, 'c4b-rv');
+        rvBtn.title = t('reviewTitle');
         btns.appendChild(rvBtn);
     }
     document.body.appendChild(btns);
@@ -461,7 +412,7 @@ export const commentsSnippet = (
         el.style.top = (rect.bottom + window.scrollY + 6) + 'px';
         el.style.left = Math.max(8, Math.min(rect.left + window.scrollX, window.innerWidth - el.offsetWidth - 8)) + 'px';
     };
-    // No visible button (questions off, no review log, no agent) — nothing to show at a selection.
+    // No visible button (no review log, no agent) — nothing to show at a selection.
     var anyButton = function () {
         for (var i = 0; i < btns.children.length; i++) if (!btns.children[i].hidden) return true;
         return false;
@@ -489,7 +440,7 @@ export const commentsSnippet = (
         return /\\.md$/i.test(p) ? p : p + '.md';
     };
     var send = function (body, method, url) {
-        return fetch(url || ENDPOINT, {
+        return fetch(url, {
             method: method || 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body)
@@ -574,10 +525,8 @@ export const commentsSnippet = (
             parent.normalize();
         }
         var page = pageFile();
-        var h = findHeading(root, HEADING);
-        var skip = h ? [h].concat(sectionOf(h)) : [];
         draft().forEach(function (it) {
-            if (it.page === page) locate(root, { quote: collapse(it.quote), section: it.section }, skip, 'c4b-dhl', it.comment);
+            if (it.page === page) locate(root, { quote: collapse(it.quote), section: it.section }, 'c4b-dhl', it.comment);
         });
     };
 
@@ -606,7 +555,7 @@ export const commentsSnippet = (
             general.hidden = true;
             expanded = false;
             saveDraft(draft().filter(function (it) { return ids.indexOf(it.id) < 0; }));
-        }, failure('reviewFailed')).then(function () { busy = false; renderPanel(); });
+        }, failure('sendFailed')).then(function () { busy = false; renderPanel(); });
     };
     var discard = button(t('discard'), function () {
         var n = draft().length;
@@ -710,23 +659,25 @@ export const commentsSnippet = (
         syncPop = null;
         btns.hidden = true;
     };
-    // kind: 'feedback' goes to the agent, 'question' to the page source, 'review' to the review log.
+    // kind: 'feedback' goes to the agent, 'review' to the review log.
     var open = function (data, rect, kind) {
         close();
-        var feedback = kind === 'feedback', review = kind === 'review';
+        var feedback = kind === 'feedback';
         pop = document.createElement('div');
         pop.className = 'c4b-cpop';
         var quote = document.createElement('blockquote');
         quote.textContent = data.quote;
         var ta = document.createElement('textarea');
-        ta.placeholder = t(feedback ? 'feedbackPlaceholder' : review ? 'reviewPlaceholder' : 'questionPlaceholder');
+        ta.placeholder = t(feedback ? 'feedbackPlaceholder' : 'reviewPlaceholder');
         var row = document.createElement('div');
         row.className = 'c4b-row';
         var hint = document.createElement('small');
-        // Several heading variants: the file alone — which one is used depends on the log.
-        var where = review ? REVIEW_LOG.file + (REVIEW_LOG.heading.length === 1 ? ' / ' + REVIEW_LOG.heading[0] : '') : HEADING;
         if (feedback) hint.className = 'c4b-listen';
-        else hint.textContent = hint.title = t('questionTo', { target: where + (data.section ? ' / ' + data.section : '') });
+        else {
+            // Several heading variants: the file alone — which one is used depends on the log.
+            var where = REVIEW_LOG.file + (REVIEW_LOG.heading.length === 1 ? ' / ' + REVIEW_LOG.heading[0] : '');
+            hint.textContent = hint.title = t('commentTo', { target: where + (data.section ? ' / ' + data.section : '') });
+        }
         var actions = document.createElement('span');
         var buttons = [button(t('cancel'), close)];
         var sending = false, now = null;
@@ -742,7 +693,7 @@ export const commentsSnippet = (
                 action(comment).then(close, function (err) {
                     sending = false;
                     sync();
-                    failure(feedback ? 'feedbackFailed' : review ? 'remarkFailed' : 'questionFailed')(err);
+                    failure(feedback ? 'sendFailed' : 'remarkFailed')(err);
                 });
             };
         };
@@ -762,8 +713,8 @@ export const commentsSnippet = (
             // As in a GitLab merge request: once a review is started, comments go into it.
             primary = draft().length ? add : now;
         } else {
-            primary = button(t(review ? 'addRemark' : 'addQuestion'), run(function (c) {
-                return send(item(c), 'POST', review ? REVIEW_LOG_URL : ENDPOINT).then(function (r) {
+            primary = button(t('addRemark'), run(function (c) {
+                return send(item(c), 'POST', REVIEW_LOG_URL).then(function (r) {
                     var msg = t(r.number ? 'addedNumber' : 'added', { file: r.file, number: r.number });
                     try { sessionStorage.setItem(TOAST_KEY, msg); } catch (e) {}
                     toast(msg);
@@ -800,7 +751,6 @@ export const commentsSnippet = (
     };
     btns.addEventListener('mousedown', function (e) { e.preventDefault(); });
     fbBtn.addEventListener('click', openFor('feedback'));
-    if (qBtn) qBtn.addEventListener('click', openFor('question'));
     if (rvBtn) rvBtn.addEventListener('click', openFor('review'));
     document.addEventListener('mousedown', function (e) {
         if (pop && !pop.contains(e.target) && !btns.contains(e.target)) close();

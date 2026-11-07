@@ -1,25 +1,25 @@
 // Замечание со страницы `site -w` в журнал ревью (change site-review-log): строка таблицы
 // раздела `heading` файла `file`, который лежит рядом с исходником страницы или выше по дереву
 // (у OpenSpec — `review.md` в каталоге change'а, страницы дельт — на два уровня ниже). Состав
-// ячеек задаёт проект шаблоном `cells`; без него строка такая же, как у вопроса.
+// ячеек задаёт проект шаблоном `cells`; без него — строка `formatEntry` (текст, цитата, раздел).
 import fs from 'node:fs';
 import path from 'node:path';
 
 import {
     clipQuote,
     collapse,
-    deleteQuestion,
+    deleteRow,
     escapeHtml,
-    formatQuestion,
+    formatEntry,
     markdownHasHeading,
     plain,
-    type QuestionRef,
+    type RowRef,
     type RemoveResult,
     tableRows,
-    writeQuestion
-} from './questions.ts';
+    writeRow
+} from './sections.ts';
 
-/** Ключ `reviewLog` в `.c4builder`; нет ключа — кнопки на странице нет. */
+/** Ключ `comments` (прежде `reviewLog`) в `.c4builder`; нет ключа — кнопки на странице нет. */
 export interface ReviewLogOptions {
     file: string;
     /** Варианты заголовка раздела: первый найденный в файле, иначе создаётся первый. */
@@ -145,7 +145,7 @@ const cellPattern = (template: string): RegExp | null => {
     return new RegExp(`^${body}$`);
 };
 
-// «комментарий — «цитата»» (хвост `(§ раздел)` — у строк без шаблона, как у вопроса).
+// «комментарий — «цитата»» (хвост `(§ раздел)` — у строк без шаблона, `formatEntry`).
 const splitText = (text: string): { comment: string; quote: string; section: string } => {
     const m = text.match(/^([\s\S]*?) — «([\s\S]*)»(?: \(§ (.*)\))?$/);
     return m
@@ -157,7 +157,7 @@ const splitText = (text: string): { comment: string; quote: string; section: str
  * Замечания журнала, сделанные со страницы `source`: строки таблицы раздела разбираются по
  * шаблону `cells` (ячейка с `{artifact}`/`{page}` отбирает строки этой страницы; без таких
  * подстановок берутся все), цитата — из `{quote}` или хвоста `{text}`. Без шаблона — как у
- * вопроса: текст во второй колонке. Строки без цитаты пропускаются — подсвечивать нечего.
+ * `formatEntry`: текст во второй колонке. Строки без цитаты пропускаются — подсвечивать нечего.
  */
 export const parseRemarks = (reviewFile: string, opts: ReviewLogOptions, source: string): RemarkRef[] => {
     const markdown = readLog(reviewFile);
@@ -191,7 +191,7 @@ export const parseRemarks = (reviewFile: string, opts: ReviewLogOptions, source:
             vars.text !== undefined
                 ? splitText(vars.text)
                 : { comment: vars.comment ?? '', quote: '', section: '' };
-        // Хвост `…` обрезанной цитаты на странице искать нельзя — как parseQuestions у вопросов.
+        // Хвост `…` обрезанной цитаты на странице искать нельзя — на странице она обрезана.
         const quote = plain(vars.quote ?? text.quote)
             .replace(/…$/, '')
             .trim();
@@ -220,13 +220,11 @@ export const isReviewFile = (source: string, file: string, root: string): boolea
 export const deleteRemark = (
     reviewFile: string,
     headings: string[],
-    ref: QuestionRef,
+    ref: RowRef,
     cells?: string[]
 ): RemoveResult => {
     const heading = findHeading(readLog(reviewFile), headings);
-    return heading
-        ? deleteQuestion(reviewFile, heading, ref, { anyCell: true, cells })
-        : { error: 'not-found' };
+    return heading ? deleteRow(reviewFile, heading, ref, { anyCell: true, cells }) : { error: 'not-found' };
 };
 
 /** Дописывает замечание в журнал и возвращает номер строки таблицы (null — список). */
@@ -235,14 +233,14 @@ export const writeRemark = (
     opts: ReviewLogOptions,
     input: RemarkInput
 ): number | null => {
-    const text = formatQuestion({ comment: input.comment, quote: input.quote, section: input.section });
+    const text = formatEntry({ comment: input.comment, quote: input.quote, section: input.section });
     const template = opts.cells;
     // `{number}` — через vars, а не заменой по готовым ячейкам: текст пользователя не трогаем.
     const cells = template?.length
         ? (n: number | null) =>
               fillCells(template, { ...remarkVars(input, reviewFile), number: n === null ? '' : String(n) })
         : undefined;
-    return writeQuestion(
+    return writeRow(
         reviewFile,
         findHeading(readLog(reviewFile), opts.heading) ?? opts.heading[0],
         text,
