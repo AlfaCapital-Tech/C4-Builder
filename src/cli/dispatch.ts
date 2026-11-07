@@ -35,7 +35,7 @@ import { teardownMermaid } from '../core/render/mermaidrenderer.ts';
 import { packageJson as pkg } from '../util/paths.ts';
 import type { BuildOptions, C4ConfigFile, ConfigIssue } from '../config/options.ts';
 import { outputDirs, parseConfig } from '../config/options.ts';
-import { isValidPort } from '../config/schema.ts';
+import { commentsLog, isValidPort } from '../config/schema.ts';
 
 // Configstore-подобное хранилище конфига/кэша. Реальный инстанс — Configstore;
 // заглушки (режим --new, где проектного конфига ещё нет) кастуются к нему.
@@ -164,10 +164,9 @@ function getOptions(c: Partial<C4ConfigFile>): BuildOptions | Partial<BuildOptio
         EXECUTE_SCRIPT: c.executeScript,
         EXCLUDE_OTHER_FILES: c.excludeOtherFiles,
         USE_SYSTEM_FONTS: c.useSystemFonts,
-        QUESTIONS: c.questions,
-        QUESTIONS_HEADING: c.questionsHeading,
-        // Выключенный журнал для сборки равен отсутствующему.
-        REVIEW_LOG: c.reviewLog?.enabled === false ? undefined : c.reviewLog,
+        BUTTONS: c.buttons,
+        // Ключ `comments` или прежний `reviewLog`; выключенный журнал для сборки равен отсутствующему.
+        REVIEW_LOG: commentsLog(c),
         UI_LANGUAGE: c.uiLanguage,
         PLUGINS: c.plugins
     };

@@ -1,12 +1,13 @@
-// Правка раздела вопросов исходного markdown по комментарию со страницы `site -w`
-// (см. change site-comments, design D4): добавление и удаление. Чистые функции + запись
-// файла; формат раздела (таблица / список / его отсутствие) определяется по содержимому,
-// чтобы не навязывать проектам одну форму таблицы.
+// Правка раздела исходного markdown по комментарию со страницы `site -w`: добавление и
+// удаление строки. Сейчас им пользуется журнал ревью (change site-review-log); раньше — и
+// вопросы (change site-comments, удалены в site-button-names). Чистые функции + запись файла;
+// формат раздела (таблица / список / его отсутствие) определяется по содержимому, чтобы не
+// навязывать проектам одну форму таблицы.
 import fs from 'node:fs';
 
 export const QUOTE_MAX = 200;
 
-export interface QuestionInput {
+export interface EntryInput {
     comment: string;
     quote?: string;
     section?: string;
@@ -25,8 +26,8 @@ export const clipQuote = (quote: string | undefined): string => {
     return q.length > QUOTE_MAX ? `${q.slice(0, QUOTE_MAX - 1).trimEnd()}…` : q;
 };
 
-/** Текст вопроса: комментарий, цитата (до 200 символов) и раздел страницы, где сделано выделение. */
-export const formatQuestion = ({ comment, quote, section }: QuestionInput): string => {
+/** Текст записи: комментарий, цитата (до 200 символов) и раздел страницы, где сделано выделение. */
+export const formatEntry = ({ comment, quote, section }: EntryInput): string => {
     const q = clipQuote(quote);
     const s = collapse(section ?? '');
     return escapeHtml(`${collapse(comment)}${q ? ` — «${q}»` : ''}${s ? ` (§ ${s})` : ''}`);
@@ -128,7 +129,7 @@ const findTable = (lines: string[], start: number, end: number): Table | undefin
 export type Cells = string[] | ((number: number | null) => string[]);
 
 // Ячейки новой строки: заготовка `given` (пустые ячейки берут значения заглушки — например
-// «Кому: Аналитик» из строки шаблона) либо текст в колонку вопроса; заглушки `...` очищаются.
+// «Кому: Аналитик» из строки шаблона) либо текст в колонку текста; заглушки `...` очищаются.
 const rowCells = (
     cells: Cells | undefined,
     text: string,
@@ -179,19 +180,14 @@ export interface AppendResult {
 }
 
 /**
- * Дописывает вопрос в раздел `heading`: строкой таблицы (с номером, если первая колонка
+ * Дописывает запись в раздел `heading`: строкой таблицы (с номером, если первая колонка
  * числовая; заглушка `1 | ... | ...` заменяется), иначе пунктом списка в конце раздела;
  * нет раздела — создаёт его в конце файла. Перевод строки файла сохраняется.
  * `cells` — готовые ячейки строки таблицы (журнал ревью, change site-review-log) либо фабрика
  * по номеру строки; числовая первая колонка всё равно получает номер; для списка и
  * отсутствующего раздела используется `text`.
  */
-export const appendQuestion = (
-    markdown: string,
-    heading: string,
-    text: string,
-    cells?: Cells
-): AppendResult => {
+export const appendRow = (markdown: string, heading: string, text: string, cells?: Cells): AppendResult => {
     const eol = markdown.includes('\r\n') ? '\r\n' : '\n';
     const lines = markdown.split(/\r?\n/);
 
@@ -207,7 +203,7 @@ export const appendQuestion = (
     if (table) {
         const { header, last, cols, numeric, textCol } = table;
         const rows = lines.slice(header + 2, last + 1).map(splitRow);
-        // Единственная строка шаблона с `...` в ячейке вопроса — заглушка: заменяем её, сохраняя
+        // Единственная строка шаблона с `...` в ячейке текста — заглушка: заменяем её, сохраняя
         // заполненные ячейки (например, «Кому: Аналитик»), остальные `...` очищаем.
         const placeholder = rows.length === 1 && isPlaceholder(rows[0][textCol] ?? '');
         const number = numeric
@@ -241,8 +237,8 @@ export const appendQuestion = (
     return { markdown: lines.join(eol), number: null };
 };
 
-/** Какой вопрос удалять: номер (строка числовой таблицы) и текст, как он виден на странице. */
-export interface QuestionRef {
+/** Какую запись удалять: номер (строка числовой таблицы) и текст, как он виден на странице. */
+export interface RowRef {
     number?: number | null;
     text: string;
 }
@@ -260,14 +256,14 @@ export interface RemoveOptions {
 }
 
 /**
- * Удаляет вопрос из раздела `heading`: строку таблицы (по номеру и тексту; без совпадения
+ * Удаляет запись из раздела `heading`: строку таблицы (по номеру и тексту; без совпадения
  * номера — только по тексту) или пункт списка по тексту. Текст сравнивается без inline-разметки.
  * Номера остальных строк не меняются — на них ссылаются другие документы.
  */
-export const removeQuestion = (
+export const removeRow = (
     markdown: string,
     heading: string,
-    ref: QuestionRef,
+    ref: RowRef,
     { anyCell = false, cells }: RemoveOptions = {}
 ): RemoveResult => {
     const eol = markdown.includes('\r\n') ? '\r\n' : '\n';
@@ -309,36 +305,21 @@ export const removeQuestion = (
 export const markdownHasHeading = (markdown: string, heading: string): boolean =>
     markdown.split(/\r?\n/).some((l) => headingLevel(l, heading) > 0);
 
-/** То же для файла; нечитаемый файл — false. */
-export const hasHeading = (file: string, heading: string): boolean => {
-    try {
-        return markdownHasHeading(fs.readFileSync(file, 'utf8'), heading);
-    } catch {
-        return false;
-    }
-};
-
-/** Файл страницы для записи: первый с разделом `heading`, иначе первый существующий. */
-export const pickSource = (files: string[], heading: string): string | undefined => {
-    const existing = files.filter((f) => fs.existsSync(f));
-    return existing.find((f) => hasHeading(f, heading)) ?? existing[0];
-};
-
-/** Дописывает вопрос (или строку `cells`) в файл и возвращает номер строки таблицы (null — список). */
-export const writeQuestion = (file: string, heading: string, text: string, cells?: Cells): number | null => {
-    const { markdown, number } = appendQuestion(fs.readFileSync(file, 'utf8'), heading, text, cells);
+/** Дописывает запись (или строку `cells`) в файл и возвращает номер строки таблицы (null — список). */
+export const writeRow = (file: string, heading: string, text: string, cells?: Cells): number | null => {
+    const { markdown, number } = appendRow(fs.readFileSync(file, 'utf8'), heading, text, cells);
     fs.writeFileSync(file, markdown);
     return number;
 };
 
-/** Удаляет вопрос из файла; ошибка поиска возвращается, не бросается. */
-export const deleteQuestion = (
+/** Удаляет запись из файла; ошибка поиска возвращается, не бросается. */
+export const deleteRow = (
     file: string,
     heading: string,
-    ref: QuestionRef,
+    ref: RowRef,
     options?: RemoveOptions
 ): RemoveResult => {
-    const result = removeQuestion(fs.readFileSync(file, 'utf8'), heading, ref, options);
+    const result = removeRow(fs.readFileSync(file, 'utf8'), heading, ref, options);
     if ('markdown' in result) fs.writeFileSync(file, result.markdown);
     return result;
 };

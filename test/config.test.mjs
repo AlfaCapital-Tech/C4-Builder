@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { configSchema, isValidPort, parseConfig } from './dist.mjs';
+import { commentsLog, configSchema, isValidPort, parseConfig } from './dist.mjs';
 
 // Регрессии конфига против 0.2.x (max-ревью PR #8): легаси-значения из рукописных
 // `.c4builder` не должны ни падать, ни превращаться в мусорные строки.
@@ -80,20 +80,27 @@ describe('generateLLMS', () => {
     });
 });
 
-describe('questionsHeading', () => {
-    it('по умолчанию Open questions, своё значение сохраняется', () => {
-        expect(configSchema.parse({}).questionsHeading).toBe('Open questions');
-        expect(configSchema.parse({ questionsHeading: 'Открытые вопросы' }).questionsHeading).toBe(
-            'Открытые вопросы'
-        );
+// Вопросы удалены (change site-button-names): старые ключи схема молча отбрасывает, как любые неизвестные.
+describe('questions, questionsHeading', () => {
+    it('старый конфиг с ними проходит, ключи отброшены', () => {
+        const r = configSchema.safeParse({ questions: false, questionsHeading: 'Открытые вопросы' });
+        expect(r.success).toBe(true);
+        expect(r.data).not.toHaveProperty('questions');
+        expect(r.data).not.toHaveProperty('questionsHeading');
     });
 });
 
-describe('questions', () => {
-    it('по умолчанию true, false выключает', () => {
-        expect(configSchema.parse({}).questions).toBe(true);
-        expect(configSchema.parse({ questions: false }).questions).toBe(false);
-        expect(configSchema.safeParse({ questions: 'no' }).success).toBe(false);
+describe('buttons', () => {
+    it('по умолчанию пусто, свои подписи сохраняются', () => {
+        expect(configSchema.parse({}).buttons).toEqual({});
+        expect(configSchema.parse({ buttons: null }).buttons).toEqual({});
+        expect(configSchema.parse({ buttons: { agent: 'Fix it', comment: 'Note' } }).buttons).toEqual({
+            agent: 'Fix it',
+            comment: 'Note'
+        });
+    });
+    it('не строка — ошибка', () => {
+        expect(configSchema.safeParse({ buttons: { agent: true } }).success).toBe(false);
     });
 });
 
@@ -140,6 +147,41 @@ describe('reviewLog', () => {
     });
     it('cells не массив — ошибка', () => {
         expect(configSchema.safeParse({ reviewLog: { cells: 'x' } }).success).toBe(false);
+    });
+});
+
+describe('comments и прежний reviewLog', () => {
+    it('comments — те же поля, что у reviewLog, без label', () => {
+        expect(configSchema.parse({ comments: {} }).comments).toEqual({
+            enabled: true,
+            file: 'review.md',
+            heading: ['Review']
+        });
+        expect(configSchema.parse({ comments: { label: 'X', heading: 'A' } }).comments).toEqual({
+            enabled: true,
+            file: 'review.md',
+            heading: ['A']
+        });
+        expect(configSchema.safeParse({ comments: { cells: 'x' } }).success).toBe(false);
+    });
+    it('commentsLog: только comments, только reviewLog, оба — побеждает comments', () => {
+        const log = (raw) => commentsLog(configSchema.parse(raw));
+        expect(log({})).toBeUndefined();
+        expect(log({ comments: { file: 'a.md' } }).file).toBe('a.md');
+        expect(log({ reviewLog: { file: 'b.md' } }).file).toBe('b.md');
+        expect(log({ comments: { file: 'a.md' }, reviewLog: { file: 'b.md', heading: 'B' } })).toEqual({
+            enabled: true,
+            file: 'a.md',
+            heading: ['Review']
+        });
+    });
+    it('commentsLog: enabled: false — журнала нет; label — из reviewLog', () => {
+        const log = (raw) => commentsLog(configSchema.parse(raw));
+        expect(log({ comments: { enabled: false } })).toBeUndefined();
+        expect(log({ comments: { enabled: false }, reviewLog: {} })).toBeUndefined();
+        expect(log({ reviewLog: { label: 'Log' } }).label).toBe('Log');
+        expect(log({ comments: {}, reviewLog: { label: 'Log' } }).label).toBe('Log');
+        expect(log({ comments: {} })).not.toHaveProperty('label');
     });
 });
 
