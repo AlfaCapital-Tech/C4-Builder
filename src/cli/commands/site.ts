@@ -24,6 +24,8 @@ import { packageJson as pkg } from '../../util/paths.ts';
 import type { AgentMode } from '../agent.ts';
 import { pendingUpdate } from '../update.ts';
 import {
+    hasChangePage,
+    projectId,
     removeServerState,
     STATUS_PATH,
     type ServerState,
@@ -200,40 +202,58 @@ const freePortAfter = async (port: number, tries = 10): Promise<number | undefin
         if ((await canListen(p, '127.0.0.1')) && (await canListen(p, '::1'))) return p;
 };
 
-// Сервер этого конфига уже работает (change site-server-state, D7): второй не поднимаем — он сначала
+// `go to` и браузер для `--open` / `--open-change <id>` — общие для нового сервера и работающего (D7).
+// Короткого адреса change'а нет на сайте — предупреждаем, но адрес всё равно открываем: в watch change
+// могут собрать позже. BROWSER=none отключает браузер (CI/headless). Промис — чтобы вызывающий,
+// который сразу выходит, дождался запуска браузера.
+const announce = (
+    base: string,
+    program: { open?: boolean; openChange?: string },
+    hasPage: (route: string) => boolean
+): Promise<void> => {
+    const route = program.openChange ? redirectKey(['change', program.openChange]) : '';
+    const url = route ? `${base}/#${route}` : base;
+    console.log(`go to ${chalk.green(url)}`);
+    if (route && !hasPage(route))
+        console.error(
+            chalk.yellow(
+                `warning: the site has no page change/${program.openChange} — ${url} shows "not found" until a change with this id is built`
+            )
+        );
+    if (!(program.open || route) || process.env.BROWSER === 'none') return Promise.resolve();
+    return open(url).then(
+        () => {},
+        () => console.log(chalk.gray('could not open the browser automatically'))
+    );
+};
+
+// Сервер этого конфига уже работает (change site-server-state, D7): второй не поднимаем — он
 // пересобрал бы dist, который раздаёт первый. Возвращает код выхода: без `--open*` — 1 (процесс,
-// ожидавший запустить сервер, его не запустил), с ними — открыть адрес работающего и 0.
+// ожидавший запустить сервер, его не запустил), с ними — открыть адрес работающего и 0. Просили
+// watch (`-w` или `--agent`), а работающий без него — 1 и в любом случае: молча отдать сайт без
+// пересборки и замечаний агенту значило бы обмануть ожидание.
 export const reuseRunningServer = async (
     state: ServerState,
-    program: { open?: boolean; openChange?: string }
+    program: { open?: boolean; openChange?: string; watch?: boolean; agent?: boolean }
 ): Promise<number> => {
     const running = `c4builder site is already running for this project at ${state.url} (pid ${state.pid})`;
+    if ((program.watch || program.agent === true) && !state.watch) {
+        console.error(
+            chalk.red(
+                `${running} without -w — stop that process and start c4builder site -w to get rebuilds and agent feedback`
+            )
+        );
+        return 1;
+    }
     if (!program.open && !program.openChange) {
         console.error(
             chalk.red(`${running} — open it, or stop that process first; check it with c4builder status`)
         );
         return 1;
     }
-    const route = program.openChange ? redirectKey(['change', program.openChange]) : '';
-    const url = route ? `${state.url}/#${route}` : state.url;
     console.log(running);
-    console.log(`go to ${chalk.green(url)}`);
-    // Страница change'а — тем же запросом, что у `feedback`: 404 — прежнее предупреждение, адрес
-    // всё равно открываем (в watch change могут собрать позже).
-    if (route) {
-        const page = await fetch(
-            `http://127.0.0.1:${state.port}${PAGE_PATH}?as=${encodeURIComponent(program.openChange ?? '')}`,
-            { headers: { [FEEDBACK_HEADER]: '1' }, signal: AbortSignal.timeout(1000) }
-        ).catch(() => undefined);
-        if (page?.status !== 200)
-            console.error(
-                chalk.yellow(
-                    `warning: the site has no page change/${program.openChange} — ${url} shows "not found" until a change with this id is built`
-                )
-            );
-    }
-    if (process.env.BROWSER !== 'none')
-        await open(url).catch(() => console.log(chalk.gray('could not open the browser automatically')));
+    const exists = program.openChange ? await hasChangePage(state.port, program.openChange) : true;
+    await announce(state.url, program, () => exists);
     return 0;
 };
 
@@ -312,6 +332,7 @@ export default (
             port: Number(port),
             version: pkg.version,
             watch: liveReloadEnabled,
+            project: program.configPath ? projectId(program.configPath) : null,
             agent: { on: liveReloadEnabled && agent.on, name: agent.name },
             ...feedbackState()
         };
@@ -893,7 +914,11 @@ export default (
                     });
                     const remove = () => removeServerState(configPath);
                     process.once('exit', remove);
-                    server.once('close', remove);
+                    // Сервер закрыт в живом процессе (тесты, встраивание) — обработчик exit больше не нужен.
+                    server.once('close', () => {
+                        process.off('exit', remove);
+                        remove();
+                    });
                 } catch (e) {
                     // Каталог только для чтения: сервер работает, клиенты берут порт из -p/webPort.
                     console.error(
@@ -903,27 +928,14 @@ export default (
                     );
                 }
             }
-            // `--open-change <id>`: короткий адрес change'а. Ключа нет в карте — предупреждаем, но
-            // адрес всё равно открываем: в watch change могут собрать позже.
-            const route = program.openChange ? redirectKey(['change', program.openChange]) : '';
-            const url = route ? `${base}/#${route}` : base;
             console.log('serving your docsify site');
-            console.log(`go to ${chalk.green(url)}`);
-            if (route && !result().redirects.has(route))
-                console.error(
-                    chalk.yellow(
-                        `warning: the site has no page change/${program.openChange} — ${url} shows "not found" until a change with this id is built`
-                    )
-                );
+            void announce(base, program, (route) => result().redirects.has(route));
             if (liveReloadEnabled)
                 console.log(chalk.gray('livereload enabled (browser auto-reload on rebuild)'));
             if (liveReloadEnabled && agent.on)
                 console.log(
                     `agent mode (${agent.name}): page feedback goes to "c4builder feedback --wait --as <name>${program.port ? ` -p ${port}` : ''}" — run it in the background, <name> is your change or task; run it again with the same name after each batch`
                 );
-            // --open/--open-change: открываем браузер один раз при старте; BROWSER=none отключает (CI/headless)
-            if ((program.open || route) && process.env.BROWSER !== 'none')
-                open(url).catch(() => console.log(chalk.gray('could not open the browser automatically')));
             resolve(server);
         });
         server.on('close', () => clearInterval(sweeper));

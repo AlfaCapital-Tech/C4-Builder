@@ -159,3 +159,92 @@ describe('c4builder status', () => {
         expect(fs.readdirSync(empty)).toEqual([]);
     });
 });
+
+// Идентичность проекта (change site-server-state, D4, D8): без файла состояния сервер на webPort —
+// ещё не наш. Соседний worktree с тем же webPort не должен видеть чужой сайт своим.
+describe('сервер другого проекта на webPort', () => {
+    const cli = (cwd, ...args) =>
+        new Promise((resolve) => {
+            const child = spawn(process.execPath, [CLI, ...args], { cwd, env: agentEnv() });
+            let stdout = '';
+            let stderr = '';
+            child.stdout.on('data', (d) => (stdout += d));
+            child.stderr.on('data', (d) => (stderr += d));
+            child.on('exit', (code) => resolve({ code, stdout, stderr }));
+        });
+    const worktree = (name, webPort) => {
+        const cwd = path.join(dir, name);
+        fs.mkdirSync(path.join(cwd, 'src'), { recursive: true });
+        fs.writeFileSync(path.join(cwd, 'src', 'README.md'), '# root\n');
+        fs.writeFileSync(path.join(cwd, '.c4builder'), JSON.stringify({ ...CONFIG, webPort }));
+        return cwd;
+    };
+
+    it('status — код 1 и otherProject, feedback не подключается, doctor — warn', async () => {
+        const a = worktree('worktree-a', '28417');
+        const b = worktree('worktree-b', '28417');
+        await serveSite(a, ['site', '-w'], {
+            env: agentEnv(),
+            onReady: async () => {
+                const text = await cli(b, 'status');
+                expect(text.code).toBe(1);
+                expect(text.stdout).toContain(
+                    'no c4builder site of this project on http://localhost:28417 — the port is used by the c4builder site of another project'
+                );
+                const json = await cli(b, 'status', '--json');
+                expect(json.code).toBe(1);
+                expect(JSON.parse(json.stdout)).toEqual({
+                    running: false,
+                    port: 28417,
+                    source: 'config',
+                    busy: true,
+                    otherProject: fs.realpathSync(path.join(a, '.c4builder'))
+                });
+                const fb = await cli(b, 'feedback', '--as', 'foo');
+                expect(fb.code).toBe(1);
+                expect(fb.stderr).toContain('the port is used by the c4builder site of another project');
+                expect(fb.stderr).not.toContain('Change page');
+                const doctor = JSON.parse((await cli(b, 'doctor', 'runtime', '--json')).stdout);
+                expect(doctor.checks.find((c) => c.id === 'runtime.port')).toMatchObject({
+                    status: 'warn',
+                    fix: 'c4builder site -w -p <port>'
+                });
+                // свой проект видит свой сервер
+                expect((await cli(a, 'status')).code).toBe(0);
+            }
+        });
+    }, 60_000);
+
+    // D4/D7: pid из файла жив, порт принял соединение, но молчит — сервер занят, а не мёртв.
+    it('сервер из файла не ответил вовремя — status: running, responding: false; второй site отказывает', async () => {
+        const c = worktree('worktree-c', '28419');
+        const silent = http.createServer(() => {}).listen(28418, '127.0.0.1');
+        await new Promise((r) => silent.once('listening', r));
+        // pid живого процесса — самого теста
+        fs.writeFileSync(
+            path.join(c, '.c4builder.server.json'),
+            JSON.stringify({ port: 28418, url: 'http://localhost:28418', pid: process.pid, watch: true })
+        );
+        try {
+            const json = await cli(c, 'status', '--json');
+            expect(json.code).toBe(0);
+            expect(JSON.parse(json.stdout)).toMatchObject({
+                running: true,
+                responding: false,
+                port: 28418,
+                source: 'state',
+                pid: process.pid
+            });
+            expect((await cli(c, 'status')).stdout).toContain('but did not answer in time');
+            const again = await cli(c, 'site', '-w');
+            expect(again.code).toBe(1);
+            expect(again.stderr).toContain(
+                `c4builder site is already running for this project at http://localhost:28418 (pid ${process.pid})`
+            );
+            expect(again.stdout).not.toContain('built in');
+        } finally {
+            silent.closeAllConnections();
+            silent.close();
+        }
+    }, 30_000);
+});

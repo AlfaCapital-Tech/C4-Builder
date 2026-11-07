@@ -536,8 +536,10 @@ export default async () => {
 
         if (opts.site) {
             // Без обработчиков Ctrl+C и SIGTERM завершают Node без события exit — файл состояния
-            // сервера остался бы. 128 + n — код, которым оболочка и так отметила бы сигнал.
-            for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const)
+            // сервера остался бы. 128 + n — код, которым оболочка и так отметила бы сигнал. SIGHUP не
+            // перехватываем: обработчик отменил бы его игнорирование под nohup и закрытие терминала
+            // гасило бы сервер; без nohup файл после SIGHUP остаётся и недействителен по pid (D4).
+            for (const signal of ['SIGINT', 'SIGTERM'] as const)
                 process.once(signal, () => process.exit(128 + os.constants.signals[signal]));
             try {
                 await cmdSite(

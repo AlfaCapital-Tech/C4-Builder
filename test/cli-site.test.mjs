@@ -714,4 +714,46 @@ describe('файл состояния site', () => {
             await next.exited;
         }
     }, 90_000);
+
+    // D3: SIGHUP не перехватывается — под nohup сервер переживает закрытие терминала, как раньше. Без
+    // nohup процесс гибнет от сигнала, файл остаётся и недействителен по pid.
+    it('SIGHUP завершает сервер сигналом, без обработчика: файл остаётся', async () => {
+        const server = launch(['site', '-w', '-p', '28440']);
+        try {
+            await server.serving;
+        } finally {
+            server.child.kill('SIGHUP');
+        }
+        const { code, signal } = await server.exited;
+        expect({ code, signal }).toEqual({ code: null, signal: 'SIGHUP' });
+        expect(JSON.parse(fs.readFileSync(STATE, 'utf8')).pid).toBe(server.child.pid);
+        fs.rmSync(STATE);
+    }, 60_000);
+
+    // D7: просили -w (или --agent), а работающий сервер без него — не переиспользуем молча, даже с --open.
+    it('работающий сервер без -w, повторный запуск с -w или --agent — код 1 и совет перезапустить с -w', async () => {
+        const plain = launch(['site', '-p', '28441']);
+        try {
+            await plain.serving;
+            for (const args of [
+                ['--site', '-w'],
+                ['site', '-w', '--open-change', 'nope'],
+                ['site', '--agent', '--open']
+            ]) {
+                const res = await run(args);
+                expect(res.code, args.join(' ')).toBe(1);
+                expect(res.stderr).toContain(
+                    `c4builder site is already running for this project at http://localhost:28441 (pid ${plain.child.pid}) without -w — stop that process and start c4builder site -w`
+                );
+                expect(res.stdout).not.toContain('go to');
+            }
+            // без -w — прежнее поведение: открыть работающий
+            const open = await run(['site', '--open']);
+            expect(open.code, open.stderr).toBe(0);
+            expect(open.stdout).toContain('go to http://localhost:28441');
+        } finally {
+            plain.child.kill('SIGTERM');
+            await plain.exited;
+        }
+    }, 90_000);
 });

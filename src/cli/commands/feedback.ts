@@ -1,6 +1,6 @@
 import chalk from 'chalk';
 import { LISTENER_NAME } from '../../core/feedback.ts';
-import { resolvePort } from '../server-state.ts';
+import { findServer } from '../server-state.ts';
 import { FEEDBACK_HEADER, FEEDBACK_PATH, PAGE_PATH } from './site.comments.ts';
 
 // `c4builder feedback` (change site-agent-feedback, design D9): забирает пачку замечаний у `site -w`.
@@ -22,10 +22,12 @@ export default async (
         process.exitCode = 2;
         return;
     }
-    // Порт: `-p` → живой файл состояния сервера → `webPort` (change site-server-state, D6): сайт мог
-    // подняться на другом `-p`, когда порт из конфига занят.
-    const { port } = await resolvePort(configPath, opts.port);
-    const shown = `http://localhost:${port}`;
+    // Сервер: `-p` → живой файл состояния → `webPort` (change site-server-state, D6) — сайт мог подняться
+    // на другом `-p`, когда порт из конфига занят. Сервер другого проекта на этом порту (соседний worktree)
+    // не наш: его пачки — с исходниками чужого дерева.
+    const found = await findServer(configPath, { port: opts.port });
+    const { port } = found;
+    const shown = found.url;
     const fail = (message: string): void => {
         console.error(chalk.red(message));
         process.exitCode = 1;
@@ -33,6 +35,10 @@ export default async (
     // 127.0.0.1, а не localhost: сервер слушает только IPv4, а `localhost` → `::1` на части машин
     // подвешивает соединение.
     const url = `http://127.0.0.1:${port}${FEEDBACK_PATH}/next?as=${opts.as}${opts.wait ? '' : '&wait=0'}`;
+    if (found.kind === 'other-project')
+        return fail(
+            `no c4builder site -w of this project on ${shown} — the port is used by the c4builder site of another project${found.status.project ? ` (${found.status.project})` : ''}; start this project's site with c4builder site -w`
+        );
     // Адрес страницы change'а, если имя слушателя — change сайта (change site-agent-review, D6):
     // один запрос до цикла, строка — в stderr, stdout агент читает как пачку. Нет сервера, старый
     // сервер без эндпоинта (404) или не change — молча, дальше цикл скажет своё.

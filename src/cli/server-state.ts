@@ -1,8 +1,11 @@
 import fs from 'node:fs';
 import http from 'node:http';
+import path from 'node:path';
 import { defaultConfig } from '../config/defaults.ts';
 import { parseConfig } from '../config/options.ts';
-import { FEEDBACK_HEADER, type MailboxState } from './commands/site.comments.ts';
+import { LISTENER_NAME } from '../core/feedback.ts';
+import { ownerAlive } from '../util/lock.ts';
+import { FEEDBACK_HEADER, type MailboxState, PAGE_PATH } from './commands/site.comments.ts';
 
 // Файл состояния dev-сервера (change site-server-state): клиенты CLI (`status`, `feedback`, `doctor`,
 // повторный `site`) находят по нему сервер своего проекта без `-p`. Лежит рядом с конфигом, как
@@ -19,12 +22,16 @@ export interface ServerState {
     startedAt: string;
 }
 
-// Ответ `GET /__c4builder/status`: без `-w` агентского режима нет — списки пусты.
+// Ответ `GET /__c4builder/status`: без `-w` агентского режима нет — списки пусты. `project` — realpath
+// конфига сервера: по нему клиент отличает сервер своего проекта от сервера соседнего worktree на том
+// же порту; null — сервер запущен без конфига (встроен в чужой процесс, тесты): проекта он не сообщает,
+// и клиент считает его своим, как явно указанный ему порт.
 export interface ServerStatus {
     pid: number;
     port: number;
     version: string;
     watch: boolean;
+    project: string | null;
     agent: { on: boolean; name: string };
     listeners: MailboxState[];
     unaddressed: number;
@@ -33,6 +40,16 @@ export interface ServerStatus {
 export type PortSource = 'flag' | 'state' | 'config';
 
 export const stateFile = (configPath: string): string => `${configPath}.server.json`;
+
+// Идентичность проекта — realpath конфига: симлинки и относительные пути не должны давать «чужой»
+// проект. Конфига нет (status вне проекта) — просто абсолютный путь.
+export const projectId = (configPath: string): string => {
+    try {
+        return fs.realpathSync(configPath);
+    } catch {
+        return path.resolve(configPath);
+    }
+};
 
 // Сервер слушает только IPv4; `localhost` — лишь в печатаемом адресе, как в `go to`.
 const HOST = '127.0.0.1';
@@ -82,21 +99,14 @@ export const removeServerState = (configPath: string, pid = process.pid): void =
     } catch {}
 };
 
-// EPERM = процесс есть, но сигналить ему нельзя (чужой пользователь) — жив, как в util/lock.ts.
-const pidAlive = (pid: number): boolean => {
-    try {
-        process.kill(pid, 0);
-        return true;
-    } catch (e) {
-        return (e as NodeJS.ErrnoException).code === 'EPERM';
-    }
-};
-
 export type StatusProbe =
     | { kind: 'status'; status: ServerStatus }
     | { kind: 'refused' }
+    // Порт принял соединение, но не ответил за отведённое время: сервер занят (синхронная работа
+    // в event loop) или завис.
+    | { kind: 'timeout' }
     // Порт отвечает, но не эндпоинтом состояния: старая версия c4builder или чужой процесс.
-    | { kind: 'other'; code?: number };
+    | { kind: 'other' };
 
 // Запрос команды CLI (служебный заголовок, без Origin) — иначе сервер ответит 403.
 export const probeStatus = async (port: number, timeoutMs = 1000): Promise<StatusProbe> => {
@@ -107,17 +117,18 @@ export const probeStatus = async (port: number, timeoutMs = 1000): Promise<Statu
             signal: AbortSignal.timeout(timeoutMs)
         });
     } catch (e) {
+        if ((e as Error).name === 'TimeoutError') return { kind: 'timeout' };
         const code = ((e as Error).cause as NodeJS.ErrnoException | undefined)?.code;
         return code === 'ECONNREFUSED' ? { kind: 'refused' } : { kind: 'other' };
     }
     const body = (await res.json().catch(() => undefined)) as ServerStatus | undefined;
     if (res.status === 200 && body && Number.isInteger(body.pid)) return { kind: 'status', status: body };
-    return { kind: 'other', code: res.status };
+    return { kind: 'other' };
 };
 
 // Чем занят порт: `site -w` отвечает на /__livereload потоком SSE, любой другой ответ — чужой процесс.
-// Так узнаём и сервер версии без эндпоинта состояния.
-export const probeLivereload = (port: number): Promise<'free' | 'site' | 'busy'> =>
+// Так узнаём сервер версии без эндпоинта состояния.
+const probeLivereload = (port: number): Promise<'free' | 'site' | 'busy'> =>
     new Promise((resolve) => {
         const req = http.get({ host: HOST, port, path: '/__livereload', timeout: 1000 }, (res) => {
             resolve(String(res.headers['content-type']).startsWith('text/event-stream') ? 'site' : 'busy');
@@ -127,17 +138,23 @@ export const probeLivereload = (port: number): Promise<'free' | 'site' | 'busy'>
         req.on('error', (e: NodeJS.ErrnoException) => resolve(e.code === 'ECONNREFUSED' ? 'free' : 'busy'));
     });
 
+// Сервер из файла состояния: `running` — отвечает тем же pid; `unresponsive` — pid жив, порт принял
+// соединение, но ответа нет за таймаут (сервер занят) — для D7 он всё равно работает: второй сервер
+// пересобрал бы его dist.
+export type LiveServer =
+    | { kind: 'running'; state: ServerState; status: ServerStatus }
+    | { kind: 'unresponsive'; state: ServerState };
+
 // Живой сервер этого конфига: pid из файла жив И сервер на порту из файла отвечает тем же pid.
 // Только kill(pid, 0) — ложное «жив» при переиспользованном pid; только проба порта — не отличить
-// сервер соседнего worktree на том же порту.
-export const liveServer = async (
-    configPath: string
-): Promise<{ state: ServerState; status: ServerStatus } | undefined> => {
+// сервер соседнего worktree на том же порту. Отказ в соединении при живом pid — pid переиспользован.
+export const liveServer = async (configPath: string): Promise<LiveServer | undefined> => {
     const state = readServerState(configPath);
-    if (!state || !pidAlive(state.pid)) return undefined;
+    if (!state || !ownerAlive(state.pid)) return undefined;
     const probe = await probeStatus(state.port);
+    if (probe.kind === 'timeout') return { kind: 'unresponsive', state };
     return probe.kind === 'status' && probe.status.pid === state.pid
-        ? { state, status: probe.status }
+        ? { kind: 'running', state, status: probe.status }
         : undefined;
 };
 
@@ -151,14 +168,60 @@ export const configPort = (configPath: string): number => {
     return Number((config.ok ? config.value : config.salvaged).webPort ?? defaultConfig.webPort);
 };
 
-// Порт клиента: `-p` → живой файл состояния → `webPort`. Явный `-p` побеждает файл: человек мог
-// намеренно указать другой сервер.
-export const resolvePort = async (
+// Что на порту с точки зрения клиента этого проекта — одна классификация для `status`, `feedback` и
+// `doctor`, чтобы они не противоречили друг другу:
+// - `own` — c4builder этого проекта (тот же realpath конфига), `unresponsive` — он же по файлу
+//   состояния, но не ответил вовремя;
+// - `other-project` — c4builder другого проекта (соседний worktree на том же порту): не наш;
+// - `legacy` — c4builder без эндпоинта состояния (SSE на /__livereload): чей — не узнать;
+// - `busy` — чужой процесс, `free` — порт свободен.
+export type ServerLookup = { port: number; source: PortSource; url: string } & (
+    | { kind: 'own'; status: ServerStatus }
+    | { kind: 'unresponsive'; state: ServerState }
+    | { kind: 'other-project'; status: ServerStatus }
+    | { kind: 'legacy' }
+    | { kind: 'busy' }
+    | { kind: 'free' }
+);
+
+// Порт клиента: `-p` → живой файл состояния → `webPort` (готовое значение — `webPort`, если конфиг уже
+// прочитан). Явный `-p` побеждает файл: человек мог намеренно указать другой порт, но и на нём сервер
+// чужого проекта своим не считается.
+export const findServer = async (
     configPath: string,
-    flag?: number
-): Promise<{ port: number; source: PortSource; live?: { state: ServerState; status: ServerStatus } }> => {
-    if (flag !== undefined) return { port: flag, source: 'flag' };
-    const live = await liveServer(configPath);
-    if (live) return { port: live.state.port, source: 'state', live };
-    return { port: configPort(configPath), source: 'config' };
+    opts: { port?: number; webPort?: number } = {}
+): Promise<ServerLookup> => {
+    if (opts.port === undefined) {
+        const live = await liveServer(configPath);
+        if (live) {
+            const at = { port: live.state.port, source: 'state' as const, url: shownUrl(live.state.port) };
+            return live.kind === 'running'
+                ? { ...at, kind: 'own', status: live.status }
+                : { ...at, kind: 'unresponsive', state: live.state };
+        }
+    }
+    const port = opts.port ?? opts.webPort ?? configPort(configPath);
+    const at = {
+        port,
+        source: opts.port === undefined ? ('config' as const) : ('flag' as const),
+        url: shownUrl(port)
+    };
+    const probe = await probeStatus(port);
+    if (probe.kind === 'status')
+        return probe.status.project === null || probe.status.project === projectId(configPath)
+            ? { ...at, kind: 'own', status: probe.status }
+            : { ...at, kind: 'other-project', status: probe.status };
+    if (probe.kind === 'refused') return { ...at, kind: 'free' };
+    const sse = await probeLivereload(port);
+    return { ...at, kind: sse === 'site' ? 'legacy' : sse };
+};
+
+// Есть ли на работающем сервере страница change'а — тем же запросом, что у `feedback`.
+export const hasChangePage = async (port: number, id: string): Promise<boolean> => {
+    if (!LISTENER_NAME.test(id)) return false;
+    const res = await fetch(`http://${HOST}:${port}${PAGE_PATH}?as=${id}`, {
+        headers: { [FEEDBACK_HEADER]: '1' },
+        signal: AbortSignal.timeout(1000)
+    }).catch(() => undefined);
+    return res?.status === 200;
 };

@@ -46,7 +46,8 @@ export { default as cmdSite } from '../dist/cli/commands/site.js';
 export {
     readServerState,
     removeServerState,
-    resolvePort,
+    findServer,
+    liveServer,
     stateFile,
     writeServerState
 } from '../dist/cli/server-state.js';

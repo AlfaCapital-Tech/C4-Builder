@@ -10,6 +10,7 @@ import { detectAgent } from '../agent.ts';
 import { compareVersions, newestVersion, npmCommand, viewArgs, WIN } from '../update.ts';
 import { packageSkills, SKILLS_DIR, skillRoots, stampIn, unstamp } from './skills.ts';
 import { WIZARD_KEYS } from '../wizard/collect.ts';
+import { defaultConfig } from '../../config/defaults.ts';
 import { type BuildOptions, type C4ConfigFile, parseConfig } from '../../config/options.ts';
 import { loadPlugins } from '../../core/plugins/load.ts';
 import { renderDiagram } from '../../core/render/diagrams.ts';
@@ -19,7 +20,7 @@ import { detectSystemJava, installedJavaAt, jreCacheDir } from '../../core/rende
 import { renderMermaid, teardownMermaid } from '../../core/render/mermaidrenderer.ts';
 import { PACKAGE_ROOT, packageJson as pkg, VENDOR_DIR } from '../../util/paths.ts';
 import { VENDORED_JAR } from '../../util/utils.ts';
-import { probeLivereload, resolvePort, shownUrl, stateFile } from '../server-state.ts';
+import { findServer, stateFile } from '../server-state.ts';
 
 // `c4builder doctor [group...]` (change cli-doctor): только читает — ничего не ставит и не скачивает,
 // пишет лишь временный каталог `--full`. Id проверок стабильны: на них опираются агенты и `--json`.
@@ -579,24 +580,49 @@ const project = async (ctx: Ctx): Promise<Check[]> => {
 // уже опознан по pid — пробу не повторяем; без -w у него нет /__livereload, и проба сочла бы его чужим.
 // Иначе чем занят порт: `site -w` отвечает на /__livereload потоком SSE, другой ответ — чужой процесс (D8).
 const runtime = async (ctx: Ctx): Promise<Check[]> => {
-    const { port, live } = await resolvePort(ctx.configPath, ctx.port);
-    const url = shownUrl(port);
-    const state = live ? 'site' : await probeLivereload(port);
-    const from = live ? ` (from ${path.basename(stateFile(ctx.configPath))})` : '';
+    // Конфиг уже прочитан readProject — webPort оттуда, а не вторым разбором файла.
+    const found = await findServer(ctx.configPath, {
+        port: ctx.port,
+        webPort: Number(ctx.project?.config?.webPort ?? defaultConfig.webPort)
+    });
+    const { port, url } = found;
+    const from = found.source === 'state' ? ` (from ${path.basename(stateFile(ctx.configPath))})` : '';
+    const portCheck = (): Check => {
+        switch (found.kind) {
+            case 'free':
+                return check('runtime.port', 'ok', `port ${port} free`);
+            case 'own':
+                return check(
+                    'runtime.port',
+                    'ok',
+                    found.status.watch
+                        ? `site -w is running at ${url}${from}`
+                        : `site is running at ${url} without -w${from}`
+                );
+            case 'legacy':
+                return check('runtime.port', 'ok', `site -w is running at ${url}`);
+            case 'unresponsive':
+                return check(
+                    'runtime.port',
+                    'warn',
+                    `site is running at ${url} (pid ${found.state.pid}) but did not answer in time${from}`,
+                    { fix: 'c4builder status' }
+                );
+            case 'other-project':
+                return check(
+                    'runtime.port',
+                    'warn',
+                    `port ${port} is used by the c4builder site of another project${found.status.project ? ` (${found.status.project})` : ''}`,
+                    { fix: 'c4builder site -w -p <port>' }
+                );
+            case 'busy':
+                return check('runtime.port', 'warn', `port ${port} is in use by another process`, {
+                    fix: 'c4builder site -w -p <port>'
+                });
+        }
+    };
     return [
-        state === 'busy'
-            ? check('runtime.port', 'warn', `port ${port} is in use by another process`, {
-                  fix: 'c4builder site -w -p <port>'
-              })
-            : check(
-                  'runtime.port',
-                  'ok',
-                  state === 'free'
-                      ? `port ${port} free`
-                      : live && !live.status.watch
-                        ? `site is running at ${url} without -w${from}`
-                        : `site -w is running at ${url}${from}`
-              ),
+        portCheck(),
         check(
             'runtime.agent',
             'ok',
