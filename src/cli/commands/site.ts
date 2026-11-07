@@ -490,7 +490,7 @@ export default (
                     res.status(500).json({ error: `could not read the review log: ${(e as Error).message}` });
                 }
             });
-            // Удаление строки журнала — как у вопроса: номер и текст ячейки, видимой на странице, плюс
+            // Удаление строки журнала: номер и текст ячейки, видимой на странице, плюс
             // все ячейки строки (таблицы без номеров: одна ячейка бывает общей у нескольких строк).
             app.delete(REVIEW_LOG_PATH, express.json({ limit: '64kb' }), (req, res) => {
                 if (!fromSite(req)) {

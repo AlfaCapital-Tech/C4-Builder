@@ -70,8 +70,10 @@ MUST NOT влиять на файл, раздел и ячейки журнала
 ### Requirement: Подписи кнопок у выделения
 Подписи кнопок у выделения SHALL называть адресата и MUST NOT совпадать с подписями панели пачки
 агенту. Ключ `buttons` SHALL задавать свои подписи — `agent` для **Tell agent**, `comment` для
-**Comment** — на любом языке интерфейса. Если `buttons.comment` не задан, кнопку **Comment** SHALL
-подписывать старый `reviewLog.label`, иначе словарь по языку.
+**Comment** — на любом языке интерфейса. Если `buttons.comment` не задан, а журнал задан ключом
+`reviewLog` (без `comments`, не выключен), кнопку **Comment** SHALL подписывать его `label`, иначе
+словарь по языку. `label` выключенного или перекрытого `comments` блока `reviewLog` MUST NOT
+действовать.
 
 #### Scenario: Своя подпись кнопки агенту
 - **WHEN** в `.c4builder` задано `"buttons": { "agent": "Fix it" }`, интерфейс на русском
@@ -84,3 +86,15 @@ MUST NOT влиять на файл, раздел и ячейки журнала
 #### Scenario: buttons побеждает label
 - **WHEN** заданы `reviewLog.label: "Журнал"` и `buttons.comment: "Note"`
 - **THEN** кнопка журнала у выделения подписана «Note»
+
+#### Scenario: label перекрытого reviewLog не действует
+- **WHEN** заданы `comments: { "file": "review.md" }` и `reviewLog: { "label": "Журнал" }`, ключа `buttons` нет
+- **THEN** кнопка журнала у выделения подписана подписью словаря
+
+### Requirement: Предупреждение о comments.label
+`label` внутри ключа `comments` SHALL игнорироваться, а CLI при сборке SHALL печатать предупреждение
+на английском, что подпись кнопки задаётся `buttons.comment`.
+
+#### Scenario: label внутри comments
+- **WHEN** в `comments` задан `label: "Журнал"`
+- **THEN** CLI при сборке печатает предупреждение `comments.label is ignored — use buttons.comment for the button text`, кнопка подписана подписью словаря

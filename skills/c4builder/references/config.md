@@ -56,7 +56,7 @@ Validation rules:
 | Key | Default | Meaning |
 |---|---|---|
 | `webPort` | `3000` | port of `c4builder --site` (`-p <n>` overrides) |
-| `buttons` | — | own labels of the selection buttons of `site -w`: `{ "agent": "…", "comment": "…" }` — instead of **Tell agent** and **Comment**, shown as is in any interface language; `buttons.comment` overrides the legacy `reviewLog.label` |
+| `buttons` | — | own labels of the selection buttons of `site -w`: `{ "agent": "…", "comment": "…" }` — instead of **Tell agent** and **Comment**, shown as is in any interface language; `buttons.comment` overrides the legacy `reviewLog.label`; a `label` inside `comments` is ignored with a warning |
 | `comments` | — | review log for the **Comment** button of `site -w` (former name `reviewLog`, still read when `comments` is absent): `{ "enabled": true, "file": "review.md", "heading": "Review" (or a list of variants), "cells": ["", "{artifact} → {section}", "{text}", "{author}", ""], "author": "" }` — the nearest `file` from the page's source up to the project root, a row of the `heading` table from the `cells` template (`{comment}`, `{quote}`, `{text}`, `{section}`, `{artifact}`, `{page}`, `{author}`, `{date}`, `{number}`); `author` defaults to `git config user.name`; no key — no button |
 | `uiLanguage` | `auto` | language of the `site -w` page interface: `auto` (browser language), `en` or `ru`; CLI output and feedback batches stay English |
 | `webTheme` | `vendor/vue.css` | docsify theme stylesheet |

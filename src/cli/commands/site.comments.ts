@@ -163,11 +163,11 @@ export const commentsSnippet = ({
         return null;
     };
 
-    var textIndex = function (roots, skip) {
+    var textIndex = function (roots) {
         var chars = [], map = [], lastBlock = null, prevSpace = true;
         var walk = function (node) {
             if (node.nodeType === 1) {
-                if (skip.indexOf(node) >= 0 || (node.tagName === 'SUP' && node.classList.contains('c4b-ref'))) return;
+                if (node.tagName === 'SUP' && node.classList.contains('c4b-ref')) return;
                 if (/^(SCRIPT|STYLE)$/.test(node.tagName)) return;
                 for (var c = node.firstChild; c; c = c.nextSibling) walk(c);
                 return;
@@ -223,13 +223,13 @@ export const commentsSnippet = ({
         return marks && marks.length ? marks : null;
     };
     // The quote is searched in its own section first: the same words may repeat on the page.
-    var locate = function (root, q, skip, cls, title) {
+    var locate = function (root, q, cls, title) {
         var marks = null;
         if (q.section) {
             var sh = findHeading(root, q.section);
-            if (sh && skip.indexOf(sh) < 0) marks = tryIn(textIndex(sectionOf(sh), skip), q.quote, cls, title);
+            if (sh) marks = tryIn(textIndex(sectionOf(sh)), q.quote, cls, title);
         }
-        return marks || tryIn(textIndex([root], skip), q.quote, cls, title);
+        return marks || tryIn(textIndex([root]), q.quote, cls, title);
     };
     var flash = function (row) {
         row.scrollIntoView({ block: 'center', behavior: 'smooth' });
@@ -304,9 +304,8 @@ export const commentsSnippet = ({
     // log page.
     var highlightRemarks = function (root, data) {
         if (!data.remarks || root.querySelector('mark.c4b-rhl')) return;
-        var skip = [];
         data.remarks.forEach(function (r) {
-            var marks = locate(root, { quote: collapse(r.quote), section: r.section }, skip, 'c4b-hl c4b-rhl', r.comment);
+            var marks = locate(root, { quote: collapse(r.quote), section: r.section }, 'c4b-hl c4b-rhl', r.comment);
             if (!marks) return;
             var sup = document.createElement('sup');
             sup.className = 'c4b-ref c4b-rref';
@@ -413,7 +412,7 @@ export const commentsSnippet = ({
         el.style.top = (rect.bottom + window.scrollY + 6) + 'px';
         el.style.left = Math.max(8, Math.min(rect.left + window.scrollX, window.innerWidth - el.offsetWidth - 8)) + 'px';
     };
-    // No visible button (questions off, no review log, no agent) — nothing to show at a selection.
+    // No visible button (no review log, no agent) — nothing to show at a selection.
     var anyButton = function () {
         for (var i = 0; i < btns.children.length; i++) if (!btns.children[i].hidden) return true;
         return false;
@@ -526,9 +525,8 @@ export const commentsSnippet = ({
             parent.normalize();
         }
         var page = pageFile();
-        var skip = [];
         draft().forEach(function (it) {
-            if (it.page === page) locate(root, { quote: collapse(it.quote), section: it.section }, skip, 'c4b-dhl', it.comment);
+            if (it.page === page) locate(root, { quote: collapse(it.quote), section: it.section }, 'c4b-dhl', it.comment);
         });
     };
 
@@ -557,7 +555,7 @@ export const commentsSnippet = ({
             general.hidden = true;
             expanded = false;
             saveDraft(draft().filter(function (it) { return ids.indexOf(it.id) < 0; }));
-        }, failure('reviewFailed')).then(function () { busy = false; renderPanel(); });
+        }, failure('sendFailed')).then(function () { busy = false; renderPanel(); });
     };
     var discard = button(t('discard'), function () {
         var n = draft().length;
@@ -664,7 +662,7 @@ export const commentsSnippet = ({
     // kind: 'feedback' goes to the agent, 'review' to the review log.
     var open = function (data, rect, kind) {
         close();
-        var feedback = kind === 'feedback', review = kind === 'review';
+        var feedback = kind === 'feedback';
         pop = document.createElement('div');
         pop.className = 'c4b-cpop';
         var quote = document.createElement('blockquote');
@@ -674,10 +672,12 @@ export const commentsSnippet = ({
         var row = document.createElement('div');
         row.className = 'c4b-row';
         var hint = document.createElement('small');
-        // Several heading variants: the file alone — which one is used depends on the log.
-        var where = review ? REVIEW_LOG.file + (REVIEW_LOG.heading.length === 1 ? ' / ' + REVIEW_LOG.heading[0] : '') : '';
         if (feedback) hint.className = 'c4b-listen';
-        else hint.textContent = hint.title = t('commentTo', { target: where + (data.section ? ' / ' + data.section : '') });
+        else {
+            // Several heading variants: the file alone — which one is used depends on the log.
+            var where = REVIEW_LOG.file + (REVIEW_LOG.heading.length === 1 ? ' / ' + REVIEW_LOG.heading[0] : '');
+            hint.textContent = hint.title = t('commentTo', { target: where + (data.section ? ' / ' + data.section : '') });
+        }
         var actions = document.createElement('span');
         var buttons = [button(t('cancel'), close)];
         var sending = false, now = null;
@@ -693,7 +693,7 @@ export const commentsSnippet = ({
                 action(comment).then(close, function (err) {
                     sending = false;
                     sync();
-                    failure(feedback ? 'feedbackFailed' : 'remarkFailed')(err);
+                    failure(feedback ? 'sendFailed' : 'remarkFailed')(err);
                 });
             };
         };

@@ -3,7 +3,7 @@
 export { cachedJava, detectSystemJava, resolveJava } from '../dist/core/render/jre.js';
 export { isPathInside } from '../dist/util/archive.js';
 export { watchTree } from '../dist/util/watch.js';
-export { commentsLog, configSchema, isValidPort } from '../dist/config/schema.js';
+export { commentsLog, configSchema, configWarnings, isValidPort } from '../dist/config/schema.js';
 export { parseConfig } from '../dist/config/options.js';
 export { defaultConfig } from '../dist/config/defaults.js';
 export { rasterizeSvgToPng, resvgFontOptions } from '../dist/core/render/pngraster.js';

@@ -26,6 +26,13 @@
 - [x] 4.3 Актуализация: `docs/ru/src`, `docs/en/src` (таблица ключей, раздел журнала, якоря), `skills/*` (включая `references/`), `template/AGENTS.md`, строка в `## Unreleased` CHANGELOG.md; проверка — grep `reviewLog` в docs/skills/template остаётся только в упоминании синонима, тесты `docs-parity` и `skills` зелёные
 - [x] 4.4 Полный прогон: `npm run build && npm test`, `npx biome ci src test skills docs/docsify-template.mjs`
 
+## 5. Правки по ревью
+
+- [x] 5.1 `commentsLog`: `label` только у журнала из `reviewLog`; проверка — `test/config.test.mjs` (перекрытый и выключенный `reviewLog` не дают подпись)
+- [x] 5.2 Предупреждение CLI о `comments.label` (`configWarnings` в `schema.ts`, вывод в `dispatch.ts`); документация RU/EN (05) и `skills/c4builder/references/config.md`; проверка — `test/config.test.mjs`
+- [x] 5.3 Упрощения клиента: без мёртвой ветки подсказки и параметра `skip`; один ключ `sendFailed` вместо `reviewFailed`/`feedbackFailed`; комментарии без упоминаний вопросов; проверка — `npx vitest run test/site-comments-client.test.mjs test/cli-language.test.mjs`
+- [x] 5.4 Прогон: `npm run build && npm test`, `npx biome ci src test skills docs/docsify-template.mjs`
+
 ## Workflow follow-up
 
 - После merge — архив change'а (`/opsx:archive`): при синхронизации обновить `## Purpose` спеки `site-comments` (теперь это кнопки у выделения и журнал, а не вопросы).

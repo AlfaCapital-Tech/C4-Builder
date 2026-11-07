@@ -238,6 +238,7 @@ comment and press **Add comment** (`Ctrl+Enter`). The button appears when `.c4bu
 
 The key's former name is `reviewLog` with the same fields: it works while `.c4builder` has no
 `comments` (with both, `comments` applies). Its `label` field labels the button unless `buttons.comment` is set.
+`comments` has no `label`: the build warns about it and labels the button only from `buttons.comment`.
 
 Watch rebuilds the site and the page reloads with the comment in place. On the log's own page (the
 page whose source is `file`) the rows of the `heading` section have a «×» button (shown on hover): it

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { commentsLog, configSchema, isValidPort, parseConfig } from './dist.mjs';
+import { commentsLog, configSchema, configWarnings, isValidPort, parseConfig } from './dist.mjs';
 
 // Регрессии конфига против 0.2.x (max-ревью PR #8): легаси-значения из рукописных
 // `.c4builder` не должны ни падать, ни превращаться в мусорные строки.
@@ -180,8 +180,22 @@ describe('comments и прежний reviewLog', () => {
         expect(log({ comments: { enabled: false } })).toBeUndefined();
         expect(log({ comments: { enabled: false }, reviewLog: {} })).toBeUndefined();
         expect(log({ reviewLog: { label: 'Log' } }).label).toBe('Log');
-        expect(log({ comments: {}, reviewLog: { label: 'Log' } }).label).toBe('Log');
         expect(log({ comments: {} })).not.toHaveProperty('label');
+    });
+    it('commentsLog: label — только у журнала из reviewLog', () => {
+        const log = (raw) => commentsLog(configSchema.parse(raw));
+        expect(log({ comments: {}, reviewLog: { label: 'Log' } })).not.toHaveProperty('label');
+        expect(log({ comments: {}, reviewLog: { enabled: false, label: 'Log' } })).not.toHaveProperty(
+            'label'
+        );
+        expect(log({ reviewLog: { enabled: false, label: 'Log' } })).toBeUndefined();
+    });
+    it('configWarnings: comments.label игнорируется с предупреждением', () => {
+        expect(configWarnings({ comments: { label: 'X' } })).toEqual([
+            'comments.label is ignored — use buttons.comment for the button text'
+        ]);
+        expect(configWarnings({ comments: {}, reviewLog: { label: 'X' } })).toEqual([]);
+        expect(configWarnings({})).toEqual([]);
     });
 });
 

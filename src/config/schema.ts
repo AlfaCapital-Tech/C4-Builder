@@ -162,15 +162,27 @@ export type PluginEntry = C4ConfigFile['plugins'][number];
 /**
  * Журнал комментариев из конфига: ключ `comments`, без него — прежний `reviewLog`. При обоих
  * действует `comments` целиком, без слияния полей: иначе непонятно, откуда взялся `file`.
- * `label` берётся из `reviewLog` в любом случае — это прежняя подпись кнопки, а не настройка
- * журнала (ниже `buttons.comment` по приоритету). `enabled: false` — журнала нет.
+ * `label` — только у журнала из `reviewLog`: подпись выключенного или перекрытого блока
+ * подписывала бы кнопку чужого журнала. `enabled: false` — журнала нет.
  */
 export const commentsLog = (
     c: Pick<C4ConfigFile, 'comments' | 'reviewLog'>
 ): (NonNullable<C4ConfigFile['comments']> & { label?: string }) | undefined => {
     const log = c.comments ?? c.reviewLog;
     if (!log || log.enabled === false) return undefined;
-    const { label: _, ...fields } = log as NonNullable<C4ConfigFile['reviewLog']>;
-    const label = c.reviewLog?.label;
+    const { label, ...fields } = log as NonNullable<C4ConfigFile['reviewLog']>;
     return label ? { ...fields, label } : fields;
+};
+
+/**
+ * Предупреждения о ключах, которые схема молча отбрасывает, хотя пользователь явно ждал от них
+ * эффекта. `comments.label` — типичный след переименования `reviewLog` → `comments`: без
+ * предупреждения кнопка тихо возвращалась к подписи по умолчанию.
+ */
+export const configWarnings = (raw: Record<string, unknown>): string[] => {
+    const warnings: string[] = [];
+    const comments = raw.comments;
+    if (comments && typeof comments === 'object' && 'label' in comments)
+        warnings.push('comments.label is ignored — use buttons.comment for the button text');
+    return warnings;
 };
