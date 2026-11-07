@@ -55,6 +55,8 @@
   пересобрал бы `dist`, который раздаёт первый сервер. С `--open-change <id>` проверяем страницу тем
   же `PAGE_PATH?as=<id>`, что и `feedback`: 404 — прежнее предупреждение, адрес всё равно
   открывается. Без `--open*` — код 1: процесс, ожидавший запустить сервер, его не запустил.
+  Эндпоинт `PAGE_PATH` для этого выносится из блока `-w` (как и `/__c4builder/status`, D5): иначе на
+  сервере без `-w` проверка всегда давала бы 404 и ложное предупреждение.
 - **D8. `c4builder status`:** текст — строка `site is running at <url> (pid N, c4builder V, watch)`,
   агентский режим, слушатели `name — listening|reconnecting, N queued`, пачки без адресата; JSON —
   `{ running, url, port, source, pid, version, watch, agent, listeners, unaddressed }`, при
@@ -64,6 +66,9 @@
 - **D9. `doctor runtime` и `feedback` — через D6;** в doctor адрес и источник порта видны в
   сообщении. Подсказка агентского режима сервера про `-p` остаётся: она верна и без файла
   (каталог только для чтения).
+  Сервер из действительного файла уже опознан по `pid` — doctor не повторяет пробу `/__livereload`
+  (у сервера без `-w` её нет, и он считался бы чужим процессом): `ok` «site -w is running at <url>»
+  или «site is running at <url> without -w» с пометкой `(from .c4builder.server.json)`.
 
 ## Risks / Trade-offs
 
