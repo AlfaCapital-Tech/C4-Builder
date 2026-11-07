@@ -3,6 +3,19 @@
 User-facing changes of C4-Builder. Every pull request that changes behaviour adds a line to
 `## Unreleased`; the release commit renames it to `## vX.Y.Z`.
 
+## Unreleased
+
+- `openspec` plugin: the `filter` option — dropdown filters above the Changes tables (summary,
+  Changes page, group pages; checkboxes, a search box for long lists, a `Reset` button) that keep
+  only the rows with the selected `Schema` or extra-column values, e.g.
+  `"filter": ["Schema", "Assignee"]`; multi-select, AND between columns, a nested change is judged
+  by its own value and keeps its parent dimmed for context; the selection is stored in the browser
+  per column header and follows the reader across the pages; the script `changes-filter.js` is
+  linked on every site with the plugin, like its stylesheet
+- plugin contract: `assets.scripts` / `assets.styles` accept `{ name, content }` next to file
+  paths — the core writes the string to `dist/vendor/plugins/<name>/`, so a plugin keeps its own
+  site script in source like the core scripts
+
 ## v0.14.0
 
 - `site` / `--site -w` on a taken port suggests a free one: `port 3000 is already in use — pass a

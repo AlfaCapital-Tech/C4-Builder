@@ -458,7 +458,10 @@ describe('плагин openspec: опция groupKey', () => {
     let d;
     const readD = (rel) => fs.readFileSync(path.join(d, 'docs', rel), 'utf8');
     beforeAll(() => {
-        d = makeFixture('group', [['openspec', { parentKey: 'x-parent', groupKey: 'x-team' }]]);
+        // filter без columns: фильтр только по Schema — атрибут и на странице группы, и в секциях
+        d = makeFixture('group', [
+            ['openspec', { parentKey: 'x-parent', groupKey: 'x-team', filter: ['Schema'] }]
+        ]);
         addFamily(d);
         const s = path.join(d, 'openspec');
         write(s, 'changes/dig-3-root/.openspec.yaml', 'schema: spec-driven\nx-team: Service\n');
@@ -473,6 +476,14 @@ describe('плагин openspec: опция groupKey', () => {
         runBuild(d);
     });
     afterAll(() => fs.rmSync(d, { recursive: true, force: true }));
+
+    it('filter без columns: атрибут обёртки на странице группы и в секциях, без модификатора --extra', () => {
+        const wrap = '<div class="c4b-openspec-changes" data-c4b-filter="2">';
+        expect(readD('OpenSpec/Changes/Service/Service.md')).toContain(wrap);
+        expect(readD('OpenSpec/Changes/Changes.md').match(/data-c4b-filter="2"/g).length).toBeGreaterThan(1);
+        expect(readD('OpenSpec/Changes/Changes.md')).not.toContain('--extra');
+        expect(readD('OpenSpec/OpenSpec.md')).toContain(wrap);
+    });
 
     it("sidebar: группы по алфавиту, под ними change'ы и их вложенные; без группы — после групп", () => {
         const lines = readD('_sidebar.md').trimEnd().split('\n');
@@ -631,6 +642,8 @@ describe('плагин openspec: опция columns', () => {
                 'openspec',
                 {
                     parentKey: 'x-parent',
+                    // фильтр на сайте: номера колонок идут в порядке таблицы — Schema 2, Assignee 5
+                    filter: ['Assignee', 'Schema'],
                     columns: [
                         { key: 'x-assignee', title: 'Assignee' },
                         { key: 'x-jira', title: 'Jira' },
@@ -689,15 +702,25 @@ describe('плагин openspec: опция columns', () => {
     it('таблица в обёртке раскладки, стиль плагина подключён', () => {
         const md = readD('OpenSpec/Changes/Changes.md');
         // с columns — модификатор минимальной ширины
-        expect(md).toContain('<div class="c4b-openspec-changes c4b-openspec-changes--extra">');
+        const wrap = '<div class="c4b-openspec-changes c4b-openspec-changes--extra" data-c4b-filter="2,5">';
+        expect(md).toContain(wrap);
         expect(md).toMatch(
-            /<div class="c4b-openspec-changes c4b-openspec-changes--extra">\n\n\| Change \|[\s\S]*\|\n\n<\/div>/
+            /<div class="c4b-openspec-changes c4b-openspec-changes--extra" data-c4b-filter="2,5">\n\n\| Change \|[\s\S]*\|\n\n<\/div>/
         );
-        // без columns (основная фикстура) — обёртка без модификатора
+        // сводка — та же обёртка с атрибутом
+        expect(readD('OpenSpec/OpenSpec.md')).toContain(wrap);
+        // без columns и filter (основная фикстура) — обёртка без модификатора и атрибута
         expect(read('OpenSpec/Changes/Changes.md')).toContain('<div class="c4b-openspec-changes">');
         expect(read('OpenSpec/Changes/Changes.md')).not.toContain('--extra');
+        expect(read('OpenSpec/Changes/Changes.md')).not.toContain('data-c4b-filter');
         expect(readD('index.html')).toContain('vendor/plugins/openspec/changes.css');
         expect(fs.existsSync(path.join(d, 'docs', 'vendor/plugins/openspec/changes.css'))).toBe(true);
+        // скрипт фильтра — ассет плагина, подключён всегда: без атрибута обёртки он ничего не делает
+        expect(readD('index.html')).toContain('vendor/plugins/openspec/changes-filter.js');
+        expect(readD('index.html')).toContain('vendor/plugins/openspec/changes-filter.css');
+        expect(readD('vendor/plugins/openspec/changes-filter.css')).toContain('.c4b-openspec-filter-menu');
+        expect(fs.existsSync(path.join(d, 'docs', 'vendor/plugins/openspec/changes-filter.js'))).toBe(true);
+        expect(read('index.html')).toContain('vendor/plugins/openspec/changes-filter.js');
     });
 
     it('заголовок и значения колонок; нет значения — прочерк', () => {
