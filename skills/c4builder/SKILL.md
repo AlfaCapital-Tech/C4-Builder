@@ -49,6 +49,10 @@ How the source tree becomes pages:
 
 ## The loop: edit → check → build
 
+Commands are positional (`c4builder site -w`, `c4builder new`, `c4builder config`). Unsure about a
+command? `c4builder help <command>` (same as `<command> --help`) prints its options, output format
+and exit codes; it writes nothing and works outside a project.
+
 1. **Edit** markdown and diagrams under `src/`.
 2. **Check every diagram you changed** — fast, no project build, writes nothing:
 
@@ -72,7 +76,7 @@ How the source tree becomes pages:
    c4builder
    ```
 
-   With a complete `.c4builder` (written by `c4builder --new --name <name> -y` or by the
+   With a complete `.c4builder` (written by `c4builder new --name <name> -y` or by the
    first interactive run) this is a one-off, non-interactive build. A missing or partial
    config needs the interactive wizard; without a terminal the run stops with exit code 1.
    Do not drive the wizard: ask the user or write the full config (references/config.md). A diagram that fails here aborts the build with a long
@@ -80,7 +84,7 @@ How the source tree becomes pages:
    the changed files to get the short message.
 4. **Look at the result** in `docs/`: `docs/<folder>/README.md` (markdown collection),
    `docs/index.html` + `docs/<folder>/<folder>.md` (site), `docs/<folder>/<diagram>.svg`.
-5. **Live preview for a human:** `c4builder --site -w` builds, serves on
+5. **Live preview for a human:** `c4builder site -w` builds, serves on
    `http://localhost:3000` (`webPort`, or `-p <n>`), rebuilds on save and reloads the
    browser; `-o` opens it, `--open-change <change-id>` opens the OpenSpec change page by its short
    address `#/change/<change-id>` (a warning on stderr when the site has no such change). It
@@ -107,7 +111,7 @@ skill (`/c4builder-review [change-id|page]`): it checks the server, gives the li
 runs the batch loop.
 
 In short: under an agent (`CLAUDECODE`, `CODEX_THREAD_ID`, `GEMINI_CLI`, `OPENCODE`, `COPILOT_CLI`,
-`AI_AGENT`, or `--agent`) `c4builder --site -w` adds a **Feedback** button to text selected on a
+`AI_AGENT`, or `--agent`) `c4builder site -w` adds a **Feedback** button to text selected on a
 page. The comments do not go into the files: `c4builder feedback --wait --as <name>`, run in the
 background with your change or task as `<name>`, exits with one batch on stdout. When `<name>` is an
 OpenSpec change of the site, it first prints `Change page: http://localhost:<port>/#/change/<name>`
@@ -170,7 +174,7 @@ messages.
 ## Config and plugins
 
 - Read [references/config.md](references/config.md) before editing `.c4builder`: unknown
-  keys are **silently dropped**, so a typo does nothing. `c4builder --list` prints the
+  keys are **silently dropped**, so a typo does nothing. `c4builder list` prints the
   current config.
 - Read [references/plugins.md](references/plugins.md) when the project has or needs
   `plugins` — `openspec` (OpenSpec store as a site section), `openapi` (swagger-ui and AsyncAPI pages) or
@@ -218,7 +222,7 @@ reads, its `fix:` lines say what to run.
 
 - Editing generated files in `docs/` instead of `src/`.
 - Remote `!include` URLs instead of `<C4/...>` stdlib includes.
-- Running `c4builder --site -w` or `c4builder feedback --wait --as <name>` in the foreground — the
+- Running `c4builder site -w` or `c4builder feedback --wait --as <name>` in the foreground — the
   agent hangs.
 - Forgetting `c4builder check` and reading a Java stack trace from the full build instead.
 - A page "missing" from the output because its file or folder starts with `_`.

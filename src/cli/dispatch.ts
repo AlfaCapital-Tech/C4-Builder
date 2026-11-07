@@ -1,11 +1,11 @@
 import figlet from 'figlet';
-import { InvalidArgumentError, program } from 'commander';
+import { type Command, InvalidArgumentError, program } from 'commander';
 import chalk from 'chalk';
 import path from 'node:path';
 
 import Configstore from 'configstore';
 
-import cmdHelp from './commands/help.ts';
+import cmdDocs from './commands/docs.ts';
 import cmdNewProject from './commands/new.ts';
 import cmdJre from './commands/jre.ts';
 import cmdCheck from './commands/check.ts';
@@ -15,6 +15,7 @@ import cmdFeedback from './commands/feedback.ts';
 import cmdSkills, { skillsNotice } from './commands/skills.ts';
 import cmdDoctor from './commands/doctor.ts';
 import { detectAgent } from './agent.ts';
+import { COMMAND_HELP, commandHelp, generalHelp } from './help.ts';
 import { cmdUpdate, pendingUpdate, startUpdateCheck } from './update.ts';
 import cmdCollect from './wizard/collect.ts';
 import { build, type BuildResult } from '../core/build.ts';
@@ -49,29 +50,6 @@ interface ConfStore {
     delete(key: string): void;
     clear(): void;
 }
-
-// Позиционные подкоманды: allowExcessArguments пропускает любые, список — единственный фильтр.
-// Commander о них не знает — аргументы и описания здесь же, для блока команд в --help.
-const COMMANDS: Record<string, [args: string, about: string]> = {
-    check: ['<files...>', 'check diagrams without a build, exit code 0 or 1'],
-    jre: ['info|install', 'which Java will be used | download a JRE in advance'],
-    site: ['', 'build and serve the site locally (same as --site)'],
-    new: ['', 'create a project from the template (same as --new)'],
-    config: ['', 'setup wizard with the current values (same as --config)'],
-    update: ['', 'update a global npm install to the newest version'],
-    feedback: ['', 'wait for page feedback from site -w (--wait --as <name>)'],
-    skills: ['', 'install or update the agent skills in the current folder'],
-    doctor: ['[group...]', 'diagnose env, skills, render, project, runtime (read-only)']
-};
-
-const commandsHelp = (): string => {
-    const rows = Object.entries(COMMANDS).map(([name, [args, about]]): [string, string] => [
-        `${name} ${args}`.trim(),
-        about
-    ]);
-    const width = Math.max(...rows.map(([usage]) => usage.length));
-    return `\nCommands:\n${rows.map(([usage, about]) => `  ${usage.padEnd(width)}  ${about}`).join('\n')}`;
-};
 
 const intro = () => {
     console.log(chalk.blue(figlet.textSync('c4builder')));
@@ -173,64 +151,85 @@ function getOptions(c: Partial<C4ConfigFile>): BuildOptions | Partial<BuildOptio
     };
 }
 
-export default async () => {
-    program
+// Регистрация опций — отдельно от запуска: тест полноты справки сверяет с ней таблицы help.ts.
+// Описания без «for `x`:» — к какой команде относится опция, видно по справке команды.
+export const defineOptions = (cmd: Command): Command =>
+    cmd
         .name('c4builder')
         .usage('[command] [options]')
-        .version(pkg.version)
-        .option('--new', 'create a new project from template')
-        .option('--name <name>', 'project name for --new (skips the name prompt)')
-        .option('-y, --yes', 'non-interactive --new: defaults, no prompts (requires --name)')
-        .option('--force', 'for `jre install`: force JRE download even if system java is present')
-        .option('--config', 'change configuration for the current directory')
-        .option('-c, --config-file <.c4builder>', 'set the configuration file relative path')
-        .option('--list', 'display the current configuration')
-        .option('--reset', 'clear all configuration')
-        .option('--site', 'serve the generated site')
+        .version(pkg.version, '-V, --version', 'print the version')
+        // Встроенная справка commander срабатывала внутри parse() и на `check --help` печатала
+        // справку программы целиком; своя опция оставляет выбор справки диспетчеру.
+        .helpOption(false)
+        .option('-h, --help', 'show help (c4builder <command> --help for a command)')
+        .option('--new', 'same as c4builder new')
+        .option('--name <name>', 'project name (skips the name prompt)')
+        .option('-y, --yes', 'non-interactive: defaults, no prompts (requires --name)')
+        .option('--force', 'with install: download a JRE even if system java is suitable')
+        .option('--config', 'same as c4builder config')
+        .option('-c, --config-file <path>', 'configuration file relative to the current folder (.c4builder)')
+        .option('--list', 'same as c4builder list')
+        .option('--reset', 'same as c4builder reset')
+        .option('--site', 'same as c4builder site')
         .option('-w, --watch', 'watch for changes and rebuild')
-        .option('-o, --open', 'open the generated site in the browser (with --site)')
+        .option('-o, --open', 'open the site in the browser')
         // Отдельная опция, а не `--open [id]`: необязательное значение забирало бы следующий
         // токен (`-o site`, `-ow`, `-wop 3918` меняли смысл).
         .option(
             '--open-change <id>',
-            'open the page of the OpenSpec change <id> (#/change/<id>) in the browser (with --site)'
+            'open the page of the OpenSpec change <id> (#/change/<id>) in the browser'
         )
-        .option('--agent', 'with --site -w: accept page feedback for a coding agent (c4builder feedback)')
-        .option('--no-agent', 'with --site -w: no agent feedback even when run by a coding agent')
-        .option('--wait', 'for `feedback`: wait for the next batch of page feedback')
-        .option(
-            '--as <name>',
-            'for `feedback`: listener name (your change or task) — the page sends batches to it'
-        )
-        .option('--json', 'for `doctor`: one JSON object with stable check ids')
-        .option('-v, --verbose', 'for `doctor`: absolute paths and details')
-        .option('--strict', 'for `doctor`: exit code 1 on warnings too')
-        .option('--full', 'for `doctor`: build the template project in a temporary folder')
-        .option('--offline', 'for `doctor`: no network requests')
-        .option('--docs', 'a brief explanation for the available configuration options')
+        .option('--agent', 'with -w: accept page feedback for a coding agent (c4builder feedback)')
+        .option('--no-agent', 'with -w: no agent feedback even when run by a coding agent')
+        .option('--wait', 'wait for the next batch of page feedback')
+        .option('--as <name>', 'listener name (your change or task) — the page sends batches to it')
+        .option('--json', 'one JSON object with stable check ids')
+        .option('-v, --verbose', 'absolute paths and details')
+        .option('--strict', 'exit code 1 on warnings too')
+        .option('--full', 'build the template project in a temporary folder')
+        .option('--offline', 'no network requests')
+        .option('--docs', 'same as c4builder docs')
         .option('--system-fonts', 'render with system fonts instead of the bundled one (not deterministic)')
-        .option('-p, --port <n>', 'port used for serving the generated site', (v) => {
+        .option('-p, --port <n>', 'port of the local site (default: webPort of .c4builder)', (v) => {
             // parseInt молча резал бы опечатку ('30OO' → 30) — валидируем строго.
             if (!isValidPort(v)) throw new InvalidArgumentError('expected a TCP port: an integer 1..65535');
             return Number(v);
         })
-        .allowExcessArguments() // позиционные аргументы подкоманд `jre <action>` и `check <file...>`
-        .addHelpText('after', commandsHelp())
-        .parse(process.argv);
+        .allowExcessArguments(); // позиционные аргументы подкоманд `jre <action>` и `check <file...>`
+
+const unknownCommand = (name: string): never => {
+    console.error(chalk.red(`unknown command: ${name}`));
+    console.error(
+        `available commands: ${Object.keys(COMMAND_HELP).join(', ')} (see c4builder --help for options)`
+    );
+    process.exit(1);
+};
+
+// Флаговая форма команды вместе с --help (`c4builder --site --help`) — справка этой команды.
+const ALIAS_COMMANDS = ['site', 'new', 'config', 'list', 'reset', 'docs'];
+
+export default async () => {
+    defineOptions(program).parse(process.argv);
 
     const opts = program.opts();
     const [cmd, ...cmdArgs] = program.args;
 
-    // allowExcessArguments глотает любой позиционный аргумент — без этой проверки
-    // опечатка (`c4builder nwe`) молча превращалась бы в сборку.
-    if (cmd !== undefined && !Object.hasOwn(COMMANDS, cmd)) {
-        console.error(chalk.red(`unknown command: ${cmd}`));
-        console.error(
-            `available commands: ${Object.keys(COMMANDS).join(', ')} (see c4builder --help for options)`
-        );
-        process.exit(1);
+    // allowExcessArguments глотает любой позиционный аргумент — без этой проверки опечатка
+    // (`c4builder nwe`) молча превращалась бы в сборку. Таблица справки — единственный список команд.
+    if (cmd !== undefined && !Object.hasOwn(COMMAND_HELP, cmd)) unknownCommand(cmd);
+    // Справка — до уведомления о версии, Configstore и проверки терминала: она не должна ни создавать
+    // файлов, ни скачивать JRE (`jre install --help`), ни проверять файл (`check x.puml --help`).
+    if (opts.help || cmd === 'help') {
+        // `help <cmd>` — как `<cmd> --help`; `help --help` — справка самой команды help.
+        const topic =
+            cmd === 'help'
+                ? (cmdArgs[0] ?? (opts.help ? 'help' : undefined))
+                : (cmd ?? ALIAS_COMMANDS.find((c) => opts[c]));
+        if (topic !== undefined && !Object.hasOwn(COMMAND_HELP, topic)) unknownCommand(topic);
+        process.stdout.write(topic === undefined ? generalHelp(program) : commandHelp(program, topic));
+        return;
     }
-    // --version/--help уже вышли в parse. Уведомление — по кэшу прошлой проверки, до её
+    // --version уже вышел в parse. Уведомление — по кэшу прошлой проверки, до её
     // перезапуска; exit покрывает и выходы через process.exit. Вывод `feedback` читает агент; doctor
     // сообщает о новой версии сам, а фоновый `npm view` ходил бы в сеть и с --offline.
     if (cmd !== 'update' && cmd !== 'feedback' && cmd !== 'doctor') {
@@ -256,12 +255,12 @@ export default async () => {
     if (cmd === 'skills') return cmdSkills();
     // Диагностика — тоже до Configstore и проверки терминала: работает вне проекта, в CI и под агентом.
     if (cmd === 'doctor') return cmdDoctor(cmdArgs, opts);
-    // `site`/`new`/`config` — позиционные синонимы одноимённых флагов: эту форму печатают
-    // подсказки CLI и учат README, шаблон и скиллы.
+    // `site`/`new`/`config`/`list`/`reset`/`docs` — позиционные синонимы одноимённых флагов:
+    // эту форму печатают справка и подсказки CLI, учат README, шаблон и скиллы.
     if (cmd) opts[cmd] = true;
     // Справочные команды не должны оставлять файлов: конструктор Configstore сразу пишет
     // .c4builder и .c4builder.cache, и следующий запуск считал бы каталог проектом.
-    if (opts.docs) return cmdHelp();
+    if (opts.docs) return cmdDocs();
     const configPath = path.join(process.cwd(), opts.configFile ?? '.c4builder');
     if ((opts.list || opts.reset) && !opts.new && !fs.existsSync(configPath)) {
         console.error(
@@ -275,7 +274,7 @@ export default async () => {
     if (!opts.new && !process.stdin.isTTY && !fs.existsSync(configPath)) {
         console.error(
             chalk.red(
-                `no ${opts.configFile ?? '.c4builder'} in ${process.cwd()} — run c4builder --new, or c4builder --config in a terminal`
+                `no ${opts.configFile ?? '.c4builder'} in ${process.cwd()} — run c4builder new, or c4builder config in a terminal`
             )
         );
         process.exit(1);

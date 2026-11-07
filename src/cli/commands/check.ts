@@ -81,7 +81,8 @@ const CHECKERS: Record<string, (abs: string) => Promise<unknown>> = {
     '.mmd': async (abs) => renderMermaid(await readFile(abs, 'utf8'), relative(abs)),
     '.wireflow.json': async (abs) => renderWireflow(await readFile(abs, 'utf8'), relative(abs))
 };
-const EXTENSIONS = Object.keys(CHECKERS);
+// Экспорт — для справки `check --help`: список расширений там не расходится с кодом.
+export const EXTENSIONS = Object.keys(CHECKERS);
 const EXPECTED = `${EXTENSIONS.slice(0, -1).join(', ')} or ${EXTENSIONS[EXTENSIONS.length - 1]}`;
 
 const checkerFor = (abs: string): ((abs: string) => Promise<unknown>) | undefined => {

@@ -25,15 +25,15 @@ If you would rather not install Node and Java, use the
 ## First project
 
 ```bash
-c4builder --new --name demo -y # project from the template with a full config, no questions
+c4builder new --name demo -y   # project from the template with a full config, no questions
 cd demo
 c4builder                      # build into docs/
 c4builder site                 # site at http://localhost:3000
 ```
 
 Without `-y`, c4builder asks for the project name, and the first build walks you through the
-setup wizard. Since version 0.5.0 the shorter `c4builder new --name demo -y` works too; 0.4.0 has
-no positional form, only the `--new` flag.
+setup wizard. The flag forms `--new`, `--site`, `--config` work as
+aliases — 0.4.0 has no positional commands yet, only the flags.
 
 The new project contains the "Internet Banking System" demo from the C4 model: context,
 containers, deployment, a dynamic diagram, sequence, class and ditaa diagrams, a page in Cyrillic
@@ -46,7 +46,7 @@ the diagrams (since 0.5.0; it does not end up in the documentation).
 ## Live preview
 
 ```bash
-c4builder --site -w
+c4builder site -w
 ```
 
 Builds the project, starts a local server and rebuilds the site on every save in `src/`. The
@@ -55,9 +55,9 @@ changes the port.
 
 ## Changing the settings
 
-`c4builder --config` (since 0.5.0 also `c4builder config`) runs the wizard again with the
+`c4builder config` runs the wizard again with the
 current values as defaults;
-`c4builder --list` prints the config. `.c4builder` is plain JSON and can be edited by hand: every
+`c4builder list` prints the config. `.c4builder` is plain JSON and can be edited by hand: every
 key is described on the [CLI & configuration](05%20CLI%20and%20configuration/05%20CLI%20and%20configuration.md)
 page.
 

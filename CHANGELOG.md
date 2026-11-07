@@ -3,6 +3,15 @@
 User-facing changes of C4-Builder. Every pull request that changes behaviour adds a line to
 `## Unreleased`; the release commit renames it to `## vX.Y.Z`.
 
+## Unreleased
+
+- `c4builder <command> --help` (`-h`, `c4builder help <command>`) prints the help of that command:
+  purpose, usage, its own options, output format, exit codes and examples — no files, no config,
+  no new-version notice. `c4builder --help` lists the commands and only the global options
+  (`-c`, `-w`, `-p`, `--system-fonts`, `-V`, `-h`); scripts parsing it see fewer flags. New
+  positional forms `c4builder list`, `reset`, `docs`; the flag forms `--site`, `--new`, `--config`,
+  `--list`, `--reset`, `--docs` still work but are no longer shown in the help (#63)
+
 ## v0.14.0
 
 - `site` / `--site -w` on a taken port suggests a free one: `port 3000 is already in use — pass a

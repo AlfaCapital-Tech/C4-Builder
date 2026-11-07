@@ -9,10 +9,11 @@ into `docs/`.
 ```bash
 c4builder                    # build docs/ (non-interactive with a complete .c4builder)
 c4builder check <file...>    # validate .puml / .iuml / .d2 / .bpmn / .mmd / .wireflow.json files, exit code 0 = OK
-c4builder --site -w          # live preview on http://localhost:3000 - never exits
-c4builder --site -w --open-change <change-id>  # the same, opens the OpenSpec change page #/change/<change-id>
+c4builder site -w            # live preview on http://localhost:3000 - never exits
+c4builder site -w --open-change <change-id>  # the same, opens the OpenSpec change page #/change/<change-id>
 c4builder feedback --wait --as <name>  # wait for comments from the preview page sent to <name>
 c4builder doctor             # something does not work? run this first: read-only checks, a fix: line per problem
+c4builder help <command>     # options, output format and exit codes of a command (same as <command> --help)
 ```
 
 Not installed: `npm i -g @alfacapital-tech/c4builder` (Node.js 22.17+; Java 17+ is used
@@ -26,7 +27,7 @@ updates it.
    look like `✗ <file>: line <N>: <message>` (BPMN: `✗ <file>: <element id> [<rule>] <message>`; wireflow: one line per problem with
    the node or edge id).
    Fix until the exit code is 0.
-3. Run `c4builder` and make sure it exits with code 0. Leave `c4builder --site -w` to a
+3. Run `c4builder` and make sure it exits with code 0. Leave `c4builder site -w` to a
    human or run it in the background. When the human reviews the pages, also run
    `c4builder feedback --wait --as <name>` in the background, `<name>` being your change or
    task: on exit it prints a batch of comments (page, `Sources`, quote, text) — apply them to
@@ -74,7 +75,7 @@ updates it.
 ## Agent skills
 
 Detailed guidance (project layout, config keys, plugins, page review, installation) as skills for
-Claude Code, Codex, Cursor and other agents. A project created with `c4builder --new` already has
+Claude Code, Codex, Cursor and other agents. A project created with `c4builder new` already has
 them in `.agents/skills/` (and `.claude/skills/` under Claude Code). Install or update them to the
 installed CLI version:
 

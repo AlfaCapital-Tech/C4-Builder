@@ -48,7 +48,7 @@ The full list of changes is in the
 
 1. An agent (or you) edits `.md` and `.puml` files in `src/`.
 2. `c4builder check <files>` tells whether the diagram compiles and shows the line of the error.
-3. `c4builder --site -w` rebuilds the site on every save and reloads the browser.
+3. `c4builder site -w` rebuilds the site on every save and reloads the browser.
 
 Agent skills, `AGENTS.md` in a new project and `llms.txt` with diagram sources are on the
 [Agents](08%20Agents/08%20Agents.md) page.

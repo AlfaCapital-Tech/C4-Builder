@@ -1,11 +1,11 @@
 ---
 name: c4builder-review
-description: Review c4builder pages with a human right on the local site - the human selects text in c4builder --site -w and leaves comments with the Feedback button, the agent receives them in batches with c4builder feedback --wait --as <name>, edits the sources and waits for the next batch until Approve. Use when asked to discuss a change on the site, to show the pages or a design, to review a page, the design or OpenSpec artifacts, when the human says they will leave comments on the page, right after proposing an OpenSpec change in a repository with c4builder, and on /c4builder-review [change-id|page].
+description: Review c4builder pages with a human right on the local site - the human selects text in c4builder site -w and leaves comments with the Feedback button, the agent receives them in batches with c4builder feedback --wait --as <name>, edits the sources and waits for the next batch until Approve. Use when asked to discuss a change on the site, to show the pages or a design, to review a page, the design or OpenSpec artifacts, when the human says they will leave comments on the page, right after proposing an OpenSpec change in a repository with c4builder, and on /c4builder-review [change-id|page].
 ---
 
 # c4builder-review: page comments to the agent
 
-The human looks at the pages in the browser (`c4builder --site -w`), selects text and presses:
+The human looks at the pages in the browser (`c4builder site -w`), selects text and presses:
 
 - **Feedback** — a comment to you. It is not written to the files and comes to you in a batch:
   **Send now** sends one comment, **Add to review** → **Submit review** sends several (from several
@@ -30,7 +30,7 @@ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:<port>/
 ```
 
 `200` — the server is up; never start a second one. Otherwise ask the user to start
-`c4builder --site -w`, or ask whether you may start it yourself in the background — many teams
+`c4builder site -w`, or ask whether you may start it yourself in the background — many teams
 keep the preview server in the human's hands. If it exits with `port <port> is already in use —
 pass a different one, e.g. -p <n>`, restart it with that `-p <n>`: `<port>` below is then `<n>`,
 and the commands take the same `-p <n>`.
@@ -77,7 +77,7 @@ no restart. Errors:
 - `--as <name> is required` (exit code 2) — the name is missing or invalid: fix it and run again;
 - `no c4builder site -w on …` (exit code 1) — no server or it crashed: back to step 1;
 - `agent feedback is disabled on …` (exit code 1) — the server runs without `-w` or with
-  `--no-agent`: ask the user to restart `c4builder --site -w`;
+  `--no-agent`: ask the user to restart `c4builder site -w`;
 - `unknown command: feedback` or `unknown option '--as'` — the CLI is older than this skill: tell
   the user, `c4builder update` updates it (only when they agree).
 

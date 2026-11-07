@@ -1,8 +1,8 @@
 # `.c4builder` reference
 
 `.c4builder` is a JSON file in the project root (another path: `c4builder -c <path>`).
-`c4builder --list` prints the effective values, `c4builder --docs` explains the wizard
-questions, `c4builder --config` re-runs the wizard (interactive — prefer editing the JSON).
+`c4builder list` prints the effective values, `c4builder docs` explains the wizard
+questions, `c4builder config` re-runs the wizard (interactive — prefer editing the JSON).
 
 Validation rules:
 
@@ -12,7 +12,7 @@ Validation rules:
   message naming the key. `null` means "not set" → default.
 - The wizard asks for every key it knows that is **missing** from the file, so a
   non-interactive build needs a complete config — like the one
-  `c4builder --new --name <name> -y` writes (below). `hasRun: true` (set after the first
+  `c4builder new --name <name> -y` writes (below). `hasRun: true` (set after the first
   successful build) makes invalid values fail the build instead of being asked again.
 
 ## Sources and outputs
@@ -55,7 +55,7 @@ Validation rules:
 
 | Key | Default | Meaning |
 |---|---|---|
-| `webPort` | `3000` | port of `c4builder --site` (`-p <n>` overrides) |
+| `webPort` | `3000` | port of `c4builder site` (`-p <n>` overrides) |
 | `questions` | `true` | the **Question** button of `site -w`; `false` — no button, routes or question highlighting |
 | `questionsHeading` | `Open questions` | heading of the section in the source `.md` where `site -w` appends questions left on the page |
 | `reviewLog` | — | review log for the **Review** button of `site -w`: `{ "enabled": true, "file": "review.md", "heading": "Review" (or a list of variants), "cells": ["", "{artifact} → {section}", "{text}", "{author}", ""], "author": "", "label": "" }` — the nearest `file` from the page's source up to the project root, a row of the `heading` table from the `cells` template (`{comment}`, `{quote}`, `{text}`, `{section}`, `{artifact}`, `{page}`, `{author}`, `{date}`, `{number}`); `author` defaults to `git config user.name`; no key — no button |
@@ -78,7 +78,7 @@ Validation rules:
 Legacy keys (`plantumlVersion`, `generatePDF`, `generateCompletePDF`) only produce a
 warning — remove them when you see one.
 
-Complete config written by `c4builder --new --name demo -y` — start from it when adding
+Complete config written by `c4builder new --name demo -y` — start from it when adding
 c4builder to an existing repository:
 
 ```json
