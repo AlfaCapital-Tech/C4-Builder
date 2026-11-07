@@ -14,6 +14,11 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
   without files they print an empty report with exit code 0. `--json` is the same as
   `--format json`; the text output and exit codes do not change. The site page "Docker and CI"
   has ready jobs for GitHub Actions and GitLab CI (#65)
+- `c4builder check --files-from <file>` (`-` for stdin): also check the paths listed one per line,
+  empty lines skipped. The CI jobs pipe `git diff --name-only` into one `check` call, so a machine
+  format prints one report (with `xargs` a long list could become several JSON arrays). An empty
+  list is an empty report and exit code 0, in `text` too. `--format` and `--files-from` with any
+  other command or a build are now an error with exit code 1 instead of being ignored (#65)
 - A C4 relation to an undeclared alias (`Rel(u, nope, …)` with a typo — PlantUML silently draws an
   empty circle) is a warning in `c4builder check` and in the build:
   `⚠ <file>: line <N>: Rel to undeclared element "nope"`; covers `Rel*`, `BiRel*`, `RelIndex*` and

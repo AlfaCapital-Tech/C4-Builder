@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -16,17 +17,20 @@ let dir;
 const check = (...files) =>
     spawnSync(process.execPath, [CLI, 'check', ...files], { cwd: dir, encoding: 'utf8', timeout: 60_000 });
 // Машинные форматы: база путей из переменных CI задаётся явно — тест сам может идти в CI.
-const checkEnv = (env, ...args) => {
+// input — stdin процесса (`--files-from -`).
+const run = (args, { env = {}, input } = {}) => {
     const clean = { ...process.env };
     delete clean.GITHUB_WORKSPACE;
     delete clean.CI_PROJECT_DIR;
-    return spawnSync(process.execPath, [CLI, 'check', ...args], {
+    return spawnSync(process.execPath, [CLI, ...args], {
         cwd: dir,
         encoding: 'utf8',
         timeout: 60_000,
+        input,
         env: { ...clean, ...env }
     });
 };
+const checkEnv = (env, ...args) => run(['check', ...args], { env });
 
 const BPMN_NS = 'xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"';
 const bpmn = (body) =>
@@ -96,6 +100,11 @@ beforeAll(() => {
     // Две ошибки: 1:1 и 2:4 — позиции для `check --format`.
     write('bad.d2', 'a -> \nb: {\n');
     write('what.txt', 'x');
+    // Общая библиотека с ошибкой, импортированная двумя диаграммами (дедуп замечаний отчёта).
+    fs.mkdirSync(path.join(dir, 'lib'));
+    write('lib/broken.d2', 'a -> \n');
+    write('use1.d2', 'x: @lib/broken\n');
+    write('use2.d2', 'y: @lib/broken\n');
     // Имя совпадает с расширением, но расширения нет — не диаграмма (как в scan).
     for (const name of ['d2', 'mmd', 'puml']) write(name, 'a -> b\n');
     const wf = (nodes, edges = []) =>
@@ -129,6 +138,8 @@ beforeAll(() => {
         '<bpmn:startEvent id="S" name="s"/><bpmn:task id="T" name="t"/><bpmn:endEvent id="E" name="e"/>' +
         '<bpmn:sequenceFlow id="F1" sourceRef="S" targetRef="T"/><bpmn:sequenceFlow id="F2" sourceRef="T" targetRef="E"/>';
     write('ok.bpmn', bpmn(chain));
+    // Битый XML: позицию парсер вписывает в текст ошибки.
+    write('broken.bpmn', '<?xml version="1.0"?>\n<a>\n<b>\n</a>\n');
     write('lonely.bpmn', bpmn(`${chain}<bpmn:task id="Lonely" name="lonely"/>`));
     write(
         'warn.bpmn',
@@ -464,6 +475,112 @@ describe('c4builder check --format', () => {
         const ghEmpty = checkEnv({}, '--format', 'github');
         expect(ghEmpty.status).toBe(0);
         expect(ghEmpty.stdout).toBe('');
+    });
+
+    it('json: позиция из текста движка (XML BPMN, JSON wireflow) — в line/column, не в message', () => {
+        fs.writeFileSync(path.join(dir, 'broken.wireflow.json'), '{\n "a": 1,\n\n}\n');
+        const { list } = json('broken.bpmn', 'broken.wireflow.json');
+        expect(list.map(pick)).toEqual([
+            {
+                file: 'broken.bpmn',
+                line: 4,
+                column: 1,
+                engine: 'bpmn',
+                severity: 'error',
+                rule: null,
+                element: null
+            },
+            {
+                file: 'broken.wireflow.json',
+                line: 4,
+                column: 1,
+                engine: 'wireflow',
+                severity: 'error',
+                rule: null,
+                element: null
+            }
+        ]);
+        for (const d of list) expect(d.message).not.toMatch(/\bline\b|column|position/);
+        // Текст — прежний, с позицией внутри.
+        const text = check('broken.bpmn');
+        expect(text.stderr).toMatch(/^✗ broken\.bpmn: invalid BPMN XML: .*line: 3, column: 0/m);
+    });
+
+    it('ошибка в общем импортируемом .d2 — одно замечание на весь отчёт', () => {
+        const { res, list } = json('use1.d2', 'use2.d2');
+        expect(res.status).toBe(1);
+        expect(list.map(pick)).toEqual([
+            {
+                file: 'lib/broken.d2',
+                line: 1,
+                column: 1,
+                engine: 'd2',
+                severity: 'error',
+                rule: null,
+                element: null
+            }
+        ]);
+        // В тексте — по строке на проверяемый файл, как раньше.
+        expect(check('use1.d2', 'use2.d2').stderr.match(/✗ use\d\.d2: /g)).toHaveLength(2);
+    });
+
+    it('--files-from: stdin и файл, пустые строки пропускаются, объединение с аргументами', () => {
+        const fromStdin = run(['check', '--format', 'json', 'what.txt', '--files-from', '-'], {
+            input: 'ok.puml\n\n  \nbad.puml\r\n'
+        });
+        expect(fromStdin.status).toBe(1);
+        expect(JSON.parse(fromStdin.stdout).map((d) => d.file)).toEqual(['what.txt', 'bad.puml']);
+        fs.writeFileSync(path.join(dir, 'list.txt'), 'bad.puml\n');
+        const fromFile = run(['check', '--format', 'json', '--files-from', 'list.txt']);
+        expect(JSON.parse(fromFile.stdout).map((d) => d.file)).toEqual(['bad.puml']);
+        // Текст: файлы из списка проверяются так же.
+        const text = run(['check', '--files-from', '-'], { input: 'ok.puml\nbad.puml\n' });
+        expect(text.status).toBe(1);
+        expect(text.stdout).toMatch(/✓ ok\.puml/);
+        expect(text.stderr).toMatch(/✗ bad\.puml: line 3: /);
+    });
+
+    it('--files-from: пустой список → пустой отчёт и код 0 (и в тексте); нет файла списка → код 1', () => {
+        for (const [format, out] of [
+            ['json', '[]\n'],
+            ['gitlab', '[]\n'],
+            ['github', '']
+        ]) {
+            const res = run(['check', '--format', format, '--files-from', '-'], { input: '' });
+            expect(res.status, res.stderr).toBe(0);
+            expect(res.stdout).toBe(out);
+        }
+        const text = run(['check', '--files-from', '-'], { input: '\n' });
+        expect(text.status, text.stderr).toBe(0);
+        expect(text.stdout).toBe('');
+        const missing = run(['check', '--format', 'json', '--files-from', 'nope.txt']);
+        expect(missing.status).toBe(1);
+        expect(missing.stderr).toMatch(/--files-from: cannot read nope\.txt/);
+        expect(missing.stdout).toBe('');
+    });
+
+    it('GITHUB_WORKSPACE через симлинк → путь от физического каталога, без `../`', () => {
+        const link = path.join(fs.realpathSync(os.tmpdir()), `c4b-ws-link-${process.pid}`);
+        fs.rmSync(link, { force: true });
+        fs.symlinkSync(path.dirname(dir), link);
+        try {
+            const res = checkEnv({ GITHUB_WORKSPACE: link }, '--format', 'github', 'bad.puml');
+            expect(res.stdout).toMatch(
+                new RegExp(`^::error file=${path.basename(dir)}/bad\\.puml,line=3,`, 'm')
+            );
+        } finally {
+            fs.rmSync(link, { force: true });
+        }
+    });
+
+    it('--format и --files-from у другой команды или сборки → ошибка и код 1', () => {
+        const doctor = run(['doctor', '--format', 'json']);
+        expect(doctor.status).toBe(1);
+        expect(doctor.stderr).toMatch(/--format is only supported by check \(use --json for doctor\)/);
+        expect(doctor.stdout).toBe('');
+        const build = run(['--files-from', 'list.txt']);
+        expect(build.status).toBe(1);
+        expect(build.stderr).toMatch(/--files-from is only supported by check/);
     });
 
     it('неизвестный формат → код 1 со списком форматов', () => {

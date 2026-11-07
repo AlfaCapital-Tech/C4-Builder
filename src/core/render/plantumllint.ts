@@ -1,3 +1,4 @@
+import type { DiagramProblem } from './problem.ts';
 import { warnDiagram } from './warnings.ts';
 
 // Связь C4 на необъявленный алиас (`Rel(u, nope, …)` с опечаткой): PlantUML не падает, а
@@ -107,19 +108,11 @@ const svgEntities = (svg: string): { implicit: Set<string>; declared: string[] }
     return { implicit, declared };
 };
 
-// Текст предупреждения — контракт: его печатает `⚠`, а `check --format` разбирает обратно в
-// правило и элемент. Шаблон и разбор живут рядом, чтобы правка одного не сломала другое молча.
-export const UNDECLARED_REL_RULE = 'undeclared-element';
-const undeclaredRelMessage = (macro: string, alias: string): string =>
-    `${macro} to undeclared element "${alias}"`;
-/** Разбор `undeclaredRelMessage` (без префикса `line N: `): [, macro, alias]. */
-export const UNDECLARED_REL_RE = /^(\w+) to undeclared element "(.*)"$/;
-
 /**
- * `line N: <Macro> to undeclared element "alias"` — по одной на каждый вызов с таким алиасом.
- * N — строка source с 1 плюс lineOffset (блок в markdown: строка страницы, см. fences.ts).
+ * Замечание `line N: <Macro> to undeclared element "alias"` — по одному на каждый вызов с таким
+ * алиасом. N — строка source с 1 плюс lineOffset (блок в markdown: строка страницы, см. fences.ts).
  */
-export const undeclaredRelWarnings = (source: string, svg: string, lineOffset = 0): string[] => {
+export const undeclaredRelWarnings = (source: string, svg: string, lineOffset = 0): DiagramProblem[] => {
     // Сначала текст: без вызовов макросов связей SVG не разбираем вовсе.
     if (!HAS_MACRO.test(source)) return [];
     const calls = relCalls(source);
@@ -134,11 +127,17 @@ export const undeclaredRelWarnings = (source: string, svg: string, lineOffset = 
     // разрешается никогда: движок рисует отдельный кружок с подписью `b1.db` — помечаем всегда.
     const isUndeclared = (alias: string): boolean =>
         implicit.has(alias) && (alias.includes('.') || !declared.some((name) => lastSegment(name) === alias));
-    const warnings: string[] = [];
+    const warnings: DiagramProblem[] = [];
     for (const { line, macro, aliases } of calls)
         for (const alias of aliases)
             if (ALIAS.test(alias) && isUndeclared(alias))
-                warnings.push(`line ${line + lineOffset}: ${undeclaredRelMessage(macro, alias)}`);
+                warnings.push({
+                    line: line + lineOffset,
+                    rule: 'undeclared-element',
+                    element: alias,
+                    elementInMessage: true,
+                    message: `${macro} to undeclared element "${alias}"`
+                });
     return warnings;
 };
 

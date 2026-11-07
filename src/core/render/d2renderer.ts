@@ -1,6 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { DiagramError, type DiagramProblem, errorText } from './problem.ts';
+
 // Второй бэкенд рендера: D2 (terrastruct) через @terrastruct/d2 (WASM → SVG).
 // Пакет ~60 МБ и поднимает webworker, поэтому это опциональная зависимость с
 // ленивой загрузкой: движок инициализируется единожды за прогон и только когда
@@ -181,61 +183,48 @@ const buildCompileRequest = (
     return { fs: fsMap, inputPath: toKey(path.resolve(entryAbs)), root };
 };
 
-// Рендер .d2 → SVG (Buffer). Ошибки компиляции пробрасываются с путём файла.
-// Ошибка компиляции движок отдаёт JSON-массивом [{range, errmsg}] — вытаскиваем
-// человекочитаемые errmsg (`file:line:col: текст`); иной формат отдаём как есть.
-const d2ErrorText = (message: string): string => {
-    try {
-        const parsed: unknown = JSON.parse(message);
-        if (Array.isArray(parsed) && parsed.every((x) => typeof x?.errmsg === 'string'))
-            return parsed.map((x: { errmsg: string }) => x.errmsg).join('\n');
-    } catch {}
-    return message;
-};
+// Ошибка компиляции со структурными позициями для `check --format`. message прежний (его
+// печатают сборка и `check` в тексте), а позиции из него не восстановить: путь в errmsg
+// отсчитан от корня виртуальной fs, который знает только renderD2.
+export class D2Error extends DiagramError {}
 
-/** Позиция ошибки компиляции: file — абсолютный путь, line/column — с 1 (null — движок не дал). */
-export interface D2Problem {
-    file: string;
-    line: number | null;
-    column: number | null;
-    message: string;
-}
-
-// Ошибка компиляции со структурными позициями для `check --format`. Текст message прежний
-// (его печатают сборка и `check` в тексте), а problems восстановить из него нельзя: путь в
-// errmsg отсчитан от корня виртуальной fs, который знает только renderD2.
-export class D2Error extends Error {
-    readonly problems: D2Problem[];
-    constructor(message: string, problems: D2Problem[]) {
-        super(message);
-        this.problems = problems;
-    }
-}
-
-// range движка — `<ключ fs>,L:C:B-L:C:B`, позиции с 0. Ключ может содержать запятые, поэтому
-// он — всё до последней запятой перед позицией. errmsg дублирует позицию префиксом
-// `<ключ>:L:C: ` — отрезаем его, текст остаётся без пути.
+// Ответ движка на ошибку компиляции — JSON-массив [{range, errmsg}]. Разбираем его один раз:
+// из него и печатный текст (errmsg построчно, `file:line:col: текст`), и структура. range —
+// `<ключ fs>,L:C:B-L:C:B`, позиции с 0; ключ может содержать запятые, поэтому он — всё до
+// последней запятой перед позицией. errmsg дублирует позицию префиксом `<ключ>:L:C: ` — в
+// структуре его нет. Иной формат ответа — текст как есть и одно замечание без позиции.
 const RANGE = /^(.*),(\d+):(\d+):\d+-/;
-const d2Problems = (raw: string, root: string, entryAbs: string): D2Problem[] => {
+const d2Failure = (
+    raw: string,
+    root: string,
+    entryAbs: string
+): { text: string; details: DiagramProblem[] } => {
+    let errors: { range?: unknown; errmsg: string }[] | null = null;
     try {
         const parsed: unknown = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length && parsed.every((x) => typeof x?.errmsg === 'string'))
-            return parsed.map(({ range, errmsg }: { range?: unknown; errmsg: string }) => {
-                const m = typeof range === 'string' ? range.match(RANGE) : null;
-                if (!m) return { file: entryAbs, line: null, column: null, message: errmsg };
-                const [line, column] = [Number(m[2]) + 1, Number(m[3]) + 1];
-                const prefix = `${m[1]}:${line}:${column}: `;
-                return {
-                    file: path.resolve(root, m[1]),
-                    line,
-                    column,
-                    message: errmsg.startsWith(prefix) ? errmsg.slice(prefix.length) : errmsg
-                };
-            });
+        if (Array.isArray(parsed) && parsed.every((x) => typeof x?.errmsg === 'string')) errors = parsed;
     } catch {}
-    return [{ file: entryAbs, line: null, column: null, message: raw }];
+    if (!errors) return { text: raw, details: [{ file: entryAbs, message: raw }] };
+    const text = errors.map((x) => x.errmsg).join('\n');
+    if (!errors.length) return { text, details: [{ file: entryAbs, message: raw }] };
+    return {
+        text,
+        details: errors.map(({ range, errmsg }) => {
+            const m = typeof range === 'string' ? range.match(RANGE) : null;
+            if (!m) return { file: entryAbs, message: errmsg };
+            const [line, column] = [Number(m[2]) + 1, Number(m[3]) + 1];
+            const prefix = `${m[1]}:${line}:${column}: `;
+            return {
+                file: path.resolve(root, m[1]),
+                line,
+                column,
+                message: errmsg.startsWith(prefix) ? errmsg.slice(prefix.length) : errmsg
+            };
+        })
+    };
 };
 
+// Рендер .d2 → SVG (Buffer). Ошибки компиляции пробрасываются с путём файла.
 const renderD2 = async (
     entryAbs: string,
     { layout = 'dagre', seed }: { layout?: string; seed?: string } = {}
@@ -246,11 +235,8 @@ const renderD2 = async (
     try {
         result = await d2.compile({ fs: fsMap, inputPath, options: { layout } });
     } catch (err) {
-        const raw = (err as Error).message || String(err);
-        throw new D2Error(
-            `D2 compile error (${entryAbs}):\n${d2ErrorText(raw)}`,
-            d2Problems(raw, root, path.resolve(entryAbs))
-        );
+        const { text, details } = d2Failure(errorText(err) || String(err), root, path.resolve(entryAbs));
+        throw new D2Error(`D2 compile error (${entryAbs}):\n${text}`, details);
     }
     let svg: string;
     try {

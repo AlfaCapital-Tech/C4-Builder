@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import fs from 'node:fs';
 import path from 'node:path';
 
 import type { Diagnostic } from './check.problems.ts';
@@ -15,6 +16,22 @@ interface ReportOptions {
 }
 
 /**
+ * Физический путь каталога (симлинки раскрыты), а если его нет — как есть. Пути файлов `check`
+ * строит от cwd, а cwd — физический (на macOS `/tmp` → `/private/tmp`): база из переменной CI
+ * через симлинк дала бы в отчёте `../../private/tmp/…`.
+ */
+export const realDir = (dir: string): string => {
+    try {
+        return fs.realpathSync.native(dir);
+    } catch {
+        return path.resolve(dir);
+    }
+};
+
+/** Путь файла с физическим каталогом: сам файл-симлинк не раскрываем — отчёт о нём, а не о цели. */
+export const realFile = (file: string): string => path.join(realDir(path.dirname(file)), path.basename(file));
+
+/**
  * База путей отчёта. Аннотации GitHub и Code Quality GitLab ждут путь от корня репозитория —
  * `check` же могут запустить из подкаталога (`cd docs && c4builder check …`).
  */
@@ -23,15 +40,17 @@ export const reportBase = (
     env: NodeJS.ProcessEnv = process.env,
     cwd: string = process.cwd()
 ): string =>
-    (format === 'github' ? env.GITHUB_WORKSPACE : format === 'gitlab' ? env.CI_PROJECT_DIR : undefined) ||
-    cwd;
+    realDir(
+        (format === 'github' ? env.GITHUB_WORKSPACE : format === 'gitlab' ? env.CI_PROJECT_DIR : undefined) ||
+            cwd
+    );
 
 const relPath = (file: string, base: string): string => path.relative(base, file).split(path.sep).join('/');
 
-// Текст для человека в CI: у bpmnlint id элемента в сообщении нет — без префикса непонятно,
-// о каком элементе речь; у wireflow и PlantUML id уже в тексте, дубль не нужен.
+// Текст для человека в CI: у bpmnlint id элемента в сообщении нет — без префикса непонятно, о
+// каком элементе речь; у wireflow и связи C4 id входит в текст по форме движка, дубль не нужен.
 const text = (d: Diagnostic): string =>
-    d.element !== null && !d.message.includes(d.element) ? `${d.element}: ${d.message}` : d.message;
+    d.element !== null && !d.elementInMessage ? `${d.element}: ${d.message}` : d.message;
 
 const checkName = (d: Diagnostic): string => {
     const engine = d.engine ?? 'c4builder';
@@ -72,7 +91,8 @@ export const formatGithub = (list: Diagnostic[], { base }: ReportOptions): strin
         .join('\n');
 
 // fingerprint без номера строки: иначе пустая строка выше превращала бы замечание в «новое» в
-// виджете MR. Одинаковые замечания одного файла различает порядковый номер.
+// виджете MR. Позиции нет и в message — движки отдают её отдельно (DiagramProblem). Одинаковые
+// замечания одного файла различает порядковый номер.
 export const formatGitlab = (list: Diagnostic[], { base }: ReportOptions): string => {
     const seen = new Map<string, number>();
     return JSON.stringify(

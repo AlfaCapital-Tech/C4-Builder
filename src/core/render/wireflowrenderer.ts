@@ -3,7 +3,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { VENDOR_DIR } from '../../util/paths.ts';
+import { positionAt } from '../../util/text.ts';
 import { DEFAULT_FONT_NAME } from './fonts.ts';
+import { DiagramError, type DiagramProblem, errorText, fileError } from './problem.ts';
 import { warnDiagram } from './warnings.ts';
 import { ASCENT, DESCENT, escapeXml, stripInvalidXml, textWidth } from './textmetrics.ts';
 import { type EdgePath, getBezierPath, getSmoothStepPath } from './xyflowpaths.ts';
@@ -20,15 +22,21 @@ export const WIREFLOW_DIR = path.join(VENDOR_DIR, 'wireflow');
 // (lib/diagram/file.ts редактора). Версия 1 и файлы без `format` — старый gg-editor/G6.
 export const WIREFLOW_VERSIONS = { min: 2, max: 4 };
 
-// Ошибка конвейера: problems — по строке на нарушение без пути файла (check печатает их
-// как `✗ <file>: <problem>`), message — те же строки с путём для сборки.
-export class WireflowError extends Error {
-    readonly problems: string[];
-    constructor(file: string, problems: string[]) {
-        super(problems.map((p) => `${file}: ${p}`).join('\n'));
-        this.problems = problems;
+// Ошибка конвейера: details — нарушения структурой, problems — их печатные строки без пути
+// файла (check печатает `✗ <file>: <problem>`), message — те же строки с путём для сборки.
+export class WireflowError extends DiagramError {
+    constructor(file: string, details: DiagramProblem[]) {
+        super(...fileError(file, details));
     }
 }
+
+// Нарушение у узла или ребра: id — часть текста (`edge "e1": …`, вид узла значим), отдельно —
+// в element для отчёта `check --format`.
+const onElement = (id: string, message: string): DiagramProblem => ({
+    element: id,
+    elementInMessage: true,
+    message
+});
 
 // --- модель файла после валидации -------------------------------------------------------
 
@@ -190,18 +198,41 @@ export interface Parsed {
     diagram: WireflowDiagram;
 }
 
+// JSON.parse вписывает позицию в текст: `… in JSON at position 12 (line 4 column 1)` (раньше V8
+// давал только смещение). Позицию переносим в line/column и убираем из message, печатный text —
+// прежний.
+const JSON_AT = / at position (\d+)(?: \(line (\d+) column (\d+)\))?/;
+const jsonProblem = (raw: string, source: string): DiagramProblem => {
+    const text = `invalid JSON: ${raw}`;
+    const m = JSON_AT.exec(raw);
+    if (!m) return { message: text };
+    const at =
+        m[2] === undefined ? positionAt(source, Number(m[1])) : { line: Number(m[2]), column: Number(m[3]) };
+    return { ...at, message: `invalid JSON: ${raw.replace(JSON_AT, '')}`, text };
+};
+
+// Владелец поля в сообщении: id и печатное имя (`card "a"`, `edge "e1"`).
+interface Owner {
+    id: string;
+    who: string;
+}
+
 // Разбор файла с проверкой структуры (design §7): все нарушения собираются в одну ошибку с id
 // элементов. Неизвестные поля игнорируются — формат молодой и растёт. Неизвестный шаблон и
 // картинка не из файла — предупреждения рендера (cardImage), не ошибки разбора.
 export const parseWireflow = (text: string, file: string): Parsed => {
-    const fail = (...problems: string[]): never => {
-        throw new WireflowError(file, problems);
+    const fail = (...list: (string | DiagramProblem)[]): never => {
+        throw new WireflowError(
+            file,
+            list.map((p) => (typeof p === 'string' ? { message: p } : p))
+        );
     };
+    const source = text.replace(/^﻿/, '');
     let json: unknown;
     try {
-        json = JSON.parse(text.replace(/^﻿/, ''));
+        json = JSON.parse(source);
     } catch (err) {
-        return fail(`invalid JSON: ${(err as Error).message}`);
+        return fail(jsonProblem(errorText(err), source));
     }
     if (!isObject(json)) return fail('not a Wireflow file (expected a JSON object)');
     if (!('format' in json))
@@ -225,46 +256,49 @@ export const parseWireflow = (text: string, file: string): Parsed => {
     const rawEdges = diagram.edges ?? [];
     if (!Array.isArray(rawEdges)) return fail('"diagram.edges" must be an array');
 
-    const problems: string[] = [];
+    const problems: DiagramProblem[] = [];
+    const bad = (o: Owner, message: string): void => {
+        problems.push(onElement(o.id, `${o.who}: ${message}`));
+    };
     const ids = new Set<string>();
     const nodes: WireflowNode[] = [];
     const parents = new Map<string, string>();
-    const str = (v: unknown, what: string, who: string): string | undefined => {
+    const str = (v: unknown, what: string, o: Owner): string | undefined => {
         if (v === undefined || v === null) return undefined;
-        if (typeof v !== 'string') problems.push(`${who}: ${what} must be a string`);
+        if (typeof v !== 'string') bad(o, `${what} must be a string`);
         return typeof v === 'string' ? v : undefined;
     };
-    const txt = (v: unknown, what: string, who: string): string | undefined => {
-        const s = str(v, what, who);
+    const txt = (v: unknown, what: string, o: Owner): string | undefined => {
+        const s = str(v, what, o);
         return s === undefined ? undefined : cleanText(s);
     };
     const size = (v: unknown, fallback: number): number => (isNum(v) && v > 0 ? v : fallback);
 
     diagram.nodes.forEach((raw, i) => {
         if (!isObject(raw) || !isId(raw.id)) {
-            problems.push(`node #${i}: missing "id"`);
+            problems.push({ message: `node #${i}: missing "id"` });
             return;
         }
         const id = raw.id;
         if (ids.has(id)) {
-            problems.push(`duplicate id ${q(id)}`);
+            problems.push(onElement(id, `duplicate id ${q(id)}`));
             return;
         }
         ids.add(id);
         const type = raw.type;
         if (type !== 'flow' && type !== 'note' && type !== 'group') {
-            problems.push(`node ${q(id)}: unknown type ${q(type)} (expected flow, note or group)`);
+            bad({ id, who: `node ${q(id)}` }, `unknown type ${q(type)} (expected flow, note or group)`);
             return;
         }
-        const who = `${type === 'flow' ? 'card' : type} ${q(id)}`;
+        const o: Owner = { id, who: `${type === 'flow' ? 'card' : type} ${q(id)}` };
         const pos = raw.position;
         if (!isObject(pos) || !isNum(pos.x) || !isNum(pos.y)) {
-            problems.push(`${who}: missing "position" {x, y}`);
+            bad(o, 'missing "position" {x, y}');
             return;
         }
         let parentId: string | undefined;
         if (raw.parentId !== undefined && raw.parentId !== null) {
-            if (!isId(raw.parentId)) problems.push(`${who}: "parentId" must be a node id`);
+            if (!isId(raw.parentId)) bad(o, '"parentId" must be a node id');
             else {
                 parentId = raw.parentId;
                 parents.set(id, parentId);
@@ -278,7 +312,7 @@ export const parseWireflow = (text: string, file: string): Parsed => {
                 ...base,
                 width: isNum(raw.width) && raw.width > 0 ? raw.width : undefined,
                 height: isNum(raw.height) && raw.height > 0 ? raw.height : undefined,
-                label: txt(data.label, '"data.label"', who) ?? ''
+                label: txt(data.label, '"data.label"', o) ?? ''
             });
             return;
         }
@@ -288,17 +322,17 @@ export const parseWireflow = (text: string, file: string): Parsed => {
                 ...base,
                 width: size(raw.width, NOTE_SIZE.width),
                 height: size(raw.height, NOTE_SIZE.height),
-                text: txt(data.text, '"data.text"', who) ?? ''
+                text: txt(data.text, '"data.text"', o) ?? ''
             });
             return;
         }
         if (!isId(data.graphicId)) {
-            problems.push(`${who}: missing "data.graphicId" (screen template)`);
+            bad(o, 'missing "data.graphicId" (screen template)');
             return;
         }
-        const label = txt(data.label, '"data.label"', who);
-        const headerText = txt(data.headerText, '"data.headerText"', who);
-        const src = str(data.src, '"data.src"', who);
+        const label = txt(data.label, '"data.label"', o);
+        const headerText = txt(data.headerText, '"data.headerText"', o);
+        const src = str(data.src, '"data.src"', o);
         nodes.push({
             kind: 'flow',
             ...base,
@@ -315,13 +349,13 @@ export const parseWireflow = (text: string, file: string): Parsed => {
     for (const [id, parentId] of parents) {
         const parent = byId.get(parentId);
         if (parent?.kind !== 'group') {
-            problems.push(`node ${q(id)}: "parentId" ${q(parentId)} is not a group`);
+            bad({ id, who: `node ${q(id)}` }, `"parentId" ${q(parentId)} is not a group`);
             continue;
         }
         let p: string | undefined = parentId;
         for (let steps = 0; p !== undefined; steps++) {
             if (p === id || steps > nodes.length) {
-                problems.push(`group ${q(parentId)} is inside itself`);
+                problems.push(onElement(parentId, `group ${q(parentId)} is inside itself`));
                 break;
             }
             p = parents.get(p);
@@ -331,30 +365,30 @@ export const parseWireflow = (text: string, file: string): Parsed => {
     const edges: WireflowEdge[] = [];
     rawEdges.forEach((raw, i) => {
         if (!isObject(raw) || !isId(raw.id)) {
-            problems.push(`edge #${i}: missing "id"`);
+            problems.push({ message: `edge #${i}: missing "id"` });
             return;
         }
         const id = raw.id;
         if (ids.has(id)) {
-            problems.push(`duplicate id ${q(id)}`);
+            problems.push(onElement(id, `duplicate id ${q(id)}`));
             return;
         }
         ids.add(id);
-        const who = `edge ${q(id)}`;
+        const o: Owner = { id, who: `edge ${q(id)}` };
         let ok = true;
         for (const end of ['source', 'target'] as const) {
             const ref = raw[end];
             if (!isId(ref)) {
-                problems.push(`${who}: "${end}" must be a node id`);
+                bad(o, `"${end}" must be a node id`);
                 ok = false;
                 continue;
             }
             const node = byId.get(ref);
             if (!node) {
-                problems.push(`${who}: ${end} ${q(ref)} is not a node`);
+                bad(o, `${end} ${q(ref)} is not a node`);
                 ok = false;
             } else if (node.kind === 'group') {
-                problems.push(`${who}: ${end} ${q(ref)} is a group (connect cards or notes)`);
+                bad(o, `${end} ${q(ref)} is a group (connect cards or notes)`);
                 ok = false;
             }
         }
@@ -366,7 +400,7 @@ export const parseWireflow = (text: string, file: string): Parsed => {
             source: raw.source as string,
             target: raw.target as string,
             shape: raw.type === 'step' || raw.type === 'smoothstep' ? raw.type : 'bezier',
-            label: txt(raw.label, '"label"', who) || undefined,
+            label: txt(raw.label, '"label"', o) || undefined,
             color: stroke ? (/^#[0-9a-f]{3,8}$/i.test(stroke) ? stroke.toLowerCase() : stroke) : undefined,
             width: isNum(style.strokeWidth) && style.strokeWidth > 0 ? style.strokeWidth : DEFAULT_EDGE_WIDTH
         });
@@ -535,7 +569,7 @@ const cardImage = (
     card: Card,
     box: { x: number; y: number; width: number; height: number },
     symbols: Map<string, string>,
-    warnings: string[],
+    warnings: DiagramProblem[],
     options: RenderOptions
 ): string => {
     const placeholder = ({ lines }: Placeholder): string => {
@@ -561,14 +595,22 @@ const cardImage = (
         const m = IMAGE_SRC_RE.exec(src);
         if (!m) {
             warnings.push(
-                /^https?:/i.test(src)
-                    ? `card ${q(card.id)}: external image URL is not loaded (no network at build time)`
-                    : `card ${q(card.id)}: "data.src" is not an embedded JPEG, PNG or WebP image`
+                onElement(
+                    card.id,
+                    /^https?:/i.test(src)
+                        ? `card ${q(card.id)}: external image URL is not loaded (no network at build time)`
+                        : `card ${q(card.id)}: "data.src" is not an embedded JPEG, PNG or WebP image`
+                )
             );
             return placeholder({ lines: [/^https?:/i.test(src) ? 'external image' : 'no image', card.id] });
         }
         if (m[1] === 'webp' && options.raster) {
-            warnings.push(`card ${q(card.id)}: WebP image cannot be rasterized to PNG (use JPEG or PNG)`);
+            warnings.push(
+                onElement(
+                    card.id,
+                    `card ${q(card.id)}: WebP image cannot be rasterized to PNG (use JPEG or PNG)`
+                )
+            );
             return placeholder({ lines: ['WebP image', card.id] });
         }
         return `<image ${geometry} preserveAspectRatio="none" href="${src}"/>`;
@@ -577,7 +619,9 @@ const cardImage = (
     if (!symbols.has(symbolId)) {
         const symbol = templateSymbol(card.graphicId, symbolId);
         if (!symbol) {
-            warnings.push(`card ${q(card.id)}: unknown screen template ${q(card.graphicId)}`);
+            warnings.push(
+                onElement(card.id, `card ${q(card.id)}: unknown screen template ${q(card.graphicId)}`)
+            );
             return placeholder({ lines: ['template not found', card.graphicId] });
         }
         symbols.set(symbolId, symbol);
@@ -589,7 +633,7 @@ const renderCard = (
     card: Card,
     box: Box,
     symbols: Map<string, string>,
-    warnings: string[],
+    warnings: DiagramProblem[],
     options: RenderOptions
 ): string => {
     const { width: w, height: h, header } = cardSize(card);
@@ -739,7 +783,7 @@ const marker = (color: string, id: string): string =>
 
 export interface Rendered {
     svg: string;
-    warnings: string[];
+    warnings: DiagramProblem[];
 }
 
 /**
@@ -749,7 +793,7 @@ export interface Rendered {
  */
 export const renderWireflowSvg = (source: string, file: string, options: RenderOptions = {}): Rendered => {
     const { diagram } = parseWireflow(source, file);
-    const warnings: string[] = [];
+    const warnings: DiagramProblem[] = [];
     const boxes = layoutWireflow(diagram);
     const bounds: Bounds = { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity };
     for (const b of boxes.values()) {

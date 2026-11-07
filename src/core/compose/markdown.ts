@@ -6,6 +6,7 @@ import { createRequire } from 'node:module';
 import defaultDocsifyTemplate from './docsify.template.ts';
 import { encodeURIPath, readFile, writeFile, plantUmlServerUrl } from '../../util/utils.ts';
 import { VENDOR_DIR } from '../../util/paths.ts';
+import { escapeRegExp } from '../../util/text.ts';
 // Фаза scan: тип дерева и его элементов + производные (имя папки, формат выхода диаграммы)
 // и единый реестр расширений диаграмм (источник истины для regex ссылок ниже).
 import {
@@ -63,13 +64,13 @@ const injectAfterFirstH1 = (md: string, block: string): string => {
 // Расширения диаграмм без точки, экранированные для regex. Источник истины — реестр
 // DIAGRAM_ENGINES из фазы scan (scan/tree.ts): добавление движка там автоматически
 // расширяет regex ссылок здесь, без синхронной правки. Экранируем на случай спецсимволов.
-const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-const diagramExtAlternation = (): string => DIAGRAM_ENGINES.map((e) => escapeRe(e.ext.slice(1))).join('|');
+const diagramExtAlternation = (): string =>
+    DIAGRAM_ENGINES.map((e) => escapeRegExp(e.ext.slice(1))).join('|');
 // Суффиксы из нескольких расширений (`.wireflow.json`) — ещё и точным именем файла
 // (`wireflow.json`), как в engineForFile.
 const diagramNameAlternation = (): string =>
     DIAGRAM_ENGINES.filter((e) => e.ext.indexOf('.', 1) !== -1)
-        .map((e) => escapeRe(e.ext.slice(1)))
+        .map((e) => escapeRegExp(e.ext.slice(1)))
         .join('|');
 
 // Ссылка на диаграмму в markdown: ![alt](path.puml|d2) и с title в кавычках —

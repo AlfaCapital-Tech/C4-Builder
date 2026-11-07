@@ -5,91 +5,178 @@ import { afterAll, describe, expect, it } from 'vitest';
 
 import {
     D2Error,
+    DiagramError,
+    errorDiagnostics,
     formatGithub,
     formatGitlab,
     formatJson,
     locate,
-    parseProblem,
+    parseBpmn,
+    parseWireflow,
+    problemText,
     renderD2,
+    renderMermaid,
     reportBase,
-    teardownD2
+    teardownBpmn,
+    teardownD2,
+    teardownMermaid,
+    uniqueDiagnostics
 } from './dist.mjs';
 
-// `check --format` (issue #65): разбор текста движков в модель замечания и форматтеры отчёта —
-// без запуска движков (кроме D2: позиции берутся из его ответа).
+// `check --format` (issue #65): структура замечаний у источника (рендереры), сборка модели
+// замечания и форматтеры отчёта — без запуска CLI.
 
-const none = { line: null, column: null, rule: null, element: null };
+afterAll(async () => {
+    await teardownBpmn();
+    await teardownMermaid();
+});
 
-describe('parseProblem', () => {
-    it('PlantUML: `line N:` → line и message; undeclared-element → rule и element', () => {
-        expect(parseProblem('plantuml', 'line 3: Syntax Error?')).toEqual({
-            ...none,
-            line: 3,
-            message: 'Syntax Error?'
-        });
-        expect(parseProblem('plantuml', 'line 6: Rel_D to undeclared element "nope"')).toEqual({
-            ...none,
+const rejection = async (promise) => {
+    try {
+        await promise;
+    } catch (e) {
+        return e;
+    }
+    throw new Error('expected a rejection');
+};
+const thrown = (fn) => {
+    try {
+        fn();
+    } catch (e) {
+        return e;
+    }
+    throw new Error('expected a throw');
+};
+
+describe('problemText — печатная форма из структуры', () => {
+    it('`line N:`, `<id> [<rule>]` (`-` без элемента), `<id>:`; id в тексте — без префикса', () => {
+        expect(problemText({ line: 3, message: 'Syntax Error?' })).toBe('line 3: Syntax Error?');
+        expect(
+            problemText({ rule: 'no-disconnected', element: 'Lonely', message: 'Element is not connected' })
+        ).toBe('Lonely [no-disconnected] Element is not connected');
+        expect(problemText({ rule: 'layout:x', message: 'whole model' })).toBe('- [layout:x] whole model');
+        expect(problemText({ element: 'F1', message: 'unresolved reference <X>' })).toBe(
+            'F1: unresolved reference <X>'
+        );
+        const rel = {
             line: 6,
             rule: 'undeclared-element',
             element: 'nope',
+            elementInMessage: true,
             message: 'Rel_D to undeclared element "nope"'
-        });
-        // .iuml — без строки
-        expect(parseProblem('plantuml', 'Error in function definition')).toEqual({
-            ...none,
-            message: 'Error in function definition'
-        });
+        };
+        expect(problemText(rel)).toBe('line 6: Rel_D to undeclared element "nope"');
+        expect(problemText({ element: 'e1', elementInMessage: true, message: 'edge "e1": bad' })).toBe(
+            'edge "e1": bad'
+        );
+        // Позиция, вписанная движком в текст: печать — text, message — без позиции.
+        expect(problemText({ line: 2, message: 'm', text: 'raw at line 2' })).toBe('raw at line 2');
+    });
+});
+
+describe('позиция из текста движка — у источника, не в message', () => {
+    it('BPMN: XML-парсер moddle `line: L, column: C` (с 0) → line/column с 1; печать прежняя', async () => {
+        const e = await rejection(parseBpmn('<?xml version="1.0"?>\n<a>\n<b>\n</a>\n', 'x.bpmn'));
+        expect(e.problems).toEqual([
+            'invalid BPMN XML: unparsable content </a> detected, line: 3, column: 0, nested error: closing tag mismatch'
+        ]);
+        expect(e.details).toEqual([
+            {
+                line: 4,
+                column: 1,
+                message:
+                    'invalid BPMN XML: unparsable content </a> detected, nested error: closing tag mismatch',
+                text: e.problems[0]
+            }
+        ]);
     });
 
-    it('BPMN: `id [rule] msg`, `-` без элемента, `id: msg`', () => {
-        expect(parseProblem('bpmn', 'Lonely [no-disconnected] Element is not connected')).toEqual({
-            ...none,
-            rule: 'no-disconnected',
-            element: 'Lonely',
-            message: 'Element is not connected'
-        });
-        expect(parseProblem('bpmn', '- [layout:x] whole model')).toEqual({
-            ...none,
-            rule: 'layout:x',
-            message: 'whole model'
-        });
-        expect(parseProblem('bpmn', 'F1: unresolved reference <X>')).toEqual({
-            ...none,
-            element: 'F1',
-            message: 'unresolved reference <X>'
-        });
-        expect(parseProblem('bpmn', 'invalid BPMN XML: unparsable content')).toEqual({
-            ...none,
-            message: 'invalid BPMN XML: unparsable content'
-        });
+    it('wireflow: JSON.parse `at position N (line L column C)` → line/column; message без позиции', () => {
+        const e = thrown(() => parseWireflow('{\n "a": 1,\n\n}\n', 'x.wireflow.json'));
+        expect(e.problems).toEqual([
+            expect.stringMatching(/^invalid JSON: .* at position 12 \(line 4 column 1\)$/)
+        ]);
+        const [p] = e.details;
+        expect(p).toMatchObject({ line: 4, column: 1 });
+        expect(p.message).toMatch(/^invalid JSON: /);
+        expect(p.message).not.toMatch(/position|line|column/);
     });
 
-    it('`ENOENT: …` у не-BPMN — без element', () => {
-        const text = "ENOENT: no such file or directory, open 'x.puml'";
-        expect(parseProblem('plantuml', text)).toEqual({ ...none, message: text });
-        expect(parseProblem(null, text)).toEqual({ ...none, message: text });
+    it('wireflow: id узла или ребра — element, id остаётся в тексте; duplicate id — тоже с element', () => {
+        const wf = (nodes, edges = []) =>
+            JSON.stringify({ format: 'wireflow', version: 4, diagram: { nodes, edges } });
+        const card = (id) => ({ id, type: 'flow', position: { x: 0, y: 0 }, data: { graphicId: 'g' } });
+        const e = thrown(() =>
+            parseWireflow(wf([card('a'), card('a')], [{ id: 'e', source: 'a', target: 'x9' }]), 'x')
+        );
+        expect(e.details).toEqual([
+            { element: 'a', elementInMessage: true, message: 'duplicate id "a"' },
+            { element: 'e', elementInMessage: true, message: 'edge "e": target "x9" is not a node' }
+        ]);
+        expect(e.problems).toEqual(['duplicate id "a"', 'edge "e": target "x9" is not a node']);
+        const noId = thrown(() => parseWireflow(wf([], [{ source: 'a' }]), 'x'));
+        expect(noId.details).toEqual([{ message: 'edge #0: missing "id"' }]);
     });
 
-    it('wireflow: id из `card "a": …`, message — вся строка; `edge #0` без element', () => {
-        const card = 'card "a\\"b": unknown screen template "x"';
-        expect(parseProblem('wireflow', card)).toEqual({ ...none, element: 'a"b', message: card });
-        expect(parseProblem('wireflow', 'edge "e1": target "x9" is not a node').element).toBe('e1');
-        expect(parseProblem('wireflow', 'edge #0: missing "id"')).toEqual({
-            ...none,
-            message: 'edge #0: missing "id"'
-        });
+    it('mermaid: `on line N, column M` и `at offset` внутри текста → line/column, message без них', async () => {
+        const e = await rejection(renderMermaid('pie\n "a" : x\n', 'p.mmd'));
+        expect(e.problems[0]).toMatch(/^line 2: Parsing failed: Lexer error on line 2, column 8: /);
+        const [p] = e.details;
+        expect(p).toMatchObject({ line: 2, column: 8 });
+        expect(p.message).toMatch(/^Parsing failed: Lexer error: unexpected character/);
+        expect(p.message).not.toMatch(/\bline \d|offset/);
+        // jison: строка из заголовка, в message её нет и не было.
+        const jison = await rejection(renderMermaid('flowchart LR\n  A -->> ((B', 'f.mmd'));
+        expect(jison.details[0].line).toBe(2);
+        expect(jison.problems[0]).toBe(`line 2: ${jison.details[0].message}`);
+    });
+});
+
+describe('errorDiagnostics / uniqueDiagnostics', () => {
+    it('не-Error (строка, undefined, объект) → одно замечание с текстом, без падения', () => {
+        for (const [thrownValue, message] of [
+            ['boom', 'boom'],
+            [undefined, 'undefined'],
+            [{ code: 1 }, '[object Object]'],
+            [new Error('ENOENT: no such file'), 'ENOENT: no such file']
+        ])
+            expect(errorDiagnostics(thrownValue, '/w/a.puml', 'plantuml')).toEqual([
+                {
+                    file: '/w/a.puml',
+                    line: null,
+                    column: null,
+                    engine: 'plantuml',
+                    severity: 'error',
+                    rule: null,
+                    element: null,
+                    message,
+                    elementInMessage: false
+                }
+            ]);
     });
 
-    it('mermaid: со строкой и без', () => {
-        expect(parseProblem('mermaid', 'line 2: Parse error')).toEqual({
-            ...none,
-            line: 2,
-            message: 'Parse error'
-        });
-        expect(parseProblem('mermaid', "diagram type 'x' uses HTML labels")).toEqual({
-            ...none,
-            message: "diagram type 'x' uses HTML labels"
-        });
+    it('ошибка движка → details; file замечания (импорт D2) важнее проверяемого', () => {
+        const e = new DiagramError('x', [
+            { file: '/w/lib.d2', line: 1, column: 1, message: 'bad' },
+            { message: 'm' }
+        ]);
+        expect(errorDiagnostics(e, '/w/a.d2', 'd2').map((d) => [d.file, d.line, d.message])).toEqual([
+            ['/w/lib.d2', 1, 'bad'],
+            ['/w/a.d2', null, 'm']
+        ]);
+    });
+
+    it('повтор по всем полям схлопывается, отличие в любом поле — нет', () => {
+        const d = errorDiagnostics(
+            new DiagramError('x', [{ line: 1, message: 'bad' }]),
+            '/w/lib.d2',
+            'd2'
+        )[0];
+        expect(uniqueDiagnostics([d, { ...d }, { ...d, line: 2 }, { ...d, severity: 'warning' }])).toEqual([
+            d,
+            { ...d, line: 2 },
+            { ...d, severity: 'warning' }
+        ]);
     });
 });
 
@@ -133,7 +220,7 @@ describe('форматтеры', () => {
     });
 
     it('json: поля модели в порядке, путь относительно base', () => {
-        const [d] = JSON.parse(formatJson([diag()], { base }));
+        const [d] = JSON.parse(formatJson([diag({ elementInMessage: true })], { base }));
         expect(Object.keys(d)).toEqual([
             'file',
             'line',
@@ -175,14 +262,33 @@ describe('форматтеры', () => {
         );
     });
 
-    it('префикс element — только если id нет в сообщении', () => {
+    it('префикс element — по структуре (id не входит в message), а не по подстроке', () => {
         const lint = diag({ engine: 'bpmn', element: 'Lonely', message: 'Element is not connected' });
         expect(formatGithub([lint], { base })).toMatch(/::Lonely: Element is not connected$/);
-        const wf = diag({ engine: 'wireflow', element: 'e1', message: 'edge "e1": bad' });
+        const wf = diag({
+            engine: 'wireflow',
+            element: 'e1',
+            elementInMessage: true,
+            message: 'edge "e1": bad'
+        });
         expect(formatGithub([wf], { base })).toMatch(/::edge "e1": bad$/);
         expect(JSON.parse(formatGitlab([lint], { base }))[0].description).toBe(
             'Lonely: Element is not connected'
         );
+        // Короткие id `e` и `a` встречаются в тексте как буквы — префикс всё равно нужен.
+        for (const id of ['e', 'a'])
+            expect(
+                formatGithub([diag({ engine: 'bpmn', element: id, message: 'Element is not connected' })], {
+                    base
+                })
+            ).toMatch(new RegExp(`::${id}: Element is not connected$`));
+        const short = diag({
+            engine: 'wireflow',
+            element: 'e',
+            elementInMessage: true,
+            message: 'edge "e": bad'
+        });
+        expect(formatGithub([short], { base })).toMatch(/::edge "e": bad$/);
     });
 
     it('gitlab: check_name, severity, location; без строки begin = 1', () => {
@@ -225,6 +331,20 @@ describe('форматтеры', () => {
         expect(reportBase('json', env, '/cwd')).toBe('/cwd');
         expect(reportBase('github', {}, '/cwd')).toBe('/cwd');
     });
+
+    it('reportBase: каталог через симлинк → физический путь (пути файлов строятся от физического cwd)', () => {
+        const real = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'c4b-base-')));
+        const link = `${real}-link`;
+        fs.symlinkSync(real, link);
+        try {
+            expect(reportBase('github', { GITHUB_WORKSPACE: link }, '/cwd')).toBe(real);
+            expect(reportBase('gitlab', { CI_PROJECT_DIR: link }, '/cwd')).toBe(real);
+            expect(reportBase('json', {}, link)).toBe(real);
+        } finally {
+            fs.rmSync(link);
+            fs.rmSync(real, { recursive: true, force: true });
+        }
+    });
 });
 
 describe('renderD2: позиции ошибок компиляции', () => {
@@ -234,17 +354,18 @@ describe('renderD2: позиции ошибок компиляции', () => {
         fs.rmSync(dir, { recursive: true, force: true });
     });
 
-    it('две ошибки → D2Error.problems с абсолютным путём и позициями с 1; message прежний', async () => {
+    it('две ошибки → D2Error.details с абсолютным путём и позициями с 1; message прежний', async () => {
         const file = path.join(dir, 'bad.d2');
         fs.writeFileSync(file, 'a -> \nb: {\n');
         const err = await renderD2(file).catch((e) => e);
         expect(err).toBeInstanceOf(D2Error);
         expect(err.message).toMatch(/^D2 compile error \(.*bad\.d2\):\nbad\.d2:1:1: connection missing/);
-        expect(err.problems.map(({ file, line, column }) => [file, line, column])).toEqual([
+        expect(err.problems).toEqual([err.message]);
+        expect(err.details.map(({ file, line, column }) => [file, line, column])).toEqual([
             [file, 1, 1],
             [file, 2, 4]
         ]);
-        expect(err.problems[0].message).toBe('connection missing destination');
+        expect(err.details[0].message).toBe('connection missing destination');
     });
 
     it('ошибка в импортированном файле → путь импорта', async () => {
@@ -254,7 +375,7 @@ describe('renderD2: позиции ошибок компиляции', () => {
         const main = path.join(dir, 'main.d2');
         fs.writeFileSync(main, 'b: @lib/x\n');
         const err = await renderD2(main).catch((e) => e);
-        expect(err.problems).toEqual([
+        expect(err.details).toEqual([
             { file: lib, line: 1, column: 1, message: 'connection missing destination' }
         ]);
     });

@@ -212,6 +212,10 @@ export default async () => {
                 'for `check`: output format, json/github/gitlab for agents and CI'
             ).choices(FORMATS)
         )
+        .option(
+            '--files-from <file>',
+            'for `check`: also check the paths listed in a file, one per line (- for stdin)'
+        )
         .option('-v, --verbose', 'for `doctor`: absolute paths and details')
         .option('--strict', 'for `doctor` and `check`: exit code 1 on warnings too')
         .option('--full', 'for `doctor`: build the template project in a temporary folder')
@@ -239,6 +243,17 @@ export default async () => {
         );
         process.exit(1);
     }
+    // Опции только для `check` глобальные (commander не знает подкоманд), и другая команда молча
+    // их игнорировала бы: `doctor --format json` печатал бы текст с кодом 0, и CI разбирал бы его.
+    for (const [flag, value] of [
+        ['--format', opts.format],
+        ['--files-from', opts.filesFrom]
+    ] as const)
+        if (value !== undefined && cmd !== 'check') {
+            const hint = flag === '--format' ? ' (use --json for doctor)' : '';
+            console.error(chalk.red(`${flag} is only supported by check${hint}`));
+            process.exit(1);
+        }
     // --version/--help уже вышли в parse. Уведомление — по кэшу прошлой проверки, до её
     // перезапуска; exit покрывает и выходы через process.exit. Вывод `feedback` читает агент; doctor
     // сообщает о новой версии сам, а фоновый `npm view` ходил бы в сеть и с --offline.

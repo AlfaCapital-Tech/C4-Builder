@@ -42,10 +42,16 @@ GitLab CI, проверка диаграмм и публикация в GitLab P
 
 ```yaml
 check:
-  image: ghcr.io/alfacapital-tech/c4builder:latest
+  image: node:24
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  variables:
+    GIT_DEPTH: 0  # коммит базы MR для git diff
   script:
-    - find src \( -name '*.puml' -o -name '*.d2' -o -name '*.bpmn' -o -name '*.mmd' -o -name '*.wireflow.json' -o -name wireflow.json \) -print0
-      | xargs -0 c4builder check --strict --format gitlab > gl-code-quality-report.json
+    - npm i -g @alfacapital-tech/c4builder@0.15.0
+    - git -c core.quotePath=false diff --name-only --diff-filter=d "$CI_MERGE_REQUEST_DIFF_BASE_SHA" HEAD
+      -- '*.puml' '*.iuml' '*.d2' '*.bpmn' '*.mmd' '*.wireflow.json' 'wireflow.json' '*/wireflow.json'
+      | c4builder check --strict --format gitlab --files-from - > gl-code-quality-report.json
   artifacts:
     when: always
     reports:
@@ -59,10 +65,11 @@ pages:
     paths: [public]
 ```
 
-Джоба `check` кладёт замечания в отчёт GitLab Code Quality: они видны в виджете MR и в diff
-на нужной строке, а не только в логе. `when: always` сохраняет отчёт и при упавшей джобе.
-`--format` появился после 0.14.0, поэтому у `check` здесь `latest`; в своём CI закрепите тег
-релиза с `--format`.
+Джоба `check` проверяет диаграммы, изменённые в MR, и кладёт замечания в отчёт GitLab Code
+Quality: они видны в виджете MR и в diff на нужной строке, а не только в логе. `when: always`
+сохраняет отчёт и при упавшей джобе. В образе c4builder нет `git`, поэтому джоба идёт на
+`node:24`, а JRE c4builder скачает сам. `--format` и `--files-from` — с c4builder 0.15.0:
+версия закреплена, на более ранней джоба упадёт на неизвестной опции.
 
 GitHub Actions, проверка изменённых в PR диаграмм с аннотациями в diff:
 
@@ -76,15 +83,18 @@ jobs:
         with: { fetch-depth: 0 }
       - uses: actions/setup-node@v4
         with: { node-version: 24 }
-      - run: npm i -g @alfacapital-tech/c4builder
+      - run: npm i -g @alfacapital-tech/c4builder@0.15.0
       - run: >
-          git diff -z --name-only --diff-filter=d "origin/${{ github.base_ref }}...HEAD"
-          -- '*.puml' '*.iuml' '*.d2' '*.bpmn' '*.mmd' '*wireflow.json'
-          | xargs -0 c4builder check --strict --format github
+          git -c core.quotePath=false diff --name-only --diff-filter=d "origin/${{ github.base_ref }}...HEAD"
+          -- '*.puml' '*.iuml' '*.d2' '*.bpmn' '*.mmd' '*.wireflow.json' 'wireflow.json' '*/wireflow.json'
+          | c4builder check --strict --format github --files-from -
 ```
 
-Если диаграммы в PR не менялись, `xargs` вызовет `check` без файлов: машинный формат печатает
-пустой отчёт и завершается с кодом 0. Java шагу не нужна заранее — c4builder скачает JRE сам, и
+Список изменённых файлов идёт в `check` одним вызовом через `--files-from -`, а не через
+`xargs`: тот делит длинный список на несколько вызовов, и отчёт GitLab стал бы несколькими
+JSON-массивами подряд. `core.quotePath=false` — чтобы `git` не экранировал кириллицу в путях.
+Если диаграммы в PR не менялись, список пуст: машинный формат печатает пустой отчёт и
+завершается с кодом 0. Java шагу не нужна заранее — c4builder скачает JRE сам, и
 сообщения об этом уйдут в stderr, не смешиваясь с аннотациями. Формат и поля замечаний — в
 [CLI и конфигурация](05%20CLI%20и%20конфигурация/05%20CLI%20и%20конфигурация.md).
 

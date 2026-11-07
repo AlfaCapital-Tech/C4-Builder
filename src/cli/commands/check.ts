@@ -1,19 +1,34 @@
 import chalk from 'chalk';
 import path from 'node:path';
 import { readFile } from 'node:fs/promises';
+import { text as streamText } from 'node:stream/consumers';
 
 import { VENDOR_DIR } from '../../util/paths.ts';
 import { VENDORED_JAR } from '../../util/utils.ts';
 import { resolveJava } from '../../core/render/jre.ts';
 import { renderDiagram } from '../../core/render/diagrams.ts';
-import { D2Error, renderD2, teardownD2 } from '../../core/render/d2renderer.ts';
-import { BpmnError, renderBpmn, teardownBpmn } from '../../core/render/bpmnrenderer.ts';
-import { MermaidError, renderMermaid, teardownMermaid } from '../../core/render/mermaidrenderer.ts';
-import { WireflowError, renderWireflow } from '../../core/render/wireflowrenderer.ts';
+import { renderD2, teardownD2 } from '../../core/render/d2renderer.ts';
+import { renderBpmn, teardownBpmn } from '../../core/render/bpmnrenderer.ts';
+import { renderMermaid, teardownMermaid } from '../../core/render/mermaidrenderer.ts';
+import { renderWireflow } from '../../core/render/wireflowrenderer.ts';
 import { warnUndeclaredRels } from '../../core/render/plantumllint.ts';
+import {
+    DiagramError,
+    type DiagramProblem,
+    errorText,
+    isDiagramError,
+    problemText
+} from '../../core/render/problem.ts';
 import { captureDiagramWarnings, diagramWarningCount } from '../../core/render/warnings.ts';
-import { type Diagnostic, type Engine, locate, parseProblem } from './check.problems.ts';
-import { type Format, formatReport, reportBase } from './check.report.ts';
+import {
+    type Diagnostic,
+    type Engine,
+    errorDiagnostics,
+    locate,
+    toDiagnostic,
+    uniqueDiagnostics
+} from './check.problems.ts';
+import { type Format, formatReport, realFile, reportBase } from './check.report.ts';
 
 // `c4builder check <file...>` — валидация отдельных диаграмм ТЕМ ЖЕ движком, что и
 // сборка (вендорный PlantUML jar + системная/managed java, бандл D2, конвейер BPMN, mermaid,
@@ -31,14 +46,14 @@ const PUML_ERROR = /^ERROR\n(\d+)\n(.*)$/m;
 
 const JAR_PATH = path.join(VENDOR_DIR, VENDORED_JAR.jar);
 
-// JRE резолвится лениво и один раз: список только из .d2 java не трогает. В машинном формате
-// сообщения о выборе и загрузке JRE — в stderr: stdout там занят отчётом.
+// Куда печатать служебные сообщения (выбор и загрузка JRE): в машинном формате stdout занят
+// отчётом, поэтому режим передаёт свой лог явно.
+type Log = (message: string) => void;
+
+// JRE резолвится лениво и один раз: список только из .d2 java не трогает.
 let javaPromise: Promise<string> | null = null;
-let logToStderr = false;
-const getJava = (): Promise<string> => {
-    javaPromise ??= resolveJava({
-        log: (m) => (logToStderr ? console.error : console.log)(chalk.gray(m))
-    }).then((r) => r.path);
+const getJava = (log: Log): Promise<string> => {
+    javaPromise ??= resolveJava({ log }).then((r) => r.path);
     return javaPromise;
 };
 
@@ -49,7 +64,7 @@ const getJava = (): Promise<string> => {
 // java на файл, а самодостаточные библиотеки подключают C4 сами.
 const LIB_CONTEXTS = ['', '!include <C4/C4_Dynamic>\n!include <C4/C4_Deployment>\n'];
 
-const checkPlantUml = async (abs: string): Promise<void> => {
+const checkPlantUml = async (abs: string, log: Log): Promise<void> => {
     const isLib = path.extname(abs) === '.iuml';
     const attempts = isLib
         ? LIB_CONTEXTS.map((ctx) => `@startuml\n${ctx}!include ${abs}\n@enduml\n`)
@@ -58,7 +73,7 @@ const checkPlantUml = async (abs: string): Promise<void> => {
         const isDitaa = /@startditaa/i.test(content.toString());
         try {
             const svg = await renderDiagram(content, {
-                javaBin: await getJava(),
+                javaBin: await getJava(log),
                 jarPath: JAR_PATH,
                 includePath: path.dirname(abs),
                 format: isDitaa ? 'png' : 'svg',
@@ -71,11 +86,14 @@ const checkPlantUml = async (abs: string): Promise<void> => {
             if (!isLib && !isDitaa) warnUndeclaredRels(relative(abs), content.toString(), svg.toString());
             return;
         } catch (e) {
-            const m = (e as Error).message.match(PUML_ERROR);
+            const m = errorText(e).match(PUML_ERROR);
             if (!m) throw e;
             if (i < attempts.length - 1) continue;
             // Для .iuml позиция относится к обёртке, а не к файлу — не показываем.
-            throw new Error(isLib ? m[2] : `line ${Number(m[1]) + 1}: ${m[2]}`);
+            const problem: DiagramProblem = isLib
+                ? { message: m[2] }
+                : { line: Number(m[1]) + 1, message: m[2] };
+            throw new DiagramError(problemText(problem), [problem]);
         }
     }
 };
@@ -87,7 +105,7 @@ const relative = (abs: string): string => path.relative(process.cwd(), abs);
 // файл `puml`/`d2`/`mmd` без расширения диаграммой не считается — тоже как в scan.
 interface Checker {
     engine: Engine;
-    run: (abs: string) => Promise<unknown>;
+    run: (abs: string, log: Log) => Promise<unknown>;
 }
 const CHECKERS: Record<string, Checker> = {
     '.puml': { engine: 'plantuml', run: checkPlantUml },
@@ -115,29 +133,75 @@ const checkerFor = (abs: string): Checker | undefined => {
     return ext === undefined ? undefined : CHECKERS[ext];
 };
 
-// Ошибки движка, у которых по строке на нарушение (BPMN и wireflow — агент правит их по id
-// элемента; mermaid — `line N: …`).
-const problemsOf = (e: unknown): string[] =>
-    e instanceof BpmnError || e instanceof MermaidError || e instanceof WireflowError
-        ? e.problems
-        : [(e as Error).message];
-
 const teardown = async (): Promise<void> => {
     await teardownD2();
     await teardownBpmn();
     await teardownMermaid();
 };
 
-// Брошенная проверкой ошибка → замечания. Текст PlantUML разбираем всегда: прочие его ошибки
-// (ENOENT) под грамматику `line N:` не попадают. У остальных движков разбираем только их
-// собственные ошибки — `ENOENT: …` у BPMN иначе прочитался бы как id элемента.
-const errorDiagnostics = (abs: string, engine: Engine | null, e: unknown): Diagnostic[] => {
-    const at = { file: abs, engine, severity: 'error' as const };
-    if (e instanceof D2Error) return e.problems.map((p) => ({ ...at, ...p, rule: null, element: null }));
-    if (e instanceof BpmnError || e instanceof MermaidError || e instanceof WireflowError)
-        return e.problems.map((p) => ({ ...at, ...parseProblem(engine, p) }));
-    const message = (e as Error).message;
-    return [{ ...at, ...parseProblem(engine === 'plantuml' ? engine : null, message) }];
+interface Checked {
+    /** Путь, как его передал пользователь, — для текстового вывода. */
+    file: string;
+    abs: string;
+    engine: Engine | null;
+    /** Брошенное проверкой; null — файл прошёл (предупреждения возможны). */
+    failure: { error: unknown } | null;
+    /** Предупреждений за проверку файла — для `--strict` в тексте. */
+    warnings: number;
+}
+
+// Общий цикл обоих режимов: проверка файла и счёт его предупреждений. Режимы различаются
+// только тем, что делают с результатом (report).
+// ponytail: последовательно — на сотнях файлов добавить пул как в generateImages.
+const checkFiles = async (
+    files: string[],
+    log: Log,
+    report: (checked: Checked) => void | Promise<void>
+): Promise<void> => {
+    try {
+        for (const file of files) {
+            const abs = path.resolve(file);
+            const checker = checkerFor(abs);
+            const before = diagramWarningCount();
+            let failure: Checked['failure'] = null;
+            try {
+                if (!checker) throw new Error(`unsupported extension (expected ${EXPECTED})`);
+                await checker.run(abs, log);
+            } catch (error) {
+                failure = { error };
+            }
+            await report({
+                file,
+                abs,
+                engine: checker?.engine ?? null,
+                failure,
+                warnings: diagramWarningCount() - before
+            });
+        }
+    } finally {
+        await teardown();
+    }
+};
+
+// Текст: `✓`/`✗` по файлу, предупреждения печатают сами движки (`⚠`).
+const checkText = async (files: string[], strict: boolean): Promise<number> => {
+    let failed = false;
+    await checkFiles(
+        files,
+        (m) => console.log(chalk.gray(m)),
+        ({ file, failure, warnings }) => {
+            if (failure) {
+                failed = true;
+                const { error } = failure;
+                for (const p of isDiagramError(error) ? error.problems : [errorText(error)])
+                    console.error(chalk.red(`✗ ${file}: ${p}`));
+            } else if (strict && warnings) {
+                failed = true;
+                console.error(chalk.red(`✗ ${file}: ${warnings} warning(s), failing with --strict`));
+            } else console.log(chalk.green(`✓ ${file}`));
+        }
+    );
+    return failed ? 1 : 0;
 };
 
 // Машинный формат: замечания копятся и печатаются одним отчётом в конце (json и gitlab — один
@@ -146,43 +210,31 @@ const checkMachine = async (
     files: string[],
     format: Exclude<Format, 'text'>,
     strict: boolean
-): Promise<void> => {
-    logToStderr = true;
+): Promise<{ code: number; report: string }> => {
+    const warned: { file: string; problem: DiagramProblem }[] = [];
+    captureDiagramWarnings((file, problem) => warned.push({ file, problem }));
     const all: Diagnostic[] = [];
     let failed = false;
-    let current: { abs: string; engine: Engine | null; list: Diagnostic[] } | null = null;
-    captureDiagramWarnings((_file, message) => {
-        // Путь из рендерера — относительный для печати; берём абсолютный проверяемого файла.
-        if (current)
-            current.list.push({
-                file: current.abs,
-                engine: current.engine,
-                severity: 'warning',
-                ...parseProblem(current.engine, message)
-            });
-    });
     try {
-        for (const file of files) {
-            const abs = path.resolve(file);
-            const checker = checkerFor(abs);
-            current = { abs, engine: checker?.engine ?? null, list: [] };
-            try {
-                if (!checker) throw new Error(`unsupported extension (expected ${EXPECTED})`);
-                await checker.run(abs);
-            } catch (e) {
-                current.list.push(...errorDiagnostics(abs, current.engine, e));
+        await checkFiles(
+            files,
+            (m) => console.error(chalk.gray(m)),
+            async ({ abs, engine, failure }) => {
+                // Путь предупреждения — тот, что check передал движку (относительный к cwd).
+                const list = warned
+                    .splice(0)
+                    .map(({ file, problem }) => toDiagnostic(problem, path.resolve(file), engine, 'warning'));
+                if (failure) list.push(...errorDiagnostics(failure.error, abs, engine));
+                for (const d of list) d.file = realFile(d.file);
+                if (list.some((d) => d.severity === 'error' || strict)) failed = true;
+                await locateElements(list);
+                all.push(...list);
             }
-            if (current.list.some((d) => d.severity === 'error' || strict)) failed = true;
-            await locateElements(current.list);
-            all.push(...current.list);
-        }
+        );
     } finally {
         captureDiagramWarnings(null);
-        await teardown();
     }
-    const report = formatReport(format, all, reportBase(format));
-    if (report) process.stdout.write(`${report}\n`);
-    if (failed) process.exitCode = 1;
+    return { code: failed ? 1 : 0, report: formatReport(format, uniqueDiagnostics(all), reportBase(format)) };
 };
 
 // BPMN и wireflow сообщают только id — строку и колонку берём из объявления id в исходнике.
@@ -200,35 +252,42 @@ const locateElements = async (list: Diagnostic[]): Promise<void> => {
     }
 };
 
+// Список путей из файла или stdin (`-`), по одному на строку; пустые строки пропускаются. Так
+// список изменённых файлов из `git diff` уходит в один вызов — один отчёт. xargs делит длинный
+// список на несколько вызовов, и машинный формат дал бы несколько JSON-массивов подряд.
+const readList = async (from: string): Promise<string[]> => {
+    let content: string;
+    try {
+        content = from === '-' ? await streamText(process.stdin) : await readFile(from, 'utf8');
+    } catch (e) {
+        console.error(chalk.red(`--files-from: cannot read ${from}: ${errorText(e)}`));
+        process.exit(1);
+    }
+    return content.split(/\r?\n/).filter((line) => line.trim() !== '');
+};
+
+// Выход явный и при успехе: висящий handle упавшего движка (воркер D2, окно jsdom) иначе
+// подвесил бы CI. Но process.exit не ждёт асинхронной записи в pipe (macOS) — выходим из
+// колбэка последней записи: колбэки потока идут по порядку, значит всё выше уже записано.
+const exitAfterWrite = (code: number, out = ''): Promise<never> =>
+    new Promise(() => {
+        process.stdout.write(out, () => process.stderr.write('', () => process.exit(code)));
+    });
+
 export default async (
     files: string[],
-    opts: { strict?: boolean; format?: Format; json?: boolean } = {}
+    opts: { strict?: boolean; format?: Format; json?: boolean; filesFrom?: string } = {}
 ): Promise<void> => {
     const format = opts.format ?? (opts.json ? 'json' : 'text');
-    if (format !== 'text') return checkMachine(files, format, !!opts.strict);
-    if (files.length === 0) {
+    const list = opts.filesFrom === undefined ? files : [...files, ...(await readList(opts.filesFrom))];
+    if (format !== 'text') {
+        const { code, report } = await checkMachine(list, format, !!opts.strict);
+        return exitAfterWrite(code, report ? `${report}\n` : '');
+    }
+    // Пустой список из --files-from — «изменённых диаграмм нет», а не ошибка вызова.
+    if (list.length === 0 && opts.filesFrom === undefined) {
         console.log(chalk.red(`usage: c4builder check [--strict] <file...>  (${EXTENSIONS.join(' | ')})`));
         process.exit(1);
     }
-    let failed = 0;
-    // ponytail: последовательно — на сотнях файлов добавить пул как в generateImages.
-    for (const file of files) {
-        const abs = path.resolve(file);
-        const checker = checkerFor(abs);
-        const warningsBefore = diagramWarningCount();
-        try {
-            if (!checker) throw new Error(`unsupported extension (expected ${EXPECTED})`);
-            await checker.run(abs);
-            const warnings = diagramWarningCount() - warningsBefore;
-            if (opts.strict && warnings) {
-                failed++;
-                console.error(chalk.red(`✗ ${file}: ${warnings} warning(s), failing with --strict`));
-            } else console.log(chalk.green(`✓ ${file}`));
-        } catch (e) {
-            failed++;
-            for (const p of problemsOf(e)) console.error(chalk.red(`✗ ${file}: ${p}`));
-        }
-    }
-    await teardown();
-    if (failed) process.exit(1);
+    return exitAfterWrite(await checkText(list, !!opts.strict));
 };

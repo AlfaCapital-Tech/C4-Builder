@@ -68,9 +68,10 @@ How the source tree becomes pages:
    it). Rather than parse these shapes, use `c4builder check --strict --format json <file...>`:
    stdout is only a JSON array of findings `{file, line, column, engine, severity, rule,
    element, message}` (`null` where the engine has no such field; `[]` when all is fine), the
-   exit code is the same. BPMN and wireflow findings get the line of the element's `id`;
+   exit code is the same. `message` carries no position (it is in `line`/`column`); BPMN and
+   wireflow findings get the line of the element's `id`;
    `rule: "undeclared-element"` with `element` is the relation alias typo. `--json` is the
-   same. A changed `.iuml` is checked directly too: a
+   same. A list of paths can come from a file or stdin: `--files-from <file|->`, one per line. A changed `.iuml` is checked directly too: a
    styles file calling C4 macros (`UpdateElementStyle`) is checked with the C4 stdlib
    included. Same engines as the build (bundled PlantUML jar, bundled D2, BPMN pipeline, mermaid, wireflow), no
    `.c4builder` needed.
