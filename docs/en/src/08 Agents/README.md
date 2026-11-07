@@ -223,8 +223,9 @@ root and `~/.claude/skills`, for Codex also `.codex/skills`, `~/.agents/skills` 
 - under Claude Code a personal copy shadows the project one — `!` with its path and the command to
   remove it (with the user's consent), even when the personal copy is current; without a project copy
   the command first installs it (`c4builder skills && rm -r …`);
-- a Claude Code plugin in the `~/.claude/plugins/cache` cache carries a skill with the same name —
-  `!` without a fix: removing the whole plugin may be impossible, it has other skills;
+- an installed Claude Code plugin (per `~/.claude/plugins/installed_plugins.json`; uninstalled ones
+  and ones installed in other projects do not count) carries a skill with the same name — `!` without
+  a fix: removing the whole plugin may be impossible, it has other skills;
 - the last line is `–`: the CLI cannot see which skills the agent session loaded.
 
 ### Alternative: npx skills

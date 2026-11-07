@@ -304,11 +304,45 @@ const copyCheck = (id: string, root: string, personal?: { project: boolean; shad
     });
 };
 
-// Кэш плагинов Claude Code `<marketplace>/<plugin>/<version>/skills/<name>` — раскладка не контракт,
-// поэтому только warn без fix (удалять плагин целиком нельзя: в нём другие скиллы) или skipped (D4).
-const pluginCheck = (): Check | undefined => {
-    const cache = path.join(os.homedir(), '.claude', 'plugins', 'cache');
-    if (!fs.existsSync(cache)) return undefined;
+// Плагины Claude Code — по реестру установленных `installed_plugins.json`, а не обходом кэша: кэш хранит и
+// удалённые плагины (каталог версии помечен `.orphaned_at`), и старые версии, и установки в другие
+// проекты — от них были ложные дубли (#74). Формат реестра и раскладка кэша не контракт, поэтому только
+// warn без fix (удалять плагин целиком нельзя: в нём другие скиллы) или skipped.
+const pluginCheck = (cwd: string): Check | undefined => {
+    const base = path.join(os.homedir(), '.claude', 'plugins');
+    const registry = path.join(base, 'installed_plugins.json');
+    // Нет реестра — плагины не ставились; проверки нет, как раньше при отсутствии кэша.
+    if (!fs.existsSync(registry)) return undefined;
+    let plugins: Record<string, unknown[]>;
+    try {
+        const parsed = JSON.parse(fs.readFileSync(registry, 'utf8'))?.plugins;
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
+            throw new Error('no "plugins" object');
+        const bad = Object.keys(parsed).find((k) => !Array.isArray(parsed[k]));
+        if (bad !== undefined) throw new Error(`plugins["${bad}"] is not an array`);
+        plugins = parsed;
+    } catch (e) {
+        return check('skills.claude.plugins', 'skipped', 'Claude Code plugin registry is not recognized', {
+            details: firstLine(e)
+        });
+    }
+    // realpath: на macOS `/tmp` и `/var` — симлинки, а process.cwd() отдаёт уже разрешённый путь.
+    const real = (p: string): string => {
+        try {
+            return fs.realpathSync(p);
+        } catch {
+            return path.resolve(p);
+        }
+    };
+    const here = real(cwd);
+    // projectPath — обычно git-корень, а doctor могут запустить из подкаталога: учитываем и предка.
+    // Неизвестная область без projectPath учитывается — лишний информационный warn лучше пропущенного дубля.
+    const inScope = (e: Record<string, unknown>): boolean => {
+        if (e.scope === 'user') return true;
+        if (typeof e.projectPath !== 'string') return e.scope !== 'project' && e.scope !== 'local';
+        const rel = path.relative(real(e.projectPath), here);
+        return rel !== '..' && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel);
+    };
     const subdirs = (d: string): string[] =>
         fs
             .readdirSync(d, { withFileTypes: true })
@@ -316,23 +350,37 @@ const pluginCheck = (): Check | undefined => {
             .map((e) => path.join(d, e.name));
     try {
         const found: string[] = [];
-        for (const market of subdirs(cache))
-            for (const plugin of subdirs(market)) {
-                // Версии одного плагина в кэше копятся — дубль скилла считаем по плагину, не по версии.
-                const names = new Set<string>();
-                for (const version of subdirs(plugin))
-                    for (const name of packageSkills()) {
-                        const dir = path.join(version, 'skills', name);
-                        if (!fs.existsSync(path.join(dir, 'SKILL.md'))) continue;
-                        names.add(
-                            changedFiles(name, dir).length ? `${name} (differs from this package)` : name
-                        );
-                    }
-                if (names.size)
-                    found.push(
-                        `plugin ${path.basename(plugin)}@${path.basename(market)} duplicates project skills: ${[...names].join(', ')}`
-                    );
+        for (const [key, entries] of Object.entries(plugins)) {
+            // Записей у плагина несколько (разные проекты) — каталоги подходящих объединяем.
+            const dirs = new Set<string>();
+            for (const e of entries) {
+                // Битая запись — не повод терять остальные.
+                if (!e || typeof e !== 'object' || !inScope(e as Record<string, unknown>)) continue;
+                const { installPath } = e as Record<string, unknown>;
+                if (typeof installPath === 'string') {
+                    dirs.add(path.resolve(installPath));
+                    continue;
+                }
+                // Без installPath — все версии плагина в кэше `<marketplace>/<plugin>/<version>`.
+                const at = key.lastIndexOf('@');
+                if (at <= 0) continue;
+                const versions = path.join(base, 'cache', key.slice(at + 1), key.slice(0, at));
+                if (fs.existsSync(versions)) for (const v of subdirs(versions)) dirs.add(v);
             }
+            const names = new Set<string>();
+            for (const dir of dirs) {
+                // Запись реестра могла устареть: каталог удалённой версии не в счёт и при явном installPath.
+                if (fs.existsSync(path.join(dir, '.orphaned_at'))) continue;
+                for (const name of packageSkills()) {
+                    const skill = path.join(dir, 'skills', name);
+                    if (!fs.existsSync(path.join(skill, 'SKILL.md'))) continue;
+                    names.add(
+                        changedFiles(name, skill).length ? `${name} (differs from this package)` : name
+                    );
+                }
+            }
+            if (names.size) found.push(`plugin ${key} duplicates project skills: ${[...names].join(', ')}`);
+        }
         return found.length ? check('skills.claude.plugins', 'warn', found.join('; ')) : undefined;
     } catch (e) {
         return check('skills.claude.plugins', 'skipped', 'Claude Code plugin cache is not readable', {
@@ -365,7 +413,7 @@ const skills = async (ctx: Ctx): Promise<Check[]> => {
             })
         );
     if (!agent || agent === 'claude-code') {
-        const plugins = pluginCheck();
+        const plugins = pluginCheck(ctx.cwd);
         if (plugins) checks.push(plugins);
     }
     checks.push(

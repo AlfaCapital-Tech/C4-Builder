@@ -272,27 +272,96 @@ describe('скиллы', () => {
         });
     });
 
-    it('скилл плагина Claude Code дублирует проектный — warn без fix', () => {
+    // Плагины Claude Code: версия `tools@market` в кэше со скиллом пакета (текст отличается) и реестр
+    // установленных. Возвращает каталог версии — в него кладут `.orphaned_at`.
+    const PLUGINS = '.claude/plugins';
+    const pluginVersion = (home, version = '1.0.0') => {
+        const dir = path.join(home, PLUGINS, 'cache/market/tools', version);
+        const skill = path.join(dir, 'skills/c4builder-review');
+        fs.mkdirSync(skill, { recursive: true });
+        fs.writeFileSync(path.join(skill, 'SKILL.md'), '---\nname: c4builder-review\n---\nother\n');
+        return dir;
+    };
+    const registry = (home, plugins) => {
+        fs.mkdirSync(path.join(home, PLUGINS), { recursive: true });
+        fs.writeFileSync(
+            path.join(home, PLUGINS, 'installed_plugins.json'),
+            typeof plugins === 'string' ? plugins : JSON.stringify({ version: 2, plugins })
+        );
+    };
+    const pluginReport = (json) =>
+        byId(json(['skills'], { CLAUDECODE: '1' }).report, 'skills.claude.plugins');
+    const DUPLICATE = {
+        id: 'skills.claude.plugins',
+        status: 'warn',
+        message: 'plugin tools@market duplicates project skills: c4builder-review (differs from this package)'
+    };
+
+    it('скилл установленного плагина Claude Code дублирует проектный — warn без fix', () => {
         const { home, json } = installed();
-        const plugin = path.join(home, '.claude/plugins/cache/market/tools/1.0.0/skills/c4builder-review');
-        fs.mkdirSync(plugin, { recursive: true });
-        fs.writeFileSync(path.join(plugin, 'SKILL.md'), '---\nname: c4builder-review\n---\nother\n');
-        const c = byId(json(['skills'], { CLAUDECODE: '1' }).report, 'skills.claude.plugins');
-        expect(c).toEqual({
-            id: 'skills.claude.plugins',
-            status: 'warn',
-            message:
-                'plugin tools@market duplicates project skills: c4builder-review (differs from this package)'
+        registry(home, {
+            'tools@market': [{ scope: 'user', installPath: pluginVersion(home), version: '1.0.0' }]
         });
+        expect(pluginReport(json)).toEqual(DUPLICATE);
     });
 
-    it('кэш плагинов не обходится — skipped, не error', () => {
+    it('удалённый плагин остался в кэше с .orphaned_at — проверки нет', () => {
         const { home, json } = installed();
-        fs.mkdirSync(path.join(home, '.claude', 'plugins'), { recursive: true });
-        fs.writeFileSync(path.join(home, '.claude', 'plugins', 'cache'), 'not a folder');
-        const { res, report } = json(['skills'], { CLAUDECODE: '1' });
-        expect(byId(report, 'skills.claude.plugins').status).toBe('skipped');
-        expect(res.status).toBe(0);
+        fs.writeFileSync(path.join(pluginVersion(home), '.orphaned_at'), '1700000000000');
+        registry(home, {});
+        expect(pluginReport(json)).toBeUndefined();
+    });
+
+    it('плагин с областью проекта — только в этом проекте и его подкаталогах', () => {
+        const { home, cwd, dir, json } = installed();
+        const installPath = pluginVersion(home);
+        const entry = (projectPath) => ({ scope: 'project', projectPath, installPath, version: '1.0.0' });
+        registry(home, { 'tools@market': [entry(path.join(dir, 'other'))] });
+        expect(pluginReport(json)).toBeUndefined();
+        registry(home, { 'tools@market': [entry(path.join(dir, 'other')), entry(cwd)] });
+        expect(pluginReport(json)).toEqual(DUPLICATE);
+        const sub = path.join(cwd, 'docs');
+        fs.mkdirSync(sub);
+        expect(byId(json(['skills'], { CLAUDECODE: '1' }, sub).report, 'skills.claude.plugins')).toEqual(
+            DUPLICATE
+        );
+    });
+
+    it('без installPath — версии из кэша, кроме помеченных .orphaned_at', () => {
+        const { home, json } = installed();
+        fs.writeFileSync(path.join(pluginVersion(home, '0.9.0'), '.orphaned_at'), '1700000000000');
+        registry(home, { 'tools@market': [{ scope: 'user' }] });
+        expect(pluginReport(json)).toBeUndefined();
+        pluginVersion(home, '1.0.0');
+        expect(pluginReport(json)).toEqual(DUPLICATE);
+    });
+
+    it('старая версия с .orphaned_at рядом с установленной не попадает в отчёт', () => {
+        const { home, json } = installed();
+        const old = pluginVersion(home, '0.9.0');
+        fs.writeFileSync(path.join(old, '.orphaned_at'), '1700000000000');
+        const current = path.join(home, PLUGINS, 'cache/market/tools/1.0.0');
+        fs.mkdirSync(current, { recursive: true });
+        registry(home, { 'tools@market': [{ scope: 'user', installPath: current, version: '1.0.0' }] });
+        expect(pluginReport(json)).toBeUndefined();
+        // Устаревшая запись реестра на удалённую версию — тоже не в счёт.
+        registry(home, { 'tools@market': [{ scope: 'user', installPath: old, version: '0.9.0' }] });
+        expect(pluginReport(json)).toBeUndefined();
+    });
+
+    it('реестр плагинов не распознан — skipped, код выхода 0', () => {
+        const { home, json } = installed();
+        for (const broken of ['not json', '{"version":2}', '{"plugins":{"tools@market":{}}}']) {
+            registry(home, broken);
+            // details печатаются только с -v.
+            const { res, report } = json(['skills', '-v'], { CLAUDECODE: '1' });
+            expect(byId(report, 'skills.claude.plugins')).toMatchObject({
+                status: 'skipped',
+                message: 'Claude Code plugin registry is not recognized',
+                details: expect.any(String)
+            });
+            expect(res.status).toBe(0);
+        }
     });
 });
 
