@@ -19,10 +19,26 @@ const PUML_PROCESS = /^PlantUML (exited with code|did not finish)/;
 
 export const VERBOSE_HINT = '(run with --verbose for details)';
 
+// java на Windows печатает `\r\n`: без нормализации блок ERROR не узнаётся, и вместо
+// `line N: …` пользователь получил бы сырой stderr.
+const messageOf = (err: unknown): string =>
+    `${err instanceof Error ? err.message : (err ?? '')}`.replace(/\r\n?/g, '\n');
+
 /** Позиция и описание синтаксической ошибки PlantUML; null — ошибка не входа (или не PlantUML). */
 export const plantUmlInputError = (err: unknown): { line: number; message: string } | null => {
-    const m = `${(err as Error)?.message ?? ''}`.match(PUML_ERROR);
+    const m = messageOf(err).match(PUML_ERROR);
     return m ? { line: Number(m[1]) + 1, message: m[2].trim() } : null;
+};
+
+// Ошибка с разобранной сутью (нарушения BPMN/wireflow, строка mermaid или PlantUML) — null,
+// если движок дал только сырой текст.
+const structuredProblems = (err: unknown, lib: boolean): string[] | null => {
+    // BPMN и wireflow: по строке на нарушение — агент правит их по id элемента; mermaid — `line N: …`.
+    if (err instanceof BpmnError || err instanceof MermaidError || err instanceof WireflowError) {
+        return err.problems;
+    }
+    const puml = plantUmlInputError(err);
+    return puml ? [lib ? puml.message : `line ${puml.line}: ${puml.message}`] : null;
 };
 
 /**
@@ -30,17 +46,33 @@ export const plantUmlInputError = (err: unknown): { line: number; message: strin
  * позиция относится к обёртке, а не к файлу, поэтому без номера строки.
  */
 export const describeRenderError = (err: unknown, { lib = false }: { lib?: boolean } = {}): string[] => {
-    // BPMN и wireflow: по строке на нарушение — агент правит их по id элемента; mermaid — `line N: …`.
-    if (err instanceof BpmnError || err instanceof MermaidError || err instanceof WireflowError) {
-        return err.problems;
-    }
-    const puml = plantUmlInputError(err);
-    if (puml) return [lib ? puml.message : `line ${puml.line}: ${puml.message}`];
-    const message = err instanceof Error ? err.message : `${err}`;
+    const structured = structuredProblems(err, lib);
+    if (structured) return structured;
+    const message = messageOf(err);
     const [first, ...rest] = message.split('\n');
     if (PUML_PROCESS.test(first) && rest.some((l) => l.trim())) return [`${first} ${VERBOSE_HINT}`];
     return [message];
 };
+
+/**
+ * Текст картинки-заглушки: разобранная суть, если есть, иначе сообщение движка целиком (у
+ * сбоя процесса PlantUML — хвост stderr). Подсказка про флаг CLI в картинке бессмысленна —
+ * читатель сайта его не запустит.
+ */
+export const placeholderText = (err: unknown): string =>
+    (structuredProblems(err, false) ?? [messageOf(err)]).join('\n');
+
+/** Полный текст ошибки для --verbose: стек включает stderr движка (он в message). */
+export const errorDetails = (err: unknown): string =>
+    err instanceof Error ? (err.stack ?? err.message) : `${err}`;
+
+/** Нет java и т. п.: дело не во входе диаграммы — одно сообщение на сборку, без строки на файл. */
+export class DiagramEnvironmentError extends Error {
+    constructor(message: string, options?: { cause?: unknown }) {
+        super(message, options);
+        this.name = 'DiagramEnvironmentError';
+    }
+}
 
 /** Упавшая диаграмма строгой сборки: путь для сообщения, строки-проблемы и исходная ошибка. */
 export interface DiagramFailure {
@@ -51,23 +83,27 @@ export interface DiagramFailure {
     cause: unknown;
 }
 
-// Ошибки входа всех диаграмм сборки разом: строгая сборка дорендеривает остальные и
-// сообщает обо всех, а CLI печатает их строками `✗` без стека (стек — только с --verbose).
+// Ошибки всех диаграмм сборки разом: строгая сборка дорендеривает остальные и сообщает обо
+// всех, а CLI печатает их строками `✗` без стека (стек — только с --verbose). `fatal` —
+// ошибка, остановившая очередь (нет java): собранные до неё ошибки входа не теряются.
 export class DiagramBuildError extends Error {
     readonly failures: DiagramFailure[];
-    /** Строки `✗` уже напечатаны (build.ts) — верхний обработчик их не повторяет. */
-    reported = false;
-    constructor(failures: DiagramFailure[]) {
+    readonly fatal?: unknown;
+    constructor(failures: DiagramFailure[], fatal?: unknown) {
         const sorted = [...failures].sort((a, b) => a.index - b.index);
+        const lines = diagramErrorLines(sorted, fatal);
         super(
-            `${sorted.length} diagram${sorted.length === 1 ? '' : 's'} failed to render:\n` +
-                diagramErrorLines(sorted).join('\n')
+            `${lines.length} diagram error${lines.length === 1 ? '' : 's'}:\n${lines.join('\n')}`,
+            fatal === undefined ? undefined : { cause: fatal }
         );
         this.name = 'DiagramBuildError';
         this.failures = sorted;
+        this.fatal = fatal;
     }
 }
 
-/** Строки `<file>: <problem>` без маркера — маркер и цвет ставит место печати. */
-export const diagramErrorLines = (failures: DiagramFailure[]): string[] =>
-    failures.flatMap((f) => f.problems.map((p) => `${f.file}: ${p}`));
+/** Строки `<file>: <problem>` (и сообщение fatal-ошибки) без маркера — маркер ставит место печати. */
+export const diagramErrorLines = (failures: DiagramFailure[], fatal?: unknown): string[] => [
+    ...failures.flatMap((f) => f.problems.map((p) => `${f.file}: ${p}`)),
+    ...(fatal === undefined ? [] : [messageOf(fatal)])
+];

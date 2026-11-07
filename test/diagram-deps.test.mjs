@@ -160,8 +160,8 @@ describe('ленивая загрузка mermaid-движка', () => {
     it('блок mermaid без пакета: код 0, заглушка, предупреждение с пакетом и способом установки', () => {
         const res = run(project('mblock', '# Home\n\n```mermaid\nflowchart LR\n  A --> B\n```\n'));
         expect(res.status, `${res.stdout}${res.stderr}`).toBe(0);
-        expect(res.stdout).toMatch(/⚠ .*requires the optional packages @mermaid-js\/tiny and jsdom/);
-        expect(res.stdout).toMatch(/without --omit=optional: npm i -g @alfacapital-tech\/c4builder/);
+        expect(res.stderr).toMatch(/⚠ .*requires the optional packages @mermaid-js\/tiny and jsdom/);
+        expect(res.stderr).toMatch(/without --omit=optional: npm i -g @alfacapital-tech\/c4builder/);
     });
 
     it('.mmd без пакета → понятная ошибка check с подсказкой установки', () => {

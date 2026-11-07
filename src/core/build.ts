@@ -15,7 +15,12 @@ import {
     type DiagramQueue,
     type GenerateImagesFlags
 } from './render/diagrams.ts';
-import { DiagramBuildError, diagramErrorLines } from './render/errors.ts';
+import {
+    DiagramBuildError,
+    DiagramEnvironmentError,
+    diagramErrorLines,
+    errorDetails
+} from './render/errors.ts';
 import {
     generateMD,
     generateWebMD,
@@ -166,12 +171,18 @@ const build = async (
         ok = true;
         return { pages, redirects, pending };
     } catch (err) {
-        // Ошибки диаграмм — строками в формате check, до `build aborted` (его печатает finally);
-        // верхний обработчик CLI выходит с кодом 1 без стека, не повторяя их.
+        // Ошибки диаграмм печатаются только здесь — строками в формате check, до `build aborted`
+        // (его печатает finally); верхний обработчик CLI лишь выходит с кодом 1 без стека.
         if (err instanceof DiagramBuildError) {
             console.log(''); // закрыть строку прогресса `processed …`
-            for (const line of diagramErrorLines(err.failures)) console.error(chalk.red(`✗ ${line}`));
-            err.reported = true;
+            for (const line of diagramErrorLines(err.failures, err.fatal))
+                console.error(chalk.red(`✗ ${line}`));
+            for (const { file, cause } of err.failures)
+                if (flags.verbose) console.error(chalk.gray(`\n${file}:\n${errorDetails(cause)}`));
+            // Сбой вне рендера (не нет java) — баг: его стек нужен всегда.
+            const { fatal } = err;
+            if (fatal !== undefined && (flags.verbose || !(fatal instanceof DiagramEnvironmentError)))
+                console.error(chalk.gray(`\n${errorDetails(fatal)}`));
         }
         throw err;
     } finally {
@@ -181,7 +192,8 @@ const build = async (
         if (ok) {
             await fsextra.removeSync(bkFolderName);
         } else if (options.GENERATE_LOCAL_IMAGES && fsextra.existsSync(bkFolderName)) {
-            console.log(
+            // stderr — вместе со строками `✗`: в `2>&1 | tail` и в логе CI они идут подряд.
+            console.error(
                 chalk.yellow(`\nbuild aborted — the previous build is backed up in ./${bkFolderName}`)
             );
         }

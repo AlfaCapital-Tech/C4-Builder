@@ -11,6 +11,7 @@ import {
     defaultConfig,
     describeRenderError,
     MermaidError,
+    placeholderText,
     plantUmlInputError,
     VERBOSE_HINT,
     WireflowError
@@ -41,6 +42,22 @@ describe('describeRenderError — общий разбор для check и сбо
             line: 4,
             message: 'Fatal parsing error'
         });
+    });
+
+    it('CRLF (java на Windows) — разбирается так же', () => {
+        const crlf = new Error(ISSUE_STDERR.replace(/\n/g, '\r\n'));
+        expect(describeRenderError(crlf)).toEqual(['line 4: Fatal parsing error']);
+        expect(plantUmlInputError(crlf)).toEqual({ line: 4, message: 'Fatal parsing error' });
+        const proc = new Error('PlantUML exited with code 1\r\njava.lang.OutOfMemoryError\r\n');
+        expect(describeRenderError(proc)).toEqual([`PlantUML exited with code 1 ${VERBOSE_HINT}`]);
+    });
+
+    it('текст заглушки: разобранная суть, иначе хвост stderr — без подсказки про флаг CLI', () => {
+        expect(placeholderText(new Error(ISSUE_STDERR))).toBe('line 4: Fatal parsing error');
+        const proc = new Error('PlantUML did not finish in 120 s and was aborted\njava.lang.Thread.sleep');
+        expect(placeholderText(proc)).toBe(proc.message);
+        expect(placeholderText(proc)).not.toContain('--verbose');
+        expect(placeholderText(new BpmnError('a.bpmn', ['T [r] x', 'U [r] y']))).toBe('T [r] x\nU [r] y');
     });
 
     it('.iuml (lib) — без номера строки: позиция относится к обёртке', () => {
@@ -77,14 +94,16 @@ describe('describeRenderError — общий разбор для check и сбо
         expect(describeRenderError('boom')).toEqual(['boom']);
     });
 
-    it('DiagramBuildError — порядок обхода, а не завершения', () => {
-        const e = new DiagramBuildError([
+    it('DiagramBuildError — порядок обхода, а не завершения; fatal-ошибка — последней строкой', () => {
+        const failures = [
             { index: 5, file: 'b.d2', problems: ['bad'], cause: new Error('bad') },
             { index: 1, file: 'a.puml', problems: ['line 4: x'], cause: new Error('x') }
-        ]);
+        ];
+        const e = new DiagramBuildError(failures);
         expect(e.failures.map((f) => f.file)).toEqual(['a.puml', 'b.d2']);
-        expect(e.message).toBe('2 diagrams failed to render:\na.puml: line 4: x\nb.d2: bad');
-        expect(e.reported).toBe(false);
+        expect(e.message).toBe('2 diagram errors:\na.puml: line 4: x\nb.d2: bad');
+        const withFatal = new DiagramBuildError(failures, new Error('Could not get Java'));
+        expect(withFatal.message).toBe('3 diagram errors:\na.puml: line 4: x\nb.d2: bad\nCould not get Java');
     });
 
     it('DEBUG: c4builder или * в списке через запятую/пробел', () => {
@@ -161,6 +180,10 @@ describe('строгая сборка со сломанными диаграмм
         expect(res.out).not.toContain('at render (');
         expect(res.out).not.toMatch(/Node\.js v\d/);
         expect(res.out).toContain('build aborted');
+        // Все строки ошибок и `build aborted` — в stderr, как у check: stdout их не несёт.
+        expect(res.stdout).not.toContain('✗');
+        expect(res.stdout).not.toContain('build aborted');
+        expect(res.stderr).toContain('build aborted');
 
         // Та же строка, что печатает check для этого файла.
         const check = run(root, ['check', 'src/dangling.puml']);
@@ -191,12 +214,13 @@ describe('строгая сборка со сломанными диаграмм
         expect(debug.stderr).toContain('java.lang.');
     }, 600_000);
 
-    it('нет java: сообщение один раз на все диаграммы, код 1', () => {
+    it('нет java: сообщение один раз на все диаграммы, код 1; ошибки входа других движков не теряются', () => {
         const root = project('nojava', {
             'src/README.md': '# Home\n',
             'src/a.puml': GOOD_PUML,
             'src/b.puml': GOOD_PUML,
-            'src/c.puml': GOOD_PUML
+            'src/c.puml': GOOD_PUML,
+            'src/bad.d2': 'a -> \n'
         });
         // Ни системной java (пустой PATH, без JAVA_HOME), ни кэша JRE, скачивание падает сразу.
         const empty = path.join(dir, 'nojava-env');
@@ -218,6 +242,9 @@ describe('строгая сборка со сломанными диаграмм
         const out = `${res.stdout}${res.stderr}`;
         expect(res.status, out).toBe(1);
         expect(out.match(/Could not get Java to render PlantUML diagrams/g), out).toHaveLength(1);
+        expect(res.stderr).toMatch(/^✗ src\/bad\.d2: D2 compile error/m);
+        expect(res.stderr).toMatch(/^✗ Could not get Java/m);
+        expect(out).not.toMatch(/Node\.js v\d/);
     }, 180_000);
 
     it('stdout не терминал: ни баннера, ни очистки экрана (первый запуск и --docs)', () => {

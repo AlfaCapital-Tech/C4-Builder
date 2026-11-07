@@ -62,7 +62,7 @@ build aborted — the previous build is backed up in ./docs_bk
   `build aborted — …` (the previous output, if any, stays in `docs_bk`) and exit code 1 — no Java
   or Node stack trace.
 - No Java, or the render thread crashed — the build stops at once with one message for all
-  diagrams.
+  diagrams; errors of other diagrams found before that are printed along with it.
 - `-v, --verbose` or the `DEBUG` environment variable set to `c4builder` (a comma- or
   space-separated list, `*` — everything) add the full engine output and stack of every error
   after the `✗` lines — what is worth attaching to an issue.
@@ -70,7 +70,9 @@ build aborted — the previous build is backed up in ./docs_bk
   a file.
 
 Soft errors — a placeholder instead of a broken markdown block (`⚠`) and errors in `site -w` (`✗`)
-— print the same short text, and the placeholder image carries no Java stack.
+— print the same short text on stderr, with `-v` also the full engine output. The placeholder image
+shows the same gist of the error, and for a PlantUML process failure with no position — the tail of
+its output.
 
 ## The `--site -w` dev server
 

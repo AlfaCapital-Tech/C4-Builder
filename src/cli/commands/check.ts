@@ -3,6 +3,7 @@ import path from 'node:path';
 import { readFile } from 'node:fs/promises';
 
 import { VENDOR_DIR } from '../../util/paths.ts';
+import { exitAfterFlush } from '../../util/exit.ts';
 import { VENDORED_JAR } from '../../util/utils.ts';
 import { resolveJava } from '../../core/render/jre.ts';
 import { renderDiagram } from '../../core/render/diagrams.ts';
@@ -11,7 +12,7 @@ import { renderBpmn, teardownBpmn } from '../../core/render/bpmnrenderer.ts';
 import { renderMermaid, teardownMermaid } from '../../core/render/mermaidrenderer.ts';
 import { renderWireflow } from '../../core/render/wireflowrenderer.ts';
 // Разбор ошибки движка — общий со сборкой: один файл даёт один и тот же текст в обоих местах.
-import { describeRenderError, plantUmlInputError } from '../../core/render/errors.ts';
+import { describeRenderError, errorDetails, plantUmlInputError } from '../../core/render/errors.ts';
 
 // `c4builder check <file...>` — валидация отдельных диаграмм ТЕМ ЖЕ движком, что и
 // сборка (вендорный PlantUML jar + системная/managed java, бандл D2, конвейер BPMN, mermaid,
@@ -91,7 +92,7 @@ const checkerFor = (abs: string): ((abs: string) => Promise<unknown>) | undefine
 export default async (files: string[], { verbose = false }: { verbose?: boolean } = {}): Promise<void> => {
     if (files.length === 0) {
         console.log(chalk.red(`usage: c4builder check <file...>  (${EXTENSIONS.join(' | ')})`));
-        process.exit(1);
+        return exitAfterFlush(1);
     }
     let failed = 0;
     // ponytail: последовательно — на сотнях файлов добавить пул как в generateImages.
@@ -107,11 +108,12 @@ export default async (files: string[], { verbose = false }: { verbose?: boolean 
             const lib = path.extname(abs) === '.iuml';
             for (const p of describeRenderError(e, { lib })) console.error(chalk.red(`✗ ${file}: ${p}`));
             // Сбой процесса PlantUML в короткой строке обещает подробности по --verbose.
-            if (verbose) console.error(chalk.gray((e as Error)?.stack ?? `${e}`));
+            if (verbose) console.error(chalk.gray(errorDetails(e)));
         }
     }
     await teardownD2();
     await teardownBpmn();
     await teardownMermaid();
-    if (failed) process.exit(1);
+    // Строки `✗` в pipe должны дописаться до выхода (см. exitAfterFlush).
+    if (failed) exitAfterFlush(1);
 };

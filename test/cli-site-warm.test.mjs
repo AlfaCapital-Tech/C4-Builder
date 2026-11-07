@@ -146,9 +146,9 @@ describe('холодный старт site -w', () => {
         // Формат check: путь файла и строка, без stderr PlantUML со стеком Java (issue #62).
         expect(out.match(/^✗ src\/Bad\/diagram\.puml: line 3: Syntax Error\?.*$/gm)).toHaveLength(1);
         expect(out).not.toContain('java.lang.');
-        expect(out.match(/Diagram "diagram\.svg": unchanged since it failed, not re-rendered/g)).toHaveLength(
-            2
-        );
+        expect(
+            out.match(/src\/Bad\/diagram\.puml: unchanged since it failed, not re-rendered/g)
+        ).toHaveLength(2);
         expect(out).toContain('serving your docsify site');
     }, 240_000);
 

@@ -20,6 +20,7 @@ export { build } from '../dist/core/build.js';
 export {
     describeRenderError,
     DiagramBuildError,
+    placeholderText,
     plantUmlInputError,
     VERBOSE_HINT
 } from '../dist/core/render/errors.js';

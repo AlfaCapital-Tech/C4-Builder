@@ -25,7 +25,14 @@ import { resolveJava } from './jre.ts';
 import { rasterizeSvgToPng } from './pngraster.ts';
 import { escapeXml } from './textmetrics.ts';
 // Короткий текст ошибки движка — общий с `c4builder check`.
-import { describeRenderError, DiagramBuildError, type DiagramFailure } from './errors.ts';
+import {
+    DiagramBuildError,
+    DiagramEnvironmentError,
+    type DiagramFailure,
+    describeRenderError,
+    errorDetails,
+    placeholderText
+} from './errors.ts';
 // Шрифт-пин общий с resvg-растеризатором (одна точка правды, см. fonts.ts).
 import { FONTS_DIR, DEFAULT_FONT_NAME } from './fonts.ts';
 import { VENDOR_DIR, packageJson } from '../../util/paths.ts';
@@ -393,6 +400,9 @@ export const pendingPlaceholderSvg = (name: string): string =>
 // Заглушки свёрстаны вендорным шрифтом — системные им не нужны, а resvg с
 // loadSystemFonts сканирует все шрифты системы (до нескольких секунд на каждую растеризацию
 // при useSystemFonts), задерживая отдачу страницы ради картинки «rendering…».
+// Сообщение ошибки окружения без имени диаграммы: оно общее для всех диаграмм сборки.
+const messageText = (err: unknown): string => `${(err as Error)?.message || err}`;
+
 const rasterizePlaceholder = (svg: Buffer): Promise<Buffer> => rasterizeSvgToPng(svg, false);
 
 export interface GenerateImagesFlags {
@@ -423,6 +433,11 @@ export interface GenerateImagesFlags {
      * SSE во время их рендера. Обычная сборка и check рендерят в главном потоке.
      */
     offThread?: boolean;
+    /**
+     * Полный вывод движка и стек ошибки диаграммы (`-v/--verbose`, `DEBUG=c4builder`): в мягких
+     * путях печатаются здесь же, под строкой `✗`/`⚠` — их короткий текст обещает подробности.
+     */
+    verbose?: boolean;
 }
 
 export const generateImages = async (
@@ -435,7 +450,8 @@ export const generateImages = async (
         deferImages = false,
         softErrors = deferImages,
         failedRenders,
-        offThread = false
+        offThread = false,
+        verbose = false
     }: GenerateImagesFlags = {}
 ): Promise<DiagramQueue | undefined> => {
     // Чексуммы прошлого прогона — в Set: попадание проверяется O(1) на диаграмму
@@ -552,6 +568,11 @@ export const generateImages = async (
                   : foldIncludes(body, depsDir, depsDir, new Set());
             const outFormat = diagramOutputFormat(diagram, options);
             const outName = `${diagramBaseName(diagram.dir)}.${outFormat}`;
+            // Путь для сообщений движка; у блоков в markdown — их страница.
+            const file = diagram.source ?? path.relative(process.cwd(), entryPath).split(path.sep).join('/');
+            // Метка в строках ошибок: у блока в markdown строка ошибки — внутри блока, а не
+            // страницы, поэтому рядом с путём страницы — имя картинки, чтобы найти блок.
+            const label = diagram.soft === true && diagram.source ? `${diagram.source} (${outName})` : file;
             const relOut = path.join(item.dir.replace(options.ROOT_FOLDER, ''), outName);
             const outKey = relOut.split(path.sep).join('/');
             // Путь выхода — тоже в чексумме: восстановление из бэкапа идёт по паре
@@ -603,11 +624,7 @@ export const generateImages = async (
                 const keep = withProgress(async () => {
                     fsextra.copyFileSync(bkFilePath, filePath);
                     failedRenders?.set(outKey, cksum);
-                    console.log(
-                        chalk.gray(
-                            `Diagram "${outName}"${diagram.source ? ` (${diagram.source})` : ''}: unchanged since it failed, not re-rendered`
-                        )
-                    );
+                    console.log(chalk.gray(`${label}: unchanged since it failed, not re-rendered`));
                 });
                 if (deferImages) immediate.push(keep);
                 else queue.add({ out: relOut, lane: 'plantuml', run: keep });
@@ -621,9 +638,6 @@ export const generateImages = async (
             const diagramContent = diagram.content;
             const includePath = depsDir;
             const isDitaa = diagram.isDitaa;
-            // Имя картинки диаграммы виртуальной страницы производно от контента —
-            // без исходного файла в сообщении его не найти.
-            const source = diagram.source;
             const soft = diagram.soft === true;
             // Wireflow рендерится синхронно в главном потоке — своя дорожка с параллелизмом 1
             // ради единообразия, выигрыша от конкурентности нет.
@@ -647,8 +661,6 @@ export const generateImages = async (
                 // render diagram to image: D2 через WASM, PlantUML — прямым вызовом java.
                 // Для растеризации PlantUML не-ditaa рендерим в svg (не -tpng), затем resvg.
                 let rendered: Buffer;
-                // Путь для сообщений движка; у блоков в markdown — их страница.
-                const file = source ?? path.relative(process.cwd(), entryPath).split(path.sep).join('/');
                 try {
                     if (isD2) {
                         rendered = await renderD2(entryPath, { layout: options.D2_LAYOUT, seed: body });
@@ -690,26 +702,30 @@ export const generateImages = async (
                     const environment = environmentFailure || err instanceof RenderWorkerError;
                     // Тот же короткий текст, что у check: `line N: …` вместо stderr со стеком Java.
                     const problems = describeRenderError(err);
-                    // У блока в markdown строка ошибки — внутри блока, а не страницы: рядом с
-                    // путём страницы — имя картинки, чтобы найти, какой это блок.
-                    const label = soft && source ? `${source} (${outName})` : file;
+                    // Мягкие пути: строки ошибок — в stderr, как у check и строгой сборки; заглушка
+                    // получает диагностику для читателя страницы (без подсказки про флаг CLI).
+                    const reportSoft = async (mark: string): Promise<void> => {
+                        for (const p of problems)
+                            console.error(
+                                mark === '✗'
+                                    ? chalk.red(`✗ ${label}: ${p}`)
+                                    : chalk.yellow(`⚠ ${label}: ${p}`)
+                            );
+                        if (verbose) console.error(chalk.gray(errorDetails(err)));
+                        await writeErrorPlaceholder(placeholderText(err));
+                    };
                     if (softErrors) {
-                        for (const p of problems) console.log(chalk.red(`✗ ${label}: ${p}`));
-                        await writeErrorPlaceholder(problems.join('\n'));
+                        await reportSoft('✗');
                         if (!environment) failedRenders?.set(outKey, cksum);
                         return;
                     }
                     if (soft) {
-                        for (const p of problems) console.log(chalk.yellow(`⚠ ${label}: ${p}`));
-                        await writeErrorPlaceholder(problems.join('\n'));
+                        await reportSoft('⚠');
                         return;
                     }
                     // Нет java / упал воркер — одно сообщение и стоп: у остальных диаграмм та же
-                    // причина. Имя диаграммы в ошибку: renderDiagram/renderD2 сами его не знают.
-                    if (environment) {
-                        const reason = `${(err as Error).message || err}`;
-                        throw new Error(`Diagram "${outName}"${source ? ` (${source})` : ''}: ${reason}`);
-                    }
+                    // причина, строка на каждый файл была бы шумом.
+                    if (environment) throw new DiagramEnvironmentError(messageText(err), { cause: err });
                     failures.push({ index: order, file, problems, cause: err });
                 }
             };
@@ -741,7 +757,15 @@ export const generateImages = async (
     // главный поток) и параллельно друг другу; при частичном падении чексуммы успешно
     // обработанных всё равно персистятся (onSettled) — вместе с сохранением dist_bk при
     // ошибке (build.ts) повторный прогон после сбоя чинит только упавшую диаграмму.
-    await queue.run();
+    try {
+        await queue.run();
+    } catch (err) {
+        // Очередь остановила ошибка окружения (или сбой вне рендера): ошибки входа, собранные
+        // другими дорожками до неё, печатаются вместе с ней, а не теряются.
+        if (failures.length || err instanceof DiagramEnvironmentError)
+            throw new DiagramBuildError(failures, err);
+        throw err;
+    }
     if (failures.length) throw new DiagramBuildError(failures);
     return undefined;
 };

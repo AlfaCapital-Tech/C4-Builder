@@ -19,7 +19,6 @@ import { cmdUpdate, pendingUpdate, startUpdateCheck } from './update.ts';
 import cmdCollect from './wizard/collect.ts';
 import { build, type BuildResult } from '../core/build.ts';
 import type { DiagramQueue } from '../core/render/diagrams.ts';
-import { DiagramBuildError } from '../core/render/errors.ts';
 import { isVerbose } from './verbose.ts';
 import { loadPlugins, pluginWatchPaths } from '../core/plugins/load.ts';
 import fs from 'node:fs';
@@ -401,6 +400,8 @@ export default async () => {
         // dev-сервере BPMN и mermaid рендерятся в worker-потоке, сервер не замирает.
         const failedRenders = new Map<string, string>();
         const offThread = !!opts.site;
+        // Подробности ошибок диаграмм (stderr движка, стек) — во всех путях сборки, в т.ч. мягких.
+        const verbose = isVerbose(opts);
         // Ошибку сборки печатает и гасит (false): watch и сервер живы, прежний result в силе.
         const rebuild = async (): Promise<boolean> => {
             try {
@@ -409,20 +410,13 @@ export default async () => {
                     result = await build(options, cacheConf, plugins, {
                         softErrors: true,
                         failedRenders,
-                        offThread
+                        offThread,
+                        verbose
                     });
                 } while (attemptedWatchBuild);
                 return true;
             } catch (err) {
                 attemptedWatchBuild = false;
-                // Ошибки диаграмм build уже напечатал строками `✗` — стек тут только шум.
-                // (При softErrors их не бывает; страховка на случай иного пути.)
-                if (err instanceof DiagramBuildError) {
-                    console.log(
-                        chalk.red(`build failed: ${err.failures.length} diagram(s) failed to render`)
-                    );
-                    return false;
-                }
                 const e = err as Error;
                 console.log(chalk.red(`build failed: ${e?.stack ? e.stack : e}`));
                 return false;
@@ -512,6 +506,7 @@ export default async () => {
             const deferImages = !!(opts.site && opts.watch);
             result = await build(options, cacheConf, plugins, {
                 deferImages,
+                verbose,
                 ...(deferImages ? { failedRenders, offThread } : {})
             });
             ({ pending } = result);
