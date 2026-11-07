@@ -1,2 +1,3 @@
 *.pdf
 .c4builder.cache
+.c4builder.server.json

@@ -3,6 +3,25 @@
 User-facing changes of C4-Builder. Every pull request that changes behaviour adds a line to
 `## Unreleased`; the release commit renames it to `## vX.Y.Z`.
 
+## Unreleased
+
+- `site` / `--site [-w]` writes a state file next to the config while it runs —
+  `.c4builder.server.json` (`<file>.server.json` for `-c <file>`) with the port, address, pid,
+  version and watch mode — and removes it on Ctrl+C, `SIGTERM` or a normal exit; a file left by a
+  killed process is ignored. Add `.c4builder.server.json` to the `.gitignore` of existing projects
+  (the `c4builder new` template has it) (#64)
+- `c4builder status [--json]` — whether the site of this project is running: address, pid, version,
+  watch, agent mode, `feedback` listeners and their queues; exit code 0 — running, 1 — not. It only
+  reads and works outside a project (#64)
+- `c4builder feedback` and `c4builder doctor runtime` find the running site by its state file:
+  without `-p` they take its port, otherwise `webPort` as before (#64)
+- A second `site` / `--site -w` for the same config no longer builds and starts another server: it
+  prints `c4builder site is already running for this project at <url> (pid N)` and exits with code
+  1; with `--open` / `--open-change <id>` it opens that address of the running server and exits
+  with code 0 (#64)
+- The `c4builder-review` and `c4builder` skills check the server with `c4builder status` instead of
+  `curl` and no longer pass `-p` to `feedback`
+
 ## v0.14.0
 
 - `site` / `--site -w` on a taken port suggests a free one: `port 3000 is already in use — pass a
