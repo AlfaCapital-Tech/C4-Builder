@@ -15,6 +15,7 @@ import {
     type DiagramQueue,
     type GenerateImagesFlags
 } from './render/diagrams.ts';
+import { DiagramBuildError, diagramErrorLines } from './render/errors.ts';
 import {
     generateMD,
     generateWebMD,
@@ -164,6 +165,15 @@ const build = async (
         console.log(chalk.green(`built in ${(Date.now() - start_date.getTime()) / 1000} seconds`));
         ok = true;
         return { pages, redirects, pending };
+    } catch (err) {
+        // Ошибки диаграмм — строками в формате check, до `build aborted` (его печатает finally);
+        // верхний обработчик CLI выходит с кодом 1 без стека, не повторяя их.
+        if (err instanceof DiagramBuildError) {
+            console.log(''); // закрыть строку прогресса `processed …`
+            for (const line of diagramErrorLines(err.failures)) console.error(chalk.red(`✗ ${line}`));
+            err.reported = true;
+        }
+        throw err;
     } finally {
         // Бэкап dist сносим ТОЛЬКО при успехе: при падении фазы dist_bk — единственная
         // полная копия прошлого удачного билда, её нельзя терять (иначе первый же

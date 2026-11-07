@@ -24,6 +24,8 @@ import { resolveJava } from './jre.ts';
 // PNG-выход: SVG обоих движков растеризуется resvg (ленивая загрузка внутри модуля).
 import { rasterizeSvgToPng } from './pngraster.ts';
 import { escapeXml } from './textmetrics.ts';
+// Короткий текст ошибки движка — общий с `c4builder check`.
+import { describeRenderError, DiagramBuildError, type DiagramFailure } from './errors.ts';
 // Шрифт-пин общий с resvg-растеризатором (одна точка правды, см. fonts.ts).
 import { FONTS_DIR, DEFAULT_FONT_NAME } from './fonts.ts';
 import { VENDOR_DIR, packageJson } from '../../util/paths.ts';
@@ -444,6 +446,10 @@ export const generateImages = async (
     // упавший прогон терял бы чексуммы уже отрендеренных → их полный перерендер на
     // следующем запуске (см. persist ниже).
     const checksumEntries: { cksum: string; ok: boolean }[] = [];
+    // Ошибки входа строгой сборки: задача не бросает, а складывает сюда — очередь дорендеривает
+    // остальные, и пользователь видит все сломанные диаграммы за один прогон (как в check).
+    // Ошибки окружения сюда не попадают — они останавливают очередь сразу.
+    const failures: DiagramFailure[] = [];
 
     // Персист кэша по ходу рендера: не чаще CACHE_PERSIST_MS и обязательно по окончании
     // очереди (onSettled). Набор — old ∩ успешные, как и раньше, но накапливается постепенно.
@@ -561,6 +567,8 @@ export const generateImages = async (
             // порядок массива не зависит от того, кто из воркеров финиширует раньше —
             // .c4builder.cache детерминирован (важно для сравнения кэша между сборками).
             const cksumEntry = { cksum, ok: false };
+            // Порядок обхода — для вывода ошибок: воркеры финишируют вразнобой.
+            const order = checksumEntries.length;
             checksumEntries.push(cksumEntry);
 
             // path to backup image file
@@ -639,9 +647,9 @@ export const generateImages = async (
                 // render diagram to image: D2 через WASM, PlantUML — прямым вызовом java.
                 // Для растеризации PlantUML не-ditaa рендерим в svg (не -tpng), затем resvg.
                 let rendered: Buffer;
+                // Путь для сообщений движка; у блоков в markdown — их страница.
+                const file = source ?? path.relative(process.cwd(), entryPath).split(path.sep).join('/');
                 try {
-                    // Путь для сообщений движка; у блоков в markdown — их страница.
-                    const file = source ?? path.relative(process.cwd(), entryPath).split(path.sep).join('/');
                     if (isD2) {
                         rendered = await renderD2(entryPath, { layout: options.D2_LAYOUT, seed: body });
                     } else if (isBpmn) {
@@ -679,19 +687,30 @@ export const generateImages = async (
                     cksumEntry.ok = true;
                     schedulePersist();
                 } catch (err: unknown) {
-                    // Имя диаграммы в ошибку: renderDiagram/renderD2 сами его не знают.
-                    const reason = `${(err as Error).message || err}`;
-                    const msg = `Diagram "${outName}"${source ? ` (${source})` : ''}: ${reason}`;
+                    const environment = environmentFailure || err instanceof RenderWorkerError;
+                    // Тот же короткий текст, что у check: `line N: …` вместо stderr со стеком Java.
+                    const problems = describeRenderError(err);
+                    // У блока в markdown строка ошибки — внутри блока, а не страницы: рядом с
+                    // путём страницы — имя картинки, чтобы найти, какой это блок.
+                    const label = soft && source ? `${source} (${outName})` : file;
                     if (softErrors) {
-                        console.log(chalk.red(`✗ ${msg}`));
-                        await writeErrorPlaceholder(reason);
-                        if (!environmentFailure && !(err instanceof RenderWorkerError))
-                            failedRenders?.set(outKey, cksum);
+                        for (const p of problems) console.log(chalk.red(`✗ ${label}: ${p}`));
+                        await writeErrorPlaceholder(problems.join('\n'));
+                        if (!environment) failedRenders?.set(outKey, cksum);
                         return;
                     }
-                    if (!soft) throw new Error(msg);
-                    console.log(chalk.yellow(`⚠ ${msg}`));
-                    await writeErrorPlaceholder(reason);
+                    if (soft) {
+                        for (const p of problems) console.log(chalk.yellow(`⚠ ${label}: ${p}`));
+                        await writeErrorPlaceholder(problems.join('\n'));
+                        return;
+                    }
+                    // Нет java / упал воркер — одно сообщение и стоп: у остальных диаграмм та же
+                    // причина. Имя диаграммы в ошибку: renderDiagram/renderD2 сами его не знают.
+                    if (environment) {
+                        const reason = `${(err as Error).message || err}`;
+                        throw new Error(`Diagram "${outName}"${source ? ` (${source})` : ''}: ${reason}`);
+                    }
+                    failures.push({ index: order, file, problems, cause: err });
                 }
             };
 
@@ -723,5 +742,6 @@ export const generateImages = async (
     // обработанных всё равно персистятся (onSettled) — вместе с сохранением dist_bk при
     // ошибке (build.ts) повторный прогон после сбоя чинит только упавшую диаграмму.
     await queue.run();
+    if (failures.length) throw new DiagramBuildError(failures);
     return undefined;
 };
