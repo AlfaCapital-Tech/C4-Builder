@@ -686,9 +686,7 @@ describe('сборка проекта с .wireflow.json', () => {
         });
         const res = build(bad);
         expect(res.status).toBe(1);
-        expect(res.out).toMatch(
-            /Diagram "bad\.svg": src\/Flows\/bad\.wireflow\.json: edge "e": target "x9" is not a node/
-        );
+        expect(res.out).toMatch(/^✗ src\/Flows\/bad\.wireflow\.json: edge "e": target "x9" is not a node$/m);
 
         const clash = project({
             'README.md': '# Overview\n',

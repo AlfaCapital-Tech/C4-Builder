@@ -112,7 +112,9 @@ const urlTextFrom = (s: string): string => {
 const plantUmlServerUrl = (baseURL: string, imageFormat: string, content: string): string =>
     `${baseURL}/${imageFormat}/0/${urlTextFrom(content)}`;
 
+// Вне терминала escape-последовательности очистки попали бы в лог/файл мусором.
 const clearConsole = (): void => {
+    if (!process.stdout.isTTY) return;
     process.stdout.write('\x1b[2J');
     process.stdout.write('\x1b[0f');
 };

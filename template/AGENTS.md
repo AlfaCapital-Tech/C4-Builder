@@ -26,7 +26,8 @@ updates it.
    look like `✗ <file>: line <N>: <message>` (BPMN: `✗ <file>: <element id> [<rule>] <message>`; wireflow: one line per problem with
    the node or edge id).
    Fix until the exit code is 0.
-3. Run `c4builder` and make sure it exits with code 0. Leave `c4builder --site -w` to a
+3. Run `c4builder` and make sure it exits with code 0. Broken diagrams print the same `✗` lines
+   as `check` (all of them in one run) and exit with code 1; `-v` adds the full engine output. Leave `c4builder --site -w` to a
    human or run it in the background. When the human reviews the pages, also run
    `c4builder feedback --wait --as <name>` in the background, `<name>` being your change or
    task: on exit it prints a batch of comments (page, `Sources`, quote, text) — apply them to

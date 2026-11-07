@@ -3,13 +3,16 @@ import path from 'node:path';
 import { readFile } from 'node:fs/promises';
 
 import { VENDOR_DIR } from '../../util/paths.ts';
+import { exitAfterFlush } from '../../util/exit.ts';
 import { VENDORED_JAR } from '../../util/utils.ts';
 import { resolveJava } from '../../core/render/jre.ts';
 import { renderDiagram } from '../../core/render/diagrams.ts';
 import { renderD2, teardownD2 } from '../../core/render/d2renderer.ts';
-import { BpmnError, renderBpmn, teardownBpmn } from '../../core/render/bpmnrenderer.ts';
-import { MermaidError, renderMermaid, teardownMermaid } from '../../core/render/mermaidrenderer.ts';
-import { WireflowError, renderWireflow } from '../../core/render/wireflowrenderer.ts';
+import { renderBpmn, teardownBpmn } from '../../core/render/bpmnrenderer.ts';
+import { renderMermaid, teardownMermaid } from '../../core/render/mermaidrenderer.ts';
+import { renderWireflow } from '../../core/render/wireflowrenderer.ts';
+// Разбор ошибки движка — общий со сборкой: один файл даёт один и тот же текст в обоих местах.
+import { describeRenderError, errorDetails, plantUmlInputError } from '../../core/render/errors.ts';
 
 // `c4builder check <file...>` — валидация отдельных диаграмм ТЕМ ЖЕ движком, что и
 // сборка (вендорный PlantUML jar + системная/managed java, бандл D2, конвейер BPMN, mermaid,
@@ -17,12 +20,6 @@ import { WireflowError, renderWireflow } from '../../core/render/wireflowrendere
 // `.c4builder`. Рендер идёт в память и выбрасывается: проверяем ровно то, что упало бы
 // в сборке (системный `plantuml` может отличаться версией). Код выхода 0 — все файлы ок,
 // 1 — есть ошибка (движка, неизвестного расширения или чтения файла).
-
-// stderr PlantUML в -pipe: `ERROR` / позиция / описание. Позиция — 0-based строка
-// диаграммы, для файла с одной диаграммой это file:N+1.
-// ponytail: в файле с несколькими @startuml позиция считается от начала блока — смещение
-// не учитываем, добавить, если такие файлы станут проверять.
-const PUML_ERROR = /^ERROR\n(\d+)\n(.*)$/m;
 
 const JAR_PATH = path.join(VENDOR_DIR, VENDORED_JAR.jar);
 
@@ -59,11 +56,10 @@ const checkPlantUml = async (abs: string): Promise<void> => {
             });
             return;
         } catch (e) {
-            const m = (e as Error).message.match(PUML_ERROR);
-            if (!m) throw e;
-            if (i < attempts.length - 1) continue;
-            // Для .iuml позиция относится к обёртке, а не к файлу — не показываем.
-            throw new Error(isLib ? m[2] : `line ${Number(m[1]) + 1}: ${m[2]}`);
+            // Повтор — только на ошибке входа: сбой процесса java контекстом C4 не лечится.
+            // Текст разбирает describeRenderError (для .iuml — без позиции обёртки).
+            if (plantUmlInputError(e) && i < attempts.length - 1) continue;
+            throw e;
         }
     }
 };
@@ -93,10 +89,10 @@ const checkerFor = (abs: string): ((abs: string) => Promise<unknown>) | undefine
     return ext === undefined ? undefined : CHECKERS[ext];
 };
 
-export default async (files: string[]): Promise<void> => {
+export default async (files: string[], { verbose = false }: { verbose?: boolean } = {}): Promise<void> => {
     if (files.length === 0) {
         console.log(chalk.red(`usage: c4builder check <file...>  (${EXTENSIONS.join(' | ')})`));
-        process.exit(1);
+        return exitAfterFlush(1);
     }
     let failed = 0;
     // ponytail: последовательно — на сотнях файлов добавить пул как в generateImages.
@@ -109,17 +105,15 @@ export default async (files: string[]): Promise<void> => {
             console.log(chalk.green(`✓ ${file}`));
         } catch (e) {
             failed++;
-            // BPMN и wireflow: по строке на нарушение — агент правит их по id элемента;
-            // mermaid — `line N: …`.
-            const problems =
-                e instanceof BpmnError || e instanceof MermaidError || e instanceof WireflowError
-                    ? e.problems
-                    : [(e as Error).message];
-            for (const p of problems) console.error(chalk.red(`✗ ${file}: ${p}`));
+            const lib = path.extname(abs) === '.iuml';
+            for (const p of describeRenderError(e, { lib })) console.error(chalk.red(`✗ ${file}: ${p}`));
+            // Сбой процесса PlantUML в короткой строке обещает подробности по --verbose.
+            if (verbose) console.error(chalk.gray(errorDetails(e)));
         }
     }
     await teardownD2();
     await teardownBpmn();
     await teardownMermaid();
-    if (failed) process.exit(1);
+    // Строки `✗` в pipe должны дописаться до выхода (см. exitAfterFlush).
+    if (failed) exitAfterFlush(1);
 };

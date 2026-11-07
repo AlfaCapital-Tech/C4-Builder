@@ -19,6 +19,7 @@ import { cmdUpdate, pendingUpdate, startUpdateCheck } from './update.ts';
 import cmdCollect from './wizard/collect.ts';
 import { build, type BuildResult } from '../core/build.ts';
 import type { DiagramQueue } from '../core/render/diagrams.ts';
+import { isVerbose } from './verbose.ts';
 import { loadPlugins, pluginWatchPaths } from '../core/plugins/load.ts';
 import fs from 'node:fs';
 import { EventEmitter } from 'node:events';
@@ -73,7 +74,9 @@ const commandsHelp = (): string => {
     return `\nCommands:\n${rows.map(([usage, about]) => `  ${usage.padEnd(width)}  ${about}`).join('\n')}`;
 };
 
+// Баннер — только в терминале: в CI, логе агента и файле это ~10 строк шума перед делом.
 const intro = () => {
+    if (!process.stdout.isTTY) return;
     console.log(chalk.blue(figlet.textSync('c4builder')));
     console.log(chalk.gray('Blow up your software documentation writing skills'));
 };
@@ -203,7 +206,10 @@ export default async () => {
             'for `feedback`: listener name (your change or task) — the page sends batches to it'
         )
         .option('--json', 'for `doctor`: one JSON object with stable check ids')
-        .option('-v, --verbose', 'for `doctor`: absolute paths and details')
+        .option(
+            '-v, --verbose',
+            'for `doctor`: absolute paths and details; for a build and `check`: full engine output on diagram errors (also DEBUG=c4builder)'
+        )
         .option('--strict', 'for `doctor`: exit code 1 on warnings too')
         .option('--full', 'for `doctor`: build the template project in a temporary folder')
         .option('--offline', 'for `doctor`: no network requests')
@@ -246,7 +252,7 @@ export default async () => {
     // Прогрев JRE — до загрузки конфига проекта и intro: команда самостоятельна.
     if (cmd === 'jre') return cmdJre(cmdArgs, { force: opts.force });
     // Проверка отдельных диаграмм — тоже без конфига проекта.
-    if (cmd === 'check') return cmdCheck(cmdArgs);
+    if (cmd === 'check') return cmdCheck(cmdArgs, { verbose: isVerbose(opts) });
     // Обновление CLI — до Configstore, чтобы не создавать .c4builder в любом каталоге.
     if (cmd === 'update') return cmdUpdate();
     // Замечания со страницы `site -w` — тоже до Configstore: команду запускают в любом каталоге.
@@ -394,6 +400,8 @@ export default async () => {
         // dev-сервере BPMN и mermaid рендерятся в worker-потоке, сервер не замирает.
         const failedRenders = new Map<string, string>();
         const offThread = !!opts.site;
+        // Подробности ошибок диаграмм (stderr движка, стек) — во всех путях сборки, в т.ч. мягких.
+        const verbose = isVerbose(opts);
         // Ошибку сборки печатает и гасит (false): watch и сервер живы, прежний result в силе.
         const rebuild = async (): Promise<boolean> => {
             try {
@@ -402,7 +410,8 @@ export default async () => {
                     result = await build(options, cacheConf, plugins, {
                         softErrors: true,
                         failedRenders,
-                        offThread
+                        offThread,
+                        verbose
                     });
                 } while (attemptedWatchBuild);
                 return true;
@@ -497,6 +506,7 @@ export default async () => {
             const deferImages = !!(opts.site && opts.watch);
             result = await build(options, cacheConf, plugins, {
                 deferImages,
+                verbose,
                 ...(deferImages ? { failedRenders, offThread } : {})
             });
             ({ pending } = result);

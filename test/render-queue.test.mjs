@@ -4,8 +4,11 @@ import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import {
+    BpmnError,
     build,
     DiagramQueue,
+    describeRenderError,
+    MermaidError,
     generateImages,
     pendingPlaceholderSvg,
     rasterizeSvgToPng,
@@ -202,7 +205,7 @@ describe('инкрементальная запись кэша и отложен
         fs.rmSync(dir, { recursive: true, force: true });
     });
 
-    it('падение 3-й диаграммы из 5 оставляет в кэше чексуммы первых двух; следующий прогон берёт их из бэкапа', async () => {
+    it('падение 3-й диаграммы из 5: остальные дорендерены и в кэше, ошибка — после очереди; следующий прогон берёт их из бэкапа', async () => {
         const root = path.join(dir, 'inc', 'src');
         const names = ['d1', 'd2', 'd3', 'd4', 'd5'];
         const tree = makeTree(root, names, new Set(['d3']));
@@ -215,17 +218,20 @@ describe('инкрементальная запись кэша и отложен
         mkDist();
         const cache = memCache();
         const prev = process.env.C4BUILDER_RENDER_CONCURRENCY;
-        process.env.C4BUILDER_RENDER_CONCURRENCY = '1'; // строго по порядку: d1, d2, затем сбой на d3
+        process.env.C4BUILDER_RENDER_CONCURRENCY = '1'; // строго по порядку: сбой на d3 не останавливает d4, d5
         try {
-            await expect(generateImages(tree, options, undefined, cache, bk)).rejects.toThrow('d3.svg');
+            // Ошибка входа не останавливает очередь (issue #62): все сломанные — разом, в конце.
+            await expect(generateImages(tree, options, undefined, cache, bk)).rejects.toThrow(
+                /d3\.puml: line 3: Syntax Error/
+            );
         } finally {
             if (prev === undefined) delete process.env.C4BUILDER_RENDER_CONCURRENCY;
             else process.env.C4BUILDER_RENDER_CONCURRENCY = prev;
         }
         const checksums = cache.get('checksums');
-        expect(checksums).toHaveLength(2);
-        expect(fs.existsSync(path.join(options.DIST_FOLDER, 'd1', 'd1.svg'))).toBe(true);
-        expect(fs.existsSync(path.join(options.DIST_FOLDER, 'd2', 'd2.svg'))).toBe(true);
+        expect(checksums).toHaveLength(4);
+        for (const n of ['d1', 'd2', 'd4', 'd5'])
+            expect(fs.existsSync(path.join(options.DIST_FOLDER, n, `${n}.svg`)), n).toBe(true);
         expect(fs.existsSync(path.join(options.DIST_FOLDER, 'd3', 'd3.svg'))).toBe(false);
 
         // Повторный прогон: dist → бэкап с маркером вместо картинок; восстановленные из кэша
@@ -321,7 +327,12 @@ describe('инкрементальная запись кэша и отложен
         expect(cache.get('checksums')).toHaveLength(2);
 
         // Обычная сборка поверх: всё из кэша, кроме bad — она снова падает (не soft), сборка — ошибка.
-        await expect(build(options, cache, [])).rejects.toThrow('bad.svg');
+        const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+        try {
+            await expect(build(options, cache, [])).rejects.toThrow(/bad\.puml: line 3: /);
+        } finally {
+            err.mockRestore();
+        }
     }, 240_000);
 
     it('PNG-заглушка при useSystemFonts растеризуется вендорным шрифтом, без загрузки системных', async () => {
@@ -368,27 +379,34 @@ describe('инкрементальная запись кэша и отложен
         const cache = memCache();
         const failedRenders = new Map();
         const badSvg = () => fs.readFileSync(path.join(options.DIST_FOLDER, 'bad', 'bad.svg'), 'utf8');
-        // Пересборка dev-сервера: softErrors + общая на сессию карта упавших.
-        const rebuild = async () => {
+        // Пересборка dev-сервера: softErrors + общая на сессию карта упавших. Строки ошибок —
+        // в stderr (как у check), серое напоминание — в stdout.
+        let errOut = '';
+        const rebuild = async (flags = {}) => {
             const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+            const err = vi.spyOn(console, 'error').mockImplementation(() => {});
             try {
-                await build(options, cache, [], { softErrors: true, failedRenders });
-                return log.mock.calls.map((c) => c.join(' ')).join('\n');
+                await build(options, cache, [], { softErrors: true, failedRenders, ...flags });
+                errOut = err.mock.calls.map((c) => c.join(' ')).join('\n');
+                return [...log.mock.calls, ...err.mock.calls].map((c) => c.join(' ')).join('\n');
             } finally {
                 log.mockRestore();
+                err.mockRestore();
             }
         };
 
         makeTree(root, ['ok', 'bad'], new Set(['bad']));
         let out = await rebuild();
-        expect(out).toMatch(/✗ Diagram "bad\.svg": PlantUML exited/);
+        expect(errOut).toMatch(/✗ \S*\/bad\/bad\.puml: line 3: Syntax Error/);
+        expect(out).not.toContain('PlantUML exited'); // подробности — только с verbose
         expect(badSvg()).toContain('diagram not rendered');
+        expect(badSvg()).toContain('line 3: Syntax Error');
         expect([...failedRenders.keys()]).toEqual(['/bad/bad.svg']);
 
         // Тот же вход: без JVM — заглушка с ошибкой переносится, `✗` не повторяется.
         out = await rebuild();
         expect(out).not.toContain('✗');
-        expect(out).toContain('Diagram "bad.svg": unchanged since it failed, not re-rendered');
+        expect(out).toMatch(/\S*\/bad\/bad\.puml: unchanged since it failed, not re-rendered/);
         expect(badSvg()).toContain('diagram not rendered');
         expect(cache.get('checksums')).toHaveLength(1); // упавшая в кэш не попадает
 
@@ -397,9 +415,11 @@ describe('инкрементальная запись кэша и отложен
         out = await rebuild();
         expect(badSvg()).not.toContain('diagram not rendered');
         expect(failedRenders.size).toBe(0);
+        // verbose: под строкой `✗` мягкого пути — полный вывод движка (короткий текст его обещает).
         makeTree(root, ['ok', 'bad'], new Set(['bad']));
-        out = await rebuild();
-        expect(out).toMatch(/✗ Diagram "bad\.svg": PlantUML exited/);
+        out = await rebuild({ verbose: true });
+        expect(errOut).toMatch(/✗ \S*\/bad\/bad\.puml: line 3: Syntax Error/);
+        expect(errOut).toContain('PlantUML exited with code');
         expect(badSvg()).toContain('diagram not rendered');
     }, 240_000);
 });
@@ -453,10 +473,20 @@ describe('renderOffThread', () => {
         expect(Buffer.compare(off, await renderBpmn(BPMN, 'a.bpmn'))).toBe(0);
     }, 120_000);
 
-    it('ошибка движка приходит с тем же message, воркер жив', async () => {
+    it('ошибка движка приходит тем же классом и с тем же message, воркер жив', async () => {
         const bad = 'flowchart LR\n  A -->';
-        const main = await renderMermaid(bad, 'bad.mmd').catch((e) => e.message);
-        await expect(renderOffThread('mermaid', bad, 'bad.mmd')).rejects.toThrow(main);
+        const main = await renderMermaid(bad, 'bad.mmd').catch((e) => e);
+        const off = await renderOffThread('mermaid', bad, 'bad.mmd').catch((e) => e);
+        expect(off).toBeInstanceOf(MermaidError);
+        expect(off.message).toBe(main.message);
+        // Текст `site -w` (offThread) равен тексту check и обычной сборки.
+        expect(describeRenderError(off)).toEqual(describeRenderError(main));
+        const badBpmn = BPMN.replace('<bpmn:sequenceFlow id="F2" sourceRef="T" targetRef="E"/>', '');
+        const mainBpmn = await renderBpmn(badBpmn, 'a.bpmn').catch((e) => e);
+        const offBpmn = await renderOffThread('bpmn', badBpmn, 'a.bpmn').catch((e) => e);
+        expect(offBpmn).toBeInstanceOf(BpmnError);
+        expect(describeRenderError(offBpmn)).toEqual(mainBpmn.problems);
+        expect(offBpmn.problems.length).toBeGreaterThan(0);
         expect(
             (await renderOffThread('mermaid', 'flowchart LR\n  A --> B', 'ok.mmd')).length
         ).toBeGreaterThan(0);

@@ -75,9 +75,12 @@ How the source tree becomes pages:
    With a complete `.c4builder` (written by `c4builder --new --name <name> -y` or by the
    first interactive run) this is a one-off, non-interactive build. A missing or partial
    config needs the interactive wizard; without a terminal the run stops with exit code 1.
-   Do not drive the wizard: ask the user or write the full config (references/config.md). A diagram that fails here aborts the build with a long
-   Java stack trace and keeps the previous output in `docs_bk/`; run `c4builder check` on
-   the changed files to get the short message.
+   Do not drive the wizard: ask the user or write the full config (references/config.md). Broken
+   diagrams print the same lines as `c4builder check` — `✗ <file>: line <N>: <message>`, one per
+   broken diagram, all of them in one run — then `build aborted — …`, exit code 1; the previous
+   output stays in `docs_bk/`. Fix them from these lines. `-v`/`--verbose` (or `DEBUG=c4builder`)
+   adds the full engine output with stack traces — only when the short line is not enough.
+   No Java at all stops the build with one message, not one per diagram.
 4. **Look at the result** in `docs/`: `docs/<folder>/README.md` (markdown collection),
    `docs/index.html` + `docs/<folder>/<folder>.md` (site), `docs/<folder>/<diagram>.svg`.
 5. **Live preview for a human:** `c4builder --site -w` builds, serves on
@@ -220,7 +223,8 @@ reads, its `fix:` lines say what to run.
 - Remote `!include` URLs instead of `<C4/...>` stdlib includes.
 - Running `c4builder --site -w` or `c4builder feedback --wait --as <name>` in the foreground — the
   agent hangs.
-- Forgetting `c4builder check` and reading a Java stack trace from the full build instead.
+- Building the whole project to validate one edited diagram — `c4builder check <file>` is faster
+  and writes nothing.
 - A page "missing" from the output because its file or folder starts with `_`.
 - `generateLocalImages: false` in a project with `.d2`, `.bpmn`, `.mmd` or `.wireflow.json` files — they have no online
   renderer, the build stops with an error.
