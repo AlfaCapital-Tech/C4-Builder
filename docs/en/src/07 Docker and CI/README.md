@@ -115,9 +115,12 @@ a weak one. The output does not depend on it.
 In CI the background new-version check turns itself off by the `CI` variable: no process, no
 registry requests, a build without internet takes as long as before.
 
-The build behaves in CI just like locally: the exit code is not 0 if even one diagram fails to
-render. A separate quick `c4builder check` step on changed files reports a clear error before the
-full build.
+The build behaves in CI just like locally: the exit code is 1 if even one diagram fails to
+render. The log gets a `✗ <file>: line <N>: <message>` line for every broken diagram, all of them in
+one run, with no stack traces and no ASCII banner; the full engine output comes with `c4builder -v`
+or the `DEBUG=c4builder` variable (see "Diagram errors in a build" on the
+[CLI and configuration](05%20CLI%20and%20configuration/05%20CLI%20and%20configuration.md) page). A
+separate quick `c4builder check` step on changed files prints the same lines before the full build.
 
 ## How this site is built
 

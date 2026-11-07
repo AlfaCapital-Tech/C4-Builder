@@ -3,6 +3,14 @@
 User-facing changes of C4-Builder. Every pull request that changes behaviour adds a line to
 `## Unreleased`; the release commit renames it to `## vX.Y.Z`.
 
+## Unreleased
+
+- A build with broken diagrams prints one `✗ <file>: line <N>: <message>` line per diagram — the
+  same text as `c4builder check` — lists all of them in one run, then `build aborted` and exit
+  code 1 without a Java or Node stack trace; `-v`/`--verbose` or `DEBUG=c4builder` add the full
+  engine output. Soft errors and `site -w` placeholders use the same short text; the ASCII banner
+  and screen clearing appear only in a terminal (#62)
+
 ## v0.14.0
 
 - `site` / `--site -w` on a taken port suggests a free one: `port 3000 is already in use — pass a

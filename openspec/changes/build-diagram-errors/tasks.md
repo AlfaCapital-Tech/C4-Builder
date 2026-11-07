@@ -22,10 +22,10 @@
 
 ## 5. Актуализация
 
-- [ ] 5.1 `skills/c4builder/SKILL.md`: убрать обход «long Java stack trace … run `c4builder check` to get the short message» (шаг 3) и пункт «Forgetting `c4builder check` and reading a Java stack trace» — описать новый вывод сборки; `template/AGENTS.md` проверить на то же; `npm run test:unit -- skills` зелёный
-- [ ] 5.2 Сайт, обе версии: «05 CLI и конфигурация» — `-v, --verbose` и `DEBUG=c4builder` для сборки; «07 Docker и CI» — формат ошибок сборки и все сломанные диаграммы за прогон; тест `docs-parity` зелёный
-- [ ] 5.3 `CHANGELOG.md`: добавить `## Unreleased` со строкой про формат ошибок сборки, `--verbose`/`DEBUG`, баннер вне TTY (#62)
-- [ ] 5.4 Финальная проверка: `npm run build`, `npm run check`, `npm run test:unit`, `npm run test:golden` (байты картинок не изменились), тест `cli-language` (новые сообщения на английском)
+- [x] 5.1 `skills/c4builder/SKILL.md`: убрать обход «long Java stack trace … run `c4builder check` to get the short message» (шаг 3) и пункт «Forgetting `c4builder check` and reading a Java stack trace» — описать новый вывод сборки; `template/AGENTS.md` проверить на то же; `npm run test:unit -- skills` зелёный
+- [x] 5.2 Сайт, обе версии: «05 CLI и конфигурация» — `-v, --verbose` и `DEBUG=c4builder` для сборки; «07 Docker и CI» — формат ошибок сборки и все сломанные диаграммы за прогон; тест `docs-parity` зелёный
+- [x] 5.3 `CHANGELOG.md`: добавить `## Unreleased` со строкой про формат ошибок сборки, `--verbose`/`DEBUG`, баннер вне TTY (#62)
+- [x] 5.4 Финальная проверка: `npm run build`, `npm run check`, `npm run test:unit`, `npm run test:golden` (байты картинок не изменились), тест `cli-language` (новые сообщения на английском)
 
 ## Workflow follow-up
 
