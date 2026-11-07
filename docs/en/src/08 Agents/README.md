@@ -44,8 +44,11 @@ review batch (**Submit review**, **Approve**). With nothing to change, the empty
 button, **Done — no changes**: it sends an `approved` batch with no comments. **Discard** only clears
 the draft and sends nothing to the agent. The agent loop:
 
-1. Start `c4builder --site -w` and `c4builder feedback --wait --as <name>` in the background,
-   `<name>` being the agent's change or task, e.g. `--as add-dark-mode`. In Claude Code — both
+1. Check `c4builder status`: exit code 0 means the site of this project already runs, its address
+   is in the output; otherwise start `c4builder --site -w` in the background. Then start
+   `c4builder feedback --wait --as <name>` in the background, `<name>` being the agent's change or
+   task, e.g. `--as add-dark-mode`; the command takes the server port from its state file, no `-p`
+   needed. In Claude Code — both
    through Bash with `run_in_background`: the agent is notified when `feedback --wait` exits. The
    link to the change page for the human is the short address `http://localhost:<port>/#/change/<id>`
    (see [Plugins](06%20Plugins/06%20Plugins.md)): `feedback --wait --as <id>` prints it on stderr as
@@ -60,7 +63,7 @@ the draft and sends nothing to the agent. The agent loop:
    stop waiting.
 
 The `c4builder-review` skill (see "Agent skills" below) runs this whole loop: on
-`/c4builder-review [change-id|page]` the agent checks that `site -w` responds, gives the link to the
+`/c4builder-review [change-id|page]` the agent checks the server with `c4builder status`, gives the link to the
 change or section page, waits for the batches and reports in the chat by comment number.
 
 A batch looks like this:

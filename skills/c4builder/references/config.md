@@ -55,7 +55,7 @@ Validation rules:
 
 | Key | Default | Meaning |
 |---|---|---|
-| `webPort` | `3000` | port of `c4builder --site` (`-p <n>` overrides) |
+| `webPort` | `3000` | port of `c4builder --site` (`-p <n>` overrides); `feedback`, `doctor` and `status` prefer the port of the running site from `.c4builder.server.json` |
 | `questions` | `true` | the **Question** button of `site -w`; `false` — no button, routes or question highlighting |
 | `questionsHeading` | `Open questions` | heading of the section in the source `.md` where `site -w` appends questions left on the page |
 | `reviewLog` | — | review log for the **Review** button of `site -w`: `{ "enabled": true, "file": "review.md", "heading": "Review" (or a list of variants), "cells": ["", "{artifact} → {section}", "{text}", "{author}", ""], "author": "", "label": "" }` — the nearest `file` from the page's source up to the project root, a row of the `heading` table from the `cells` template (`{comment}`, `{quote}`, `{text}`, `{section}`, `{artifact}`, `{page}`, `{author}`, `{date}`, `{number}`); `author` defaults to `git config user.name`; no key — no button |

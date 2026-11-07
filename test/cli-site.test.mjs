@@ -1,9 +1,11 @@
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
+import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 
+import { cmdSite } from './dist.mjs';
 import { agentEnv, REPO_ROOT, serveSite, TMP_ROOT, updateCheckEnv } from './helpers.mjs';
 
 // Подсказка после сборки печатает `c4builder site` — форма обязана работать наравне
@@ -60,6 +62,8 @@ describe('c4builder site', () => {
             expect(Number(hint[1])).toBeGreaterThan(port + (v6 ? 2 : 1));
             expect(Number(hint[1])).toBeLessThanOrEqual(port + 10);
             expect(res.stdout).not.toContain('go to');
+            // сервер не поднялся — файла состояния нет (change site-server-state)
+            expect(fs.existsSync(path.join(dir, '.c4builder.server.json'))).toBe(false);
         } finally {
             for (const s of busy) s.close();
         }
@@ -513,4 +517,243 @@ describe('--open / --open-change <id> в site', () => {
         expect(out).toContain(`go to http://localhost:${port}\n`);
         expect(out).not.toContain('#/change/');
     }, 60_000);
+});
+
+// Эндпоинт состояния (change site-server-state, D5): во всех режимах, только для запросов команд CLI.
+// Сервер — в процессе теста: pid в ответе — process.pid.
+describe('GET /__c4builder/status', () => {
+    const distDir = path.join(dir, 'status-dist');
+    fs.mkdirSync(distDir, { recursive: true });
+    fs.writeFileSync(path.join(distDir, 'index.html'), '<html><body></body></html>');
+    const FB = { 'X-C4builder-Feedback': '1' };
+    const start = (port, watch) =>
+        cmdSite(
+            { DIST_FOLDER: distDir, WEB_PORT: String(port) },
+            { port, watch, agent: { on: true, name: 'claude-code', explicit: false }, pollMs: 10_000 },
+            new EventEmitter()
+        );
+
+    it('site -w: 200 с pid и слушателем foo для команды CLI, 403 со страницы', async () => {
+        const port = 28430;
+        const base = `http://127.0.0.1:${port}`;
+        const server = await start(port, true);
+        const poll = new AbortController();
+        try {
+            // long-poll слушателя foo висит, пока не прервём
+            const waiting = fetch(`${base}/__c4builder/feedback/next?as=foo`, {
+                headers: FB,
+                signal: poll.signal
+            }).catch(() => {});
+            await new Promise((r) => setTimeout(r, 200));
+            const res = await fetch(`${base}/__c4builder/status`, { headers: FB });
+            expect(res.status).toBe(200);
+            expect(await res.json()).toMatchObject({
+                pid: process.pid,
+                port,
+                watch: true,
+                agent: { on: true, name: 'claude-code' },
+                listeners: [{ name: 'foo', state: 'listening', queued: 0 }],
+                unaddressed: 0
+            });
+            const page = await fetch(`${base}/__c4builder/status`, { headers: { ...FB, Origin: base } });
+            expect(page.status).toBe(403);
+            expect((await fetch(`${base}/__c4builder/status`)).status).toBe(403);
+            poll.abort();
+            await waiting;
+        } finally {
+            poll.abort();
+            await new Promise((r) => server.close(r));
+        }
+    });
+
+    it('без -w — тот же ответ с пустыми списками и выключенным агентским режимом', async () => {
+        const port = 28431;
+        const server = await start(port, false);
+        try {
+            const res = await fetch(`http://127.0.0.1:${port}/__c4builder/status`, { headers: FB });
+            expect(res.status).toBe(200);
+            expect(await res.json()).toMatchObject({
+                pid: process.pid,
+                port,
+                watch: false,
+                agent: { on: false },
+                listeners: [],
+                unaddressed: 0
+            });
+        } finally {
+            await new Promise((r) => server.close(r));
+        }
+    });
+});
+
+// Файл состояния и один сервер на конфиг (change site-server-state, D2, D3, D7) — настоящий процесс CLI:
+// удаление проверяется по сигналам, а отказ второго сервера — до сборки.
+describe('файл состояния site', () => {
+    const life = path.join(dir, 'life');
+    fs.mkdirSync(path.join(life, 'src'), { recursive: true });
+    fs.writeFileSync(path.join(life, 'src', 'README.md'), '# root\n');
+    fs.writeFileSync(path.join(life, '.c4builder'), JSON.stringify({ ...CONFIG, webPort: '28439' }));
+    fs.writeFileSync(path.join(life, 'other.c4builder'), JSON.stringify({ ...CONFIG, webPort: '28439' }));
+    const STATE = path.join(life, '.c4builder.server.json');
+    const env = agentEnv({ BROWSER: 'none' });
+    const launch = (args) => {
+        const child = spawn(process.execPath, [CLI, ...args], { cwd: life, env });
+        let out = '';
+        child.stdout.on('data', (d) => (out += d));
+        child.stderr.on('data', (d) => (out += d));
+        const exited = new Promise((r) => child.on('exit', (code, signal) => r({ code, signal, out })));
+        const serving = new Promise((resolve, reject) => {
+            const timer = setInterval(() => {
+                if (!out.includes('serving your docsify site')) return;
+                clearInterval(timer);
+                resolve();
+            }, 50);
+            exited.then(() => {
+                clearInterval(timer);
+                reject(new Error(`процесс завершился вместо запуска сервера:\n${out}`));
+            });
+        });
+        return { child, exited, serving };
+    };
+    const run = (args) =>
+        new Promise((resolve) => {
+            const child = spawn(process.execPath, [CLI, ...args], { cwd: life, env });
+            let stdout = '';
+            let stderr = '';
+            child.stdout.on('data', (d) => (stdout += d));
+            child.stderr.on('data', (d) => (stderr += d));
+            child.on('exit', (code) => resolve({ code, stdout, stderr }));
+        });
+
+    it.each([
+        ['SIGINT', 28432],
+        ['SIGTERM', 28433]
+    ])(
+        'файл с port/url/pid/watch после serving, удалён после %s',
+        async (signal, port) => {
+            const server = launch(['--site', '-w', '-p', String(port)]);
+            try {
+                await server.serving;
+                expect(JSON.parse(fs.readFileSync(STATE, 'utf8'))).toMatchObject({
+                    port,
+                    url: `http://localhost:${port}`,
+                    pid: server.child.pid,
+                    watch: true
+                });
+            } finally {
+                server.child.kill(signal);
+            }
+            const { code } = await server.exited;
+            expect(code).toBe(signal === 'SIGINT' ? 130 : 143);
+            expect(fs.existsSync(STATE)).toBe(false);
+        },
+        60_000
+    );
+
+    it('повторный запуск — код 1 без сборки, первый жив; --open-change — код 0; другой -c — второй сервер', async () => {
+        const port = 28434;
+        const first = launch(['site', '-w', '-p', String(port)]);
+        try {
+            await first.serving;
+            const before = fs.readFileSync(STATE, 'utf8');
+            const again = await run(['--site', '-w']);
+            expect(again.code).toBe(1);
+            expect(again.stderr).toContain(
+                `c4builder site is already running for this project at http://localhost:${port} (pid ${first.child.pid})`
+            );
+            expect(again.stdout).not.toContain('built in');
+            expect(fs.readFileSync(STATE, 'utf8')).toBe(before);
+            const status = await fetch(`http://127.0.0.1:${port}/__c4builder/status`, {
+                headers: { 'X-C4builder-Feedback': '1' }
+            });
+            expect((await status.json()).pid).toBe(first.child.pid);
+
+            const open = await run(['site', '--open-change', 'nope']);
+            expect(open.code, open.stderr).toBe(0);
+            expect(open.stdout).toContain(`go to http://localhost:${port}/#/change/nope`);
+            expect(open.stderr).toContain('warning: the site has no page change/nope');
+            expect(open.stdout).not.toContain('built in');
+
+            const other = launch(['--site', '-w', '-c', 'other.c4builder', '-p', String(port + 1)]);
+            try {
+                await other.serving;
+                expect(
+                    JSON.parse(fs.readFileSync(path.join(life, 'other.c4builder.server.json'), 'utf8'))
+                ).toMatchObject({ port: port + 1, pid: other.child.pid });
+            } finally {
+                other.child.kill('SIGTERM');
+                await other.exited;
+            }
+            expect(fs.existsSync(path.join(life, 'other.c4builder.server.json'))).toBe(false);
+            expect(fs.readFileSync(STATE, 'utf8')).toBe(before);
+        } finally {
+            first.child.kill('SIGTERM');
+            await first.exited;
+        }
+    }, 90_000);
+
+    it('файл убитого процесса (SIGKILL) недействителен: следующий запуск перезаписывает его', async () => {
+        const port = 28436;
+        const killed = launch(['site', '-w', '-p', String(port)]);
+        try {
+            await killed.serving;
+        } finally {
+            killed.child.kill('SIGKILL');
+        }
+        await killed.exited;
+        expect(JSON.parse(fs.readFileSync(STATE, 'utf8')).pid).toBe(killed.child.pid);
+        const next = launch(['site', '-w', '-p', String(port + 1)]);
+        try {
+            await next.serving;
+            expect(JSON.parse(fs.readFileSync(STATE, 'utf8'))).toMatchObject({
+                port: port + 1,
+                pid: next.child.pid
+            });
+        } finally {
+            next.child.kill('SIGTERM');
+            await next.exited;
+        }
+    }, 90_000);
+
+    // D3: SIGHUP не перехватывается — под nohup сервер переживает закрытие терминала, как раньше. Без
+    // nohup процесс гибнет от сигнала, файл остаётся и недействителен по pid.
+    it('SIGHUP завершает сервер сигналом, без обработчика: файл остаётся', async () => {
+        const server = launch(['site', '-w', '-p', '28440']);
+        try {
+            await server.serving;
+        } finally {
+            server.child.kill('SIGHUP');
+        }
+        const { code, signal } = await server.exited;
+        expect({ code, signal }).toEqual({ code: null, signal: 'SIGHUP' });
+        expect(JSON.parse(fs.readFileSync(STATE, 'utf8')).pid).toBe(server.child.pid);
+        fs.rmSync(STATE);
+    }, 60_000);
+
+    // D7: просили -w (или --agent), а работающий сервер без него — не переиспользуем молча, даже с --open.
+    it('работающий сервер без -w, повторный запуск с -w или --agent — код 1 и совет перезапустить с -w', async () => {
+        const plain = launch(['site', '-p', '28441']);
+        try {
+            await plain.serving;
+            for (const args of [
+                ['--site', '-w'],
+                ['site', '-w', '--open-change', 'nope'],
+                ['site', '--agent', '--open']
+            ]) {
+                const res = await run(args);
+                expect(res.code, args.join(' ')).toBe(1);
+                expect(res.stderr).toContain(
+                    `c4builder site is already running for this project at http://localhost:28441 (pid ${plain.child.pid}) without -w — stop that process and start c4builder site -w`
+                );
+                expect(res.stdout).not.toContain('go to');
+            }
+            // без -w — прежнее поведение: открыть работающий
+            const open = await run(['site', '--open']);
+            expect(open.code, open.stderr).toBe(0);
+            expect(open.stdout).toContain('go to http://localhost:28441');
+        } finally {
+            plain.child.kill('SIGTERM');
+            await plain.exited;
+        }
+    }, 90_000);
 });

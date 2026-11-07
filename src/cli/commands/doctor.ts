@@ -1,7 +1,6 @@
 import { execFile } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
-import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -21,6 +20,7 @@ import { detectSystemJava, installedJavaAt, jreCacheDir } from '../../core/rende
 import { renderMermaid, teardownMermaid } from '../../core/render/mermaidrenderer.ts';
 import { PACKAGE_ROOT, packageJson as pkg, VENDOR_DIR } from '../../util/paths.ts';
 import { VENDORED_JAR } from '../../util/utils.ts';
+import { findServer, stateFile } from '../server-state.ts';
 
 // `c4builder doctor [group...]` (change cli-doctor): только читает — ничего не ставит и не скачивает,
 // пишет лишь временный каталог `--full`. Id проверок стабильны: на них опираются агенты и `--json`.
@@ -58,6 +58,7 @@ interface Install {
 }
 interface Ctx {
     cwd: string;
+    configPath: string;
     full: boolean;
     offline: boolean;
     port?: number;
@@ -575,30 +576,53 @@ const project = async (ctx: Ctx): Promise<Check[]> => {
     ];
 };
 
-// Чем занят порт: `site -w` отвечает на /__livereload потоком SSE, любой другой ответ — чужой процесс (D8).
-const probePort = (port: number): Promise<'free' | 'site' | 'busy'> =>
-    new Promise((resolve) => {
-        const req = http.get({ host: '127.0.0.1', port, path: '/__livereload', timeout: 1000 }, (res) => {
-            resolve(String(res.headers['content-type']).startsWith('text/event-stream') ? 'site' : 'busy');
-            req.destroy();
-        });
-        req.on('timeout', () => req.destroy(new Error('timeout')));
-        req.on('error', (e: NodeJS.ErrnoException) => resolve(e.code === 'ECONNREFUSED' ? 'free' : 'busy'));
-    });
-
+// Порт: `-p` → живой файл состояния сервера → `webPort` (change site-server-state, D9). Сервер из файла
+// уже опознан по pid — пробу не повторяем; без -w у него нет /__livereload, и проба сочла бы его чужим.
+// Иначе чем занят порт: `site -w` отвечает на /__livereload потоком SSE, другой ответ — чужой процесс (D8).
 const runtime = async (ctx: Ctx): Promise<Check[]> => {
-    const port = ctx.port ?? Number(ctx.project?.config?.webPort ?? defaultConfig.webPort);
-    const state = await probePort(port);
+    // Конфиг уже прочитан readProject — webPort оттуда, а не вторым разбором файла.
+    const found = await findServer(ctx.configPath, {
+        port: ctx.port,
+        webPort: Number(ctx.project?.config?.webPort ?? defaultConfig.webPort)
+    });
+    const { port, url } = found;
+    const from = found.source === 'state' ? ` (from ${path.basename(stateFile(ctx.configPath))})` : '';
+    const portCheck = (): Check => {
+        switch (found.kind) {
+            case 'free':
+                return check('runtime.port', 'ok', `port ${port} free`);
+            case 'own':
+                return check(
+                    'runtime.port',
+                    'ok',
+                    found.status.watch
+                        ? `site -w is running at ${url}${from}`
+                        : `site is running at ${url} without -w${from}`
+                );
+            case 'legacy':
+                return check('runtime.port', 'ok', `site -w is running at ${url}`);
+            case 'unresponsive':
+                return check(
+                    'runtime.port',
+                    'warn',
+                    `site is running at ${url} (pid ${found.state.pid}) but did not answer in time${from}`,
+                    { fix: 'c4builder status' }
+                );
+            case 'other-project':
+                return check(
+                    'runtime.port',
+                    'warn',
+                    `port ${port} is used by the c4builder site of another project${found.status.project ? ` (${found.status.project})` : ''}`,
+                    { fix: 'c4builder site -w -p <port>' }
+                );
+            case 'busy':
+                return check('runtime.port', 'warn', `port ${port} is in use by another process`, {
+                    fix: 'c4builder site -w -p <port>'
+                });
+        }
+    };
     return [
-        state === 'busy'
-            ? check('runtime.port', 'warn', `port ${port} is in use by another process`, {
-                  fix: 'c4builder site -w -p <port>'
-              })
-            : check(
-                  'runtime.port',
-                  'ok',
-                  state === 'site' ? `site -w is running at http://localhost:${port}` : `port ${port} free`
-              ),
+        portCheck(),
         check(
             'runtime.agent',
             'ok',
@@ -661,7 +685,8 @@ export default async (
     const groups = (Object.keys(GROUPS) as Group[]).filter((g) => !args.length || args.includes(g));
     const cwd = process.cwd();
     const found = detectAgent(process.env, {});
-    const proj = readProject(path.join(cwd, opts.configFile ?? '.c4builder'));
+    const configPath = path.join(cwd, opts.configFile ?? '.c4builder');
+    const proj = readProject(configPath);
     const sources = proj?.config && path.resolve(cwd, proj.config.rootFolder);
     let files: string[] = [];
     try {
@@ -674,6 +699,7 @@ export default async (
     const cached = needJava && !sys ? installedJavaAt(jreCacheDir()) : null;
     const ctx: Ctx = {
         cwd,
+        configPath,
         full: !!opts.full,
         offline: !!opts.offline,
         port: opts.port,

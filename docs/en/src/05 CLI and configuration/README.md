@@ -11,6 +11,7 @@
 | `c4builder site` | builds and serves the site locally (same as `--site`) |
 | `c4builder --site -w` | the same, rebuilding on every save and reloading the browser |
 | `c4builder feedback --wait --as <name>` | waits for the next batch of page feedback for the agent `<name>` from `site -w` and prints it, see "Feedback to the agent" below |
+| `c4builder status [--json]` | whether the dev server of this project is running: address, pid, agent mode, `feedback` listeners; exit code 0 — running, 1 — not, see "The state file and `c4builder status`" below |
 | `c4builder check <files...>` | checks `.puml`, `.iuml`, `.d2`, `.bpmn`, `.mmd`, `.wireflow.json` diagrams without a build, exit code 0 or 1 |
 | `c4builder jre info` | which Java will be used (JSON) |
 | `c4builder jre install [--force]` | download a JRE into the cache in advance; `--force` — even if system Java exists |
@@ -21,7 +22,7 @@
 | `c4builder skills` | installs or updates the agent skills of the CLI's own version in the current folder: `.agents/skills/`, under Claude Code also `.claude/skills/`; needs no project config, see "Agent skills" on the [Agents](08%20Agents/08%20Agents.md) page |
 | `c4builder doctor [group...]` | diagnostics: environment, agent skills, a test render, the project and the port; read-only, works outside a project and without a terminal, see "Diagnostics" below |
 
-Positional commands are `check`, `jre`, `site`, `update`, `feedback`, since 0.5.0 also `new` and `config`, since 0.10.0 `skills`, later `doctor`. Since
+Positional commands are `check`, `jre`, `site`, `update`, `feedback`, since 0.5.0 also `new` and `config`, since 0.10.0 `skills`, later `doctor` and `status`. Since
 0.5.0 any other positional argument is an `unknown command` error with exit code 1: a typo
 (`c4builder nwe`) no longer starts a build.
 
@@ -33,12 +34,12 @@ Flags:
 | `-w, --watch` | rebuild on changes in the sources and plugin folders |
 | `-o, --open` | open the home page of the site in the browser (with `--site`) |
 | `--open-change <id>` | open the page of an OpenSpec change by the short address `#/change/<id>` in the browser (with `--site`, see [Plugins](06%20Plugins/06%20Plugins.md)); when the site has no such address — a warning on stderr, the address is opened anyway |
-| `-p, --port <n>` | port for `--site`, `feedback` and `doctor` (defaults to `webPort` from the config, 3000) |
+| `-p, --port <n>` | port for `--site` (defaults to `webPort` from the config, 3000); for `feedback`, `doctor` and `status` — the port of the running site, by default from the server state file, otherwise `webPort` |
 | `--agent`, `--no-agent` | turn the agent mode of `site -w` on or off regardless of the environment |
 | `--wait` | for `feedback`: wait for the next batch instead of only checking the queue |
 | `--as <name>` | for `feedback`, required: listener name — the agent's change or task (1–64 characters: Latin letters, digits, `.`, `_`, `-`) |
 | `--system-fonts` | render with system fonts for one run |
-| `--json`, `-v, --verbose`, `--strict`, `--full`, `--offline` | for `doctor`, see "Diagnostics" below |
+| `--json`, `-v, --verbose`, `--strict`, `--full`, `--offline` | for `doctor`, see "Diagnostics" below; `--json` also for `status` |
 | `-V, --version` | version |
 | `-h, --help` | flags and positional commands |
 
@@ -84,8 +85,69 @@ if any of them does not render.
 The port is fixed: `-p` or `webPort`. When it is taken, the server does not start and exits with
 code 1, suggesting a free one of the next ports: `port 3000 is already in use — pass a different
 one, e.g. -p 3001` (none of them is free — `… with -p <port>`). The server never moves to another
-port by itself: `feedback`, `--open-change` and the agent skills take the port from `-p` or
-`webPort`, so restart with the suggested `-p` and pass the same `-p` to `c4builder feedback`.
+port by itself: restart it with the suggested `-p` — `feedback`, `doctor` and `status` find the
+server by its state file without `-p`.
+
+### The state file and `c4builder status`
+
+A running server (`c4builder site` and `--site [-w]`) writes `.c4builder.server.json` next to the
+config (`other.c4builder.server.json` for `-c other.c4builder`):
+
+```json
+{
+  "port": 3001,
+  "url": "http://localhost:3001",
+  "pid": 12345,
+  "version": "0.15.0",
+  "watch": true,
+  "startedAt": "2026-11-07T10:00:00.000Z"
+}
+```
+
+The file is removed when the server stops — Ctrl+C, `SIGTERM`, a normal exit (the server does not
+catch `SIGHUP`: under `nohup` it survives a closed terminal as before). A file left by a
+killed process (`kill -9`, a crash) is not valid: only the server on its port answering with the
+same `pid` makes it valid, and the next start overwrites it. The file does not trigger `-w`
+rebuilds. Add `.c4builder.server.json` to the project's `.gitignore`; the `c4builder new` template
+already has the line. In a read-only folder the server prints a one-line warning and keeps
+running, and the commands take the port from `-p` or `webPort`.
+
+With the file the commands find the server of their project without `-p`: `feedback`,
+`doctor runtime` and `status` take the port from `-p`, otherwise from a valid state file,
+otherwise from `webPort`.
+
+One server per config: while the server runs, another `c4builder site` or `--site -w` neither
+builds the site nor starts a second server — it prints `c4builder site is already running for this
+project at http://localhost:3001 (pid 12345)` and exits with code 1. With `--open` or
+`--open-change <id>` it opens that address of the running server in the browser and exits with
+code 0. A server with another config (`-c`) starts as usual, while another `-p` with the same
+config does not start a second server: both would write to one `distFolder`. When `-w` (or
+`--agent`) is asked for and the running server has no `-w`, the second start exits with code 1 and
+advises to stop it and start `c4builder site -w` — even with `--open`.
+
+`c4builder status` tells whether the server of this project is running:
+
+```text
+site is running at http://localhost:3001 (pid 12345, c4builder 0.15.0, watch)
+agent mode: on (claude-code)
+listeners:
+  add-dark-mode — listening, 0 queued
+```
+
+Exit code 0 — the server runs, 1 — it does not (`no c4builder site on http://localhost:3000 — …`).
+`--json` prints one object `{ running, url, port, source, pid, version, watch, agent, listeners,
+unaddressed }`, without a server `{ running: false, port, source, busy }`: `source` is where the
+port came from (`flag`, `state`, `config`), `busy` means another process holds the port. A server
+of an older version (no state file) gives `site is running at …` without details.
+
+A server on the port counts as the server of the project only when it reports the same config (the
+realpath of `.c4builder`): a sibling worktree with the same `webPort` sees the other site as
+`no c4builder site of this project on http://localhost:3000 — the port is used by the c4builder site
+of another project (<path>)` with exit code 1 (`busy: true` and `otherProject` in JSON), `feedback`
+does not connect to it, and `doctor runtime` warns. A server from the state file that is alive but
+did not answer within a second (busy building) gives `site is running at … but did not answer in
+time`, exit code 0, `"responding": false` in JSON. The command
+only reads: outside a project it checks the default port and creates no files.
 
 ## Updating
 
@@ -157,7 +219,7 @@ personal skill copy: an agent runs it only with the human's consent.
 | `skills` | the package skills in the agent's folders: `skills.<agents\|claude\|codex>.<project\|personal>` — the set, the version, text equal to the package, a shadowing personal copy; `skills.installed` — the agent has no skills; `skills.claude.plugins` — Claude Code plugins with the same skills; `skills.session` — always `–`: the CLI cannot see what the agent session loaded |
 | `render` | `render.plantuml` — a tiny C4 diagram with the build's engine; `render.d2`, `render.mermaid` — when the project has such files; `render.full` — with `--full` |
 | `project` | `project.config` — `.c4builder` is found and valid; `project.complete` — the build runs without the wizard; `project.paths` — `rootFolder` and plugin paths exist |
-| `runtime` | `runtime.port` — the `webPort` (or `-p`) port is free, serves `site -w` or another process; `runtime.agent` — which agent is detected and whether agent mode is on |
+| `runtime` | `runtime.port` — the port (`-p`, otherwise from the server state file, otherwise `webPort`) is free, serves `site -w` (with its address) or another process; `runtime.agent` — which agent is detected and whether agent mode is on |
 
 `c4builder doctor skills project` runs only the listed groups; an unknown group prints the list of
 groups with exit code 2. Skill folders: under an agent — its own and `.agents/skills`, without one —
@@ -284,7 +346,8 @@ tab picks a recipient, the send buttons are disabled. With one agent there is no
 the tab's recipient by itself. A draft started before any agent came goes to the tab's first
 recipient.
 
-`c4builder feedback --wait --as <name>` connects to `site -w` on the port from `-p` or `webPort`,
+`c4builder feedback --wait --as <name>` connects to `site -w` on the port from `-p`, otherwise from the server
+state file, otherwise `webPort`,
 waits for the next batch for `<name>` with no time limit, prints it to stdout as markdown and exits
 with code 0. When `<name>` is the id of a change on the site (the `openspec` plugin), the command
 first prints one stderr line `Change page: http://localhost:<port>/#/change/<name>` — the link to
