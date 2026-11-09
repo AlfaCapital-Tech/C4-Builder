@@ -1,7 +1,7 @@
 // Стиль фильтра таблиц Changes (опция `filter` плагина openspec). Живёт строкой в src, как
 // скрипт в filter.script.ts: плагин отдаёт его ассетом `{ name, content }`, ядро пишет в
-// `dist/vendor/plugins/openspec/changes-filter.css`; раскладка самих таблиц остаётся в
-// `vendor/openspec/changes.css`, который этот стиль не трогает.
+// `dist/vendor/plugins/openspec/changes-filter.css`; раскладку самих таблиц этот стиль не
+// трогает — она в changes.style.ts.
 
 /**
  * Строка фильтра — flex с переносом над первой таблицей; список колонки — `<details>` с

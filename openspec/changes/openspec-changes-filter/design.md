@@ -62,8 +62,9 @@
 
 **5. Скрипт и стиль — строки `CHANGES_FILTER_JS` и `CHANGES_FILTER_CSS` в
 `src/plugins/openspec/filter.script.ts` и `filter.style.ts`**, как скрипты ядра в
-`compose/site.scripts.ts`: комментарии остаются в исходнике, в `vendor/` — только чужой код, и
-`vendor/openspec/changes.css` раскладки таблиц этот change не трогает. Ассеты плагина до сих пор были только файлами (`injectSiteAssets` копирует их), а файл
+`compose/site.scripts.ts`: комментарии остаются в исходнике, в `vendor/` — только чужой код. Туда
+же переезжает стиль раскладки таблиц: `vendor/openspec/changes.css` → `changes.style.ts`, имя в
+выходе прежнее (`changes.css`), так что у плагина один способ хранить свои ассеты. Ассеты плагина до сих пор были только файлами (`injectSiteAssets` копирует их), а файл
 из `src` в npm-пакет не попадает — поэтому контракт расширен: элемент `assets.scripts` /
 `assets.styles` — путь файла либо `{ name, content }`, строку ядро пишет в
 `dist/vendor/plugins/<plugin>/<name>` (`types.ts`, `assets.ts`). Оба ассета подключаются всегда (без

@@ -6,7 +6,7 @@ import chalk from 'chalk';
 import { z } from 'zod';
 
 import { definePlugin } from '../../core/plugins/types.ts';
-import { VENDOR_DIR } from '../../util/paths.ts';
+import { CHANGES_CSS } from './changes.style.ts';
 import { CHANGES_FILTER_JS } from './filter.script.ts';
 import { CHANGES_FILTER_CSS } from './filter.style.ts';
 import { type Layout, layoutChanges, originalId, pageOrder } from './layout.ts';
@@ -96,12 +96,13 @@ export default definePlugin<Opts>({
     name: 'openspec',
     options: optionsSchema,
     // Раскладка таблиц Changes (обёртка `.c4b-openspec-changes` в renderChangesIndex): одинаковые
-    // колонки во всех секциях, перенос только там, где текст не помещается. Фильтр над таблицами
-    // (опция `filter`) — скрипт и стиль строками из filter.script.ts и filter.style.ts; без
+    // колонки во всех секциях, перенос только там, где текст не помещается (changes.style.ts).
+    // Фильтр над таблицами (опция `filter`) — filter.script.ts и filter.style.ts. Все ассеты —
+    // строки из исходников плагина; без
     // атрибута `data-c4b-filter` у обёртки скрипт ничего не делает.
     assets: {
         styles: [
-            path.join(VENDOR_DIR, 'openspec', 'changes.css'),
+            { name: 'changes.css', content: CHANGES_CSS },
             { name: 'changes-filter.css', content: CHANGES_FILTER_CSS }
         ],
         scripts: [{ name: 'changes-filter.js', content: CHANGES_FILTER_JS }]

@@ -15,7 +15,7 @@ import type { Artifact, Change, Spec, Store } from './scan.ts';
 
 const fmtDate = (ms: number): string => new Date(ms).toISOString().slice(0, 10);
 // Прогресс задач: нативный <progress> (docsify рендерит HTML в markdown) + числа и процент.
-// Всё выполнено — класс для стиля плагина (vendor/openspec/changes.css): бар цветом темы.
+// Всё выполнено — класс для стиля плагина (changes.style.ts): бар цветом темы.
 const progressBar = (done: number, total: number): string =>
     `<progress${done >= total ? ' class="c4b-progress-done"' : ''} value="${done}" max="${total}"></progress> ${done}/${total} (${Math.round((done / total) * 100)}%)`;
 const fmtProgress = (c: Change): string =>
@@ -130,7 +130,7 @@ const columnValue = (c: Change, col: TableColumn): string | undefined => {
  * кто ещё не сделал ревью); нет значения — `—`. `filter` — заголовки колонок с фильтром на
  * сайте: их номера (от 1) уходят в `data-c4b-filter` обёртки, читает скрипт из filter.script.ts.
  * Таблица обёрнута в `<div class="c4b-openspec-changes">`
- * (пустые строки вокруг — чтобы docsify разобрал markdown внутри): стиль `vendor/openspec/changes.css`
+ * (пустые строки вокруг — чтобы docsify разобрал markdown внутри): стиль из changes.style.ts
  * даёт всем таблицам страницы одну раскладку колонок.
  */
 export const renderChangesIndex = (
