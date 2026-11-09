@@ -31,6 +31,55 @@ beforeAll(() => {
     // Стили на макросах C4 без своего @startuml — контекст C4 задаёт подключающая диаграмма.
     write('c4-styles.iuml', 'skinparam shadowing false\nUpdateElementStyle("person", $bgColor="#000")\n');
     write('uses-lib.puml', '@startuml\n!include lib.iuml\n$x()\n@enduml\n');
+    // Связь C4 на необъявленный алиас (#60): PlantUML молча создаёт сущность — предупреждение.
+    write(
+        'dangling.puml',
+        '@startuml\n!include <C4/C4_Container>\nHIDE_STEREOTYPE()\nPerson(u, "User")\n' +
+            'System_Boundary(b, "B") {\n  Container(c1, "C1", "java")\n  Rel(c1, typo, "inside")\n}\n' +
+            'Rel(u, nope, "typo alias")\nRel_D(u, c1, "ok")\nLay_R(u, ghost)\n@enduml\n'
+    );
+    // BiRel и RelIndex: имя макроса в сообщении, индекс RelIndex за алиас не принимается.
+    write(
+        'rel-variants.puml',
+        '@startuml\n!include <C4/C4_Dynamic>\nPerson(u, "User")\nSystem(s, "S")\n' +
+            'BiRel(u, bogus, "x")\nRelIndex(1, s, missing, "y")\n@enduml\n'
+    );
+    // Формы вызова: индекс RelIndex — вызов функции со своими скобками, продолжение строки `\`,
+    // вызов после блочного комментария. Закомментированный вызов и чужая процедура `myRel` (её
+    // `-->` тоже создаёт неявную сущность) — не связи C4.
+    write(
+        'rel-forms.puml',
+        [
+            '@startuml',
+            '!include <C4/C4_Dynamic>',
+            'Person(u, "User")',
+            'Container(a, "A")',
+            'RelIndex(Index(), u, nope1, "x")',
+            'RelIndex(SetIndex(3), a, nope2, "y")',
+            'RelIndex(LastIndex(), u, a, "ok")',
+            'RelIndex(LastIndex(), u, nope3, "z")',
+            'Rel(u, \\',
+            '  nope4, "continued")',
+            `/' note '/ Rel(u, nope5, "after comment")`,
+            `' Rel(u, nope5, "commented out")`,
+            '!procedure myRel($a, $b)',
+            '$a --> $b',
+            '!endprocedure',
+            'myRel(u, plain)',
+            '@enduml',
+            ''
+        ].join('\n')
+    );
+    // Опечатка в квалифицированном алиасе внутри границы даёт неявную `b2.b9.db`; короткий `db`
+    // при объявленной `db` PlantUML разрешает к ней — эта связь верна и не помечается.
+    write(
+        'rel-qualified.puml',
+        '@startuml\n!include <C4/C4_Container>\nPerson(u, "User")\nContainerDb(db, "DB")\n' +
+            'System_Boundary(b2, "B2") {\n  Container(c2, "C2")\n  Rel(c2, b9.db, "typo")\n}\n' +
+            'Rel(u, db, "ok")\n@enduml\n'
+    );
+    // Без C4: `A --> B` без объявлений — норма PlantUML, не предупреждение.
+    write('implicit.puml', '@startuml\nA --> B\nB --> C\n@enduml\n');
     write('ok.d2', 'a -> b\n');
     write('bad.d2', 'a -> \n');
     write('what.txt', 'x');
@@ -130,7 +179,9 @@ describe('c4builder check', () => {
             expect(bare.stderr).toMatch(new RegExp(`^✗ ${name}: unsupported extension`, 'm'));
         const usage = check();
         expect(usage.status).toBe(1);
-        expect(usage.stdout).toMatch(/usage: c4builder check .*\| \.mmd \| \.wireflow\.json\)/);
+        expect(usage.stdout).toMatch(
+            /usage: c4builder check \[--strict\] <file\.\.\.> .*\| \.mmd \| \.wireflow\.json\)/
+        );
     });
 
     it('корректный .bpmn → код 0, процесс завершается (окно jsdom закрыто)', () => {
@@ -182,5 +233,56 @@ describe('c4builder check', () => {
         const ctrl = check('ctrl.wireflow.json');
         expect(ctrl.status, ctrl.stderr).toBe(0);
         expect(ctrl.stdout).toMatch(/✓ ctrl\.wireflow\.json/);
+    });
+
+    it('Rel/Lay на необъявленный алиас → ⚠ с номером строки, код 0; с --strict → ✗, код 1', () => {
+        const res = check('dangling.puml', 'implicit.puml');
+        expect(res.status, res.stderr).toBe(0);
+        expect(res.stdout).toMatch(/^⚠ dangling\.puml: line 7: Rel to undeclared element "typo"$/m);
+        expect(res.stdout).toMatch(/^⚠ dangling\.puml: line 9: Rel to undeclared element "nope"$/m);
+        expect(res.stdout).toMatch(/^⚠ dangling\.puml: line 11: Lay_R to undeclared element "ghost"$/m);
+        expect(res.stdout.match(/⚠/g)).toHaveLength(3); // объявленные u и c1 не задеты
+        expect(res.stdout).toMatch(/✓ implicit\.puml/);
+
+        const variants = check('rel-variants.puml');
+        expect(variants.status, variants.stderr).toBe(0);
+        expect(variants.stdout).toMatch(
+            /^⚠ rel-variants\.puml: line 5: BiRel to undeclared element "bogus"$/m
+        );
+        expect(variants.stdout).toMatch(
+            /^⚠ rel-variants\.puml: line 6: RelIndex to undeclared element "missing"$/m
+        );
+        expect(variants.stdout.match(/⚠/g)).toHaveLength(2);
+
+        const forms = check('rel-forms.puml');
+        expect(forms.status, forms.stderr).toBe(0);
+        for (const [line, alias] of [
+            [5, 'nope1'],
+            [6, 'nope2'],
+            [8, 'nope3']
+        ])
+            expect(forms.stdout).toMatch(
+                new RegExp(
+                    `^⚠ rel-forms\\.puml: line ${line}: RelIndex to undeclared element "${alias}"$`,
+                    'm'
+                )
+            );
+        // Многострочный вызов — строка имени макроса.
+        expect(forms.stdout).toMatch(/^⚠ rel-forms\.puml: line 9: Rel to undeclared element "nope4"$/m);
+        expect(forms.stdout).toMatch(/^⚠ rel-forms\.puml: line 11: Rel to undeclared element "nope5"$/m);
+        expect(forms.stdout.match(/⚠/g)).toHaveLength(5);
+
+        const qualified = check('rel-qualified.puml');
+        expect(qualified.status, qualified.stderr).toBe(0);
+        expect(qualified.stdout).toMatch(
+            /^⚠ rel-qualified\.puml: line 7: Rel to undeclared element "b9\.db"$/m
+        );
+        expect(qualified.stdout.match(/⚠/g)).toHaveLength(1);
+
+        const strict = check('--strict', 'dangling.puml', 'implicit.puml', 'warn.bpmn');
+        expect(strict.status).toBe(1);
+        expect(strict.stderr).toMatch(/^✗ dangling\.puml: 3 warning\(s\), failing with --strict$/m);
+        expect(strict.stderr).toMatch(/^✗ warn\.bpmn: \d+ warning\(s\), failing with --strict$/m);
+        expect(strict.stdout).toMatch(/✓ implicit\.puml/);
     });
 });

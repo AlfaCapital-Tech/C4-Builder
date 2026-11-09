@@ -5,6 +5,13 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
 
 ## Unreleased
 
+- A C4 relation to an undeclared alias (`Rel(u, nope, …)` with a typo — PlantUML silently draws an
+  empty circle) is a warning in `c4builder check` and in the build:
+  `⚠ <file>: line <N>: Rel to undeclared element "nope"`; covers `Rel*`, `BiRel*`, `RelIndex*` and
+  `Lay_*` called in the diagram file, plain `A --> B` arrows are not affected. The exit code does
+  not change; a diagram restored from the build cache is not re-checked (#60)
+- `c4builder check --strict` exits with code 1 on any warning (PlantUML, BPMN, wireflow) and prints
+  `✗ <file>: <K> warning(s), failing with --strict` — for CI and coding agents
 - `doctor skills` no longer reports duplicates from uninstalled Claude Code plugins: it reads the
   installed plugins from `~/.claude/plugins/installed_plugins.json` instead of walking the plugin
   cache, so leftovers marked `.orphaned_at`, old versions and plugins installed in other projects

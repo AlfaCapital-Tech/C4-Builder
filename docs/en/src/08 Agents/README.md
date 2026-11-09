@@ -26,6 +26,9 @@ locally, without a network and without a human.
    agent fixes the error and repeats until it gets 0. For `.bpmn`, every model violation is a
    line with the element id and the rule: `✗ <file>: <id> [<rule>] <description>`; for `.mmd`
    — the line number, as for PlantUML; for `.wireflow.json` — a line with the node or edge id.
+   A warning `⚠ <file>: line N: Rel to undeclared element "<alias>"` with exit code 0 means a
+   typo in a relation alias: PlantUML drew an empty circle instead of the element. Fix it too;
+   `check --strict` turns warnings into exit code 1.
 3. **Build.** `c4builder` builds the whole project; `c4builder --site -w` keeps the site open for
    the human and rebuilds it on every save the agent makes. It comes up right away, without
    waiting for the rendering: diagrams missing from the cache show a `rendering…` placeholder and
@@ -287,7 +290,7 @@ Files of this site:
 A project created before 0.5.0 has no `AGENTS.md`. What to put into `AGENTS.md` or `CLAUDE.md` of
 such a project:
 
-- after editing a diagram — `c4builder check <file>`, fix until exit code 0;
+- after editing a diagram — `c4builder check --strict <file>`, fix until exit code 0;
 - include C4 through the stdlib (`!include <C4/C4_Container>`), shared styles with
   `!include ../styles.iuml`;
 - a new page is a new folder in `src/`, the order is set by a numeric prefix;
