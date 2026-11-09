@@ -653,8 +653,8 @@ const project = async (ctx: Ctx): Promise<Check[]> => {
 };
 
 // Порт: `-p` → живой файл состояния сервера → `webPort` (change site-server-state, D9). Сервер из файла
-// уже опознан по pid — пробу не повторяем; без -w у него нет /__livereload, и проба сочла бы его чужим.
-// Иначе чем занят порт: `site -w` отвечает на /__livereload потоком SSE, другой ответ — чужой процесс (D8).
+// уже опознан по pid — пробу не повторяем.
+// Иначе чем занят порт, решает эндпоинт состояния: нет ответа — чужой процесс.
 const runtime = async (ctx: Ctx): Promise<Check[]> => {
     // Конфиг уже прочитан readProject — webPort оттуда, а не вторым разбором файла.
     const found = await findServer(ctx.configPath, {
@@ -675,8 +675,6 @@ const runtime = async (ctx: Ctx): Promise<Check[]> => {
                         ? `site -w is running at ${url}${from}`
                         : `site is running at ${url} without -w${from}`
                 );
-            case 'legacy':
-                return check('runtime.port', 'ok', `site -w is running at ${url}`);
             case 'unresponsive':
                 return check(
                     'runtime.port',

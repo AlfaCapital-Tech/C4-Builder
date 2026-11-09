@@ -1,5 +1,4 @@
 import fs from 'node:fs';
-import http from 'node:http';
 import path from 'node:path';
 import { defaultConfig } from '../config/defaults.ts';
 import { parseConfig } from '../config/options.ts';
@@ -126,18 +125,6 @@ export const probeStatus = async (port: number, timeoutMs = 1000): Promise<Statu
     return { kind: 'other' };
 };
 
-// Чем занят порт: `site -w` отвечает на /__livereload потоком SSE, любой другой ответ — чужой процесс.
-// Так узнаём сервер версии без эндпоинта состояния.
-const probeLivereload = (port: number): Promise<'free' | 'site' | 'busy'> =>
-    new Promise((resolve) => {
-        const req = http.get({ host: HOST, port, path: '/__livereload', timeout: 1000 }, (res) => {
-            resolve(String(res.headers['content-type']).startsWith('text/event-stream') ? 'site' : 'busy');
-            req.destroy();
-        });
-        req.on('timeout', () => req.destroy(new Error('timeout')));
-        req.on('error', (e: NodeJS.ErrnoException) => resolve(e.code === 'ECONNREFUSED' ? 'free' : 'busy'));
-    });
-
 // Сервер из файла состояния: `running` — отвечает тем же pid; `unresponsive` — pid жив, порт принял
 // соединение, но ответа нет за таймаут (сервер занят) — для D7 он всё равно работает: второй сервер
 // пересобрал бы его dist.
@@ -173,13 +160,11 @@ export const configPort = (configPath: string): number => {
 // - `own` — c4builder этого проекта (тот же realpath конфига), `unresponsive` — он же по файлу
 //   состояния, но не ответил вовремя;
 // - `other-project` — c4builder другого проекта (соседний worktree на том же порту): не наш;
-// - `legacy` — c4builder без эндпоинта состояния (SSE на /__livereload): чей — не узнать;
 // - `busy` — чужой процесс, `free` — порт свободен.
 export type ServerLookup = { port: number; source: PortSource; url: string } & (
     | { kind: 'own'; status: ServerStatus }
     | { kind: 'unresponsive'; state: ServerState }
     | { kind: 'other-project'; status: ServerStatus }
-    | { kind: 'legacy' }
     | { kind: 'busy' }
     | { kind: 'free' }
 );
@@ -211,9 +196,8 @@ export const findServer = async (
         return probe.status.project === null || probe.status.project === projectId(configPath)
             ? { ...at, kind: 'own', status: probe.status }
             : { ...at, kind: 'other-project', status: probe.status };
-    if (probe.kind === 'refused') return { ...at, kind: 'free' };
-    const sse = await probeLivereload(port);
-    return { ...at, kind: sse === 'site' ? 'legacy' : sse };
+    // Не ответил эндпоинтом состояния — чужой процесс (или c4builder до site-server-state).
+    return { ...at, kind: probe.kind === 'refused' ? 'free' : 'busy' };
 };
 
 // Есть ли на работающем сервере страница change'а — тем же запросом, что у `feedback`.

@@ -32,8 +32,8 @@
   адресом.
 - [x] 3.3 `src/cli/commands/status.ts` + регистрация в `COMMANDS` (`dispatch.ts`) до Configstore,
   опция `--json` для `status` в `--help` (D8). Проверка: новый `test/cli-status.test.mjs` — работает
-  (код 0, адрес, pid, слушатели), нет сервера (`--json` с `running: false`, код 1), сервер без
-  эндпоинта (старая версия — эмуляция SSE на `/__livereload`), пустой каталог остаётся пустым.
+  (код 0, адрес, pid, слушатели), нет сервера (`--json` с `running: false`, код 1), пустой каталог
+  остаётся пустым.
 - [x] 3.4 Прогон: `npm run build && npm run test:unit && npm run check` зелёные (включая
   `cli-language` и `cli-commands`).
 

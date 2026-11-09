@@ -8,7 +8,7 @@ export default async (configPath: string, opts: { port?: number; json?: boolean 
     const { port, source, url } = found;
     // Не отвечающий вовремя сервер из файла — работает (pid жив, порт занят им): второй не поднять,
     // и `running: false` отправило бы агента запускать его.
-    const running = found.kind === 'own' || found.kind === 'unresponsive' || found.kind === 'legacy';
+    const running = found.kind === 'own' || found.kind === 'unresponsive';
     process.exitCode = running ? 0 : 1;
 
     if (opts.json) {
@@ -37,15 +37,13 @@ export default async (configPath: string, opts: { port?: number; json?: boolean 
                         version: found.state.version,
                         watch: found.state.watch
                     }
-                  : found.kind === 'legacy'
-                    ? { running, url, port, source }
-                    : {
-                          running,
-                          port,
-                          source,
-                          busy: found.kind !== 'free',
-                          ...(found.kind === 'other-project' && { otherProject: found.status.project })
-                      };
+                  : {
+                        running,
+                        port,
+                        source,
+                        busy: found.kind !== 'free',
+                        ...(found.kind === 'other-project' && { otherProject: found.status.project })
+                    };
         console.log(JSON.stringify(report, null, 2));
         return;
     }
@@ -60,9 +58,6 @@ export default async (configPath: string, opts: { port?: number; json?: boolean 
             console.log(
                 `no c4builder site of this project on ${url} — the port is used by the c4builder site of another project${found.status.project ? ` (${found.status.project})` : ''}`
             );
-            return;
-        case 'legacy':
-            console.log(`site is running at ${url} (an older c4builder without status details)`);
             return;
         case 'unresponsive':
             console.log(

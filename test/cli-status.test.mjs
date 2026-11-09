@@ -6,8 +6,8 @@ import { afterAll, describe, expect, it } from 'vitest';
 
 import { agentEnv, REPO_ROOT, serveSite, TMP_ROOT } from './helpers.mjs';
 
-// `c4builder status [--json]` (change site-server-state, D8). Спавн асинхронный: сервер старой версии
-// эмулируется в процессе теста, и spawnSync заблокировал бы его event loop.
+// `c4builder status [--json]` (change site-server-state, D8). Спавн асинхронный: чужие серверы на порту
+// эмулируются в процессе теста, и spawnSync заблокировал бы их event loop.
 const CLI = path.join(REPO_ROOT, 'dist', 'index.js');
 const CONFIG = JSON.parse(
     fs.readFileSync(path.join(REPO_ROOT, 'test/fixtures/default.c4builder.json'), 'utf8')
@@ -96,35 +96,6 @@ describe('c4builder status', () => {
             expect(fs.existsSync(file)).toBe(true); // status только читает
         } finally {
             fs.rmSync(file, { force: true });
-        }
-    });
-
-    it('сервер старой версии (SSE на /__livereload, без эндпоинта состояния) — работает, без подробностей', async () => {
-        const old = http
-            .createServer((req, res) => {
-                if (req.url === '/__livereload') {
-                    res.writeHead(200, { 'Content-Type': 'text/event-stream' });
-                    res.write('retry: 1000\n\n');
-                    return;
-                }
-                res.writeHead(404).end('not found');
-            })
-            .listen(28414, '127.0.0.1');
-        await new Promise((r) => old.once('listening', r));
-        try {
-            const res = await status(project, '-p', '28414');
-            expect(res.code).toBe(0);
-            expect(res.stdout).toContain('site is running at http://localhost:28414');
-            const json = await status(project, '-p', '28414', '--json');
-            expect(JSON.parse(json.stdout)).toEqual({
-                running: true,
-                url: 'http://localhost:28414',
-                port: 28414,
-                source: 'flag'
-            });
-        } finally {
-            old.closeAllConnections();
-            old.close();
         }
     });
 

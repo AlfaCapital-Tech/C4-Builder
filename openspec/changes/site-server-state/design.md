@@ -62,10 +62,12 @@
 - **D6. Выбор порта клиентом — общий модуль `src/cli/server-state.ts`:** `-p` → действительный файл
   → `webPort`; возвращает порт и источник (`flag` / `state` / `config`). Явный `-p` побеждает файл:
   человек мог намеренно указать другой порт, но сервер другого проекта и на нём не свой (D5). Что на
-  порту, решает одна функция `findServer` (файл → проба `/__c4builder/status` с проверкой `project` →
-  SSE на `/__livereload`): `own`, `unresponsive`, `other-project`, `legacy`, `busy`, `free` — `status`,
-  `feedback` и `doctor` не противоречат друг другу. Модуль читает конфиг как JSON без Configstore (как
-  `feedback` сейчас) — `status` и `feedback` не создают файлов.
+  порту, решает одна функция `findServer` (файл → проба `/__c4builder/status` с проверкой `project`):
+  `own`, `unresponsive`, `other-project`, `busy`, `free` — `status`, `feedback` и `doctor` не
+  противоречат друг другу. Сервер версии без эндпоинта состояния — `busy`, как чужой процесс:
+  отдельная проба SSE на `/__livereload` ради смешения версий CLI и сервера — лишняя ветка.
+  Модуль читает конфиг как JSON без Configstore (как `feedback` сейчас) — `status` и `feedback` не
+  создают файлов.
 - **D7. Второй сервер — проверка в `dispatch.ts` до лока и сборки:** иначе повторный запуск сначала
   пересобрал бы `dist`, который раздаёт первый сервер. С `--open-change <id>` проверяем страницу тем
   же `PAGE_PATH?as=<id>`, что и `feedback`: 404 — прежнее предупреждение, адрес всё равно
@@ -86,14 +88,12 @@
   of this project on <url> — the port is used by the c4builder site of another project (<path>)`.
   Сервер из файла не ответил за таймаут — `{ running: true, responding: false, url, port, source, pid,
   version, watch }` (из файла), текст `… but did not answer in time`, код 0. Код 0/1 — скилл проверяет
-  сервер одним вызовом. Без файла: проба `/__c4builder/status` на порту; 404 и SSE на `/__livereload` —
-  сервер старой версии, `running: true` без подробностей.
+  сервер одним вызовом. Без файла: проба `/__c4builder/status` на порту; другой ответ — `busy`.
 - **D9. `doctor runtime` и `feedback` — через D6;** в doctor адрес и источник порта видны в
   сообщении. Подсказка агентского режима сервера про `-p` остаётся: она верна и без файла
   (каталог только для чтения).
   Сервер проекта (`own`) — `ok` «site -w is running at <url>» или «site is running at <url> without -w»,
-  из файла — с пометкой `(from .c4builder.server.json)`; `legacy` — `ok` «site -w is running»;
-  `unresponsive` — `warn` с `fix: c4builder status`; `other-project` — `warn` «port P is used by the
+  из файла — с пометкой `(from .c4builder.server.json)`; `unresponsive` — `warn` с `fix: c4builder status`; `other-project` — `warn` «port P is used by the
   c4builder site of another project (<path>)», `busy` — прежний `warn`; оба с `-p <port>`.
   `feedback` при `other-project` сразу завершается с кодом 1: пачки чужого сайта — с исходниками
   чужого дерева. doctor передаёт в `findServer` уже прочитанный `webPort` — конфиг не разбирается дважды.
