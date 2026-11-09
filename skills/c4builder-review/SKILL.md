@@ -16,8 +16,8 @@ The human looks at the pages in the browser (`c4builder --site -w`), selects tex
 
 The `buttons` key of `.c4builder` may relabel both buttons (`agent`, `comment`).
 
-Invocation: `/c4builder-review [change-id|page]`. The port is `webPort` from `.c4builder`
-(`<port>` below); when the server runs with `-p <n>`, pass the same `-p <n>` to the commands below.
+Invocation: `/c4builder-review [change-id|page]`. `<port>` below is the port of the running site
+from `c4builder status` (step 1); the commands find the server of this project by themselves.
 
 The listener name (`<name>` below) is how the page picks the agent when several share one
 `site -w`: the change id from the argument, otherwise the name of your task. Letters, digits,
@@ -26,14 +26,31 @@ The listener name (`<name>` below) is how the page picks the agent when several 
 ## 1. Server
 
 ```bash
-curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:<port>/
+c4builder status
 ```
 
-`200` — the server is up; never start a second one. Otherwise ask the user to start
-`c4builder --site -w`, or ask whether you may start it yourself in the background — many teams
-keep the preview server in the human's hands. If it exits with `port <port> is already in use —
-pass a different one, e.g. -p <n>`, restart it with that `-p <n>`: `<port>` below is then `<n>`,
-and the commands take the same `-p <n>`.
+Exit code 0 — the site of this project is up: `<port>` below is the port in its first line
+`site is running at http://localhost:<port> (pid …)`; never start a second one (it would refuse
+with `c4builder site is already running for this project`). `listeners:` shows the other agents
+reviewing on the same site and their queues; `c4builder status --json` prints the same as one
+JSON object (`running`, `url`, `port`, `listeners`).
+
+`… but did not answer in time` (exit code 0) — the server is busy, usually with a build: wait a few
+seconds and run `c4builder status` again; never start a second one.
+
+`no c4builder site of this project on … — the port is used by the c4builder site of another
+project` (exit code 1) — another worktree's site holds the port: do not review on it; start this
+project's site on a free port, `c4builder --site -w -p <n>`.
+
+Exit code 1 (`no c4builder site on …`) — ask the user to start `c4builder --site -w`, or ask whether
+you may start it yourself in the background — many teams keep the preview server in the human's
+hands. If it exits with `port <port> is already in use — pass a different one, e.g. -p <n>`,
+restart it with that `-p <n>` and run `c4builder status` again: the commands below find the server
+by its state file, without `-p`.
+
+`unknown command: status` — the CLI is older than this skill: tell the user, `c4builder update`
+updates it (only when they agree). Until then `<port>` is `webPort` from `.c4builder`, and a server
+on another port needs the same `-p <n>` in `c4builder feedback`.
 
 The server answers right after `serving your docsify site`, before the diagrams are rendered: on
 a cold cache the pages show `rendering…` placeholders that turn into images by themselves, the
@@ -47,8 +64,8 @@ broken diagram worth fixing before the human reaches it.
   — the short permanent address the `openspec` plugin declares for every change (active, nested or
   archived). It does not depend on the `mount`, `groupKey` and `nameKey` options, and the browser
   swaps it for the real page path. Do not search the build output and do not build the long path
-  by hand. `curl` cannot check a `#/…` address — the hash never reaches the server: check `/`
-  (step 1) and the `Change page: …` line that `c4builder feedback --as <change-id>` prints on
+  by hand. No command can check a `#/…` address — the hash never reaches the server: rely on
+  `c4builder status` (step 1) and the `Change page: …` line that `c4builder feedback --as <change-id>` prints on
   stderr in step 3. No such line means the site has no change with this id: a typo, not built yet
   (the next rebuild adds it), or a CLI older than 0.10.0 — only then fall back to the build output:
   `find <distFolder> -path '*<change-id>*' -name '*.md' | head` (`distFolder` from `.c4builder`,

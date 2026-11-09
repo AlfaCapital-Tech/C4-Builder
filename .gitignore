@@ -18,6 +18,10 @@ test/.tmp/
 *.c4builder.lock
 .c4builder.lock
 
+# файл состояния dev-сервера (см. src/cli/server-state.ts) — живёт, пока работает site
+*.c4builder.server.json
+.c4builder.server.json
+
 #intellij
 .idea
 *.iml

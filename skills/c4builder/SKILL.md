@@ -95,7 +95,10 @@ How the source tree becomes pages:
    address `#/change/<change-id>` (a warning on stderr when the site has no such change). It
    never exits — start it in the background or leave it to the user. A taken port exits with
    `port 3000 is already in use — pass a different one, e.g. -p 3001`: restart with that `-p`
-   and pass the same `-p` to `c4builder feedback` (the server never picks another port itself). The server comes up right
+   (the server never picks another port itself). `c4builder status` tells whether the site of
+   this project runs and where (exit code 0 / 1, `--json`); `c4builder feedback` and
+   `c4builder doctor` find it the same way, without `-p`. A second `c4builder --site -w` for the same
+   project exits with code 1 and the address of the running one. The server comes up right
    after `serving your docsify site` (and `-o`/`--open-change` opens the browser then), before the diagrams are
    rendered: on a cold cache they show a `rendering…` placeholder and are drawn in the
    background (`rendering N diagrams in background…` → `rendered N diagrams in T s`), the page
@@ -111,7 +114,7 @@ How the source tree becomes pages:
 ## Feedback from the page
 
 When the user wants to look at the pages and tell you what to fix, use the `c4builder-review`
-skill (`/c4builder-review [change-id|page]`): it checks the server, gives the link to the page and
+skill (`/c4builder-review [change-id|page]`): it checks the server with `c4builder status`, gives the link to the page and
 runs the batch loop.
 
 In short: under an agent (`CLAUDECODE`, `CODEX_THREAD_ID`, `GEMINI_CLI`, `OPENCODE`, `COPILOT_CLI`,

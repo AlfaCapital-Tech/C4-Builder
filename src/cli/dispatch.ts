@@ -11,7 +11,9 @@ import cmdJre from './commands/jre.ts';
 import cmdCheck from './commands/check.ts';
 import { FORMATS } from './commands/check.report.ts';
 import cmdList from './commands/list.ts';
-import cmdSite from './commands/site.ts';
+import cmdSite, { reuseRunningServer } from './commands/site.ts';
+import cmdStatus from './commands/status.ts';
+import { liveServer } from './server-state.ts';
 import cmdFeedback from './commands/feedback.ts';
 import cmdSkills, { skillsNotice } from './commands/skills.ts';
 import cmdDoctor from './commands/doctor.ts';
@@ -22,6 +24,7 @@ import { build, type BuildResult } from '../core/build.ts';
 import type { DiagramQueue } from '../core/render/diagrams.ts';
 import { loadPlugins, pluginWatchPaths } from '../core/plugins/load.ts';
 import fs from 'node:fs';
+import os from 'node:os';
 import { EventEmitter } from 'node:events';
 
 import { clearConsole } from '../util/utils.ts';
@@ -62,7 +65,8 @@ const COMMANDS: Record<string, [args: string, about: string]> = {
     update: ['', 'update a global npm install to the newest version'],
     feedback: ['', 'wait for page feedback from site -w (--wait --as <name>)'],
     skills: ['', 'install or update the agent skills in the current folder'],
-    doctor: ['[group...]', 'diagnose env, skills, render, project, runtime (read-only)']
+    doctor: ['[group...]', 'diagnose env, skills, render, project, runtime (read-only)'],
+    status: ['', 'is the site of this project running: address, pid, feedback listeners']
 };
 
 const commandsHelp = (): string => {
@@ -202,7 +206,10 @@ export default async () => {
             '--as <name>',
             'for `feedback`: listener name (your change or task) — the page sends batches to it'
         )
-        .option('--json', 'for `doctor` and `check`: JSON output (`check`: same as --format json)')
+        .option(
+            '--json',
+            'for `doctor`, `status` and `check`: JSON output (doctor: with stable check ids; check: same as --format json)'
+        )
         // choices: опечатку (`--format jsno`) commander отклоняет со списком значений и кодом 1,
         // а не молча печатает текст, который CI не разберёт.
         .addOption(
@@ -221,11 +228,16 @@ export default async () => {
         .option('--offline', 'for `doctor`: no network requests')
         .option('--docs', 'a brief explanation for the available configuration options')
         .option('--system-fonts', 'render with system fonts instead of the bundled one (not deterministic)')
-        .option('-p, --port <n>', 'port used for serving the generated site', (v) => {
-            // parseInt молча резал бы опечатку ('30OO' → 30) — валидируем строго.
-            if (!isValidPort(v)) throw new InvalidArgumentError('expected a TCP port: an integer 1..65535');
-            return Number(v);
-        })
+        .option(
+            '-p, --port <n>',
+            'port used for serving the generated site (feedback, doctor, status: port of the running site)',
+            (v) => {
+                // parseInt молча резал бы опечатку ('30OO' → 30) — валидируем строго.
+                if (!isValidPort(v))
+                    throw new InvalidArgumentError('expected a TCP port: an integer 1..65535');
+                return Number(v);
+            }
+        )
         .allowExcessArguments() // позиционные аргументы подкоманд `jre <action>` и `check <file...>`
         .addHelpText('after', commandsHelp())
         .parse(process.argv);
@@ -254,9 +266,9 @@ export default async () => {
             process.exit(1);
         }
     // --version/--help уже вышли в parse. Уведомление — по кэшу прошлой проверки, до её
-    // перезапуска; exit покрывает и выходы через process.exit. Вывод `feedback` читает агент; doctor
-    // сообщает о новой версии сам, а фоновый `npm view` ходил бы в сеть и с --offline.
-    if (cmd !== 'update' && cmd !== 'feedback' && cmd !== 'doctor') {
+    // перезапуска; exit покрывает и выходы через process.exit. Вывод `feedback` и `status` читает агент;
+    // doctor сообщает о новой версии сам, а фоновый `npm view` ходил бы в сеть и с --offline.
+    if (cmd !== 'update' && cmd !== 'feedback' && cmd !== 'doctor' && cmd !== 'status') {
         const next = pendingUpdate();
         if (next)
             process.once('exit', () =>
@@ -277,6 +289,8 @@ export default async () => {
         return cmdFeedback(path.join(process.cwd(), opts.configFile ?? '.c4builder'), opts);
     // Установка скиллов — до Configstore: ставит их и в каталог без проекта.
     if (cmd === 'skills') return cmdSkills();
+    // Состояние dev-сервера — до Configstore: только читает, работает и вне проекта.
+    if (cmd === 'status') return cmdStatus(path.join(process.cwd(), opts.configFile ?? '.c4builder'), opts);
     // Диагностика — тоже до Configstore и проверки терминала: работает вне проекта, в CI и под агентом.
     if (cmd === 'doctor') return cmdDoctor(cmdArgs, opts);
     // `site`/`new`/`config` — позиционные синонимы одноимённых флагов: эту форму печатают
@@ -302,6 +316,12 @@ export default async () => {
             )
         );
         process.exit(1);
+    }
+    // Сервер этого конфига уже работает (change site-server-state, D7) — до лока и сборки: иначе
+    // повторный запуск пересобрал бы dist, который раздаёт первый сервер.
+    if (opts.site && !opts.new && !opts.config && !opts.list && !opts.reset) {
+        const live = await liveServer(configPath);
+        if (live) process.exit(await reuseRunningServer(live.state, opts));
     }
 
     let conf: ConfStore = { get: () => {} } as unknown as ConfStore;
@@ -543,10 +563,16 @@ export default async () => {
         if (!pending) isBuilding = false;
 
         if (opts.site) {
+            // Без обработчиков Ctrl+C и SIGTERM завершают Node без события exit — файл состояния
+            // сервера остался бы. 128 + n — код, которым оболочка и так отметила бы сигнал. SIGHUP не
+            // перехватываем: обработчик отменил бы его игнорирование под nohup и закрытие терминала
+            // гасило бы сервер; без nohup файл после SIGHUP остаётся и недействителен по pid (D4).
+            for (const signal of ['SIGINT', 'SIGTERM'] as const)
+                process.once(signal, () => process.exit(128 + os.constants.signals[signal]));
             try {
                 await cmdSite(
                     options,
-                    { ...opts, agent: detectAgent(process.env, opts) },
+                    { ...opts, configPath, agent: detectAgent(process.env, opts) },
                     reloadEmitter,
                     () => result,
                     (page) => pending?.prioritize(page)

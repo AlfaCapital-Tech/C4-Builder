@@ -15,6 +15,7 @@ git diff --name-only | c4builder check --strict --files-from -  # check the path
 c4builder --site -w          # live preview on http://localhost:3000 - never exits
 c4builder --site -w --open-change <change-id>  # the same, opens the OpenSpec change page #/change/<change-id>
 c4builder feedback --wait --as <name>  # wait for comments from the preview page sent to <name>
+c4builder status             # is the live preview running? address, pid; exit code 0 = running
 c4builder doctor             # something does not work? run this first: read-only checks, a fix: line per problem
 ```
 
@@ -31,7 +32,8 @@ updates it.
    Fix until the exit code is 0; with `--strict` warnings count too: `⚠ <file>: line <N>: Rel to
    undeclared element "<alias>"` means a typo in a relation alias.
 3. Run `c4builder` and make sure it exits with code 0. Leave `c4builder --site -w` to a
-   human or run it in the background. When the human reviews the pages, also run
+   human or run it in the background; `c4builder status` tells whether it already runs and on
+   which port — do not start a second one. When the human reviews the pages, also run
    `c4builder feedback --wait --as <name>` in the background, `<name>` being your change or
    task: on exit it prints a batch of comments (page, `Sources`, quote, text) — apply them to
    `src/`, run it again with the same name, and stop on `Decision: approved`. Without `--as`

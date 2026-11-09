@@ -10,8 +10,11 @@ import fs from 'node:fs';
 // даже если pid формально жив (легитимная сборка длиннее часа — экзотика).
 const STALE_MS = 60 * 60 * 1000;
 
-// EPERM = процесс существует, но сигналить ему нельзя (чужой пользователь) — жив.
-const ownerAlive = (pid: number): boolean => {
+// EPERM = процесс существует, но сигналить ему нельзя (чужой пользователь) — жив. pid <= 0 kill
+// понимает как группу процессов и «найдёт» её — такой pid из файла не может быть живым владельцем.
+// Общая проверка и для файла состояния dev-сервера (cli/server-state.ts).
+export const ownerAlive = (pid: number): boolean => {
+    if (!Number.isInteger(pid) || pid <= 0) return false;
     try {
         process.kill(pid, 0);
         return true;

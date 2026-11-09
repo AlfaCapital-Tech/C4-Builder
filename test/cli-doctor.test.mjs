@@ -624,6 +624,20 @@ describe('проект и запуск', () => {
         });
     }, 60_000);
 
+    // change site-server-state, D9: без -p порт берётся из файла состояния сервера, а не из webPort.
+    it('сервер на порту, отличном от webPort, — ok «site -w is running» с его адресом', async () => {
+        const { cwd, env, json } = sandbox();
+        project(cwd);
+        await serveSite(cwd, ['site', '-w', '-p', '28373'], {
+            env: env(),
+            onReady: async () => {
+                const c = byId(json(['runtime']).report, 'runtime.port');
+                expect(c.status).toBe('ok');
+                expect(c.message).toContain('site -w is running at http://localhost:28373');
+            }
+        });
+    }, 60_000);
+
     it('вывод для issue — без значений переменных и абсолютного домашнего каталога', () => {
         const { home, run } = sandbox();
         const ca = path.join(home, 'certs', 'missing.pem');
