@@ -3,6 +3,13 @@
 User-facing changes of C4-Builder. Every pull request that changes behaviour adds a line to
 `## Unreleased`; the release commit renames it to `## vX.Y.Z`.
 
+## Unreleased
+
+- `doctor skills` no longer reports duplicates from uninstalled Claude Code plugins: it reads the
+  installed plugins from `~/.claude/plugins/installed_plugins.json` instead of walking the plugin
+  cache, so leftovers marked `.orphaned_at`, old versions and plugins installed in other projects
+  do not count; an unrecognized registry is `skipped` (#74)
+
 ## v0.14.0
 
 - `site` / `--site -w` on a taken port suggests a free one: `port 3000 is already in use — pass a
