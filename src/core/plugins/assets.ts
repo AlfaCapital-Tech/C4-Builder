@@ -5,7 +5,7 @@ import type { BuildOptions } from '../../config/options.ts';
 import { encodeURIPath } from '../../util/utils.ts';
 import { SITE_SCRIPTS } from '../compose/site.scripts.ts';
 import type { Redirects } from './tree.ts';
-import type { LoadedPlugin } from './types.ts';
+import type { LoadedPlugin, PluginAsset } from './types.ts';
 
 // Вставка тегов в готовый HTML: стили — перед последним `</head>`, скрипты — перед
 // последним `</body>` (регистронезависимо), headScripts — перед первым `<script>` (раньше
@@ -73,7 +73,7 @@ const writeSiteScript = (options: BuildOptions, name: string): void => {
  * Подключает в `dist/index.html` ассеты сайта: ядра (скрипт sidebar — перетаскиваемая
  * граница и прокрутка к активной странице, просмотр диаграмм с зумом — всегда, сворачивание
  * при `sidebarCollapse`)
- * и плагинов — последние копируются в `dist/vendor/plugins/<name>/`.
+ * и плагинов — последние попадают в `dist/vendor/plugins/<name>/` (файлы копией, строки записью).
  * Зовётся после generateWebMD (index.html уже записан).
  */
 export const injectSiteAssets = async (plugins: LoadedPlugin[], options: BuildOptions): Promise<void> => {
@@ -98,12 +98,24 @@ export const injectSiteAssets = async (plugins: LoadedPlugin[], options: BuildOp
         if (!plugin.assets) continue;
         const rel = path.posix.join('vendor', 'plugins', plugin.name);
         const destDir = path.join(options.DIST_FOLDER, 'vendor', 'plugins', plugin.name);
-        const copy = (files: string[] | undefined, out: string[]): void => {
+        // Строка `{ name, content }` пишется под своим именем — у плагина нет файла, который можно
+        // скопировать (скрипт живёт в его исходниках). Пишется и когда шаблон уже подключил это
+        // имя (копия сгенерированного index.html): иначе тег есть, а файла в dist нет — как у
+        // скриптов ядра выше. Файл при подключённом имени, как раньше, не копируется.
+        const copy = (files: PluginAsset[] | undefined, out: string[]): void => {
             for (const file of files ?? []) {
-                if (linked(file)) continue;
-                fs.mkdirSync(destDir, { recursive: true });
-                fs.copyFileSync(file, path.join(destDir, path.basename(file)));
-                out.push(encodeURIPath(path.posix.join(rel, path.basename(file))));
+                const name = path.basename(typeof file === 'string' ? file : file.name);
+                const isLinked = linked(name);
+                if (typeof file === 'string') {
+                    if (isLinked) continue;
+                    fs.mkdirSync(destDir, { recursive: true });
+                    fs.copyFileSync(file, path.join(destDir, name));
+                } else {
+                    fs.mkdirSync(destDir, { recursive: true });
+                    fs.writeFileSync(path.join(destDir, name), file.content);
+                    if (isLinked) continue;
+                }
+                out.push(encodeURIPath(path.posix.join(rel, name)));
             }
         };
         copy(plugin.assets.styles, styles);

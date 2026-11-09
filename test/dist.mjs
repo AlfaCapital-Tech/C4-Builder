@@ -30,6 +30,7 @@ export { DIAGRAM_ZOOM_JS, REDIRECTS_JS, STORAGE_GUARD_JS } from '../dist/core/co
 export { createFenceExtractor, mapOutsideCode, mapOutsideFences } from '../dist/core/scan/fences.js';
 export { embedFigmaImages } from '../dist/plugins/figma/index.js';
 export { artifactColumnValues } from '../dist/plugins/openspec/render.js';
+export { CHANGES_FILTER_JS } from '../dist/plugins/openspec/filter.script.js';
 export {
     foldIncludes,
     clearIncludeCache,

@@ -64,6 +64,16 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
   code 1 and advises to restart it with `-w`. `SIGHUP` is not caught: `nohup` works as before (#64)
 - The `c4builder-review` and `c4builder` skills check the server with `c4builder status` instead of
   `curl` and no longer pass `-p` to `feedback`
+- `openspec` plugin: the `filter` option — dropdown filters above the Changes tables (summary,
+  Changes page, group pages; checkboxes, a search box for long lists, a `Reset` button) that keep
+  only the rows with the selected `Schema` or extra-column values, e.g.
+  `"filter": ["Schema", "Assignee"]`; multi-select, AND between columns, a nested change is judged
+  by its own value and keeps its parent dimmed for context; the selection is stored in the browser
+  per column header and follows the reader across the pages; the script `changes-filter.js` is
+  linked on every site with the plugin, like its stylesheet
+- plugin contract: `assets.scripts` / `assets.styles` accept `{ name, content }` next to file
+  paths — the core writes the string to `dist/vendor/plugins/<name>/`, so a plugin keeps its own
+  site script in source like the core scripts
 
 ## v0.14.0
 
