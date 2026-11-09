@@ -1,6 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { DiagramError, type DiagramProblem, errorText } from './problem.ts';
+
 // Второй бэкенд рендера: D2 (terrastruct) через @terrastruct/d2 (WASM → SVG).
 // Пакет ~60 МБ и поднимает webworker, поэтому это опциональная зависимость с
 // ленивой загрузкой: движок инициализируется единожды за прогон и только когда
@@ -167,7 +169,7 @@ const commonAncestor = (files: string[]): string => {
 const buildCompileRequest = (
     entryAbs: string,
     seed?: string
-): { fs: Record<string, string>; inputPath: string } => {
+): { fs: Record<string, string>; inputPath: string; root: string } => {
     const files = collectFilesCached(entryAbs, seed);
     // Пустой граф = не прочитался сам входной файл (удалён/недоступен — гонка в watch).
     // Без guard'а commonAncestor([]) давал бы сырой TypeError (Math.min()=Infinity).
@@ -178,33 +180,63 @@ const buildCompileRequest = (
     const toKey = (abs: string): string => path.relative(root, abs).split(path.sep).join('/');
     const fsMap: Record<string, string> = {};
     for (const [abs, content] of files) fsMap[toKey(abs)] = content;
-    return { fs: fsMap, inputPath: toKey(path.resolve(entryAbs)) };
+    return { fs: fsMap, inputPath: toKey(path.resolve(entryAbs)), root };
+};
+
+// Ошибка компиляции со структурными позициями для `check --format`. message прежний (его
+// печатают сборка и `check` в тексте), а позиции из него не восстановить: путь в errmsg
+// отсчитан от корня виртуальной fs, который знает только renderD2.
+export class D2Error extends DiagramError {}
+
+// Ответ движка на ошибку компиляции — JSON-массив [{range, errmsg}]. Разбираем его один раз:
+// из него и печатный текст (errmsg построчно, `file:line:col: текст`), и структура. range —
+// `<ключ fs>,L:C:B-L:C:B`, позиции с 0; ключ может содержать запятые, поэтому он — всё до
+// последней запятой перед позицией. errmsg дублирует позицию префиксом `<ключ>:L:C: ` — в
+// структуре его нет. Иной формат ответа — текст как есть и одно замечание без позиции.
+const RANGE = /^(.*),(\d+):(\d+):\d+-/;
+const d2Failure = (
+    raw: string,
+    root: string,
+    entryAbs: string
+): { text: string; details: DiagramProblem[] } => {
+    let errors: { range?: unknown; errmsg: string }[] | null = null;
+    try {
+        const parsed: unknown = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.every((x) => typeof x?.errmsg === 'string')) errors = parsed;
+    } catch {}
+    if (!errors) return { text: raw, details: [{ file: entryAbs, message: raw }] };
+    const text = errors.map((x) => x.errmsg).join('\n');
+    if (!errors.length) return { text, details: [{ file: entryAbs, message: raw }] };
+    return {
+        text,
+        details: errors.map(({ range, errmsg }) => {
+            const m = typeof range === 'string' ? range.match(RANGE) : null;
+            if (!m) return { file: entryAbs, message: errmsg };
+            const [line, column] = [Number(m[2]) + 1, Number(m[3]) + 1];
+            const prefix = `${m[1]}:${line}:${column}: `;
+            return {
+                file: path.resolve(root, m[1]),
+                line,
+                column,
+                message: errmsg.startsWith(prefix) ? errmsg.slice(prefix.length) : errmsg
+            };
+        })
+    };
 };
 
 // Рендер .d2 → SVG (Buffer). Ошибки компиляции пробрасываются с путём файла.
-// Ошибка компиляции движок отдаёт JSON-массивом [{range, errmsg}] — вытаскиваем
-// человекочитаемые errmsg (`file:line:col: текст`); иной формат отдаём как есть.
-const d2ErrorText = (message: string): string => {
-    try {
-        const parsed: unknown = JSON.parse(message);
-        if (Array.isArray(parsed) && parsed.every((x) => typeof x?.errmsg === 'string'))
-            return parsed.map((x: { errmsg: string }) => x.errmsg).join('\n');
-    } catch {}
-    return message;
-};
-
 const renderD2 = async (
     entryAbs: string,
     { layout = 'dagre', seed }: { layout?: string; seed?: string } = {}
 ): Promise<Buffer> => {
     const d2 = await getD2();
-    const { fs: fsMap, inputPath } = buildCompileRequest(entryAbs, seed);
+    const { fs: fsMap, inputPath, root } = buildCompileRequest(entryAbs, seed);
     let result: D2Compiled;
     try {
         result = await d2.compile({ fs: fsMap, inputPath, options: { layout } });
     } catch (err) {
-        const e = err as Error;
-        throw new Error(`D2 compile error (${entryAbs}):\n${d2ErrorText(e.message || String(e))}`);
+        const { text, details } = d2Failure(errorText(err) || String(err), root, path.resolve(entryAbs));
+        throw new D2Error(`D2 compile error (${entryAbs}):\n${text}`, details);
     }
     let svg: string;
     try {

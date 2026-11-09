@@ -42,9 +42,20 @@ GitLab CI, проверка диаграмм и публикация в GitLab P
 
 ```yaml
 check:
-  image: ghcr.io/alfacapital-tech/c4builder:0.9.0
+  image: node:24
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  variables:
+    GIT_DEPTH: 0  # коммит базы MR для git diff
   script:
-    - find src \( -name '*.puml' -o -name '*.d2' -o -name '*.bpmn' -o -name '*.mmd' -o -name '*.wireflow.json' -o -name wireflow.json \) -exec c4builder check {} +
+    - npm i -g @alfacapital-tech/c4builder@0.15.0
+    - git -c core.quotePath=false diff --name-only --diff-filter=d "$CI_MERGE_REQUEST_DIFF_BASE_SHA" HEAD
+      -- '*.puml' '*.iuml' '*.d2' '*.bpmn' '*.mmd' '*.wireflow.json' 'wireflow.json' '*/wireflow.json'
+      | c4builder check --strict --format gitlab --files-from - > gl-code-quality-report.json
+  artifacts:
+    when: always
+    reports:
+      codequality: gl-code-quality-report.json
 
 pages:
   image: ghcr.io/alfacapital-tech/c4builder:0.9.0
@@ -53,6 +64,39 @@ pages:
   artifacts:
     paths: [public]
 ```
+
+Джоба `check` проверяет диаграммы, изменённые в MR, и кладёт замечания в отчёт GitLab Code
+Quality: они видны в виджете MR и в diff на нужной строке, а не только в логе. `when: always`
+сохраняет отчёт и при упавшей джобе. В образе c4builder нет `git`, поэтому джоба идёт на
+`node:24`, а JRE c4builder скачает сам. `--format` и `--files-from` — с c4builder 0.15.0:
+версия закреплена, на более ранней джоба упадёт на неизвестной опции.
+
+GitHub Actions, проверка изменённых в PR диаграмм с аннотациями в diff:
+
+```yaml
+on: pull_request
+jobs:
+  diagrams:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - run: npm i -g @alfacapital-tech/c4builder@0.15.0
+      - run: >
+          git -c core.quotePath=false diff --name-only --diff-filter=d "origin/${{ github.base_ref }}...HEAD"
+          -- '*.puml' '*.iuml' '*.d2' '*.bpmn' '*.mmd' '*.wireflow.json' 'wireflow.json' '*/wireflow.json'
+          | c4builder check --strict --format github --files-from -
+```
+
+Список изменённых файлов идёт в `check` одним вызовом через `--files-from -`, а не через
+`xargs`: тот делит длинный список на несколько вызовов, и отчёт GitLab стал бы несколькими
+JSON-массивами подряд. `core.quotePath=false` — чтобы `git` не экранировал кириллицу в путях.
+Если диаграммы в PR не менялись, список пуст: машинный формат печатает пустой отчёт и
+завершается с кодом 0. Java шагу не нужна заранее — c4builder скачает JRE сам, и
+сообщения об этом уйдут в stderr, не смешиваясь с аннотациями. Формат и поля замечаний — в
+[CLI и конфигурация](05%20CLI%20и%20конфигурация/05%20CLI%20и%20конфигурация.md).
 
 GitHub Actions без Docker: Node из `setup-node`, Java из `setup-java` (или пусть c4builder
 скачает JRE сам):
@@ -118,7 +162,9 @@ GitHub Actions:
 
 Сборка ведёт себя в CI так же, как локально: код выхода не 0, если не собралась хотя бы одна
 диаграмма. Отдельный быстрый шаг `c4builder check` на изменённых файлах даёт понятную ошибку
-раньше полной сборки.
+раньше полной сборки. С `--strict` шаг падает и на предупреждениях — например, на связи C4 к
+необъявленному элементу, которую сборка только печатает. С `--format github` или
+`--format gitlab` ошибки и предупреждения попадают прямо в diff PR/MR (фрагменты выше).
 
 ## Как собирается этот сайт
 

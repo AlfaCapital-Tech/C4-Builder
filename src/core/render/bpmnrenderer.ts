@@ -1,8 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import chalk from 'chalk';
 
 import { DEFAULT_FONT_NAME } from './fonts.ts';
+import { DiagramError, type DiagramProblem, errorText, fileError } from './problem.ts';
+import { warnDiagram } from './warnings.ts';
 import { ASCENT, DESCENT, clearTextWidths, textWidth } from './textmetrics.ts';
 
 // Третий бэкенд рендера: BPMN 2.0 XML без координат → валидация (bpmnlint) → раскладка
@@ -15,13 +16,11 @@ const require = createRequire(import.meta.url);
 // правил валидации обязан перерисовать диаграмму.
 export const BPMN_CACHE_PACKAGES = ['bpmn-js', 'bpmn-auto-layout', 'bpmnlint'];
 
-// Ошибка конвейера: problems — по строке на нарушение без пути файла (check печатает их
-// как `✗ <file>: <problem>`), message — те же строки с путём для сборки.
-export class BpmnError extends Error {
-    readonly problems: string[];
-    constructor(file: string, problems: string[]) {
-        super(problems.map((p) => `${file}: ${p}`).join('\n'));
-        this.problems = problems;
+// Ошибка конвейера: details — нарушения структурой, problems — их печатные строки без пути
+// файла (check печатает `✗ <file>: <problem>`), message — те же строки с путём для сборки.
+export class BpmnError extends DiagramError {
+    constructor(file: string, details: DiagramProblem[]) {
+        super(...fileError(file, details));
     }
 }
 
@@ -421,12 +420,12 @@ export const parseBpmn = async (xml: string, file: string): Promise<BpmnElement>
     try {
         parsed = await moddle.fromXML(xml.replace(/^﻿/, ''));
     } catch (err) {
-        throw new BpmnError(file, [`invalid BPMN XML: ${oneLine((err as Error).message)}`]);
+        throw new BpmnError(file, [moddleProblem('invalid BPMN XML: ', errorText(err))]);
     }
     if (parsed.warnings.length)
         throw new BpmnError(
             file,
-            parsed.warnings.map((w) => `${w.element?.id ? `${w.element.id}: ` : ''}${oneLine(w.message)}`)
+            parsed.warnings.map((w) => moddleProblem('', w.message, w.element?.id || undefined))
         );
     const definitions = parsed.rootElement;
     const elements: BpmnElement[] = [];
@@ -447,15 +446,33 @@ export const parseBpmn = async (xml: string, file: string): Promise<BpmnElement>
 
 const oneLine = (s: string): string => s.replace(/\s*\n\s*/g, ', ');
 
+// XML-парсер moddle вписывает позицию в текст: `…detected\n\tline: L\n\tcolumn: C\n\tnested
+// error: …`, L и C — с 0. Позицию переносим в line/column и убираем из message, печатный текст
+// (text) — прежний, с позицией внутри.
+const MODDLE_AT = /\n\s*line: (\d+)\n\s*column: (\d+)/;
+const moddleProblem = (prefix: string, raw: string, element?: string): DiagramProblem => {
+    const message = `${prefix}${oneLine(raw)}`;
+    const at = MODDLE_AT.exec(raw);
+    if (!at) return { element, message };
+    return {
+        element,
+        line: Number(at[1]) + 1,
+        column: Number(at[2]) + 1,
+        message: `${prefix}${oneLine(raw.replace(MODDLE_AT, ''))}`,
+        text: `${element ? `${element}: ` : ''}${message}`
+    };
+};
+
+// Нарушение bpmnlint и предупреждение раскладки печатаются `<id|-> [<rule>] <msg>`.
 export const lintBpmn = async (
     definitions: BpmnElement
-): Promise<{ errors: string[]; warnings: string[] }> => {
+): Promise<{ errors: DiagramProblem[]; warnings: DiagramProblem[] }> => {
     const linter = (await getEngine()).createLinter();
-    const errors: string[] = [];
-    const warnings: string[] = [];
+    const errors: DiagramProblem[] = [];
+    const warnings: DiagramProblem[] = [];
     for (const [rule, reports] of Object.entries(await linter.lint(definitions)))
         for (const r of reports)
-            (r.category === 'warn' ? warnings : errors).push(`${r.id ?? '-'} [${rule}] ${r.message}`);
+            (r.category === 'warn' ? warnings : errors).push({ rule, element: r.id, message: r.message });
     return { errors, warnings };
 };
 
@@ -484,15 +501,19 @@ export const layoutBpmn = async (
     definitions: BpmnElement,
     file: string,
     layout?: LayoutFn
-): Promise<{ xml: string; warnings: string[] }> => {
+): Promise<{ xml: string; warnings: DiagramProblem[] }> => {
     const engine = await getEngine();
     let result: Awaited<ReturnType<LayoutFn>>;
     try {
         result = await (layout ?? engine.layoutProcess)((await engine.moddle.toXML(definitions)).xml);
     } catch (err) {
-        const e = err as Error & { elementId?: string };
+        const element = (err as { elementId?: string } | undefined)?.elementId || undefined;
         throw new BpmnError(file, [
-            `layout failed: ${e.elementId ? `${e.elementId}: ` : ''}${oneLine(e.message || String(e))}`
+            {
+                element,
+                elementInMessage: true,
+                message: `layout failed: ${element ? `${element}: ` : ''}${oneLine(errorText(err) || String(err))}`
+            }
         ]);
     }
     const laidOut = (await engine.moddle.fromXML(result.xml)).rootElement;
@@ -504,14 +525,19 @@ export const layoutBpmn = async (
         .filter((id) => !drawn.has(id));
     if (lost.length)
         throw new BpmnError(file, [
-            `layout lost ${lost.length} element(s): ${lost.join(', ')} (bpmn-auto-layout defect; ` +
-                'simplify or split the model)'
+            {
+                message:
+                    `layout lost ${lost.length} element(s): ${lost.join(', ')} (bpmn-auto-layout defect; ` +
+                    'simplify or split the model)'
+            }
         ]);
     return {
         xml: result.xml,
-        warnings: result.warnings.map(
-            (w) => `${w.elementId ?? '-'} [layout${w.code ? `:${w.code}` : ''}] ${oneLine(w.message)}`
-        )
+        warnings: result.warnings.map((w) => ({
+            rule: `layout${w.code ? `:${w.code}` : ''}`,
+            element: w.elementId,
+            message: oneLine(w.message)
+        }))
     };
 };
 
@@ -586,15 +612,15 @@ const renderSvg = async (xml: string): Promise<string> => {
 export const renderBpmn = async (xml: string, file: string): Promise<Buffer> => {
     const definitions = await parseBpmn(xml, file);
     const lint = await lintBpmn(definitions);
-    for (const w of lint.warnings) console.log(chalk.yellow(`⚠ ${file}: ${w}`));
+    for (const w of lint.warnings) warnDiagram(file, w);
     if (lint.errors.length) throw new BpmnError(file, lint.errors);
     const laidOut = await layoutBpmn(definitions, file);
-    for (const w of laidOut.warnings) console.log(chalk.yellow(`⚠ ${file}: ${w}`));
+    for (const w of laidOut.warnings) warnDiagram(file, w);
     let svg: string;
     try {
         svg = await renderSvg(laidOut.xml);
     } catch (err) {
-        throw new BpmnError(file, [`render failed: ${oneLine((err as Error).message || String(err))}`]);
+        throw new BpmnError(file, [{ message: `render failed: ${oneLine(errorText(err) || String(err))}` }]);
     }
     return Buffer.from(svg, 'utf8');
 };

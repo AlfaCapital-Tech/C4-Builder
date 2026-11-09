@@ -5,7 +5,15 @@ import { BpmnModdle } from 'bpmn-moddle';
 import { layoutProcess } from 'bpmn-auto-layout';
 import { afterAll, describe, expect, it } from 'vitest';
 
-import { layoutBpmn, lintBpmn, parseBpmn, renderBpmn, resvgFontOptions, teardownBpmn } from './dist.mjs';
+import {
+    layoutBpmn,
+    lintBpmn,
+    parseBpmn,
+    problemText,
+    renderBpmn,
+    resvgFontOptions,
+    teardownBpmn
+} from './dist.mjs';
 import { REPO_ROOT } from './helpers.mjs';
 
 // Конвейер BPMN (change bpmn-diagrams): разбор и нормализация → bpmnlint → раскладка →
@@ -69,7 +77,11 @@ describe('разбор и нормализация', () => {
 });
 
 describe('валидация', () => {
-    const lint = async (xml) => lintBpmn(await parseBpmn(xml, 'x.bpmn'));
+    // lintBpmn отдаёт структуру (check --format); ожидания — печатные строки из problemText.
+    const lint = async (xml) => {
+        const { errors, warnings } = await lintBpmn(await parseBpmn(xml, 'x.bpmn'));
+        return { errors: errors.map(problemText), warnings: warnings.map(problemText) };
+    };
 
     it('корректная модель шаблона — без ошибок и предупреждений; sourceRef-only не даёт ложных no-disconnected', async () => {
         expect(await lint(TEMPLATE)).toEqual({ errors: [], warnings: [] });

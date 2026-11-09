@@ -24,6 +24,7 @@ import { resolveJava } from './jre.ts';
 // PNG-выход: SVG обоих движков растеризуется resvg (ленивая загрузка внутри модуля).
 import { rasterizeSvgToPng } from './pngraster.ts';
 import { escapeXml } from './textmetrics.ts';
+import { warnUndeclaredRels } from './plantumllint.ts';
 // Шрифт-пин общий с resvg-растеризатором (одна точка правды, см. fonts.ts).
 import { FONTS_DIR, DEFAULT_FONT_NAME } from './fonts.ts';
 import { VENDOR_DIR, packageJson } from '../../util/paths.ts';
@@ -671,6 +672,17 @@ export const generateImages = async (
                             isDitaa,
                             useSystemFonts: options.USE_SYSTEM_FONTS
                         });
+                        // Связь C4 на необъявленный алиас — предупреждение, как в `check`. Только
+                        // при рендере: диаграмма из кэша не перерисовывается и не перепроверяется.
+                        // Детектор читает SVG, а сборка может отдать PlantUML-PNG напрямую (ditaa)
+                        // — тогда молчим. Строка блока в markdown — строка страницы (lineOffset).
+                        if (!isDitaa && (needsRaster || outFormat === 'svg'))
+                            warnUndeclaredRels(
+                                file,
+                                `${diagramContent}`,
+                                rendered.toString(),
+                                diagram.lineOffset
+                            );
                     }
                     const image = needsRaster
                         ? await rasterizeSvgToPng(rendered, options.USE_SYSTEM_FONTS)

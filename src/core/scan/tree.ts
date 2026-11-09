@@ -20,6 +20,8 @@ export interface Diagram {
     soft?: boolean;
     /** Виртуальные страницы: абсолютный путь файла диаграммы на диске (см. PageDiagram.origin). */
     origin?: string;
+    /** Блок в markdown: сдвиг строки content до строки в source (см. PageDiagram.lineOffset). */
+    lineOffset?: number;
 }
 
 export interface TreeItem {
@@ -194,7 +196,8 @@ export const generateTree = async (dir: string, options: BuildOptions): Promise<
                     content: d.content,
                     isDitaa: engine === 'plantuml' && /@startditaa/i.test(d.content),
                     source: d.source,
-                    soft: d.soft
+                    soft: d.soft,
+                    lineOffset: d.lineOffset
                 });
             }
         }
