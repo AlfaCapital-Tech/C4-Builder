@@ -33,7 +33,7 @@ than a hundred diagrams, so we continue it as a maintained fork, adapted to work
   without a browser: images in every output instead of client-side rendering.
 - **Wireflow** user flows: a `.wireflow.json` export of the editor becomes an image with screen
   cards, notes and transitions, without a browser or network.
-- **Review from the page.** In `c4builder --site -w` a selection becomes a question in the source
+- **Review from the page.** In `c4builder site -w` a selection becomes a question in the source
   `.md` or feedback for the agent; `c4builder feedback --wait --as <name>` hands the batch to the
   agent, and the page reloads with its edits.
 - **Maintained.** TypeScript, golden rendering snapshots, CI on every pull request, releases to
@@ -46,24 +46,24 @@ Requires Node.js ≥ 22.17. Java 17+ is optional.
 ```bash
 npm i -g @alfacapital-tech/c4builder
 
-c4builder --new --name demo -y   # project from the template, full config, no prompts
+c4builder new --name demo -y   # project from the template, full config, no prompts
 cd demo
-c4builder                        # build into docs/
-c4builder --site -w              # live preview at http://localhost:3000
+c4builder                      # build into docs/
+c4builder site -w              # live preview at http://localhost:3000
 ```
 
-Since 0.5.0, `c4builder new` and `c4builder config` work too (0.4.0 has only the flags).
+`c4builder <command> --help` shows the options, output format and exit codes of a command.
 Without `-y`, c4builder asks for the project name and the first build runs the setup wizard.
 
 The agent loop — edit a diagram, check it, look at the result:
 
 ```bash
 c4builder check src/context.puml   # exit code 0 or 1, "✗ file: line N: message" on error
-c4builder --site -w                # rebuilds and reloads the browser on every save
+c4builder site -w                  # rebuilds and reloads the browser on every save
 ```
 
 For agents: `c4builder skills` installs the agent skills of the installed version into the project
-(`c4builder --new` does it for a new one), and `"generateLLMS": true` adds `llms.txt` /
+(`c4builder new` does it for a new one), and `"generateLLMS": true` adds `llms.txt` /
 `llms-full.txt` (diagram sources included) to the site.
 
 Or with Docker (Node, JRE, PlantUML, fonts and D2 included):

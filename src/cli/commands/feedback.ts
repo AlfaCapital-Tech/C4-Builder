@@ -1,11 +1,21 @@
 import chalk from 'chalk';
 import { LISTENER_NAME } from '../../core/feedback.ts';
+import type { ExitCodes } from '../../util/exit.ts';
 import { findServer } from '../server-state.ts';
 import { FEEDBACK_HEADER, FEEDBACK_PATH, PAGE_PATH } from './site.comments.ts';
 
 // `c4builder feedback` (change site-agent-feedback, design D9): забирает пачку замечаний у `site -w`.
 // Конфиг читается как JSON без Configstore — тот создал бы `.c4builder` в любом каталоге. Ошибки —
 // через exitCode, а не process.exit: напечатанная в pipe пачка должна успеть уйти целиком.
+export const EXIT = {
+    ok: [0, 'a batch was printed, or no new feedback without --wait'],
+    noServer: [
+        1,
+        'no site -w server of this project, agent feedback is disabled (no -w or --no-agent), or an unexpected response'
+    ],
+    badName: [2, '--as is missing or invalid']
+} as const satisfies ExitCodes;
+
 export default async (
     configPath: string,
     opts: { port?: number; wait?: boolean; as?: string }
@@ -19,7 +29,7 @@ export default async (
                 '--as <name> is required: name this listener after your change or task (1-64 letters, digits, ".", "_" or "-"), e.g. "c4builder feedback --wait --as add-dark-mode"; use the same name after each batch'
             )
         );
-        process.exitCode = 2;
+        process.exitCode = EXIT.badName[0];
         return;
     }
     // Сервер: `-p` → живой файл состояния → `webPort` (change site-server-state, D6) — сайт мог подняться
@@ -30,7 +40,7 @@ export default async (
     const shown = found.url;
     const fail = (message: string): void => {
         console.error(chalk.red(message));
-        process.exitCode = 1;
+        process.exitCode = EXIT.noServer[0];
     };
     // 127.0.0.1, а не localhost: сервер слушает только IPv4, а `localhost` → `::1` на части машин
     // подвешивает соединение.

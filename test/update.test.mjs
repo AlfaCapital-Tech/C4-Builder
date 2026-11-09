@@ -168,7 +168,9 @@ describe.skipIf(!POSIX)('уведомление в терминале', () => {
 
     it.each([
         ['кэш с текущей версией', ['--docs'], `{"latest":"${CURRENT}"}`],
-        ['--version', ['--version'], '{"latest":"99.0.0"}']
+        ['--version', ['--version'], '{"latest":"99.0.0"}'],
+        ['check --help', ['check', '--help'], '{"latest":"99.0.0"}'],
+        ['help check', ['help', 'check'], '{"latest":"99.0.0"}']
     ])('%s — без уведомления', (_, args, cache) => {
         const sb = sandbox();
         writeCache(sb, cache);

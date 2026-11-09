@@ -16,7 +16,7 @@ System_Ext(figma, "Figma", "UI mockups: frames, prototypes, boards — embedded 
 System_Ext(site, "Docsify site", "Static, no CDN: GitHub Pages, GitLab Pages, any web server")
 System_Ext(md, "Markdown", "A README per folder or a single file for the repository")
 
-Rel(dev, c4b, "Builds and previews", "c4builder --site -w")
+Rel(dev, c4b, "Builds and previews", "c4builder site -w")
 Rel(agent, c4b, "Checks edits", "c4builder check")
 Rel(c4b, engines, "Renders diagrams", "locally, offline")
 Rel(c4b, openspec, "Publishes a section", "openspec plugin")

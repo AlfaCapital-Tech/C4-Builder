@@ -12,11 +12,12 @@ c4builder check <file...>    # validate .puml / .iuml / .d2 / .bpmn / .mmd / .wi
 c4builder check --strict <file...>  # the same, exit code 1 on warnings too - use this one
 c4builder check --strict --format json <file...>  # the same, findings as a JSON array on stdout
 git diff --name-only | c4builder check --strict --files-from -  # check the paths listed on stdin, one per line
-c4builder --site -w          # live preview on http://localhost:3000 - never exits
-c4builder --site -w --open-change <change-id>  # the same, opens the OpenSpec change page #/change/<change-id>
+c4builder site -w          # live preview on http://localhost:3000 - never exits
+c4builder site -w --open-change <change-id>  # the same, opens the OpenSpec change page #/change/<change-id>
 c4builder feedback --wait --as <name>  # wait for comments from the preview page sent to <name>
 c4builder status             # is the live preview running? address, pid; exit code 0 = running
 c4builder doctor             # something does not work? run this first: read-only checks, a fix: line per problem
+c4builder help <command>     # options, output format and exit codes of a command (same as <command> --help)
 ```
 
 Not installed: `npm i -g @alfacapital-tech/c4builder` (Node.js 22.17+; Java 17+ is used
@@ -33,7 +34,7 @@ updates it.
    undeclared element "<alias>"` means a typo in a relation alias.
 3. Run `c4builder` and make sure it exits with code 0. Broken diagrams print the same `✗` lines
    as `check` (all of them in one run) and exit with code 1; `-v` adds the full engine output.
-   Leave `c4builder --site -w` to a human or run it in the background; `c4builder status` tells
+   Leave `c4builder site -w` to a human or run it in the background; `c4builder status` tells
    whether it already runs and on which port — do not start a second one. When the human
    reviews the pages, also run
    `c4builder feedback --wait --as <name>` in the background, `<name>` being your change or
@@ -81,7 +82,7 @@ updates it.
 ## Agent skills
 
 Detailed guidance (project layout, config keys, plugins, page review, installation) as skills for
-Claude Code, Codex, Cursor and other agents. A project created with `c4builder --new` already has
+Claude Code, Codex, Cursor and other agents. A project created with `c4builder new` already has
 them in `.agents/skills/` (and `.claude/skills/` under Claude Code). Install or update them to the
 installed CLI version:
 

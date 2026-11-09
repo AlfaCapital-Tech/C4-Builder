@@ -12,7 +12,7 @@ Take a look at
 
 - [C4-PlantUML](https://github.com/RicardoNiepel/C4-PlantUML) C4 syntax support for generating plantuml diagrams
 
-- `c4builder --site -w` live preview: rebuilds on save and reloads the browser; `c4builder check <file>` validates a single diagram
+- `c4builder site -w` live preview: rebuilds on save and reloads the browser; `c4builder check <file>` validates a single diagram
 
 Open the terminal and run the following commands to start compiling the documentation
 

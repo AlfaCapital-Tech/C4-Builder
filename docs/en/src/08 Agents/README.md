@@ -35,7 +35,7 @@ locally, without a network and without a human.
    `column`, `engine`, `severity`, `rule`, `element`, `message` (see
    [CLI and configuration](05%20CLI%20and%20configuration/05%20CLI%20and%20configuration.md)).
    For BPMN and wireflow `check` finds the element's line from its `id` itself.
-3. **Build.** `c4builder` builds the whole project; `c4builder --site -w` keeps the site open for
+3. **Build.** `c4builder` builds the whole project; `c4builder site -w` keeps the site open for
    the human and rebuilds it on every save the agent makes. It comes up right away, without
    waiting for the rendering: diagrams missing from the cache show a `rendering…` placeholder and
    are drawn in the background (see "CLI and configuration").
@@ -54,14 +54,14 @@ agent bar has one button, **Done — no changes**: it sends an `approved` batch 
 **Discard** only clears the pending comments and sends nothing to the agent. The agent loop:
 
 1. Check `c4builder status`: exit code 0 means the site of this project already runs, its address
-   is in the output; otherwise start `c4builder --site -w` in the background. Then start
+   is in the output; otherwise start `c4builder site -w` in the background. Then start
    `c4builder feedback --wait --as <name>` in the background, `<name>` being the agent's change or
    task, e.g. `--as add-dark-mode`; the command takes the server port from its state file, no `-p`
    needed. In Claude Code — both
    through Bash with `run_in_background`: the agent is notified when `feedback --wait` exits. The
    link to the change page for the human is the short address `http://localhost:<port>/#/change/<id>`
    (see [Plugins](06%20Plugins/06%20Plugins.md)): `feedback --wait --as <id>` prints it on stderr as
-   `Change page: …`, and `c4builder --site -w --open-change <id>` opens it in the browser instead of the
+   `Change page: …`, and `c4builder site -w --open-change <id>` opens it in the browser instead of the
    home page. The link can be given right after the `serving your docsify site` line: on a fresh
    clone the diagrams are still rendering in the background, and the `rendering…` placeholders on
    the page turn into images by themselves.
@@ -177,14 +177,14 @@ metadata:
   generatedBy: "0.10.0"
 ```
 
-`c4builder --new` installs the skills into a new project by the same rules. The folders sit next to
+`c4builder new` installs the skills into a new project by the same rules. The folders sit next to
 `src/` and do not end up in the documentation. Installed skills are generated files, like those of
 `openspec update`: the next run overwrites local edits.
 
 | Skill | Use it for |
 |---|---|
 | `c4builder` | working on a project: layout of `src/` and `.c4builder`, the edit → `c4builder check` → build loop, C4-PlantUML conventions (stdlib includes, shared `.iuml`, offline rendering), D2, BPMN processes without coordinates, mermaid (`.mmd` and blocks, unsupported types), wireflow (`.wireflow.json` from the editor, format versions, placeholders), the `openspec` and `openapi` plugins, `llms.txt`, the new version and skills notices |
-| `c4builder-review` | reviewing pages on `c4builder --site -w`: checking the server, the link to the change or section page, the `c4builder feedback --wait --as <name>` loop, a report in the chat; invoked as `/c4builder-review [change-id\|page]` |
+| `c4builder-review` | reviewing pages on `c4builder site -w`: checking the server, the link to the change or section page, the `c4builder feedback --wait --as <name>` loop, a report in the chat; invoked as `/c4builder-review [change-id\|page]` |
 | `c4builder-setup` | diagnostics with `c4builder doctor` and its fixes, install and update (npm channels `latest` and `rc`, a registry mirror through npmrc or `--registry`, the Docker image), Java or the downloaded JRE, a smoke build of the template project (`c4builder doctor render --full`), installing the skills into the project |
 
 ### Skills notice
@@ -255,7 +255,7 @@ picks up the internal development skills of c4builder itself from `.claude/skill
 
 ## AGENTS.md in a new project
 
-Since version 0.5.0, `c4builder --new` puts an `AGENTS.md` into the project: build and check
+Since version 0.5.0, `c4builder new` puts an `AGENTS.md` into the project: build and check
 commands, the workflow, the project layout, diagram conventions and the skills install command;
 since 0.10.0 it also installs the skills themselves (see above).
 Codex, Cursor and Claude Code read it. The file sits next to `src/`, not inside it, and does not
@@ -282,7 +282,7 @@ ready-made model, while an SVG link gives an agent nothing. To answer "what does
 on", an agent can read `llms-full.txt` instead of crawling pages.
 
 Without the site the build prints a warning and skips the files. New projects have the key on; an
-existing `.c4builder` without the key builds as before — enable it with `c4builder --config` or by
+existing `.c4builder` without the key builds as before — enable it with `c4builder config` or by
 adding `"generateLLMS": true` to the config.
 
 Files of this site:
