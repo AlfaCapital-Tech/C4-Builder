@@ -1,20 +1,20 @@
 ---
 name: c4builder-review
-description: Review c4builder pages with a human right on the local site - the human selects text in c4builder --site -w and leaves comments with the Feedback button, the agent receives them in batches with c4builder feedback --wait --as <name>, edits the sources and waits for the next batch until Approve. Use when asked to discuss a change on the site, to show the pages or a design, to review a page, the design or OpenSpec artifacts, when the human says they will leave comments on the page, right after proposing an OpenSpec change in a repository with c4builder, and on /c4builder-review [change-id|page].
+description: Review c4builder pages with a human right on the local site - the human selects text in c4builder --site -w and leaves comments with the Tell agent button, the agent receives them in batches with c4builder feedback --wait --as <name>, edits the sources and waits for the next batch until Approve. Use when asked to discuss a change on the site, to show the pages or a design, to review a page, the design or OpenSpec artifacts, when the human says they will leave comments on the page, right after proposing an OpenSpec change in a repository with c4builder, and on /c4builder-review [change-id|page].
 ---
 
 # c4builder-review: page comments to the agent
 
 The human looks at the pages in the browser (`c4builder --site -w`), selects text and presses:
 
-- **Feedback** — a comment to you. It is not written to the files and comes to you in a batch:
-  **Send now** sends one comment, **Add to review** → **Submit review** sends several (from several
-  pages too), **Approve** means nothing more to change.
-- **Question** — a question for people: c4builder appends it to the source `.md` under the
-  `questionsHeading` section (`Open questions` by default). It is not a task for you — leave it
-  alone unless asked.
-- **Review** (only with the `reviewLog` key of `.c4builder`) — a remark for the review log: c4builder
-  appends it as a row of the nearest `reviewLog.file` (`review.md` by default). Not a task for you either.
+- **Tell agent** — a comment to you. It is not written to the files and comes to you in a batch:
+  **Send now** sends one comment, **Add** → **Send to agent** sends several (from several pages
+  too), **Approve** means nothing more to change.
+- **Comment** (only with the `comments` key of `.c4builder`, formerly `reviewLog`) — a comment for people in the review
+  log: c4builder appends it as a row of the nearest `comments.file` (`review.md` by default). It is
+  not a task for you — leave it alone unless asked.
+
+The `buttons` key of `.c4builder` may relabel both buttons (`agent`, `comment`).
 
 Invocation: `/c4builder-review [change-id|page]`. The port is `webPort` from `.c4builder`
 (`<port>` below); when the server runs with `-p <n>`, pass the same `-p <n>` to the commands below.
@@ -58,8 +58,8 @@ broken diagram worth fixing before the human reaches it.
   `http://localhost:<port>/#/<path without .md>`.
 - No argument: the home page `http://localhost:<port>/`.
 
-Give the link, remind in two lines what **Feedback** and **Question** do (see above) and say your
-listener name: with several agents the human picks it in **Send to** on the review bar.
+Give the link, remind in two lines what **Tell agent** and **Comment** do (see above) and say your
+listener name: with several agents the human picks it in **Send to** on the agent bar.
 
 ## 3. Wait
 
@@ -71,7 +71,7 @@ c4builder feedback --wait --as <name>
 
 It exits when a batch arrives; its stdout is the batch. When `<name>` is a change of the site, it
 first prints `Change page: http://localhost:<port>/#/change/<name>` on stderr — the link from step
-2 confirmed by the server. Connecting turns the **Feedback** button on by itself, the server needs
+2 confirmed by the server. Connecting turns the **Tell agent** button on by itself, the server needs
 no restart. Errors:
 
 - `--as <name> is required` (exit code 2) — the name is missing or invalid: fix it and run again;
@@ -101,8 +101,8 @@ quoted selection; `## General` is the overall comment of a review.
 
 - Edit the files listed in `Sources` (change artifacts, `src/` and so on), never the build output.
   No `Sources` — find the quote in the sources (`grep -rn`). The page reloads by itself.
-- Do not copy comments into the questions section: they are instructions to you, not questions
-  for people.
+- Do not copy comments into the review log: they are instructions to you, not comments for
+  people.
 - A comment that is unclear or debatable — ask in the chat instead of guessing; do the rest of the
   batch.
 - After the edits report briefly in the chat what you did for each comment number. Then run

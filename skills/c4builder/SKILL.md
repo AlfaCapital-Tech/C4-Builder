@@ -101,11 +101,10 @@ How the source tree becomes pages:
    background (`rendering N diagrams in background…` → `rendered N diagrams in T s`), the page
    open in the browser first; a render error shows an error placeholder and `✗` in the log,
    the server stays up. Its output is for viewing, not for publishing — run `c4builder` for
-   that. `c4builder site` builds and serves without watching (also never exits). In `-w` a
-   human can select text on a page and add a question: it lands in the source `.md` under the
-   `questionsHeading` section (`Open questions` by default) — read it there, not in `docs/`.
-   With the `reviewLog` key a **Review** button writes a remark as a row of the nearest
-   `reviewLog.file` (`review.md`) instead.
+   that. `c4builder site` builds and serves without watching (also never exits). In `-w`, with
+   the `comments` key (former name `reviewLog`), a human can select text on a page and press **Comment**: the comment
+   lands as a row of the nearest `comments.file` (`review.md`) — read it there, not in `docs/`.
+   The `buttons` key relabels the selection buttons (`agent`, `comment`).
    `C4BUILDER_RENDER_CONCURRENCY=<n>` sets the number of parallel PlantUML processes (default
    `min(4, CPU − 1)`); the output does not depend on it.
 
@@ -116,7 +115,7 @@ skill (`/c4builder-review [change-id|page]`): it checks the server, gives the li
 runs the batch loop.
 
 In short: under an agent (`CLAUDECODE`, `CODEX_THREAD_ID`, `GEMINI_CLI`, `OPENCODE`, `COPILOT_CLI`,
-`AI_AGENT`, or `--agent`) `c4builder --site -w` adds a **Feedback** button to text selected on a
+`AI_AGENT`, or `--agent`) `c4builder --site -w` adds a **Tell agent** button to text selected on a
 page. The comments do not go into the files: `c4builder feedback --wait --as <name>`, run in the
 background with your change or task as `<name>`, exits with one batch on stdout. When `<name>` is an
 OpenSpec change of the site, it first prints `Change page: http://localhost:<port>/#/change/<name>`

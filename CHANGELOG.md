@@ -5,6 +5,19 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
 
 ## Unreleased
 
+- **BREAKING** Site: the **Question** button of `site -w` is gone together with its routes, the
+  highlighting and removal of questions and the `questions` / `questionsHeading` keys (old configs
+  still load — the keys are ignored; questions already written stay in the `.md` as plain text).
+  Comments for people go to the review log (`comments`), changes — to the agent (#61)
+- Site: the selection buttons are named by recipient — **Comment** / «Комментарий» (the review log,
+  was **Review**; its popover button is **Add comment**) and **Tell agent** / «Сказать агенту» (was
+  **Feedback**). The agent bar no longer says review: **Send to agent** (was **Submit review**),
+  **Add** (was **Add to review**), **Remove**, `To agent: 2 pending (1 page)` (#61)
+- New `.c4builder` key `buttons`: `{ "agent": "…", "comment": "…" }` relabels the selection buttons,
+  shown as is in any interface language; `buttons.comment` overrides `reviewLog.label` (#61)
+- The `.c4builder` key of the review log is now `comments` (same fields, no `label` — use
+  `buttons.comment`); the former `reviewLog` is still read when `comments` is absent, its `label`
+  still labels the button (#61)
 - `c4builder check --format <text|json|github|gitlab>`: `json` prints one JSON array of findings
   (`file`, `line`, `column`, `engine`, `severity`, `rule`, `element`, `message`) for all engines;
   `github` prints workflow commands that GitHub Actions shows as annotations in the PR diff;

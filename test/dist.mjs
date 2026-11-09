@@ -3,7 +3,7 @@
 export { cachedJava, detectSystemJava, resolveJava } from '../dist/core/render/jre.js';
 export { isPathInside } from '../dist/util/archive.js';
 export { watchTree } from '../dist/util/watch.js';
-export { configSchema, isValidPort } from '../dist/config/schema.js';
+export { commentsLog, configSchema, configWarnings, isValidPort } from '../dist/config/schema.js';
 export { parseConfig } from '../dist/config/options.js';
 export { defaultConfig } from '../dist/config/defaults.js';
 export { rasterizeSvgToPng, resvgFontOptions } from '../dist/core/render/pngraster.js';
@@ -77,13 +77,7 @@ export {
     renderBpmn,
     teardownBpmn
 } from '../dist/core/render/bpmnrenderer.js';
-export {
-    appendQuestion,
-    formatQuestion,
-    pickSource,
-    removeQuestion,
-    writeQuestion
-} from '../dist/core/questions.js';
+export { appendRow, formatEntry, removeRow, writeRow } from '../dist/core/sections.js';
 export {
     MermaidError,
     MERMAID_PACKAGE,

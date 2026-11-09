@@ -38,9 +38,8 @@ updates it.
    it exits with code 2 and `--as <name> is required`. When `<name>` is an OpenSpec change of
    the site, it first prints `Change page: http://localhost:3000/#/change/<name>` on stderr —
    give that link to the human instead of building the page path by hand. Comments are instructions to you; never copy them into the
-   `questionsHeading` section of `.c4builder` (`Open questions` by default), which holds
-   questions for people, nor into the review log of the `reviewLog` key (`review.md`), which
-   the **Review** button fills. The page buttons follow the browser language (English or Russian,
+   review log of the `comments` key (`review.md`), which the **Comment** button fills with
+   comments for people. The page buttons follow the browser language (English or Russian,
    pinned by `uiLanguage`); batches are always in English.
 4. A stderr line `c4builder <new> is available (current <current>). Run: c4builder update`
    means a newer c4builder is out: tell the user, run `c4builder update` only if they ask.
