@@ -6,7 +6,9 @@ import chalk from 'chalk';
 import { z } from 'zod';
 
 import { definePlugin } from '../../core/plugins/types.ts';
-import { VENDOR_DIR } from '../../util/paths.ts';
+import { CHANGES_CSS } from './changes.style.ts';
+import { CHANGES_FILTER_JS } from './filter.script.ts';
+import { CHANGES_FILTER_CSS } from './filter.style.ts';
 import { type Layout, layoutChanges, originalId, pageOrder } from './layout.ts';
 import { type Change, scanStore, type Store } from './scan.ts';
 import {
@@ -70,9 +72,23 @@ const optionsSchema = z
                         .strict()
                 ])
             )
-            .optional()
+            .optional(),
+        // Колонки таблицы Changes с фильтром на странице сайта: `Schema` и заголовки элементов
+        // `columns`. Другой заголовок — ошибка: у Change, Tasks и Updated значения не категории,
+        // фильтр по ним бессмыслен.
+        filter: z.array(z.string().min(1)).optional()
     })
-    .strict();
+    .strict()
+    .superRefine((o, ctx) => {
+        const allowed = ['Schema', ...(o.columns ?? []).map((c) => c.title)];
+        for (const title of o.filter ?? [])
+            if (!allowed.includes(title))
+                ctx.addIssue({
+                    code: 'custom',
+                    path: ['filter'],
+                    message: `'${title}' is not a filterable column (Schema or a title from columns: ${allowed.join(', ')})`
+                });
+    });
 
 type Opts = z.output<typeof optionsSchema>;
 
@@ -80,8 +96,17 @@ export default definePlugin<Opts>({
     name: 'openspec',
     options: optionsSchema,
     // Раскладка таблиц Changes (обёртка `.c4b-openspec-changes` в renderChangesIndex): одинаковые
-    // колонки во всех секциях, перенос только там, где текст не помещается.
-    assets: { styles: [path.join(VENDOR_DIR, 'openspec', 'changes.css')] },
+    // колонки во всех секциях, перенос только там, где текст не помещается (changes.style.ts).
+    // Фильтр над таблицами (опция `filter`) — filter.script.ts и filter.style.ts. Все ассеты —
+    // строки из исходников плагина; без
+    // атрибута `data-c4b-filter` у обёртки скрипт ничего не делает.
+    assets: {
+        styles: [
+            { name: 'changes.css', content: CHANGES_CSS },
+            { name: 'changes-filter.css', content: CHANGES_FILTER_CSS }
+        ],
+        scripts: [{ name: 'changes-filter.js', content: CHANGES_FILTER_JS }]
+    },
     watchPaths: (o) => [o.dir],
 
     afterScan(ctx, o) {
@@ -173,14 +198,24 @@ export default definePlugin<Opts>({
         addRedirects(store.changes, active, false);
         addRedirects(store.archive, archived, true);
 
-        ctx.addPage({ path: [mount], markdown: renderSummary(store, mount, options, active, o.columns) });
+        ctx.addPage({
+            path: [mount],
+            markdown: renderSummary(store, mount, options, active, o.columns, o.filter)
+        });
 
         ctx.addPage({
             path: [mount, 'Changes'],
-            markdown: renderChangesIndex(store.changes, mount, options, active, { columns: o.columns })
+            markdown: renderChangesIndex(store.changes, mount, options, active, {
+                columns: o.columns,
+                filter: o.filter
+            })
         });
         addChanges(store.changes, active, 'Changes', (members) =>
-            renderChangesIndex(members, mount, options, active, { sections: false, columns: o.columns })
+            renderChangesIndex(members, mount, options, active, {
+                sections: false,
+                columns: o.columns,
+                filter: o.filter
+            })
         );
 
         // Specs: индекс, промежуточные папки, страницы спек — тем же рендером, что и

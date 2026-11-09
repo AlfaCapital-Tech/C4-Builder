@@ -69,6 +69,18 @@ describe('loadPlugins', () => {
         ).rejects.toThrow(/openspec: columns/);
     });
 
+    it('openspec filter: Schema и заголовки columns проходят, другой заголовок — ошибка с перечнем', async () => {
+        const columns = [{ key: 'x-a', title: 'A' }];
+        const [p] = await loadPlugins([['openspec', { columns, filter: ['Schema', 'A'] }]], tmp, opts());
+        expect(p.opts.filter).toEqual(['Schema', 'A']);
+        await expect(
+            loadPlugins([['openspec', { columns, filter: ['Tasks'] }]], tmp, opts())
+        ).rejects.toThrow(/openspec: filter — 'Tasks' .*Schema, A/);
+        await expect(loadPlugins([['openspec', { filter: ['Nope'] }]], tmp, opts())).rejects.toThrow(
+            /openspec: filter — 'Nope' .*Schema\)/
+        );
+    });
+
     it('неверный тип опции — ошибка называет ключ', async () => {
         await expect(loadPlugins([['openspec', { mount: 5 }]], tmp, opts())).rejects.toThrow(
             /openspec: mount — /

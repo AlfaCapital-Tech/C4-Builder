@@ -15,7 +15,7 @@ import type { Artifact, Change, Spec, Store } from './scan.ts';
 
 const fmtDate = (ms: number): string => new Date(ms).toISOString().slice(0, 10);
 // Прогресс задач: нативный <progress> (docsify рендерит HTML в markdown) + числа и процент.
-// Всё выполнено — класс для стиля плагина (vendor/openspec/changes.css): бар цветом темы.
+// Всё выполнено — класс для стиля плагина (changes.style.ts): бар цветом темы.
 const progressBar = (done: number, total: number): string =>
     `<progress${done >= total ? ' class="c4b-progress-done"' : ''} value="${done}" max="${total}"></progress> ${done}/${total} (${Math.round((done / total) * 100)}%)`;
 const fmtProgress = (c: Change): string =>
@@ -127,8 +127,10 @@ const columnValue = (c: Change, col: TableColumn): string | undefined => {
  * вложенные change'ы идут сразу под родителем (`↳` + подпись) и ведут на свои вложенные
  * страницы, а при группах таблица делится на секции по группам. `columns` — колонки после
  * стандартных: из `.openspec.yaml` (например исполнитель) или из таблицы артефакта (например
- * кто ещё не сделал ревью); нет значения — `—`. Таблица обёрнута в `<div class="c4b-openspec-changes">`
- * (пустые строки вокруг — чтобы docsify разобрал markdown внутри): стиль `vendor/openspec/changes.css`
+ * кто ещё не сделал ревью); нет значения — `—`. `filter` — заголовки колонок с фильтром на
+ * сайте: их номера (от 1) уходят в `data-c4b-filter` обёртки, читает скрипт из filter.script.ts.
+ * Таблица обёрнута в `<div class="c4b-openspec-changes">`
+ * (пустые строки вокруг — чтобы docsify разобрал markdown внутри): стиль из changes.style.ts
  * даёт всем таблицам страницы одну раскладку колонок.
  */
 export const renderChangesIndex = (
@@ -136,10 +138,21 @@ export const renderChangesIndex = (
     mount: string,
     options: BuildOptions,
     layout?: Layout,
-    { sections = true, columns = [] }: { sections?: boolean; columns?: TableColumn[] } = {}
+    {
+        sections = true,
+        columns = [],
+        filter = []
+    }: { sections?: boolean; columns?: TableColumn[]; filter?: string[] } = {}
 ): string => {
     if (!changes.length) return '_No changes._';
-    const head = ['Change', 'Schema', 'Tasks', 'Updated', ...columns.map((c) => cell(c.title))];
+    const titles = ['Change', 'Schema', 'Tasks', 'Updated', ...columns.map((c) => c.title)];
+    const head = titles.map((t, i) => (i < 4 ? t : cell(t)));
+    // Фильтр — только Schema (2) и дополнительные колонки: дополнительная с заголовком `Tasks`
+    // не должна включать фильтр у стандартной колонки прогресса.
+    const filtered = titles
+        .map((t, i) => ((i === 1 || i >= 4) && filter.includes(t) ? i + 1 : 0))
+        .filter(Boolean);
+    const attr = filtered.length ? ` data-c4b-filter="${filtered.join(',')}"` : '';
     const table = (part: Change[]): string => {
         const byDate = [...part].sort((a, b) => b.mtime - a.mtime);
         const rows = (layout ? pageOrder(byDate, layout) : byDate).map((c) => {
@@ -153,7 +166,7 @@ export const renderChangesIndex = (
         const cls = columns.length
             ? 'c4b-openspec-changes c4b-openspec-changes--extra'
             : 'c4b-openspec-changes';
-        return `<div class="${cls}">\n\n${table}\n\n</div>`;
+        return `<div class="${cls}"${attr}>\n\n${table}\n\n</div>`;
     };
     return bySections(changes, layout, sections, table);
 };
@@ -164,7 +177,8 @@ export const renderSummary = (
     mount: string,
     options: BuildOptions,
     layout?: Layout,
-    columns: TableColumn[] = []
+    columns: TableColumn[] = [],
+    filter: string[] = []
 ): string => {
     const withProgress = store.changes.filter((c) => c.progress);
     const done = withProgress.reduce((s, c) => s + (c.progress?.done ?? 0), 0);
@@ -178,7 +192,7 @@ export const renderSummary = (
         '',
         '## Active changes',
         '',
-        renderChangesIndex(store.changes, mount, options, layout, { columns })
+        renderChangesIndex(store.changes, mount, options, layout, { columns, filter })
     ].join('\n');
 };
 

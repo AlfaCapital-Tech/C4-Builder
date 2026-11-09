@@ -76,7 +76,7 @@ folder.
 - The Changes tables (summary, the Changes page, group pages) share one column layout across the page:
   service columns have fixed widths, the Change column takes the rest and only text that does not fit
   wraps; a task progress bar with every task done is drawn in the theme colour; the stylesheet
-  `vendor/plugins/openspec/changes.css` is linked like other plugin assets (with
+  `vendor/plugins/openspec/changes.css` and the filter's `changes-filter.css` and `changes-filter.js` are linked like other plugin assets (with
   a custom `docsifyTemplate` — as long as the template allows asset injection).
 - The `columns` option adds columns to the Changes table (also the summary and the group pages)
   after the standard ones. From `.openspec.yaml` — e.g. the assignee:
@@ -88,6 +88,17 @@ folder.
   the rows whose `whenEmpty` cell is empty (blank, `—` or `-`; without `whenEmpty` — all rows),
   each on its own line; values matching the `exclude` regular expression (here — tool names in
   backticks) are left out. A missing value, artifact or table is shown as `—`.
+- The `filter` option lists the column headers that get a filter on the site pages with a
+  Changes table: `"filter": ["Schema", "Assignee", "Awaiting review"]` — `Schema` and the titles of
+  `columns` entries, any other header is a config error before the build. Above the first table of
+  the page — one line with a dropdown per column: a button with the title and the number of
+  selected values, inside every value of that column on the page as checkboxes (several lines in a
+  cell — several values, `—` and `-` are not values) and a search box for long lists; multi-select, AND between columns: rows
+  with a selected value stay, a nested change `↳` is judged by its own value, the parent of a
+  matching nested change stays dimmed, a section without rows is hidden; a `visible / all` counter
+  and a `Reset` button, disabled while nothing is selected. The selection is kept in the browser per column header and applies to the
+  summary, the Changes page and the group pages until it is cleared. Site only: in the markdown
+  outputs the table wrapper merely keeps the attribute, there is no filter.
 - The address of a change page depends on the layout: `#/<mount>/Changes/<group>/<name or id>/<name or id>`,
   for a nested change `…/<parent>/<id tail>/<id tail>`, for an archived one
   `#/<mount>/Archive/<date>-<id>/<date>-<id>`; with non-Latin letters in `mount` or the name it
@@ -114,6 +125,7 @@ folder.
 | `groupKey` | — | `.openspec.yaml` key with the change's group (e.g. `x-team`); when set, top-level changes are placed into group folders |
 | `nameKey` | — | `.openspec.yaml` key with the change's name (e.g. `x-name`); when set, top-level changes are labelled and addressed by that name |
 | `columns` | — | extra Changes table columns: `{ "key": "<.openspec.yaml key>", "title": "<header>" }` or `{ "title": "<header>", "artifact": "<artifact>", "column": "<table column>", "whenEmpty": "<column that must be empty>", "exclude": "<regex of values to leave out>" }` |
+| `filter` | — | Changes table columns that get a dropdown filter on the site: `Schema` and the titles of `columns` entries, e.g. `["Schema", "Assignee"]` |
 
 ## `openapi` — swagger-ui and AsyncAPI for a set of specs
 
@@ -262,7 +274,7 @@ export default {
   name: 'changelog',
   options: z.object({ file: z.string().default('CHANGELOG.md') }).strict(), // optional
   watchPaths: (opts) => [opts.file],                                          // optional
-  assets: { styles: ['/abs/path/x.css'], scripts: ['/abs/path/x.js'] },      // optional
+  assets: { styles: ['/abs/path/x.css'], scripts: ['/abs/path/x.js', { name: 'y.js', content: 'window.y=1;' }] }, // optional: a file or a string
   requires: { executeScript: true },                                          // optional
   async afterScan(ctx, opts) {
     // ctx.tree, ctx.options — the build tree and options; ctx.source({ dir } | { archive, subdir, headers })
