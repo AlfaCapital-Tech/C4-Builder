@@ -1,5 +1,5 @@
 import figlet from 'figlet';
-import { InvalidArgumentError, program } from 'commander';
+import { InvalidArgumentError, Option, program } from 'commander';
 import chalk from 'chalk';
 import path from 'node:path';
 
@@ -9,6 +9,7 @@ import cmdHelp from './commands/help.ts';
 import cmdNewProject from './commands/new.ts';
 import cmdJre from './commands/jre.ts';
 import cmdCheck from './commands/check.ts';
+import { FORMATS } from './commands/check.report.ts';
 import cmdList from './commands/list.ts';
 import cmdSite from './commands/site.ts';
 import cmdFeedback from './commands/feedback.ts';
@@ -201,9 +202,21 @@ export default async () => {
             '--as <name>',
             'for `feedback`: listener name (your change or task) — the page sends batches to it'
         )
-        .option('--json', 'for `doctor`: one JSON object with stable check ids')
+        .option('--json', 'for `doctor` and `check`: JSON output (`check`: same as --format json)')
+        // choices: опечатку (`--format jsno`) commander отклоняет со списком значений и кодом 1,
+        // а не молча печатает текст, который CI не разберёт.
+        .addOption(
+            new Option(
+                '--format <format>',
+                'for `check`: output format, json/github/gitlab for agents and CI'
+            ).choices(FORMATS)
+        )
+        .option(
+            '--files-from <file>',
+            'for `check`: also check the paths listed in a file, one per line (- for stdin)'
+        )
         .option('-v, --verbose', 'for `doctor`: absolute paths and details')
-        .option('--strict', 'for `doctor`: exit code 1 on warnings too')
+        .option('--strict', 'for `doctor` and `check`: exit code 1 on warnings too')
         .option('--full', 'for `doctor`: build the template project in a temporary folder')
         .option('--offline', 'for `doctor`: no network requests')
         .option('--docs', 'a brief explanation for the available configuration options')
@@ -229,6 +242,17 @@ export default async () => {
         );
         process.exit(1);
     }
+    // Опции только для `check` глобальные (commander не знает подкоманд), и другая команда молча
+    // их игнорировала бы: `doctor --format json` печатал бы текст с кодом 0, и CI разбирал бы его.
+    for (const [flag, value] of [
+        ['--format', opts.format],
+        ['--files-from', opts.filesFrom]
+    ] as const)
+        if (value !== undefined && cmd !== 'check') {
+            const hint = flag === '--format' ? ' (use --json for doctor)' : '';
+            console.error(chalk.red(`${flag} is only supported by check${hint}`));
+            process.exit(1);
+        }
     // --version/--help уже вышли в parse. Уведомление — по кэшу прошлой проверки, до её
     // перезапуска; exit покрывает и выходы через process.exit. Вывод `feedback` читает агент; doctor
     // сообщает о новой версии сам, а фоновый `npm view` ходил бы в сеть и с --offline.
@@ -245,7 +269,7 @@ export default async () => {
     // Прогрев JRE — до загрузки конфига проекта и intro: команда самостоятельна.
     if (cmd === 'jre') return cmdJre(cmdArgs, { force: opts.force });
     // Проверка отдельных диаграмм — тоже без конфига проекта.
-    if (cmd === 'check') return cmdCheck(cmdArgs);
+    if (cmd === 'check') return cmdCheck(cmdArgs, opts);
     // Обновление CLI — до Configstore, чтобы не создавать .c4builder в любом каталоге.
     if (cmd === 'update') return cmdUpdate();
     // Замечания со страницы `site -w` — тоже до Configstore: команду запускают в любом каталоге.

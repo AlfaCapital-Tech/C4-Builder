@@ -9,6 +9,9 @@ into `docs/`.
 ```bash
 c4builder                    # build docs/ (non-interactive with a complete .c4builder)
 c4builder check <file...>    # validate .puml / .iuml / .d2 / .bpmn / .mmd / .wireflow.json files, exit code 0 = OK
+c4builder check --strict <file...>  # the same, exit code 1 on warnings too - use this one
+c4builder check --strict --format json <file...>  # the same, findings as a JSON array on stdout
+git diff --name-only | c4builder check --strict --files-from -  # check the paths listed on stdin, one per line
 c4builder --site -w          # live preview on http://localhost:3000 - never exits
 c4builder --site -w --open-change <change-id>  # the same, opens the OpenSpec change page #/change/<change-id>
 c4builder feedback --wait --as <name>  # wait for comments from the preview page sent to <name>
@@ -22,10 +25,11 @@ updates it.
 ## Workflow
 
 1. Edit files in `src/` only — `docs/` is generated and wiped on every build.
-2. Run `c4builder check` on every diagram you changed, `src/styles.iuml` included. Errors
+2. Run `c4builder check --strict` on every diagram you changed, `src/styles.iuml` included. Errors
    look like `✗ <file>: line <N>: <message>` (BPMN: `✗ <file>: <element id> [<rule>] <message>`; wireflow: one line per problem with
    the node or edge id).
-   Fix until the exit code is 0.
+   Fix until the exit code is 0; with `--strict` warnings count too: `⚠ <file>: line <N>: Rel to
+   undeclared element "<alias>"` means a typo in a relation alias.
 3. Run `c4builder` and make sure it exits with code 0. Leave `c4builder --site -w` to a
    human or run it in the background. When the human reviews the pages, also run
    `c4builder feedback --wait --as <name>` in the background, `<name>` being your change or

@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -15,6 +16,21 @@ let dir;
 // Таймаут: зависшее окно jsdom/воркер D2 не дали бы процессу завершиться — ловим это здесь.
 const check = (...files) =>
     spawnSync(process.execPath, [CLI, 'check', ...files], { cwd: dir, encoding: 'utf8', timeout: 60_000 });
+// Машинные форматы: база путей из переменных CI задаётся явно — тест сам может идти в CI.
+// input — stdin процесса (`--files-from -`).
+const run = (args, { env = {}, input } = {}) => {
+    const clean = { ...process.env };
+    delete clean.GITHUB_WORKSPACE;
+    delete clean.CI_PROJECT_DIR;
+    return spawnSync(process.execPath, [CLI, ...args], {
+        cwd: dir,
+        encoding: 'utf8',
+        timeout: 60_000,
+        input,
+        env: { ...clean, ...env }
+    });
+};
+const checkEnv = (env, ...args) => run(['check', ...args], { env });
 
 const BPMN_NS = 'xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"';
 const bpmn = (body) =>
@@ -31,9 +47,64 @@ beforeAll(() => {
     // Стили на макросах C4 без своего @startuml — контекст C4 задаёт подключающая диаграмма.
     write('c4-styles.iuml', 'skinparam shadowing false\nUpdateElementStyle("person", $bgColor="#000")\n');
     write('uses-lib.puml', '@startuml\n!include lib.iuml\n$x()\n@enduml\n');
+    // Связь C4 на необъявленный алиас (#60): PlantUML молча создаёт сущность — предупреждение.
+    write(
+        'dangling.puml',
+        '@startuml\n!include <C4/C4_Container>\nHIDE_STEREOTYPE()\nPerson(u, "User")\n' +
+            'System_Boundary(b, "B") {\n  Container(c1, "C1", "java")\n  Rel(c1, typo, "inside")\n}\n' +
+            'Rel(u, nope, "typo alias")\nRel_D(u, c1, "ok")\nLay_R(u, ghost)\n@enduml\n'
+    );
+    // BiRel и RelIndex: имя макроса в сообщении, индекс RelIndex за алиас не принимается.
+    write(
+        'rel-variants.puml',
+        '@startuml\n!include <C4/C4_Dynamic>\nPerson(u, "User")\nSystem(s, "S")\n' +
+            'BiRel(u, bogus, "x")\nRelIndex(1, s, missing, "y")\n@enduml\n'
+    );
+    // Формы вызова: индекс RelIndex — вызов функции со своими скобками, продолжение строки `\`,
+    // вызов после блочного комментария. Закомментированный вызов и чужая процедура `myRel` (её
+    // `-->` тоже создаёт неявную сущность) — не связи C4.
+    write(
+        'rel-forms.puml',
+        [
+            '@startuml',
+            '!include <C4/C4_Dynamic>',
+            'Person(u, "User")',
+            'Container(a, "A")',
+            'RelIndex(Index(), u, nope1, "x")',
+            'RelIndex(SetIndex(3), a, nope2, "y")',
+            'RelIndex(LastIndex(), u, a, "ok")',
+            'RelIndex(LastIndex(), u, nope3, "z")',
+            'Rel(u, \\',
+            '  nope4, "continued")',
+            `/' note '/ Rel(u, nope5, "after comment")`,
+            `' Rel(u, nope5, "commented out")`,
+            '!procedure myRel($a, $b)',
+            '$a --> $b',
+            '!endprocedure',
+            'myRel(u, plain)',
+            '@enduml',
+            ''
+        ].join('\n')
+    );
+    // Опечатка в квалифицированном алиасе внутри границы даёт неявную `b2.b9.db`; короткий `db`
+    // при объявленной `db` PlantUML разрешает к ней — эта связь верна и не помечается.
+    write(
+        'rel-qualified.puml',
+        '@startuml\n!include <C4/C4_Container>\nPerson(u, "User")\nContainerDb(db, "DB")\n' +
+            'System_Boundary(b2, "B2") {\n  Container(c2, "C2")\n  Rel(c2, b9.db, "typo")\n}\n' +
+            'Rel(u, db, "ok")\n@enduml\n'
+    );
+    // Без C4: `A --> B` без объявлений — норма PlantUML, не предупреждение.
+    write('implicit.puml', '@startuml\nA --> B\nB --> C\n@enduml\n');
     write('ok.d2', 'a -> b\n');
-    write('bad.d2', 'a -> \n');
+    // Две ошибки: 1:1 и 2:4 — позиции для `check --format`.
+    write('bad.d2', 'a -> \nb: {\n');
     write('what.txt', 'x');
+    // Общая библиотека с ошибкой, импортированная двумя диаграммами (дедуп замечаний отчёта).
+    fs.mkdirSync(path.join(dir, 'lib'));
+    write('lib/broken.d2', 'a -> \n');
+    write('use1.d2', 'x: @lib/broken\n');
+    write('use2.d2', 'y: @lib/broken\n');
     // Имя совпадает с расширением, но расширения нет — не диаграмма (как в scan).
     for (const name of ['d2', 'mmd', 'puml']) write(name, 'a -> b\n');
     const wf = (nodes, edges = []) =>
@@ -67,6 +138,8 @@ beforeAll(() => {
         '<bpmn:startEvent id="S" name="s"/><bpmn:task id="T" name="t"/><bpmn:endEvent id="E" name="e"/>' +
         '<bpmn:sequenceFlow id="F1" sourceRef="S" targetRef="T"/><bpmn:sequenceFlow id="F2" sourceRef="T" targetRef="E"/>';
     write('ok.bpmn', bpmn(chain));
+    // Битый XML: позицию парсер вписывает в текст ошибки.
+    write('broken.bpmn', '<?xml version="1.0"?>\n<a>\n<b>\n</a>\n');
     write('lonely.bpmn', bpmn(`${chain}<bpmn:task id="Lonely" name="lonely"/>`));
     write(
         'warn.bpmn',
@@ -130,7 +203,9 @@ describe('c4builder check', () => {
             expect(bare.stderr).toMatch(new RegExp(`^✗ ${name}: unsupported extension`, 'm'));
         const usage = check();
         expect(usage.status).toBe(1);
-        expect(usage.stdout).toMatch(/usage: c4builder check .*\| \.mmd \| \.wireflow\.json\)/);
+        expect(usage.stdout).toMatch(
+            /usage: c4builder check \[--strict\] <file\.\.\.> .*\| \.mmd \| \.wireflow\.json\)/
+        );
     });
 
     it('корректный .bpmn → код 0, процесс завершается (окно jsdom закрыто)', () => {
@@ -182,5 +257,336 @@ describe('c4builder check', () => {
         const ctrl = check('ctrl.wireflow.json');
         expect(ctrl.status, ctrl.stderr).toBe(0);
         expect(ctrl.stdout).toMatch(/✓ ctrl\.wireflow\.json/);
+    });
+
+    it('Rel/Lay на необъявленный алиас → ⚠ с номером строки, код 0; с --strict → ✗, код 1', () => {
+        const res = check('dangling.puml', 'implicit.puml');
+        expect(res.status, res.stderr).toBe(0);
+        expect(res.stdout).toMatch(/^⚠ dangling\.puml: line 7: Rel to undeclared element "typo"$/m);
+        expect(res.stdout).toMatch(/^⚠ dangling\.puml: line 9: Rel to undeclared element "nope"$/m);
+        expect(res.stdout).toMatch(/^⚠ dangling\.puml: line 11: Lay_R to undeclared element "ghost"$/m);
+        expect(res.stdout.match(/⚠/g)).toHaveLength(3); // объявленные u и c1 не задеты
+        expect(res.stdout).toMatch(/✓ implicit\.puml/);
+
+        const variants = check('rel-variants.puml');
+        expect(variants.status, variants.stderr).toBe(0);
+        expect(variants.stdout).toMatch(
+            /^⚠ rel-variants\.puml: line 5: BiRel to undeclared element "bogus"$/m
+        );
+        expect(variants.stdout).toMatch(
+            /^⚠ rel-variants\.puml: line 6: RelIndex to undeclared element "missing"$/m
+        );
+        expect(variants.stdout.match(/⚠/g)).toHaveLength(2);
+
+        const forms = check('rel-forms.puml');
+        expect(forms.status, forms.stderr).toBe(0);
+        for (const [line, alias] of [
+            [5, 'nope1'],
+            [6, 'nope2'],
+            [8, 'nope3']
+        ])
+            expect(forms.stdout).toMatch(
+                new RegExp(
+                    `^⚠ rel-forms\\.puml: line ${line}: RelIndex to undeclared element "${alias}"$`,
+                    'm'
+                )
+            );
+        // Многострочный вызов — строка имени макроса.
+        expect(forms.stdout).toMatch(/^⚠ rel-forms\.puml: line 9: Rel to undeclared element "nope4"$/m);
+        expect(forms.stdout).toMatch(/^⚠ rel-forms\.puml: line 11: Rel to undeclared element "nope5"$/m);
+        expect(forms.stdout.match(/⚠/g)).toHaveLength(5);
+
+        const qualified = check('rel-qualified.puml');
+        expect(qualified.status, qualified.stderr).toBe(0);
+        expect(qualified.stdout).toMatch(
+            /^⚠ rel-qualified\.puml: line 7: Rel to undeclared element "b9\.db"$/m
+        );
+        expect(qualified.stdout.match(/⚠/g)).toHaveLength(1);
+
+        const strict = check('--strict', 'dangling.puml', 'implicit.puml', 'warn.bpmn');
+        expect(strict.status).toBe(1);
+        expect(strict.stderr).toMatch(/^✗ dangling\.puml: 3 warning\(s\), failing with --strict$/m);
+        expect(strict.stderr).toMatch(/^✗ warn\.bpmn: \d+ warning\(s\), failing with --strict$/m);
+        expect(strict.stdout).toMatch(/✓ implicit\.puml/);
+    });
+});
+
+// `check --format` (issue #65): машиночитаемые замечания для агентов и CI.
+describe('c4builder check --format', () => {
+    const json = (...args) => {
+        const res = checkEnv({}, '--format', 'json', ...args);
+        // stdout — только отчёт: без строк результата и цвета.
+        expect(res.stdout).not.toMatch(/[✓✗⚠]/);
+        expect(res.stdout).not.toContain('\u001b[');
+        return { res, list: JSON.parse(res.stdout) };
+    };
+    const pick = ({ file, line, column, engine, severity, rule, element }) => ({
+        file,
+        line,
+        column,
+        engine,
+        severity,
+        rule,
+        element
+    });
+
+    it('json: PlantUML, D2 (две позиции), mermaid, неподдерживаемое расширение; код 1', () => {
+        const { res, list } = json('ok.puml', 'bad.puml', 'bad.d2', 'bad.mmd', 'what.txt');
+        expect(res.status).toBe(1);
+        expect(list.map(pick)).toEqual([
+            {
+                file: 'bad.puml',
+                line: 3,
+                column: null,
+                engine: 'plantuml',
+                severity: 'error',
+                rule: null,
+                element: null
+            },
+            {
+                file: 'bad.d2',
+                line: 1,
+                column: 1,
+                engine: 'd2',
+                severity: 'error',
+                rule: null,
+                element: null
+            },
+            {
+                file: 'bad.d2',
+                line: 2,
+                column: 4,
+                engine: 'd2',
+                severity: 'error',
+                rule: null,
+                element: null
+            },
+            {
+                file: 'bad.mmd',
+                line: 2,
+                column: null,
+                engine: 'mermaid',
+                severity: 'error',
+                rule: null,
+                element: null
+            },
+            {
+                file: 'what.txt',
+                line: null,
+                column: null,
+                engine: null,
+                severity: 'error',
+                rule: null,
+                element: null
+            }
+        ]);
+        expect(list[0].message).toMatch(/^Syntax Error/);
+        expect(list[1].message).toBe('connection missing destination');
+        expect(list[4].message).toMatch(/^unsupported extension/);
+    });
+
+    it('json: BPMN и wireflow — элемент и строка по объявлению id; предупреждения — warning', () => {
+        const { res, list } = json('lonely.bpmn', 'bad.wireflow.json', 'warn.bpmn');
+        expect(res.status).toBe(1);
+        const at = (name, needle) => {
+            const src = fs.readFileSync(path.join(dir, name), 'utf8');
+            const i = src.indexOf(needle);
+            const before = src.slice(0, i);
+            return { line: before.split('\n').length, column: i - before.lastIndexOf('\n') };
+        };
+        const lonely = list.find((d) => d.file === 'lonely.bpmn');
+        expect(lonely).toEqual({
+            file: 'lonely.bpmn',
+            ...at('lonely.bpmn', 'id="Lonely"'),
+            engine: 'bpmn',
+            severity: 'error',
+            rule: 'no-disconnected',
+            element: 'Lonely',
+            message: 'Element is not connected'
+        });
+        const edge = list.find((d) => d.file === 'bad.wireflow.json');
+        expect(edge).toMatchObject({
+            engine: 'wireflow',
+            element: 'e1',
+            ...at('bad.wireflow.json', '"id":"e1"')
+        });
+        const warns = list.filter((d) => d.file === 'warn.bpmn');
+        expect(warns.length).toBeGreaterThan(0);
+        expect(warns.every((d) => d.severity === 'warning')).toBe(true);
+        expect(warns).toContainEqual(
+            expect.objectContaining({ element: 'F3', rule: 'c4builder/gateway-flow-labels' })
+        );
+    });
+
+    it('json: связь на необъявленный алиас → warning undeclared-element, код 0; --json — синоним', () => {
+        const { res, list } = json('dangling.puml');
+        expect(res.status, res.stderr).toBe(0);
+        expect(list.map(pick)).toContainEqual({
+            file: 'dangling.puml',
+            line: 9,
+            column: null,
+            engine: 'plantuml',
+            severity: 'warning',
+            rule: 'undeclared-element',
+            element: 'nope'
+        });
+        expect(list).toHaveLength(3);
+        const alias = checkEnv({}, '--json', 'dangling.puml');
+        expect(alias.status).toBe(0);
+        expect(alias.stdout).toBe(res.stdout);
+    });
+
+    it('json: все файлы корректны → `[]`, код 0', () => {
+        const { res, list } = json('ok.puml', 'ok.d2');
+        expect(res.status, res.stderr).toBe(0);
+        expect(list).toEqual([]);
+    });
+
+    it('github: ::error со строкой, ::warning; --strict → код 1; путь от GITHUB_WORKSPACE', () => {
+        const res = checkEnv({}, '--format', 'github', 'bad.puml', 'warn.bpmn');
+        expect(res.status).toBe(1);
+        expect(res.stdout).toMatch(/^::error file=bad\.puml,line=3,title=c4builder plantuml::Syntax Error/m);
+        expect(res.stdout).toMatch(
+            /^::warning file=warn\.bpmn,line=\d+,col=\d+,title=c4builder bpmn \[c4builder\/gateway-flow-labels\]::F3: /m
+        );
+        expect(res.stdout).not.toMatch(/[✓✗⚠]/);
+        const loose = checkEnv({}, '--format', 'github', 'warn.bpmn');
+        expect(loose.status, loose.stderr).toBe(0);
+        const strict = checkEnv({}, '--format', 'github', '--strict', 'warn.bpmn');
+        expect(strict.status).toBe(1);
+        expect(strict.stdout).toBe(loose.stdout);
+        const ws = checkEnv({ GITHUB_WORKSPACE: path.dirname(dir) }, '--format', 'github', 'bad.puml');
+        expect(ws.stdout).toMatch(new RegExp(`^::error file=${path.basename(dir)}/bad\\.puml,line=3,`, 'm'));
+    });
+
+    it('gitlab: Code Quality с check_name, severity, location; без файлов → `[]`, код 0', () => {
+        const res = checkEnv({}, '--format', 'gitlab', 'bad.puml');
+        expect(res.status).toBe(1);
+        const [issue, ...rest] = JSON.parse(res.stdout);
+        expect(rest).toEqual([]);
+        expect(issue).toMatchObject({
+            check_name: 'plantuml',
+            severity: 'major',
+            location: { path: 'bad.puml', lines: { begin: 3 } }
+        });
+        const empty = checkEnv({}, '--format', 'gitlab');
+        expect(empty.status, empty.stderr).toBe(0);
+        expect(empty.stdout).toBe('[]\n');
+        const ghEmpty = checkEnv({}, '--format', 'github');
+        expect(ghEmpty.status).toBe(0);
+        expect(ghEmpty.stdout).toBe('');
+    });
+
+    it('json: позиция из текста движка (XML BPMN, JSON wireflow) — в line/column, не в message', () => {
+        fs.writeFileSync(path.join(dir, 'broken.wireflow.json'), '{\n "a": 1,\n\n}\n');
+        const { list } = json('broken.bpmn', 'broken.wireflow.json');
+        expect(list.map(pick)).toEqual([
+            {
+                file: 'broken.bpmn',
+                line: 4,
+                column: 1,
+                engine: 'bpmn',
+                severity: 'error',
+                rule: null,
+                element: null
+            },
+            {
+                file: 'broken.wireflow.json',
+                line: 4,
+                column: 1,
+                engine: 'wireflow',
+                severity: 'error',
+                rule: null,
+                element: null
+            }
+        ]);
+        for (const d of list) expect(d.message).not.toMatch(/\bline\b|column|position/);
+        // Текст — прежний, с позицией внутри.
+        const text = check('broken.bpmn');
+        expect(text.stderr).toMatch(/^✗ broken\.bpmn: invalid BPMN XML: .*line: 3, column: 0/m);
+    });
+
+    it('ошибка в общем импортируемом .d2 — одно замечание на весь отчёт', () => {
+        const { res, list } = json('use1.d2', 'use2.d2');
+        expect(res.status).toBe(1);
+        expect(list.map(pick)).toEqual([
+            {
+                file: 'lib/broken.d2',
+                line: 1,
+                column: 1,
+                engine: 'd2',
+                severity: 'error',
+                rule: null,
+                element: null
+            }
+        ]);
+        // В тексте — по строке на проверяемый файл, как раньше.
+        expect(check('use1.d2', 'use2.d2').stderr.match(/✗ use\d\.d2: /g)).toHaveLength(2);
+    });
+
+    it('--files-from: stdin и файл, пустые строки пропускаются, объединение с аргументами', () => {
+        const fromStdin = run(['check', '--format', 'json', 'what.txt', '--files-from', '-'], {
+            input: 'ok.puml\n\n  \nbad.puml\r\n'
+        });
+        expect(fromStdin.status).toBe(1);
+        expect(JSON.parse(fromStdin.stdout).map((d) => d.file)).toEqual(['what.txt', 'bad.puml']);
+        fs.writeFileSync(path.join(dir, 'list.txt'), 'bad.puml\n');
+        const fromFile = run(['check', '--format', 'json', '--files-from', 'list.txt']);
+        expect(JSON.parse(fromFile.stdout).map((d) => d.file)).toEqual(['bad.puml']);
+        // Текст: файлы из списка проверяются так же.
+        const text = run(['check', '--files-from', '-'], { input: 'ok.puml\nbad.puml\n' });
+        expect(text.status).toBe(1);
+        expect(text.stdout).toMatch(/✓ ok\.puml/);
+        expect(text.stderr).toMatch(/✗ bad\.puml: line 3: /);
+    });
+
+    it('--files-from: пустой список → пустой отчёт и код 0 (и в тексте); нет файла списка → код 1', () => {
+        for (const [format, out] of [
+            ['json', '[]\n'],
+            ['gitlab', '[]\n'],
+            ['github', '']
+        ]) {
+            const res = run(['check', '--format', format, '--files-from', '-'], { input: '' });
+            expect(res.status, res.stderr).toBe(0);
+            expect(res.stdout).toBe(out);
+        }
+        const text = run(['check', '--files-from', '-'], { input: '\n' });
+        expect(text.status, text.stderr).toBe(0);
+        expect(text.stdout).toBe('');
+        const missing = run(['check', '--format', 'json', '--files-from', 'nope.txt']);
+        expect(missing.status).toBe(1);
+        expect(missing.stderr).toMatch(/--files-from: cannot read nope\.txt/);
+        expect(missing.stdout).toBe('');
+    });
+
+    it('GITHUB_WORKSPACE через симлинк → путь от физического каталога, без `../`', () => {
+        const link = path.join(fs.realpathSync(os.tmpdir()), `c4b-ws-link-${process.pid}`);
+        fs.rmSync(link, { force: true });
+        fs.symlinkSync(path.dirname(dir), link);
+        try {
+            const res = checkEnv({ GITHUB_WORKSPACE: link }, '--format', 'github', 'bad.puml');
+            expect(res.stdout).toMatch(
+                new RegExp(`^::error file=${path.basename(dir)}/bad\\.puml,line=3,`, 'm')
+            );
+        } finally {
+            fs.rmSync(link, { force: true });
+        }
+    });
+
+    it('--format и --files-from у другой команды или сборки → ошибка и код 1', () => {
+        const doctor = run(['doctor', '--format', 'json']);
+        expect(doctor.status).toBe(1);
+        expect(doctor.stderr).toMatch(/--format is only supported by check \(use --json for doctor\)/);
+        expect(doctor.stdout).toBe('');
+        const build = run(['--files-from', 'list.txt']);
+        expect(build.status).toBe(1);
+        expect(build.stderr).toMatch(/--files-from is only supported by check/);
+    });
+
+    it('неизвестный формат → код 1 со списком форматов', () => {
+        const res = checkEnv({}, '--format', 'xml', 'ok.puml');
+        expect(res.status).toBe(1);
+        expect(res.stderr).toMatch(/text, json, github, gitlab/);
+        expect(res.stdout).toBe('');
     });
 });

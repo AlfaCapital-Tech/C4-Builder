@@ -53,7 +53,7 @@ How the source tree becomes pages:
 2. **Check every diagram you changed** — fast, no project build, writes nothing:
 
    ```bash
-   c4builder check src/context.puml "src/1 Internet Banking System/system.puml"
+   c4builder check --strict src/context.puml "src/1 Internet Banking System/system.puml"
    ```
 
    Exit code 0 means every file compiles. Otherwise each broken file is reported as
@@ -62,7 +62,16 @@ How the source tree becomes pages:
    BPMN problems are `✗ <file>: <element id> [<rule>] <description>`, one line each;
    mermaid errors are `✗ <file>: line <N>: <message>`; wireflow problems are
    `✗ <file>: <problem>` with the node or edge id, one line each.
-   Fix and re-run until the exit code is 0. A changed `.iuml` is checked directly too: a
+   Fix and re-run until the exit code is 0. With `--strict` warnings `⚠ <file>: …` fail the
+   file too (without it they keep the exit code 0): `⚠ <file>: line <N>: Rel to undeclared
+   element "<alias>"` is a typo in a relation alias (PlantUML silently drew an empty circle for
+   it). Rather than parse these shapes, use `c4builder check --strict --format json <file...>`:
+   stdout is only a JSON array of findings `{file, line, column, engine, severity, rule,
+   element, message}` (`null` where the engine has no such field; `[]` when all is fine), the
+   exit code is the same. `message` carries no position (it is in `line`/`column`); BPMN and
+   wireflow findings get the line of the element's `id`;
+   `rule: "undeclared-element"` with `element` is the relation alias typo. `--json` is the
+   same. A list of paths can come from a file or stdin: `--files-from <file|->`, one per line. A changed `.iuml` is checked directly too: a
    styles file calling C4 macros (`UpdateElementStyle`) is checked with the C4 stdlib
    included. Same engines as the build (bundled PlantUML jar, bundled D2, BPMN pipeline, mermaid, wireflow), no
    `.c4builder` needed.
@@ -220,6 +229,8 @@ reads, its `fix:` lines say what to run.
 - Running `c4builder --site -w` or `c4builder feedback --wait --as <name>` in the foreground — the
   agent hangs.
 - Forgetting `c4builder check` and reading a Java stack trace from the full build instead.
+- Ignoring `⚠ … undeclared element` because the exit code is 0 — the diagram has a stray empty
+  element instead of the intended relation.
 - A page "missing" from the output because its file or folder starts with `_`.
 - `generateLocalImages: false` in a project with `.d2`, `.bpmn`, `.mmd` or `.wireflow.json` files — they have no online
   renderer, the build stops with an error.

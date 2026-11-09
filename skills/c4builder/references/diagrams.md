@@ -41,6 +41,17 @@ is never rendered on its own; it is copied to the output like any other file (pr
 with `_` to keep it out). Editing an included file re-renders every diagram that includes
 it.
 
+**Relation to an undeclared alias.** `Rel(u, nope, …)` with a typo does not fail PlantUML: it
+silently adds an empty circle named `nope`. `c4builder check` and the build print
+`⚠ <file>: line <N>: Rel to undeclared element "nope"` (also for `BiRel*`, `RelIndex*`,
+`Lay_*` and the `Rel_D`-style variants) — fix the alias or declare the element. Elements from
+`!include`, procedures and boundaries count as declared; plain arrows (`A --> B`) and relations
+inside included files or procedures are not checked. A qualified alias (`Rel(u, b.db, …)`) is
+flagged even when `db` is declared inside boundary `b`: PlantUML draws a separate circle for it —
+use the short alias `db`. For a `plantuml` block in markdown, the line is the page line. The
+build checks only diagrams it renders in this run (not the ones restored from cache), so rely on
+`check`; `check --strict` turns any warning into exit code 1.
+
 **Other PlantUML diagrams** (sequence, class, activity, state, ditaa…) work the same way —
 any `@startuml` file is rendered. ditaa (`@startditaa`) always produces PNG.
 

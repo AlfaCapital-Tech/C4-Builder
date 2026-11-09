@@ -26,6 +26,15 @@ locally, without a network and without a human.
    agent fixes the error and repeats until it gets 0. For `.bpmn`, every model violation is a
    line with the element id and the rule: `✗ <file>: <id> [<rule>] <description>`; for `.mmd`
    — the line number, as for PlantUML; for `.wireflow.json` — a line with the node or edge id.
+   A warning `⚠ <file>: line N: Rel to undeclared element "<alias>"` with exit code 0 means a
+   typo in a relation alias: PlantUML drew an empty circle instead of the element. Fix it too;
+   `check --strict` turns warnings into exit code 1.
+
+   Parsing five line shapes is optional: `c4builder check --format json <files>` prints a JSON
+   array of findings on stdout with the same fields for every engine — `file`, `line`,
+   `column`, `engine`, `severity`, `rule`, `element`, `message` (see
+   [CLI and configuration](05%20CLI%20and%20configuration/05%20CLI%20and%20configuration.md)).
+   For BPMN and wireflow `check` finds the element's line from its `id` itself.
 3. **Build.** `c4builder` builds the whole project; `c4builder --site -w` keeps the site open for
    the human and rebuilds it on every save the agent makes. It comes up right away, without
    waiting for the rendering: diagrams missing from the cache show a `rendering…` placeholder and
@@ -221,8 +230,9 @@ root and `~/.claude/skills`, for Codex also `.codex/skills`, `~/.agents/skills` 
 - under Claude Code a personal copy shadows the project one — `!` with its path and the command to
   remove it (with the user's consent), even when the personal copy is current; without a project copy
   the command first installs it (`c4builder skills && rm -r …`);
-- a Claude Code plugin in the `~/.claude/plugins/cache` cache carries a skill with the same name —
-  `!` without a fix: removing the whole plugin may be impossible, it has other skills;
+- an installed Claude Code plugin (per `~/.claude/plugins/installed_plugins.json`; uninstalled ones
+  and ones installed in other projects do not count) carries a skill with the same name — `!` without
+  a fix: removing the whole plugin may be impossible, it has other skills;
 - the last line is `–`: the CLI cannot see which skills the agent session loaded.
 
 ### Alternative: npx skills
@@ -284,7 +294,7 @@ Files of this site:
 A project created before 0.5.0 has no `AGENTS.md`. What to put into `AGENTS.md` or `CLAUDE.md` of
 such a project:
 
-- after editing a diagram — `c4builder check <file>`, fix until exit code 0;
+- after editing a diagram — `c4builder check --strict <file>`, fix until exit code 0;
 - include C4 through the stdlib (`!include <C4/C4_Container>`), shared styles with
   `!include ../styles.iuml`;
 - a new page is a new folder in `src/`, the order is set by a numeric prefix;
