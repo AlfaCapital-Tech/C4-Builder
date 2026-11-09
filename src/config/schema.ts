@@ -28,6 +28,28 @@ const optBool = () => nullish(z.boolean().optional());
 // трактует её как имя unix-сокета. Экспортируется для проверки CLI-флага -p.
 export const isValidPort = (s: string): boolean => /^\d+$/.test(s) && Number(s) >= 1 && Number(s) <= 65535;
 
+// Поля журнала комментариев — общие для ключа `comments` и его прежнего имени `reviewLog`.
+// `heading` — один заголовок или список (шаблоны разных схем называют раздел по-разному):
+// пишется в первый найденный в файле, нет ни одного — создаётся первый. `cells` — шаблон ячеек
+// с подстановками `{comment}`, `{quote}`, `{text}`, `{section}`, `{artifact}`, `{page}`,
+// `{author}`, `{date}`, `{number}`; `author` — вместо git user.name; `enabled: false` выключает
+// кнопку, не удаляя настройку.
+const commentsLogFields = {
+    enabled: bool(true),
+    file: str('review.md'),
+    heading: z.preprocess(
+        (v) => (typeof v === 'string' ? [v] : Array.isArray(v) ? v.map(String) : strPre(v)),
+        z.array(z.string().min(1)).min(1).default(['Review'])
+    ),
+    cells: nullish(
+        z.preprocess(
+            (v) => (Array.isArray(v) ? v.map((x) => (x == null ? '' : String(x))) : v),
+            z.array(z.string()).optional()
+        )
+    ),
+    author: optStr()
+};
+
 export const configSchema = z.object({
     // Базовые поля: опциональны в файле, но с дефолтом из defaultConfig — частичный
     // или пустой конфиг остаётся валидным (недостающее берёт значение по умолчанию).
@@ -68,36 +90,25 @@ export const configSchema = z.object({
     d2Layout: str(defaultConfig.d2Layout),
     charset: str(defaultConfig.charset),
     useSystemFonts: bool(defaultConfig.useSystemFonts),
-    // Заголовок раздела, куда `site -w` дописывает комментарии к странице (в коде кириллицы
-    // быть не может — русский заголовок задаёт сам проект).
-    questions: bool(defaultConfig.questions),
-    questionsHeading: str(defaultConfig.questionsHeading),
-    // Журнал ревью (change site-review-log): кнопка на странице `site -w` дописывает замечание
-    // строкой таблицы в раздел `heading` ближайшего `file` от исходника страницы вверх по дереву.
-    // `heading` — один заголовок или список (шаблоны разных схем называют раздел по-разному):
-    // пишется в первый найденный в файле, нет ни одного — создаётся первый. `cells` — шаблон ячеек
-    // с подстановками `{comment}`, `{quote}`, `{text}`, `{section}`, `{artifact}`, `{page}`,
-    // `{author}`, `{date}`, `{number}`; `author` — вместо git user.name; `label` — подпись кнопки;
-    // `enabled: false` выключает кнопку, не удаляя настройку. Нет ключа — кнопки нет.
-    reviewLog: nullish(
+    // Журнал комментариев (change site-review-log, ключ переименован в site-button-names): кнопка
+    // «Comment» на странице `site -w` дописывает комментарий строкой таблицы в раздел `heading`
+    // ближайшего `file` от исходника страницы вверх по дереву. Поля — см. `commentsLogFields`.
+    // Нет ключа — кнопки нет.
+    comments: nullish(z.object(commentsLogFields).optional()),
+    // Прежнее имя ключа `comments`: читается, только если `comments` нет (см. `commentsLog`).
+    // `label` — прежний способ подписать кнопку, ниже `buttons.comment` по приоритету.
+    reviewLog: nullish(z.object({ ...commentsLogFields, label: optStr() }).optional()),
+    // Свои подписи кнопок у выделения в `site -w` (change site-button-names): `agent` — кнопка
+    // агенту, `comment` — кнопка журнала (перекрывает старый `reviewLog.label`). Одна строка на все
+    // языки интерфейса: проект обычно пишет на одном языке, а подписи по умолчанию и так
+    // переводит словарь. Пусто или нет ключа — подпись словаря.
+    buttons: nullish(
         z
             .object({
-                enabled: bool(true),
-                file: str('review.md'),
-                heading: z.preprocess(
-                    (v) => (typeof v === 'string' ? [v] : Array.isArray(v) ? v.map(String) : strPre(v)),
-                    z.array(z.string().min(1)).min(1).default(['Review'])
-                ),
-                cells: nullish(
-                    z.preprocess(
-                        (v) => (Array.isArray(v) ? v.map((x) => (x == null ? '' : String(x))) : v),
-                        z.array(z.string()).optional()
-                    )
-                ),
-                author: optStr(),
-                label: optStr()
+                agent: optStr(),
+                comment: optStr()
             })
-            .optional()
+            .default({})
     ),
     // Язык интерфейса страницы `site -w`; `auto` — по языку браузера (change site-ui-language).
     uiLanguage: z.preprocess(
@@ -147,3 +158,31 @@ export type C4ConfigFile = z.infer<typeof configSchema>;
 
 /** Одна запись `plugins` в `.c4builder`: идентификатор либо пара [идентификатор, опции]. */
 export type PluginEntry = C4ConfigFile['plugins'][number];
+
+/**
+ * Журнал комментариев из конфига: ключ `comments`, без него — прежний `reviewLog`. При обоих
+ * действует `comments` целиком, без слияния полей: иначе непонятно, откуда взялся `file`.
+ * `label` — только у журнала из `reviewLog`: подпись выключенного или перекрытого блока
+ * подписывала бы кнопку чужого журнала. `enabled: false` — журнала нет.
+ */
+export const commentsLog = (
+    c: Pick<C4ConfigFile, 'comments' | 'reviewLog'>
+): (NonNullable<C4ConfigFile['comments']> & { label?: string }) | undefined => {
+    const log = c.comments ?? c.reviewLog;
+    if (!log || log.enabled === false) return undefined;
+    const { label, ...fields } = log as NonNullable<C4ConfigFile['reviewLog']>;
+    return label ? { ...fields, label } : fields;
+};
+
+/**
+ * Предупреждения о ключах, которые схема молча отбрасывает, хотя пользователь явно ждал от них
+ * эффекта. `comments.label` — типичный след переименования `reviewLog` → `comments`: без
+ * предупреждения кнопка тихо возвращалась к подписи по умолчанию.
+ */
+export const configWarnings = (raw: Record<string, unknown>): string[] => {
+    const warnings: string[] = [];
+    const comments = raw.comments;
+    if (comments && typeof comments === 'object' && 'label' in comments)
+        warnings.push('comments.label is ignored — use buttons.comment for the button text');
+    return warnings;
+};

@@ -12,7 +12,7 @@
 | `c4builder --site -w` | the same, rebuilding on every save and reloading the browser |
 | `c4builder feedback --wait --as <name>` | waits for the next batch of page feedback for the agent `<name>` from `site -w` and prints it, see "Feedback to the agent" below |
 | `c4builder status [--json]` | whether the dev server of this project is running: address, pid, agent mode, `feedback` listeners; exit code 0 — running, 1 — not, see "The state file and `c4builder status`" below |
-| `c4builder check <files...>` | checks `.puml`, `.iuml`, `.d2`, `.bpmn`, `.mmd`, `.wireflow.json` diagrams without a build, exit code 0 or 1 |
+| `c4builder check <files...>` | checks `.puml`, `.iuml`, `.d2`, `.bpmn`, `.mmd`, `.wireflow.json` diagrams without a build, exit code 0 or 1; `--strict` — 1 on warnings too; `--format json\|github\|gitlab` — a report for agents and CI, `--files-from <file>` — a list of paths from a file or stdin (see "Checking diagrams" below and [Diagrams](03%20Diagrams/03%20Diagrams.md)) |
 | `c4builder jre info` | which Java will be used (JSON) |
 | `c4builder jre install [--force]` | download a JRE into the cache in advance; `--force` — even if system Java exists |
 | `c4builder --list` | print the current config; since 0.5.0 outside a project — an error with exit code 1, no files created |
@@ -39,7 +39,11 @@ Flags:
 | `--wait` | for `feedback`: wait for the next batch instead of only checking the queue |
 | `--as <name>` | for `feedback`, required: listener name — the agent's change or task (1–64 characters: Latin letters, digits, `.`, `_`, `-`) |
 | `--system-fonts` | render with system fonts for one run |
-| `--json`, `-v, --verbose`, `--strict`, `--full`, `--offline` | for `doctor`, see "Diagnostics" below; `--json` also for `status` |
+| `--strict` | for `doctor` and `check`: exit code 1 on warnings too |
+| `--format <format>` | for `check`: `text` (default), `json`, `github`, `gitlab`, see "Checking diagrams" below |
+| `--json` | for `doctor` (see "Diagnostics" below), `status` and `check` (same as `--format json`) |
+| `--files-from <file>` | for `check`: also the paths from a file, one per line; `-` — stdin |
+| `-v, --verbose`, `--full`, `--offline` | for `doctor`, see "Diagnostics" below |
 | `-V, --version` | version |
 | `-h, --help` | flags and positional commands |
 
@@ -175,6 +179,73 @@ The check and the notices are off when the `CI` variable is set (GitLab CI, GitH
 CI systems set it) or `NO_UPDATE_NOTIFIER` is set, and in the Docker image. To turn them off on your
 machine: `NO_UPDATE_NOTIFIER=1`.
 
+## Checking diagrams
+
+`c4builder check <files...>` checks diagrams with the same engine as the build, without a project
+or `.c4builder`. The default output is text: `✓ <file>` on stdout, `✗ <file>: <problem>` on
+stderr, warnings as `⚠ <file>: <message>`. Each engine has its own problem shape (see
+[Diagrams](03%20Diagrams/03%20Diagrams.md)). Agents and CI get machine formats:
+
+| `--format` | Output on stdout |
+|---|---|
+| `text` | default, the output above |
+| `json` | a JSON array of findings for all files in check order; no findings — `[]`; paths relative to the current folder |
+| `github` | one workflow command `::error` / `::warning` per finding; GitHub Actions shows them as annotations in the PR diff; paths relative to `GITHUB_WORKSPACE` |
+| `gitlab` | a GitLab Code Quality report (`description`, `check_name`, `fingerprint`, `severity`, `location`) for `artifacts: reports: codequality`; paths relative to `CI_PROJECT_DIR` |
+
+`--json` is the same as `--format json`. Any other `--format` value is an error listing the
+formats, exit code 1. `--format` and `--files-from` belong to `check` only: with another command
+or a build they are an error with exit code 1 (`doctor` has `--json` for machine output).
+
+`--files-from <file>` adds the paths from a file to the arguments, one per line; `-` is stdin,
+empty lines are skipped. This way the list of changed files from `git diff` reaches `check` in
+one call — and one report. `xargs` does not fit a machine format: it splits a long list into
+several calls, and stdout would get several JSON arrays in a row. An empty list is an empty
+report and exit code 0; in `text` — exit code 0 too, with no output. `--format` and
+`--files-from` — since c4builder 0.15.0.
+
+A `json` finding has the same fields for every engine; a field the engine does not provide is
+`null`:
+
+```json
+[
+  {
+    "file": "src/context.puml",
+    "line": 6,
+    "column": null,
+    "engine": "plantuml",
+    "severity": "warning",
+    "rule": "undeclared-element",
+    "element": "nope",
+    "message": "Rel to undeclared element \"nope\""
+  }
+]
+```
+
+| Field | Value |
+|---|---|
+| `file` | path with `/`; for a D2 error in an imported file — the path of that file |
+| `line`, `column` | the 1-based position the engine reported — also when it writes it into the error text (BPMN XML, wireflow JSON, mermaid). For a BPMN or wireflow element finding the engine gives only the id — `check` finds the position from the `id` declaration in the source |
+| `engine` | `plantuml`, `d2`, `bpmn`, `mermaid`, `wireflow`; `null` — unsupported extension |
+| `severity` | `error` or `warning` |
+| `rule` | the rule: bpmnlint (`no-disconnected`), BPMN layout (`layout:…`), `undeclared-element` for a C4 relation to an undeclared alias |
+| `element` | BPMN element id, wireflow node or edge id, C4 relation alias |
+| `message` | the finding text without a position: no `line N:` prefix and no line and column the engine wrote into the text. A BPMN element id is only in `element`; for wireflow (`edge "e1": …`) and a C4 relation the id stays in the text: the node kind and the macro matter for reading |
+
+A `github` annotation: `::error file=src/context.puml,line=6,title=c4builder plantuml::Syntax Error`.
+`title` has the engine and the rule in brackets; the text is the message, prefixed with `<id>: `
+when the id is not part of it by the engine's shape (bpmnlint). The `gitlab` `fingerprint` does
+not depend on the line number: the position is neither in the hash nor in `message`, so a line
+inserted above does not make a finding new in the MR widget. Identical findings — for example,
+an error in a shared imported `.d2` when several files are checked — appear in the report once.
+
+In machine formats stdout has only the report: no `✓`/`✗`/`⚠` lines and no colour; messages
+about choosing and downloading a JRE go to stderr. The exit code does not depend on the format:
+0 or 1 as in `text`, `--strict` works the same. Without files a machine format prints an empty
+report (`[]`, nothing for `github`) and exits with 0, so a job over the list of changed files
+passes when no diagrams changed. `text` without files and without `--files-from` still prints
+the usage line and exits with 1.
+
 ## Diagnostics
 
 `c4builder doctor` shows in one command what gets in the way, with a `fix:` line — a command or a
@@ -246,69 +317,73 @@ set.
 
 ## Comments on the site
 
-In `c4builder site -w` you can leave a question about any place on a page: select text, press the
-**Question** button next to the selection, write the question and press **Add question** (`Ctrl+Enter`). The
-question is appended to the page's source `.md`, into the section titled by the `questionsHeading`
-key (`Open questions` by default): as a table row when the section is a table (with the next number
-if the first column is numeric), otherwise as a list item; a missing section is created at the end of
-the file. The text is the comment, the quoted selection and the heading of the page section. Watch
-rebuilds the site and the page reloads with the question in place. The quoted text on the page is
-highlighted in yellow with the question number above it linking to its row. A «×» button on the
-question row (shown on hover) removes it from the file; the other numbers
-stay as they are. Pages without a source file
-(summaries, indexes) do not accept questions. Without `-w` and on static hosting there is no button.
+In `c4builder site -w` selected text gets buttons, one per recipient:
+
+- **Comment** — a comment for people: a row in the review log (the `comments` key, see
+  [Review log](#review-log));
+- **Tell agent** — a comment for the coding agent, never written to the files (the agent mode, see
+  [Feedback to the agent](#feedback-to-the-agent)).
+
+With neither the log nor the agent mode there are no buttons; without `-w` and on static hosting
+neither. The `buttons` key relabels them: its text is shown as is in any interface language.
+
+```json
+{ "buttons": { "agent": "Fix it", "comment": "Note" } }
+```
+
+The **Question** button (a question in the `questionsHeading` section of the source file) is gone:
+the `questions` and `questionsHeading` keys are ignored, comments for people go to the review log.
 
 ### Review log
 
-A remark that belongs in a separate review log rather than in the document itself (for OpenSpec,
-the change's `review.md`) is added with the **Review** button next to **Question**. The button appears
-when `.c4builder` has the `reviewLog` key:
+A comment that belongs in a separate review log rather than in the document itself (for OpenSpec,
+the change's `review.md`) is added with the **Comment** button: select text, press it, write the
+comment and press **Add comment** (`Ctrl+Enter`). The button appears when `.c4builder` has the
+`comments` key:
 
 ```json
 {
-  "reviewLog": {
+  "comments": {
     "file": "review.md",
     "heading": "Remarks",
     "cells": ["", "{artifact} → {section}", "{text}", "{author}", "", ""],
-    "author": "",
-    "label": ""
+    "author": ""
   }
 }
 ```
 
 - `file` — the log file name (`review.md` by default): the nearest one from the page's source
-  directory up the tree to the project root, so a remark on a delta page `specs/<area>/spec.md` lands in
-  the change's `review.md`. A missing file is an error; the log is not created.
+  directory up the tree to the project root, so a comment on a delta page `specs/<area>/spec.md` lands
+  in the change's `review.md`. A missing file is an error; the log is not created.
 - `heading` — the log section (`Review` by default): a string or a list of variants when log templates
   differ (`["Remarks", "Design remarks"]`) — the first one found in the file is used, with none present
-  the first is created. The remark is appended like a question: as a table row or a list item.
+  the first is created. The comment is appended as a table row when the section is a table (with the
+  next number if the first column is numeric), otherwise as a list item.
 - `cells` — the table row cells with placeholders: `{comment}` — the text, `{quote}` — the quote (up
   to 200 characters), `{text}` — `{comment} — «{quote}»`, `{section}` — the page section, `{artifact}`
   — the source file name without extension (`design`, `spec`; the folder name for `README.md`),
   `{page}` — the source relative to the log's directory, `{author}`, `{date}` (YYYY-MM-DD),
   `{number}` — the row number. A numeric first column gets the number by itself; extra template
-  cells are dropped, missing ones are empty. Without `cells` the row is the same as a question's.
+  cells are dropped, missing ones are empty. Without `cells` the row is `comment — «quote» (§ section)`
+  in the text column.
 - `author` — the author; by default `git config user.name` of whoever runs `site -w`.
-- `label` — the button text instead of **Review**.
 - `enabled` — `false` turns the button and the log routes off without removing the rest of the settings.
 
-The **Question** button is always on; `questions: false` turns it off together with question
-highlighting and removal.
+The key's former name is `reviewLog` with the same fields: it works while `.c4builder` has no
+`comments` (with both, `comments` applies). Its `label` field labels the button unless `buttons.comment` is set.
+`comments` has no `label`: the build warns about it and labels the button only from `buttons.comment`.
 
-On the log's own page (the page whose source is `file`) the rows of the `heading` section have a «×»
-button, as questions do: it removes the row from the file, the other numbers stay. On the page a remark
-was made from, its quote is highlighted in yellow and the number above it links to the log row. Which
-rows belong to a page follows from `cells`: the cell with `{artifact}` or `{page}` is compared with the
-page, the quote comes from `{quote}` or the tail of `{text}`; without such placeholders every row with a
-quote is highlighted.
+Watch rebuilds the site and the page reloads with the comment in place. On the log's own page (the
+page whose source is `file`) the rows of the `heading` section have a «×» button (shown on hover): it
+removes the row from the file, the other numbers stay. On the page a comment was made from, its quote
+is highlighted in yellow and the number above it links to the log row. Which rows belong to a page
+follows from `cells`: the cell with `{artifact}` or `{page}` is compared with the page, the quote comes
+from `{quote}` or the tail of `{text}`; without such placeholders every row with a quote is
+highlighted.
 
 The page interface is in English or Russian, following the browser language; the `uiLanguage` key
 pins it. The button names here are the English ones; the Russian labels are on the
 [Agents](08%20Agents/08%20Agents.md) page.
-
-A question stays in the file, for people. When a coding agent edits the docs, the agent mode adds a
-second button next to the selection — **Feedback**: the comment goes to the agent and is never
-written to the files.
 
 ## Feedback to the agent
 
@@ -319,31 +394,31 @@ The agent mode of `site -w` is on when any of these holds:
 - a variable of a known agent is set: `CLAUDECODE` (Claude Code), `CODEX_THREAD_ID` (Codex),
   `GEMINI_CLI`, `OPENCODE`, `COPILOT_CLI` or `AI_AGENT`;
 - the `c4builder feedback` command has connected to the server — the mode turns on at once, and the
-  page shows the **Feedback** button without a reload.
+  page shows the **Tell agent** button without a reload.
 
 `--no-agent` or `C4BUILDER_AGENT=0` turn the mode off whatever else holds; flags win over
 variables. Started in the agent mode by a flag or a variable, `site -w` prints a hint on how to
 receive the feedback.
 
-On the page the selection gets two buttons: **Feedback** (to the agent) and **Question** (a question
-in the file). The Feedback popover sends the comment right away (**Send now**) or keeps it in a review
-(**Add to review**), as in a GitLab merge request: once a review is started, the main button and
-`Ctrl+Enter` are **Add to review**. The review bar at the bottom of the page shows the number of
-pending comments and pages, the recipient and its state (`foo: listening ●` / `foo: reconnecting ○`,
-with no agents `agent: not listening ○`) and the buttons. While the draft is empty, there is one button, **Done — no changes**: nothing to
-change, the agent gets an `approved` batch with no comments. Once the draft has comments, the
-buttons are **Submit review** (with an optional overall comment), **Approve** (nothing more to
-change; pending comments go along) and **Discard** (clear the draft, nothing goes to the agent).
-A click on the counter opens the list with a
-«×» on every comment. The draft is kept in the browser's `localStorage` per project and recipient,
-survives a reload and a closed tab, and its quotes are highlighted in blue.
+On the page the selection gets the **Tell agent** button (next to **Comment** when there is a log).
+Its popover sends the comment right away (**Send now**) or holds it back (**Add**), as in a GitLab
+merge request: once there are pending comments, the main button and `Ctrl+Enter` are **Add**. The
+agent bar at the bottom of the page shows the number of pending comments and pages
+(`To agent: 2 pending (1 page)`), the recipient and its state (`foo: listening ●` /
+`foo: reconnecting ○`, with no agents `agent: not listening ○`) and the buttons. With nothing pending
+there is one button, **Done — no changes**: nothing to change, the agent gets an `approved` batch with
+no comments. With pending comments the buttons are **Send to agent** (with an optional overall
+comment), **Approve** (nothing more to change; pending comments go along) and **Discard** (clear the
+pending comments, nothing goes to the agent). A click on the counter opens the list with a «×» on
+every comment. Pending comments are kept in the browser's `localStorage` per project and recipient,
+survive a reload and a closed tab, and their quotes are highlighted in blue.
 
 Several agents can work with one `site -w`: each listens under its own name (`--as <name>`), and
 the server keeps a mailbox per name. With more than one recipient the bar shows **Send to** with
 the names and their state (`listening`, `reconnecting`, the number of queued batches). The choice
 is remembered per tab and survives a reload, so three tabs can work with three agents. Until the
 tab picks a recipient, the send buttons are disabled. With one agent there is no choice: it becomes
-the tab's recipient by itself. A draft started before any agent came goes to the tab's first
+the tab's recipient by itself. Comments held back before any agent came go to the tab's first
 recipient.
 
 `c4builder feedback --wait --as <name>` connects to `site -w` on the port from `-p`, otherwise from the server
@@ -412,9 +487,8 @@ in older versions produce a warning listing them, and the build continues.
 | `executeScript` | `false` | run `<script>` in pages and load swagger-ui |
 | `docsifyTemplate` | empty | path to a module with a custom `index.html` template |
 | `webPort` | `3000` | port of `c4builder site` |
-| `questions` | `true` | the **Question** button of `site -w`; `false` — no button and no question highlighting |
-| `questionsHeading` | `Open questions` | heading of the section where `site -w` appends questions left on the page |
-| `reviewLog` | — | review log for the **Review** button of `site -w`: `enabled`, `file`, `heading`, `cells`, `author`, `label` — see [Review log](#review-log) |
+| `buttons` | — | own labels of the selection buttons of `site -w`: `agent` (instead of **Tell agent**), `comment` (instead of **Comment**) — see [Comments on the site](#comments-on-the-site) |
+| `comments` | — | review log for the **Comment** button of `site -w`: `enabled`, `file`, `heading`, `cells`, `author` (former name `reviewLog`) — see [Review log](#review-log) |
 | `uiLanguage` | `auto` | language of the `site -w` page interface: `auto` (from the browser), `en` or `ru` |
 | `webFileName` | — | one `.md` name for all site pages instead of the folder name |
 | `excludeSidebarFolderByPath` | — | list of paths (from the project folder, e.g. `src/Archive`) hidden from the sidebar |

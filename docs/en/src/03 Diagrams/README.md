@@ -268,8 +268,8 @@ c4builder check src/context.puml "src/4 D2 Example/landscape.d2"
 
 `check` validates `.puml`, `.iuml`, `.d2`, `.bpmn`, `.mmd` and `.wireflow.json`/`wireflow.json` files with the same engine as the
 build (for `.bpmn`: parsing, rules, layout and rendering; for wireflow: file structure and rendering), but writes nothing and needs no project
-or `.c4builder`. Exit code 0 means every file compiles, 1 means there is an error (warnings do not
-affect the code):
+or `.c4builder`. Exit code 0 means every file compiles, 1 means there is an error. Warnings (`⚠`) do
+not affect the code, except in `--strict` mode, see below:
 
 ```text
 ✓ src/context.puml
@@ -280,6 +280,27 @@ affect the code):
 including it into an empty diagram, and an `.iuml` with C4 macros (`UpdateElementStyle` and the
 like) — in the context of the C4 stdlib, as in the diagrams that include it. No line number is
 printed for an `.iuml`.
+
+A C4 relation to an undeclared element is a warning. If the alias in `Rel(u, nope, …)` has a typo,
+PlantUML does not fail but silently draws an empty circle for it. `check` and the build print:
+
+```text
+⚠ src/context.puml: line 6: Rel to undeclared element "nope"
+```
+
+`Rel*`, `BiRel*`, `RelIndex*` and `Lay_*` called in the diagram file itself are checked; elements
+from `!include`, procedures and boundaries count as declared. Plain arrows without C4 (`A --> B`)
+are not checked: implicit elements are normal there. Relations from included files and procedures
+are not checked. A qualified alias (`Rel(u, b.db, …)`) is flagged even when `db` is declared inside
+boundary `b`: PlantUML does not link it to that element and draws a separate circle — use the
+short alias `db`. For a `plantuml` block in markdown, the line number is the page line. The build
+checks only the diagrams it renders in this run: one restored from the cache stays silent, so
+`check` is what gives the guarantee.
+
+`c4builder check --strict` fails a file with any warning (PlantUML, BPMN, wireflow):
+`✗ <file>: <K> warning(s), failing with --strict` and exit code 1. This mode is for CI and
+agents. Plain `check` is enough for the pre-commit hook below: warnings do not block a
+work-in-progress commit (they are shown in the output), errors still stop it.
 
 A pre-commit hook that checks staged diagrams (`.git/hooks/pre-commit`; spaces in paths are
 fine):

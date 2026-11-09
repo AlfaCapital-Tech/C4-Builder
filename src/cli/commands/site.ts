@@ -12,7 +12,6 @@ import type { BuildResult } from '../../core/build.ts';
 import type { PageSources } from '../../core/compose/markdown.ts';
 import { batchSchema, type FeedbackBatch, formatBatch, LISTENER_NAME } from '../../core/feedback.ts';
 import { redirectKey } from '../../core/plugins/tree.ts';
-import { deleteQuestion, formatQuestion, pickSource, writeQuestion } from '../../core/questions.ts';
 import {
     deleteRemark,
     findReviewFile,
@@ -34,7 +33,7 @@ import {
     writeServerState
 } from '../server-state.ts';
 import {
-    COMMENTS_PATH,
+    buttonLabels,
     commentsSnippet,
     FEEDBACK_HEADER,
     FEEDBACK_PATH,
@@ -433,39 +432,31 @@ export default (
         // localhost:<port> не должны видеть чужой черновик.
         const projectKey = createHash('sha1').update(process.cwd()).digest('hex').slice(0, 8);
         const reviewLog = currentConfiguration.REVIEW_LOG;
-        const questions = currentConfiguration.QUESTIONS;
         // Кэш проверки обновлений читается на каждую страницу: результат фоновой проверки,
         // запущенной этим же `site -w`, виден со следующей перезагрузки без рестарта сервера.
         const inject = (html: string): string => {
             const next = pendingUpdate();
             const snippet =
                 LIVERELOAD_SNIPPET +
-                commentsSnippet(currentConfiguration.QUESTIONS_HEADING, {
-                    questions,
+                commentsSnippet({
                     agent: agent.on,
                     mailboxes: agentState().mailboxes,
                     project: projectKey,
                     language: currentConfiguration.UI_LANGUAGE,
-                    reviewLog: reviewLog && {
-                        file: reviewLog.file,
-                        heading: reviewLog.heading,
-                        label: reviewLog.label
-                    }
+                    reviewLog: reviewLog && { file: reviewLog.file, heading: reviewLog.heading },
+                    labels: buttonLabels(currentConfiguration.BUTTONS, reviewLog?.label)
                 }) +
                 (next ? updateBanner(next) : '');
             if (html.includes('</body>')) return html.replace('</body>', `${snippet}</body>`);
             return html + snippet;
         };
 
-        // Комментарий к выделенному тексту → раздел вопросов исходного файла страницы
-        // (change site-comments, design D3). Сервер слушает только 127.0.0.1, но страница
-        // любого сайта в браузере может слать POST на localhost — требуем Origin самого сайта.
+        // Комментарий к выделенному тексту → журнал ревью или агент (change site-comments,
+        // design D3). Сервер слушает только 127.0.0.1, но страница любого сайта в браузере может
+        // слать POST на localhost — требуем Origin самого сайта.
         const str = (v: unknown): string => (typeof v === 'string' ? v : '');
-        const heading = currentConfiguration.QUESTIONS_HEADING;
-        // Общая часть POST/DELETE: проверка Origin и исходный файл страницы из тела запроса.
-        // Ошибка уже отправлена клиенту, когда возвращается undefined.
         // Страница сайта из тела/запроса → её исходники внутри проекта (путь нормализован, `..` и
-        // неизвестная страница — undefined). Общее для вопросов и журнала ревью.
+        // неизвестная страница — undefined).
         const cwd = process.cwd();
         const relOf = (file: string): string => path.relative(cwd, file).split(path.sep).join('/');
         const localSources = (raw: string): { page: string; sources: string[] } | undefined => {
@@ -473,10 +464,14 @@ export default (
             const sources = page.startsWith('..') ? undefined : pages().get(page);
             return sources && { page, sources: sources.filter((s) => s.startsWith(cwd + path.sep)) };
         };
+        // Исходник страницы — первый существующий файл: от него ищется журнал и берутся
+        // `{artifact}`/`{page}` строки.
+        const firstSource = (files: string[]): string | undefined => files.find((f) => fs.existsSync(f));
+        // Проверка Origin и исходный файл страницы из тела запроса; ошибка уже отправлена
+        // клиенту, когда возвращается undefined.
         const resolveTarget = (
             req: express.Request,
-            res: express.Response,
-            heading: string
+            res: express.Response
         ): { file: string; rel: string; body: Record<string, unknown> } | undefined => {
             if (!fromSite(req)) {
                 res.status(403).json({ error: 'comments are accepted only from the site itself' });
@@ -488,7 +483,7 @@ export default (
                 res.status(404).json({ error: `unknown page: ${str(body.page)}` });
                 return undefined;
             }
-            const file = pickSource(found.sources, heading);
+            const file = firstSource(found.sources);
             if (!file) {
                 res.status(404).json({ error: 'this page has no source file to write to' });
                 return undefined;
@@ -516,57 +511,7 @@ export default (
             return { comment, quote, section };
         };
 
-        // `questions: false` — маршрутов нет, как и кнопки.
-        if (questions)
-            app.post(COMMENTS_PATH, express.json({ limit: '64kb' }), (req, res) => {
-                const target = resolveTarget(req, res, heading);
-                if (!target) return;
-                const { file, rel, body } = target;
-                const parsed = commentBody(body, res);
-                if (!parsed) return;
-                const { comment, quote, section } = parsed;
-                try {
-                    const number = writeQuestion(file, heading, formatQuestion({ comment, quote, section }));
-                    console.log(chalk.gray(`comment added to ${rel}${number ? ` as #${number}` : ''}`));
-                    res.json({ file: rel, number });
-                } catch (e) {
-                    res.status(500).json({ error: `could not write the comment: ${(e as Error).message}` });
-                }
-            });
-
-        // Удаление вопроса: по номеру (числовая таблица) и тексту, как он виден на странице.
-        if (questions)
-            app.delete(COMMENTS_PATH, express.json({ limit: '64kb' }), (req, res) => {
-                const target = resolveTarget(req, res, heading);
-                if (!target) return;
-                const { file, rel, body } = target;
-                const text = str(body.text).trim();
-                if (!text) {
-                    res.status(400).json({ error: 'question text is empty' });
-                    return;
-                }
-                const number =
-                    typeof body.number === 'number' ? body.number : Number(str(body.number)) || null;
-                try {
-                    const result = deleteQuestion(file, heading, { number, text });
-                    if ('error' in result) {
-                        const messages = {
-                            'not-found': `question not found in ${rel} — the page may be stale, reload it`,
-                            ambiguous: `several identical questions in ${rel} — remove it by hand`
-                        };
-                        res.status(result.error === 'not-found' ? 404 : 409).json({
-                            error: messages[result.error]
-                        });
-                        return;
-                    }
-                    console.log(chalk.gray(`comment removed from ${rel}`));
-                    res.json({ file: rel });
-                } catch (e) {
-                    res.status(500).json({ error: `could not remove the comment: ${(e as Error).message}` });
-                }
-            });
-
-        // Замечание в журнал ревью (change site-review-log): файл — ближайший `reviewLog.file` от
+        // Замечание в журнал ревью (change site-review-log): файл — ближайший `comments.file` от
         // исходника страницы вверх до корня проекта; автор — из конфига либо git user.name того,
         // кто запустил `site -w` (журнал правится на машине ревьюера).
         if (reviewLog) {
@@ -577,8 +522,7 @@ export default (
             // `author: ""` в конфиге (как в примере документации) — не задан, а не пустой автор.
             const author = reviewLog.author || gitUser();
             app.post(REVIEW_LOG_PATH, express.json({ limit: '64kb' }), (req, res) => {
-                // Исходник страницы — тот же, что у вопроса: заголовок журнала в исходниках не ищем.
-                const target = resolveTarget(req, res, heading);
+                const target = resolveTarget(req, res);
                 if (!target) return;
                 const { file: source, body } = target;
                 const parsed = commentBody(body, res);
@@ -623,7 +567,7 @@ export default (
                     res.json({ file: relOf(own), log: true });
                     return;
                 }
-                const source = found && pickSource(found.sources, heading);
+                const source = found && firstSource(found.sources);
                 const file = source && findReviewFile(path.dirname(source), reviewLog.file, cwd);
                 if (!source || !file) {
                     res.status(404).json({
@@ -642,7 +586,7 @@ export default (
                     res.status(500).json({ error: `could not read the review log: ${(e as Error).message}` });
                 }
             });
-            // Удаление строки журнала — как у вопроса: номер и текст ячейки, видимой на странице, плюс
+            // Удаление строки журнала: номер и текст ячейки, видимой на странице, плюс
             // все ячейки строки (таблицы без номеров: одна ячейка бывает общей у нескольких строк).
             app.delete(REVIEW_LOG_PATH, express.json({ limit: '64kb' }), (req, res) => {
                 if (!fromSite(req)) {

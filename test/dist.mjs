@@ -3,7 +3,7 @@
 export { cachedJava, detectSystemJava, resolveJava } from '../dist/core/render/jre.js';
 export { isPathInside } from '../dist/util/archive.js';
 export { watchTree } from '../dist/util/watch.js';
-export { configSchema, isValidPort } from '../dist/config/schema.js';
+export { commentsLog, configSchema, configWarnings, isValidPort } from '../dist/config/schema.js';
 export { parseConfig } from '../dist/config/options.js';
 export { defaultConfig } from '../dist/config/defaults.js';
 export { rasterizeSvgToPng, resvgFontOptions } from '../dist/core/render/pngraster.js';
@@ -37,7 +37,21 @@ export {
     diagramBaseName,
     diagramExt
 } from '../dist/core/scan/tree.js';
-export { foldD2Imports, d2LocalImports, clearD2FileCache } from '../dist/core/render/d2renderer.js';
+export {
+    foldD2Imports,
+    d2LocalImports,
+    clearD2FileCache,
+    D2Error,
+    renderD2
+} from '../dist/core/render/d2renderer.js';
+export {
+    errorDiagnostics,
+    locate,
+    toDiagnostic,
+    uniqueDiagnostics
+} from '../dist/cli/commands/check.problems.js';
+export { formatGithub, formatGitlab, formatJson, reportBase } from '../dist/cli/commands/check.report.js';
+export { DiagramError, problemText } from '../dist/core/render/problem.js';
 export { diagramRefRegex, generateLlmsFull, stripEmbeddedImages } from '../dist/core/compose/markdown.js';
 export { compareVersions, newestVersion } from '../dist/cli/update.js';
 export { detectAgent } from '../dist/cli/agent.js';
@@ -71,13 +85,7 @@ export {
     renderBpmn,
     teardownBpmn
 } from '../dist/core/render/bpmnrenderer.js';
-export {
-    appendQuestion,
-    formatQuestion,
-    pickSource,
-    removeQuestion,
-    writeQuestion
-} from '../dist/core/questions.js';
+export { appendRow, formatEntry, removeRow, writeRow } from '../dist/core/sections.js';
 export {
     MermaidError,
     MERMAID_PACKAGE,

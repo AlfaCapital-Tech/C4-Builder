@@ -5,6 +5,44 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
 
 ## Unreleased
 
+- **BREAKING** Site: the **Question** button of `site -w` is gone together with its routes, the
+  highlighting and removal of questions and the `questions` / `questionsHeading` keys (old configs
+  still load — the keys are ignored; questions already written stay in the `.md` as plain text).
+  Comments for people go to the review log (`comments`), changes — to the agent (#61)
+- Site: the selection buttons are named by recipient — **Comment** / «Комментарий» (the review log,
+  was **Review**; its popover button is **Add comment**) and **Tell agent** / «Сказать агенту» (was
+  **Feedback**). The agent bar no longer says review: **Send to agent** (was **Submit review**),
+  **Add** (was **Add to review**), **Remove**, `To agent: 2 pending (1 page)` (#61)
+- New `.c4builder` key `buttons`: `{ "agent": "…", "comment": "…" }` relabels the selection buttons,
+  shown as is in any interface language; `buttons.comment` overrides `reviewLog.label` (#61)
+- The `.c4builder` key of the review log is now `comments` (same fields, no `label` — use
+  `buttons.comment`); the former `reviewLog` is still read when `comments` is absent, its `label`
+  still labels the button (#61)
+- `c4builder check --format <text|json|github|gitlab>`: `json` prints one JSON array of findings
+  (`file`, `line`, `column`, `engine`, `severity`, `rule`, `element`, `message`) for all engines;
+  `github` prints workflow commands that GitHub Actions shows as annotations in the PR diff;
+  `gitlab` prints a GitLab Code Quality report for `artifacts: reports: codequality`. BPMN and
+  wireflow findings get the line of the element `id`, a D2 error in an imported file points to
+  that file. In these formats stdout holds only the report (JRE messages go to stderr), and
+  without files they print an empty report with exit code 0. `--json` is the same as
+  `--format json`; the text output and exit codes do not change. The site page "Docker and CI"
+  has ready jobs for GitHub Actions and GitLab CI (#65)
+- `c4builder check --files-from <file>` (`-` for stdin): also check the paths listed one per line,
+  empty lines skipped. The CI jobs pipe `git diff --name-only` into one `check` call, so a machine
+  format prints one report (with `xargs` a long list could become several JSON arrays). An empty
+  list is an empty report and exit code 0, in `text` too. `--format` and `--files-from` with any
+  other command or a build are now an error with exit code 1 instead of being ignored (#65)
+- A C4 relation to an undeclared alias (`Rel(u, nope, …)` with a typo — PlantUML silently draws an
+  empty circle) is a warning in `c4builder check` and in the build:
+  `⚠ <file>: line <N>: Rel to undeclared element "nope"`; covers `Rel*`, `BiRel*`, `RelIndex*` and
+  `Lay_*` called in the diagram file, plain `A --> B` arrows are not affected. The exit code does
+  not change; a diagram restored from the build cache is not re-checked (#60)
+- `c4builder check --strict` exits with code 1 on any warning (PlantUML, BPMN, wireflow) and prints
+  `✗ <file>: <K> warning(s), failing with --strict` — for CI and coding agents
+- `doctor skills` no longer reports duplicates from uninstalled Claude Code plugins: it reads the
+  installed plugins from `~/.claude/plugins/installed_plugins.json` instead of walking the plugin
+  cache, so leftovers marked `.orphaned_at`, old versions and plugins installed in other projects
+  do not count; an unrecognized registry is `skipped` (#74)
 - `site` / `--site [-w]` writes a state file next to the config while it runs —
   `.c4builder.server.json` (`<file>.server.json` for `-c <file>`) with the port, address, pid,
   version and watch mode — and removes it on Ctrl+C, `SIGTERM` or a normal exit; a file left by a

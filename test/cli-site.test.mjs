@@ -106,6 +106,8 @@ describe('плашка о новой версии в site -w', () => {
 
 // Комментарии к выделенному тексту (change site-comments): запись в исходник страницы,
 // защита по Origin, неизвестная страница, без -w ни скрипта, ни маршрута.
+// Вопросы удалены (change site-button-names): сниппет страницы остаётся (журнал, агент), а
+// маршрута вопросов нет.
 describe('комментарии в site -w', () => {
     const post = (port, body, headers = {}) =>
         fetch(`http://127.0.0.1:${port}/__c4builder/comments`, {
@@ -115,90 +117,21 @@ describe('комментарии в site -w', () => {
         });
     const readme = path.join(dir, 'src', 'README.md');
 
-    it('POST с Origin сайта дописывает раздел в исходник; чужой Origin, пустой комментарий и неизвестная страница отклоняются', async () => {
+    it('сниппет только в отдаче dev-сервера; маршрута вопросов нет, исходник не тронут', async () => {
         const port = 28324;
         const before = fs.readFileSync(readme, 'utf8');
-        try {
-            await serve(['site', '-w', '-p', String(port)], {
-                onReady: async () => {
-                    const html = await (await fetch(`http://127.0.0.1:${port}/`)).text();
-                    expect(html).toContain('__c4builderComments');
-                    expect(fs.readFileSync(path.join(dir, 'docs', 'index.html'), 'utf8')).not.toContain(
-                        '__c4builderComments'
-                    );
-
-                    expect((await post(port, { page: 'Overview.md', comment: 'x' })).status).toBe(403);
-                    expect(
-                        (
-                            await post(
-                                port,
-                                { page: 'Overview.md', comment: 'x' },
-                                { Origin: 'http://evil.test' }
-                            )
-                        ).status
-                    ).toBe(403);
-                    // DNS rebinding: Host и Origin согласованы, но домен чужой. fetch Host не
-                    // подменяет — нужен голый http.request.
-                    const rebound = await new Promise((resolve, reject) => {
-                        const body = JSON.stringify({ page: 'Overview.md', comment: 'x' });
-                        http.request(
-                            {
-                                host: '127.0.0.1',
-                                port,
-                                method: 'POST',
-                                path: '/__c4builder/comments',
-                                headers: {
-                                    Host: `evil.test:${port}`,
-                                    Origin: `http://evil.test:${port}`,
-                                    'Content-Type': 'application/json',
-                                    'Content-Length': Buffer.byteLength(body)
-                                }
-                            },
-                            (res) => resolve(res.resume().statusCode)
-                        )
-                            .on('error', reject)
-                            .end(body);
-                    });
-                    expect(rebound).toBe(403);
-                    const origin = { Origin: `http://127.0.0.1:${port}` };
-                    expect((await post(port, { page: 'Nope.md', comment: 'x' }, origin)).status).toBe(404);
-                    expect((await post(port, { page: 'Overview.md', comment: '  ' }, origin)).status).toBe(
-                        400
-                    );
-                    expect(fs.readFileSync(readme, 'utf8')).toBe(before);
-
-                    const ok = await post(
-                        port,
-                        { page: '/Overview.md', quote: 'root', section: 'root', comment: 'Why?' },
-                        origin
-                    );
-                    expect(ok.status).toBe(200);
-                    expect(await ok.json()).toEqual({ file: 'src/README.md', number: null });
-                    expect(fs.readFileSync(readme, 'utf8')).toBe(
-                        '# root\n\n## Open questions\n\n- Why? — «root» (§ root)\n'
-                    );
-
-                    const del = await fetch(`http://127.0.0.1:${port}/__c4builder/comments`, {
-                        method: 'DELETE',
-                        headers: { 'Content-Type': 'application/json', ...origin },
-                        body: JSON.stringify({ page: 'Overview.md', text: 'Why? — «root» (§ root)' })
-                    });
-                    expect(del.status).toBe(200);
-                    expect(fs.readFileSync(readme, 'utf8')).toBe('# root\n\n## Open questions\n\n');
-                    expect(
-                        (
-                            await fetch(`http://127.0.0.1:${port}/__c4builder/comments`, {
-                                method: 'DELETE',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ page: 'Overview.md', text: 'x' })
-                            })
-                        ).status
-                    ).toBe(403);
-                }
-            });
-        } finally {
-            fs.writeFileSync(readme, before);
-        }
+        await serve(['site', '-w', '-p', String(port)], {
+            onReady: async () => {
+                const html = await (await fetch(`http://127.0.0.1:${port}/`)).text();
+                expect(html).toContain('__c4builderComments');
+                expect(fs.readFileSync(path.join(dir, 'docs', 'index.html'), 'utf8')).not.toContain(
+                    '__c4builderComments'
+                );
+                const origin = { Origin: `http://127.0.0.1:${port}` };
+                expect((await post(port, { page: 'Overview.md', comment: 'x' }, origin)).status).toBe(404);
+                expect(fs.readFileSync(readme, 'utf8')).toBe(before);
+            }
+        });
     }, 60_000);
 
     it('без -w нет ни скрипта, ни маршрута', async () => {
@@ -219,7 +152,8 @@ describe('комментарии в site -w', () => {
     }, 60_000);
 });
 
-// Журнал ревью (change site-review-log): маршрут и кнопка есть только с `reviewLog`; файл —
+// Журнал комментариев (change site-review-log, ключ `comments` — site-button-names): маршрут и
+// кнопка есть только с `comments` или прежним `reviewLog`; файл —
 // ближайший вверх от исходника страницы; строка — по шаблону cells с автором из конфига.
 describe('журнал ревью в site -w', () => {
     const rdir = fs.mkdtempSync(path.join(TMP_ROOT, 'cli-site-review-'));
@@ -235,7 +169,7 @@ describe('журнал ревью в site -w', () => {
         path.join(rdir, '.c4builder'),
         JSON.stringify({
             ...CONFIG,
-            reviewLog: {
+            comments: {
                 heading: 'Remarks',
                 cells: ['', '{artifact} → {section}', '{text}', '{author}', ''],
                 author: 'Reviewer'
@@ -251,6 +185,46 @@ describe('журнал ревью в site -w', () => {
             },
             body: JSON.stringify(body)
         });
+
+    it('чужой Origin и DNS rebinding — 403, журнал не тронут', async () => {
+        const port = 28330;
+        const before = fs.readFileSync(log, 'utf8');
+        await serveSite(rdir, ['site', '-w', '-p', String(port)], {
+            onReady: async () => {
+                const body = { page: 'Change/Change.md', comment: 'x' };
+                const evil = await fetch(`http://127.0.0.1:${port}/__c4builder/review-log`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Origin: 'http://evil.test' },
+                    body: JSON.stringify(body)
+                });
+                expect(evil.status).toBe(403);
+                // DNS rebinding: Host и Origin согласованы, но домен чужой. fetch Host не
+                // подменяет — нужен голый http.request.
+                const rebound = await new Promise((resolve, reject) => {
+                    const raw = JSON.stringify(body);
+                    http.request(
+                        {
+                            host: '127.0.0.1',
+                            port,
+                            method: 'POST',
+                            path: '/__c4builder/review-log',
+                            headers: {
+                                Host: `evil.test:${port}`,
+                                Origin: `http://evil.test:${port}`,
+                                'Content-Type': 'application/json',
+                                'Content-Length': Buffer.byteLength(raw)
+                            }
+                        },
+                        (res) => resolve(res.resume().statusCode)
+                    )
+                        .on('error', reject)
+                        .end(raw);
+                });
+                expect(rebound).toBe(403);
+                expect(fs.readFileSync(log, 'utf8')).toBe(before);
+            }
+        });
+    }, 60_000);
 
     it('POST дописывает строку в ближайший review.md; без Origin — 403; нет файла выше — 404', async () => {
         const port = 28326;
@@ -322,7 +296,7 @@ describe('журнал ревью в site -w', () => {
         });
     }, 60_000);
 
-    it('questions: false — кнопки и маршрута вопросов нет; reviewLog.enabled: false — журнала нет', async () => {
+    it('comments.enabled: false — журнала нет; старый ключ questions не мешает', async () => {
         const port = 28328;
         const cfg = path.join(rdir, '.c4builder');
         const saved = fs.readFileSync(cfg, 'utf8');
@@ -332,14 +306,14 @@ describe('журнал ревью в site -w', () => {
             JSON.stringify({
                 ...parsed,
                 questions: false,
-                reviewLog: { ...parsed.reviewLog, enabled: false }
+                comments: { ...parsed.comments, enabled: false }
             })
         );
         try {
             await serveSite(rdir, ['site', '-w', '-p', String(port)], {
                 onReady: async () => {
                     const html = await (await fetch(`http://127.0.0.1:${port}/`)).text();
-                    expect(html).toContain('var QUESTIONS = false');
+                    expect(html).toContain('__c4builderComments');
                     expect(html).not.toContain('"review.md"');
                     const origin = { Origin: `http://127.0.0.1:${port}` };
                     const res = await fetch(`http://127.0.0.1:${port}/__c4builder/comments`, {
@@ -356,7 +330,7 @@ describe('журнал ревью в site -w', () => {
         }
     }, 60_000);
 
-    it('без reviewLog маршрута нет', async () => {
+    it('без comments маршрута нет', async () => {
         const port = 28327;
         await serve(['site', '-w', '-p', String(port)], {
             onReady: async () => {
@@ -364,6 +338,34 @@ describe('журнал ревью в site -w', () => {
                 expect((await post(port, { page: 'Overview.md', comment: 'x' })).status).toBe(404);
             }
         });
+    }, 60_000);
+
+    it('прежний ключ reviewLog работает как comments', async () => {
+        const port = 28335;
+        const cfg = path.join(rdir, '.c4builder');
+        const saved = fs.readFileSync(cfg, 'utf8');
+        const savedLog = fs.readFileSync(log, 'utf8');
+        const { comments, ...rest } = JSON.parse(saved);
+        fs.writeFileSync(cfg, JSON.stringify({ ...rest, reviewLog: comments }));
+        fs.writeFileSync(log, TABLE);
+        try {
+            await serveSite(rdir, ['site', '-w', '-p', String(port)], {
+                onReady: async () => {
+                    const ok = await post(port, {
+                        page: 'Change/Change.md',
+                        section: 'Flow',
+                        comment: 'Old'
+                    });
+                    expect(ok.status).toBe(200);
+                    expect(fs.readFileSync(log, 'utf8')).toBe(
+                        `${TABLE}| 1 | Change → Flow | Old | Reviewer |  |\n`
+                    );
+                }
+            });
+        } finally {
+            fs.writeFileSync(cfg, saved);
+            fs.writeFileSync(log, savedLog);
+        }
     }, 60_000);
 });
 

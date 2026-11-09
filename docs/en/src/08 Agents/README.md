@@ -26,6 +26,15 @@ locally, without a network and without a human.
    agent fixes the error and repeats until it gets 0. For `.bpmn`, every model violation is a
    line with the element id and the rule: `✗ <file>: <id> [<rule>] <description>`; for `.mmd`
    — the line number, as for PlantUML; for `.wireflow.json` — a line with the node or edge id.
+   A warning `⚠ <file>: line N: Rel to undeclared element "<alias>"` with exit code 0 means a
+   typo in a relation alias: PlantUML drew an empty circle instead of the element. Fix it too;
+   `check --strict` turns warnings into exit code 1.
+
+   Parsing five line shapes is optional: `c4builder check --format json <files>` prints a JSON
+   array of findings on stdout with the same fields for every engine — `file`, `line`,
+   `column`, `engine`, `severity`, `rule`, `element`, `message` (see
+   [CLI and configuration](05%20CLI%20and%20configuration/05%20CLI%20and%20configuration.md)).
+   For BPMN and wireflow `check` finds the element's line from its `id` itself.
 3. **Build.** `c4builder` builds the whole project; `c4builder --site -w` keeps the site open for
    the human and rebuilds it on every save the agent makes. It comes up right away, without
    waiting for the rendering: diagrams missing from the cache show a `rendering…` placeholder and
@@ -39,10 +48,10 @@ agent's last step or a CI step.
 It is easier for a human to point the agent at a place on the page than to retell it in the chat.
 In `c4builder site -w` under an agent (see "Feedback to the agent" on the
 [CLI & configuration](05%20CLI%20and%20configuration/05%20CLI%20and%20configuration.md) page) the
-selection gets a **Feedback** button: the comment goes to the agent right away (**Send now**) or in a
-review batch (**Submit review**, **Approve**). With nothing to change, the empty review bar has one
-button, **Done — no changes**: it sends an `approved` batch with no comments. **Discard** only clears
-the draft and sends nothing to the agent. The agent loop:
+selection gets a **Tell agent** button: the comment goes to the agent right away (**Send now**) or is
+held back (**Add**) and sent in one batch (**Send to agent**, **Approve**). With nothing to change, the
+agent bar has one button, **Done — no changes**: it sends an `approved` batch with no comments.
+**Discard** only clears the pending comments and sends nothing to the agent. The agent loop:
 
 1. Check `c4builder status`: exit code 0 means the site of this project already runs, its address
    is in the output; otherwise start `c4builder --site -w` in the background. Then start
@@ -101,25 +110,23 @@ Without `--as` the command exits at once with code 2 and
 instruction restarts the listener with a name from that message. Code 2, not 1: code 1 means no
 `site -w` is running.
 
-A feedback comment is an instruction to the agent, not a question: it is never written to the files.
-Questions for people (the **Question** button) go to the `questionsHeading` section of the source
-`.md` and stay in the documentation — the agent should not move feedback there or answer it by
-editing the questions section. The third button, **Review** (the `reviewLog` key), writes a remark as
-a row of the review log next to the source — for example the change's `review.md`; it is a record
-for people and the review process, not addressed to the agent either.
+A feedback comment is an instruction to the agent: it is never written to the files. The other button,
+**Comment** (the `comments` key), writes a comment for people as a row of the review log next to the
+source — for example the change's `review.md`; it is a record for people and the review process, not
+addressed to the agent, and the agent should not move feedback there or answer it by editing the log.
 
 ### Several agents
 
 Several agents, each with its own change, can work with one `site -w`: each listens under its own
 name, and a batch goes only to the agent with that name. The page shows **Send to** with the agents
-and their state; the recipient is picked per tab, and every recipient has its own review draft. So
+and their state; the recipient is picked per tab, and every recipient has its own pending comments. So
 a human reviews change A in one tab and change B in another, and no comment reaches the wrong
 agent. Keep the name the same on every run of the command: with another name the batches stay in
 the old mailbox.
 
 ### Interface language
 
-The page interface — buttons, hints, the review bar, toasts — comes in English and Russian. The
+The page interface — buttons, hints, the agent bar, toasts — comes in English and Russian. The
 language follows the browser settings: the first language in the preference list that the dictionary
 has (`en` or `ru`), otherwise English. To pin the language for a project, set the `.c4builder` key:
 
@@ -128,12 +135,12 @@ has (`en` or `ru`), otherwise English. To pin the language for a project, set th
 ```
 
 `auto` (the default) follows the browser, `en` and `ru` always use that language. This page names
-the English buttons; the Russian interface shows **Замечание** (Feedback), **Вопрос** (Question), **Ревью** (Review),
-**Отправить** (Send now), **В ревью** (Add to review), **Отправить ревью** (Submit review),
-**Одобрить** (Approve), **Очистить** (Discard), **Готово, правок нет** (Done — no changes),
-**Кому** (Send to). The
-interface language does not change the CLI output, the `c4builder feedback` batch, server error
-texts or the questions section heading (`questionsHeading`).
+the English buttons; the Russian interface shows **Сказать агенту** (Tell agent), **Комментарий**
+(Comment), **Добавить комментарий** (Add comment), **Отправить** (Send now), **Добавить** (Add),
+**Отправить агенту** (Send to agent), **Одобрить** (Approve), **Очистить** (Discard),
+**Готово, правок нет** (Done — no changes), **Кому** (Send to). Labels set with the `buttons` key are
+shown as is. The interface language does not change the CLI output, the `c4builder feedback` batch,
+server error texts or the review log section heading (`comments.heading`).
 
 ## Why offline rendering matters for agents
 
@@ -226,8 +233,9 @@ root and `~/.claude/skills`, for Codex also `.codex/skills`, `~/.agents/skills` 
 - under Claude Code a personal copy shadows the project one — `!` with its path and the command to
   remove it (with the user's consent), even when the personal copy is current; without a project copy
   the command first installs it (`c4builder skills && rm -r …`);
-- a Claude Code plugin in the `~/.claude/plugins/cache` cache carries a skill with the same name —
-  `!` without a fix: removing the whole plugin may be impossible, it has other skills;
+- an installed Claude Code plugin (per `~/.claude/plugins/installed_plugins.json`; uninstalled ones
+  and ones installed in other projects do not count) carries a skill with the same name — `!` without
+  a fix: removing the whole plugin may be impossible, it has other skills;
 - the last line is `–`: the CLI cannot see which skills the agent session loaded.
 
 ### Alternative: npx skills
@@ -289,7 +297,7 @@ Files of this site:
 A project created before 0.5.0 has no `AGENTS.md`. What to put into `AGENTS.md` or `CLAUDE.md` of
 such a project:
 
-- after editing a diagram — `c4builder check <file>`, fix until exit code 0;
+- after editing a diagram — `c4builder check --strict <file>`, fix until exit code 0;
 - include C4 through the stdlib (`!include <C4/C4_Container>`), shared styles with
   `!include ../styles.iuml`;
 - a new page is a new folder in `src/`, the order is set by a numeric prefix;
