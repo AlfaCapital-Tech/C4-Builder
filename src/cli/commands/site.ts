@@ -12,7 +12,6 @@ import type { BuildResult } from '../../core/build.ts';
 import type { PageSources } from '../../core/compose/markdown.ts';
 import { batchSchema, type FeedbackBatch, formatBatch, LISTENER_NAME } from '../../core/feedback.ts';
 import { redirectKey } from '../../core/plugins/tree.ts';
-import { deleteQuestion, formatQuestion, pickSource, writeQuestion } from '../../core/questions.ts';
 import {
     deleteRemark,
     findReviewFile,
@@ -24,7 +23,17 @@ import { packageJson as pkg } from '../../util/paths.ts';
 import type { AgentMode } from '../agent.ts';
 import { pendingUpdate } from '../update.ts';
 import {
-    COMMENTS_PATH,
+    hasChangePage,
+    projectId,
+    removeServerState,
+    STATUS_PATH,
+    type ServerState,
+    type ServerStatus,
+    shownUrl,
+    writeServerState
+} from '../server-state.ts';
+import {
+    buttonLabels,
     commentsSnippet,
     FEEDBACK_HEADER,
     FEEDBACK_PATH,
@@ -174,8 +183,8 @@ c4builder ${next} is available (current ${pkg.version}). Run: <code>c4builder up
 })();
 </script>`;
 
-// Только подсказка для ошибки «порт занят»: сам сервер на найденный порт не переходит —
-// feedback, --open-change и скиллы берут порт из -p/webPort (change site-port-busy-hint).
+// Только подсказка для ошибки «порт занят»: сам сервер на найденный порт не переходит
+// (change site-port-busy-hint; автовыбор — non-goal change'а site-server-state, меняет привычный адрес).
 // Гонка до перезапуска не важна: занят снова — будет новая подсказка.
 const canListen = (port: number, host: string) =>
     new Promise<boolean>((resolve) => {
@@ -192,6 +201,61 @@ const freePortAfter = async (port: number, tries = 10): Promise<number | undefin
         if ((await canListen(p, '127.0.0.1')) && (await canListen(p, '::1'))) return p;
 };
 
+// `go to` и браузер для `--open` / `--open-change <id>` — общие для нового сервера и работающего (D7).
+// Короткого адреса change'а нет на сайте — предупреждаем, но адрес всё равно открываем: в watch change
+// могут собрать позже. BROWSER=none отключает браузер (CI/headless). Промис — чтобы вызывающий,
+// который сразу выходит, дождался запуска браузера.
+const announce = (
+    base: string,
+    program: { open?: boolean; openChange?: string },
+    hasPage: (route: string) => boolean
+): Promise<void> => {
+    const route = program.openChange ? redirectKey(['change', program.openChange]) : '';
+    const url = route ? `${base}/#${route}` : base;
+    console.log(`go to ${chalk.green(url)}`);
+    if (route && !hasPage(route))
+        console.error(
+            chalk.yellow(
+                `warning: the site has no page change/${program.openChange} — ${url} shows "not found" until a change with this id is built`
+            )
+        );
+    if (!(program.open || route) || process.env.BROWSER === 'none') return Promise.resolve();
+    return open(url).then(
+        () => {},
+        () => console.log(chalk.gray('could not open the browser automatically'))
+    );
+};
+
+// Сервер этого конфига уже работает (change site-server-state, D7): второй не поднимаем — он
+// пересобрал бы dist, который раздаёт первый. Возвращает код выхода: без `--open*` — 1 (процесс,
+// ожидавший запустить сервер, его не запустил), с ними — открыть адрес работающего и 0. Просили
+// watch (`-w` или `--agent`), а работающий без него — 1 и в любом случае: молча отдать сайт без
+// пересборки и замечаний агенту значило бы обмануть ожидание.
+export const reuseRunningServer = async (
+    state: ServerState,
+    program: { open?: boolean; openChange?: string; watch?: boolean; agent?: boolean }
+): Promise<number> => {
+    const running = `c4builder site is already running for this project at ${state.url} (pid ${state.pid})`;
+    if ((program.watch || program.agent === true) && !state.watch) {
+        console.error(
+            chalk.red(
+                `${running} without -w — stop that process and start c4builder site -w to get rebuilds and agent feedback`
+            )
+        );
+        return 1;
+    }
+    if (!program.open && !program.openChange) {
+        console.error(
+            chalk.red(`${running} — open it, or stop that process first; check it with c4builder status`)
+        );
+        return 1;
+    }
+    console.log(running);
+    const exists = program.openChange ? await hasChangePage(state.port, program.openChange) : true;
+    await announce(state.url, program, () => exists);
+    return 0;
+};
+
 export default (
     currentConfiguration: BuildOptions,
     program: {
@@ -206,6 +270,9 @@ export default (
         pollMs?: number;
         idleMs?: number;
         mailboxTtlMs?: number;
+        // Конфиг проекта: рядом с ним — файл состояния сервера (change site-server-state, D1). Без
+        // него (тесты, запускающие сервер в своём процессе) файл не пишется.
+        configPath?: string;
     },
     reloadEmitter?: EventEmitter,
     // Итог текущей сборки (страницы → исходники, переадресации) — геттером, чтобы видеть
@@ -228,6 +295,48 @@ export default (
     // (в окне build.js → emptyDir(DIST_FOLDER) перед записью).
     let lastIndexHtml: string | null = null;
     let sweeper: NodeJS.Timeout | undefined;
+
+    // Host — только локальный: при DNS rebinding чужой домен резолвится в 127.0.0.1 и
+    // присылает согласованные Host и Origin, сверка Origin с одним Host это пропускает.
+    const localHost = (req: express.Request): string | undefined => {
+        const host = req.get('host');
+        const local = [`127.0.0.1:${req.socket.localPort}`, `localhost:${req.socket.localPort}`];
+        return host && local.includes(host) ? host : undefined;
+    };
+    const fromSite = (req: express.Request): boolean => {
+        const host = localHost(req);
+        return !!host && req.get('origin') === `http://${host}`;
+    };
+    // Запрос команды `c4builder feedback`, а не страницы: нестандартный заголовок вынуждает
+    // браузер к preflight, на который сервер не отвечает (design D6), Origin у неё нет.
+    const fromFeedbackCommand = (req: express.Request): boolean =>
+        !!localHost(req) && !req.get('origin') && req.get(FEEDBACK_HEADER) === '1';
+    // Слушатели и пачки без адресата для эндпоинта состояния: ящики есть только в блоке `-w`,
+    // без него списки пусты.
+    let feedbackState = (): Pick<ServerStatus, 'listeners' | 'unaddressed'> => ({
+        listeners: [],
+        unaddressed: 0
+    });
+
+    // Состояние сервера для `c4builder status` и клиентов, ищущих сервер своего проекта (change
+    // site-server-state, D5) — во всех режимах. Защита — как у /next: имена слушателей чужой
+    // странице ни к чему.
+    app.get(STATUS_PATH, (req, res) => {
+        if (!fromFeedbackCommand(req)) {
+            res.status(403).json({ error: 'served only to c4builder commands' });
+            return;
+        }
+        const status: ServerStatus = {
+            pid: process.pid,
+            port: Number(port),
+            version: pkg.version,
+            watch: liveReloadEnabled,
+            project: program.configPath ? projectId(program.configPath) : null,
+            agent: { on: liveReloadEnabled && agent.on, name: agent.name },
+            ...feedbackState()
+        };
+        res.json(status);
+    });
 
     // reloadEmitter в условии — сужает тип до EventEmitter внутри блока (liveReloadEnabled
     // истинно ⟺ reloadEmitter задан), поэтому дальше без non-null assertions.
@@ -259,6 +368,7 @@ export default (
                 })
             )
         });
+        feedbackState = () => ({ listeners: agentState().mailboxes, unaddressed: unaddressed.length });
         // Событие — только когда снимок изменился: publish зовётся после любой смены очередей.
         let published = JSON.stringify(agentState());
         const publish = (): void => {
@@ -322,54 +432,31 @@ export default (
         // localhost:<port> не должны видеть чужой черновик.
         const projectKey = createHash('sha1').update(process.cwd()).digest('hex').slice(0, 8);
         const reviewLog = currentConfiguration.REVIEW_LOG;
-        const questions = currentConfiguration.QUESTIONS;
         // Кэш проверки обновлений читается на каждую страницу: результат фоновой проверки,
         // запущенной этим же `site -w`, виден со следующей перезагрузки без рестарта сервера.
         const inject = (html: string): string => {
             const next = pendingUpdate();
             const snippet =
                 LIVERELOAD_SNIPPET +
-                commentsSnippet(currentConfiguration.QUESTIONS_HEADING, {
-                    questions,
+                commentsSnippet({
                     agent: agent.on,
                     mailboxes: agentState().mailboxes,
                     project: projectKey,
                     language: currentConfiguration.UI_LANGUAGE,
-                    reviewLog: reviewLog && {
-                        file: reviewLog.file,
-                        heading: reviewLog.heading,
-                        label: reviewLog.label
-                    }
+                    reviewLog: reviewLog && { file: reviewLog.file, heading: reviewLog.heading },
+                    labels: buttonLabels(currentConfiguration.BUTTONS, reviewLog?.label)
                 }) +
                 (next ? updateBanner(next) : '');
             if (html.includes('</body>')) return html.replace('</body>', `${snippet}</body>`);
             return html + snippet;
         };
 
-        // Комментарий к выделенному тексту → раздел вопросов исходного файла страницы
-        // (change site-comments, design D3). Сервер слушает только 127.0.0.1, но страница
-        // любого сайта в браузере может слать POST на localhost — требуем Origin самого сайта.
+        // Комментарий к выделенному тексту → журнал ревью или агент (change site-comments,
+        // design D3). Сервер слушает только 127.0.0.1, но страница любого сайта в браузере может
+        // слать POST на localhost — требуем Origin самого сайта.
         const str = (v: unknown): string => (typeof v === 'string' ? v : '');
-        const heading = currentConfiguration.QUESTIONS_HEADING;
-        // Host — только локальный: при DNS rebinding чужой домен резолвится в 127.0.0.1 и
-        // присылает согласованные Host и Origin, сверка Origin с одним Host это пропускает.
-        const localHost = (req: express.Request): string | undefined => {
-            const host = req.get('host');
-            const local = [`127.0.0.1:${req.socket.localPort}`, `localhost:${req.socket.localPort}`];
-            return host && local.includes(host) ? host : undefined;
-        };
-        const fromSite = (req: express.Request): boolean => {
-            const host = localHost(req);
-            return !!host && req.get('origin') === `http://${host}`;
-        };
-        // Запрос команды `c4builder feedback`, а не страницы: нестандартный заголовок вынуждает
-        // браузер к preflight, на который сервер не отвечает (design D6), Origin у неё нет.
-        const fromFeedbackCommand = (req: express.Request): boolean =>
-            !!localHost(req) && !req.get('origin') && req.get(FEEDBACK_HEADER) === '1';
-        // Общая часть POST/DELETE: проверка Origin и исходный файл страницы из тела запроса.
-        // Ошибка уже отправлена клиенту, когда возвращается undefined.
         // Страница сайта из тела/запроса → её исходники внутри проекта (путь нормализован, `..` и
-        // неизвестная страница — undefined). Общее для вопросов и журнала ревью.
+        // неизвестная страница — undefined).
         const cwd = process.cwd();
         const relOf = (file: string): string => path.relative(cwd, file).split(path.sep).join('/');
         const localSources = (raw: string): { page: string; sources: string[] } | undefined => {
@@ -377,10 +464,14 @@ export default (
             const sources = page.startsWith('..') ? undefined : pages().get(page);
             return sources && { page, sources: sources.filter((s) => s.startsWith(cwd + path.sep)) };
         };
+        // Исходник страницы — первый существующий файл: от него ищется журнал и берутся
+        // `{artifact}`/`{page}` строки.
+        const firstSource = (files: string[]): string | undefined => files.find((f) => fs.existsSync(f));
+        // Проверка Origin и исходный файл страницы из тела запроса; ошибка уже отправлена
+        // клиенту, когда возвращается undefined.
         const resolveTarget = (
             req: express.Request,
-            res: express.Response,
-            heading: string
+            res: express.Response
         ): { file: string; rel: string; body: Record<string, unknown> } | undefined => {
             if (!fromSite(req)) {
                 res.status(403).json({ error: 'comments are accepted only from the site itself' });
@@ -392,7 +483,7 @@ export default (
                 res.status(404).json({ error: `unknown page: ${str(body.page)}` });
                 return undefined;
             }
-            const file = pickSource(found.sources, heading);
+            const file = firstSource(found.sources);
             if (!file) {
                 res.status(404).json({ error: 'this page has no source file to write to' });
                 return undefined;
@@ -420,57 +511,7 @@ export default (
             return { comment, quote, section };
         };
 
-        // `questions: false` — маршрутов нет, как и кнопки.
-        if (questions)
-            app.post(COMMENTS_PATH, express.json({ limit: '64kb' }), (req, res) => {
-                const target = resolveTarget(req, res, heading);
-                if (!target) return;
-                const { file, rel, body } = target;
-                const parsed = commentBody(body, res);
-                if (!parsed) return;
-                const { comment, quote, section } = parsed;
-                try {
-                    const number = writeQuestion(file, heading, formatQuestion({ comment, quote, section }));
-                    console.log(chalk.gray(`comment added to ${rel}${number ? ` as #${number}` : ''}`));
-                    res.json({ file: rel, number });
-                } catch (e) {
-                    res.status(500).json({ error: `could not write the comment: ${(e as Error).message}` });
-                }
-            });
-
-        // Удаление вопроса: по номеру (числовая таблица) и тексту, как он виден на странице.
-        if (questions)
-            app.delete(COMMENTS_PATH, express.json({ limit: '64kb' }), (req, res) => {
-                const target = resolveTarget(req, res, heading);
-                if (!target) return;
-                const { file, rel, body } = target;
-                const text = str(body.text).trim();
-                if (!text) {
-                    res.status(400).json({ error: 'question text is empty' });
-                    return;
-                }
-                const number =
-                    typeof body.number === 'number' ? body.number : Number(str(body.number)) || null;
-                try {
-                    const result = deleteQuestion(file, heading, { number, text });
-                    if ('error' in result) {
-                        const messages = {
-                            'not-found': `question not found in ${rel} — the page may be stale, reload it`,
-                            ambiguous: `several identical questions in ${rel} — remove it by hand`
-                        };
-                        res.status(result.error === 'not-found' ? 404 : 409).json({
-                            error: messages[result.error]
-                        });
-                        return;
-                    }
-                    console.log(chalk.gray(`comment removed from ${rel}`));
-                    res.json({ file: rel });
-                } catch (e) {
-                    res.status(500).json({ error: `could not remove the comment: ${(e as Error).message}` });
-                }
-            });
-
-        // Замечание в журнал ревью (change site-review-log): файл — ближайший `reviewLog.file` от
+        // Замечание в журнал ревью (change site-review-log): файл — ближайший `comments.file` от
         // исходника страницы вверх до корня проекта; автор — из конфига либо git user.name того,
         // кто запустил `site -w` (журнал правится на машине ревьюера).
         if (reviewLog) {
@@ -481,8 +522,7 @@ export default (
             // `author: ""` в конфиге (как в примере документации) — не задан, а не пустой автор.
             const author = reviewLog.author || gitUser();
             app.post(REVIEW_LOG_PATH, express.json({ limit: '64kb' }), (req, res) => {
-                // Исходник страницы — тот же, что у вопроса: заголовок журнала в исходниках не ищем.
-                const target = resolveTarget(req, res, heading);
+                const target = resolveTarget(req, res);
                 if (!target) return;
                 const { file: source, body } = target;
                 const parsed = commentBody(body, res);
@@ -527,7 +567,7 @@ export default (
                     res.json({ file: relOf(own), log: true });
                     return;
                 }
-                const source = found && pickSource(found.sources, heading);
+                const source = found && firstSource(found.sources);
                 const file = source && findReviewFile(path.dirname(source), reviewLog.file, cwd);
                 if (!source || !file) {
                     res.status(404).json({
@@ -546,7 +586,7 @@ export default (
                     res.status(500).json({ error: `could not read the review log: ${(e as Error).message}` });
                 }
             });
-            // Удаление строки журнала — как у вопроса: номер и текст ячейки, видимой на странице, плюс
+            // Удаление строки журнала: номер и текст ячейки, видимой на странице, плюс
             // все ячейки строки (таблицы без номеров: одна ячейка бывает общей у нескольких строк).
             app.delete(REVIEW_LOG_PATH, express.json({ limit: '64kb' }), (req, res) => {
                 if (!fromSite(req)) {
@@ -731,27 +771,6 @@ export default (
             res.status(204).end();
         });
 
-        // Адрес страницы change'а по имени слушателя (change site-agent-review, D6): `c4builder
-        // feedback --as <name>` печатает его в stderr. Защита — как у /next: чужой странице
-        // список change'ей ни к чему.
-        app.get(PAGE_PATH, (req, res) => {
-            if (!fromFeedbackCommand(req)) {
-                res.status(403).json({ error: 'served only to the c4builder feedback command' });
-                return;
-            }
-            const name = req.query.as;
-            if (typeof name !== 'string' || !LISTENER_NAME.test(name)) {
-                res.status(400).json({ error: 'as=<name> is required' });
-                return;
-            }
-            const key = redirectKey(['change', name]);
-            if (!result().redirects.has(key)) {
-                res.status(404).json({ error: `no page for change/${name}` });
-                return;
-            }
-            res.json({ url: `/#${key}` });
-        });
-
         app.use((req, res, next) => {
             if (req.method !== 'GET') return next();
             let urlPath: string;
@@ -791,6 +810,28 @@ export default (
         });
     }
 
+    // Адрес страницы change'а по имени слушателя (change site-agent-review, D6): `c4builder
+    // feedback --as <name>` печатает его в stderr, повторный `site --open-change <id>` проверяет им
+    // страницу на работающем сервере (change site-server-state, D7) — поэтому во всех режимах.
+    // Защита — как у /next: чужой странице список change'ей ни к чему.
+    app.get(PAGE_PATH, (req, res) => {
+        if (!fromFeedbackCommand(req)) {
+            res.status(403).json({ error: 'served only to the c4builder feedback command' });
+            return;
+        }
+        const name = req.query.as;
+        if (typeof name !== 'string' || !LISTENER_NAME.test(name)) {
+            res.status(400).json({ error: 'as=<name> is required' });
+            return;
+        }
+        const key = redirectKey(['change', name]);
+        if (!result().redirects.has(key)) {
+            res.status(404).json({ error: `no page for change/${name}` });
+            return;
+        }
+        res.json({ url: `/#${key}` });
+    });
+
     // express 5 / path-to-regexp v8 запрещает голый '/*' как путь маршрута — раздаём
     // статику через app.use (тот же эффект: fallthrough-обработчик всех GET).
     app.use(express.static(distFolder));
@@ -800,28 +841,45 @@ export default (
         // server.on('error') ниже, а «serving» печатаем только после настоящего listen.
         const server = app.listen(port as number, '127.0.0.1', (err?: Error) => {
             if (err) return;
-            const base = `http://localhost:${port}`;
-            // `--open-change <id>`: короткий адрес change'а. Ключа нет в карте — предупреждаем, но
-            // адрес всё равно открываем: в watch change могут собрать позже.
-            const route = program.openChange ? redirectKey(['change', program.openChange]) : '';
-            const url = route ? `${base}/#${route}` : base;
+            const base = shownUrl(Number(port));
+            // Файл состояния — только после настоящего listen и до resolve (D2): на занятом порту
+            // его нет, а файл уже работающего сервера не трогаем. Удаление — на exit (сигналы
+            // переводит в exit dispatch) и при закрытии сервера, только своего pid (D3).
+            const { configPath } = program;
+            if (configPath) {
+                try {
+                    writeServerState(configPath, {
+                        port: Number(port),
+                        url: base,
+                        pid: process.pid,
+                        version: pkg.version,
+                        watch: liveReloadEnabled,
+                        startedAt: new Date().toISOString()
+                    });
+                    const remove = () => removeServerState(configPath);
+                    process.once('exit', remove);
+                    // Сервер закрыт в живом процессе (тесты, встраивание) — обработчик exit больше не нужен.
+                    server.once('close', () => {
+                        process.off('exit', remove);
+                        remove();
+                    });
+                } catch (e) {
+                    // Каталог только для чтения: сервер работает, клиенты берут порт из -p/webPort.
+                    console.error(
+                        chalk.yellow(
+                            `warning: could not write the server state file: ${(e as Error).message} — c4builder status, feedback and doctor will use -p or webPort`
+                        )
+                    );
+                }
+            }
             console.log('serving your docsify site');
-            console.log(`go to ${chalk.green(url)}`);
-            if (route && !result().redirects.has(route))
-                console.error(
-                    chalk.yellow(
-                        `warning: the site has no page change/${program.openChange} — ${url} shows "not found" until a change with this id is built`
-                    )
-                );
+            void announce(base, program, (route) => result().redirects.has(route));
             if (liveReloadEnabled)
                 console.log(chalk.gray('livereload enabled (browser auto-reload on rebuild)'));
             if (liveReloadEnabled && agent.on)
                 console.log(
                     `agent mode (${agent.name}): page feedback goes to "c4builder feedback --wait --as <name>${program.port ? ` -p ${port}` : ''}" — run it in the background, <name> is your change or task; run it again with the same name after each batch`
                 );
-            // --open/--open-change: открываем браузер один раз при старте; BROWSER=none отключает (CI/headless)
-            if ((program.open || route) && process.env.BROWSER !== 'none')
-                open(url).catch(() => console.log(chalk.gray('could not open the browser automatically')));
             resolve(server);
         });
         server.on('close', () => clearInterval(sweeper));

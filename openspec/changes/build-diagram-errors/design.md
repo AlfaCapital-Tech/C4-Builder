@@ -31,15 +31,22 @@
 
 ## Decisions
 
-1. **Модуль `src/core/render/errors.ts`**: `describeRenderError(err, { lib?: boolean }): string[]`
-   — короткие строки-проблемы (без префикса файла); `isVerbose(opts)` не здесь, а в CLI.
-   PlantUML с блоком `ERROR` → `line N+1: msg` (`.iuml` — без номера); `Bpmn/Mermaid/WireflowError`
-   → `problems`; ошибка процесса PlantUML без блока `ERROR` → первая строка сообщения +
-   ` (run with --verbose for details)`; прочее — `message` как сейчас в `check`. Перенос
-   PUML-regex из `check.ts` сюда; `check.ts` вызывает этот же разборщик (его вывод не меняется —
-   проверяется существующими тестами `check`).
-   *Альтернатива*: парсить в `renderDiagram` и бросать типизированную ошибку — отвергнуто:
-   `check` для `.iuml` делает повтор с C4-контекстом по сырому тексту, проще разбирать на краю.
+1. **Структура ошибки у источника, общий текст — `problem.ts`.** Все движки бросают
+   `DiagramError` (`problem.ts`, change check-output-format): `problems` — короткие строки без
+   префикса файла, `details` — структура для `check --format`. PlantUML — так же: `renderDiagram`
+   при коде выхода ≠ 0 разбирает блок `ERROR` / позиция / описание stderr и бросает
+   `PlantUmlInputError extends DiagramError` (`line N+1: msg`, message — весь вывод процесса для
+   `--verbose`; `\r\n` java на Windows нормализуется до разбора); сбой процесса без блока
+   `ERROR` — обычная `Error`. `check` для `.iuml` повторяет с C4-контекстом по классу ошибки и
+   снимает номер строки (позиция относится к обёртке). Модуль `src/core/render/errors.ts` ничего
+   не разбирает заново: `describeRenderError(err)` — `problems` у `DiagramError`, у сбоя процесса
+   PlantUML — первая строка + ` (run with --verbose for details)`, прочее — `errorText`;
+   `placeholderText`, `errorDetails`, `DiagramEnvironmentError`, `DiagramBuildError`.
+   Воркер `site -w` (`jsdomworker.ts`) передаёт `details`/`problems` через границу потока, а
+   `offthread.ts` собирает `DiagramError` заново — класс `BpmnError`/`MermaidError` для вывода не
+   нужен. *Альтернатива*: свой разборщик stderr в `errors.ts` поверх текста ошибки (первая версия
+   PR) — отвергнуто на ревью: дублировал `problem.ts`, а `check` и сборка разбирали один stderr в
+   двух местах.
 
 2. **Сбор ошибок без изменения очереди.** В строгом режиме `render()` ошибку входа не бросает,
    а кладёт `{ index, file, problems, cause }` в массив `failures` замыкания `generateImages` и
@@ -54,8 +61,8 @@
 
 3. **Где печатать.** `build.ts` ловит `DiagramBuildError` в `catch` перед `finally` и печатает
    строки `✗ <file>: <problem>` в stderr (`console.error`) — так они идут до `build aborted`.
-   Ошибку перебрасывает с флагом «уже сообщено». `index.ts`: для `DiagramBuildError` — без
-   стека, `process.exit(1)`; в verbose-режиме перед выходом — `cause.message` (полный stderr
+   Ошибку перебрасывает. `index.ts`: для `DiagramBuildError` — без стека, выход кодом 1 через
+   общий `exitAfterWrite` (`util/exit.ts`, тот же, что у `check`: дописать stdout/stderr в pipe); в verbose-режиме перед выходом — `cause.message` (полный stderr
    движка) и `cause.stack` каждой ошибки. Путь `<file>`: `source ?? relative(cwd, entryPath)`
    (POSIX-разделители) — тот же, что уже вычисляется в `render()` для сообщений движков.
    Teardown D2/BPMN/mermaid остаётся в `finally` `dispatch` и выполняется до выхода.

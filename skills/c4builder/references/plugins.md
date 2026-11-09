@@ -43,6 +43,7 @@ print an `Output name collision` warning — rename one.
 | `groupKey` | — | `.openspec.yaml` key with the change's group (e.g. `x-team`); when set, top-level changes go to `Changes/<group>/<id>`, the Changes table and the archive get per-group sections |
 | `nameKey` | — | `.openspec.yaml` key with the change's name (e.g. `x-name`); when set, the name labels the top-level change and is its page path segment (falls back to the id on `/`, `#`, `?` or a duplicate) |
 | `columns` | — | extra Changes table columns: from `.openspec.yaml` — `{ "key": "x-assignee", "title": "Assignee" }`; from a markdown table of an artifact (rows whose `whenEmpty` cell is empty, values matching regex `exclude` left out, one per line) — `` { "title": "Awaiting review", "artifact": "review", "column": "Who", "whenEmpty": "Status", "exclude": "`" } ``; missing value — `—` |
+| `filter` | — | Changes table columns with a dropdown filter on the site pages: `Schema` and titles of `columns` entries, e.g. `["Schema", "Assignee"]`; multi-select, AND between columns, the selection is kept in the browser |
 
 Change page addresses: `#/<mount>/Changes/<group>/<name or id>/<name or id>`, nested
 `…/<parent>/<id tail>/<id tail>`, archived `#/<mount>/Archive/<date>-<id>/<date>-<id>`. Do not
@@ -113,7 +114,7 @@ link can view"), which the build notes with one log line.
 ## Custom plugins
 
 A plugin is an ESM module whose default export is an object with `name` and optional
-`options` (zod schema), `watchPaths`, `assets`, `requires`, `afterScan(ctx, opts)` (add
+`options` (zod schema), `watchPaths`, `assets` (file paths or `{ name, content }` strings), `requires`, `afterScan(ctx, opts)` (add
 virtual pages with `ctx.addPage`, short addresses with `ctx.addRedirect(from, to)` — a repeated
 short path fails the build) and `afterBuild(ctx, opts)`. See the "Writing a plugin"
 section of the c4builder README for the full contract and an example.

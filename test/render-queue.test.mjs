@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import {
     BpmnError,
+    DiagramError,
     build,
     DiagramQueue,
     describeRenderError,
@@ -473,19 +474,23 @@ describe('renderOffThread', () => {
         expect(Buffer.compare(off, await renderBpmn(BPMN, 'a.bpmn'))).toBe(0);
     }, 120_000);
 
-    it('ошибка движка приходит тем же классом и с тем же message, воркер жив', async () => {
+    it('ошибка движка приходит DiagramError с теми же message, details и problems, воркер жив', async () => {
         const bad = 'flowchart LR\n  A -->';
         const main = await renderMermaid(bad, 'bad.mmd').catch((e) => e);
         const off = await renderOffThread('mermaid', bad, 'bad.mmd').catch((e) => e);
-        expect(off).toBeInstanceOf(MermaidError);
+        expect(main).toBeInstanceOf(MermaidError);
+        expect(off).toBeInstanceOf(DiagramError);
         expect(off.message).toBe(main.message);
+        expect(off.details).toEqual(main.details);
         // Текст `site -w` (offThread) равен тексту check и обычной сборки.
         expect(describeRenderError(off)).toEqual(describeRenderError(main));
         const badBpmn = BPMN.replace('<bpmn:sequenceFlow id="F2" sourceRef="T" targetRef="E"/>', '');
         const mainBpmn = await renderBpmn(badBpmn, 'a.bpmn').catch((e) => e);
         const offBpmn = await renderOffThread('bpmn', badBpmn, 'a.bpmn').catch((e) => e);
-        expect(offBpmn).toBeInstanceOf(BpmnError);
+        expect(mainBpmn).toBeInstanceOf(BpmnError);
+        expect(offBpmn).toBeInstanceOf(DiagramError);
         expect(describeRenderError(offBpmn)).toEqual(mainBpmn.problems);
+        expect(offBpmn.details).toEqual(mainBpmn.details);
         expect(offBpmn.problems.length).toBeGreaterThan(0);
         expect(
             (await renderOffThread('mermaid', 'flowchart LR\n  A --> B', 'ok.mmd')).length

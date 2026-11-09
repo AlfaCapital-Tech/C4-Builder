@@ -53,7 +53,7 @@ How the source tree becomes pages:
 2. **Check every diagram you changed** — fast, no project build, writes nothing:
 
    ```bash
-   c4builder check src/context.puml "src/1 Internet Banking System/system.puml"
+   c4builder check --strict src/context.puml "src/1 Internet Banking System/system.puml"
    ```
 
    Exit code 0 means every file compiles. Otherwise each broken file is reported as
@@ -62,7 +62,16 @@ How the source tree becomes pages:
    BPMN problems are `✗ <file>: <element id> [<rule>] <description>`, one line each;
    mermaid errors are `✗ <file>: line <N>: <message>`; wireflow problems are
    `✗ <file>: <problem>` with the node or edge id, one line each.
-   Fix and re-run until the exit code is 0. A changed `.iuml` is checked directly too: a
+   Fix and re-run until the exit code is 0. With `--strict` warnings `⚠ <file>: …` fail the
+   file too (without it they keep the exit code 0): `⚠ <file>: line <N>: Rel to undeclared
+   element "<alias>"` is a typo in a relation alias (PlantUML silently drew an empty circle for
+   it). Rather than parse these shapes, use `c4builder check --strict --format json <file...>`:
+   stdout is only a JSON array of findings `{file, line, column, engine, severity, rule,
+   element, message}` (`null` where the engine has no such field; `[]` when all is fine), the
+   exit code is the same. `message` carries no position (it is in `line`/`column`); BPMN and
+   wireflow findings get the line of the element's `id`;
+   `rule: "undeclared-element"` with `element` is the relation alias typo. `--json` is the
+   same. A list of paths can come from a file or stdin: `--files-from <file|->`, one per line. A changed `.iuml` is checked directly too: a
    styles file calling C4 macros (`UpdateElementStyle`) is checked with the C4 stdlib
    included. Same engines as the build (bundled PlantUML jar, bundled D2, BPMN pipeline, mermaid, wireflow), no
    `.c4builder` needed.
@@ -89,28 +98,30 @@ How the source tree becomes pages:
    address `#/change/<change-id>` (a warning on stderr when the site has no such change). It
    never exits — start it in the background or leave it to the user. A taken port exits with
    `port 3000 is already in use — pass a different one, e.g. -p 3001`: restart with that `-p`
-   and pass the same `-p` to `c4builder feedback` (the server never picks another port itself). The server comes up right
+   (the server never picks another port itself). `c4builder status` tells whether the site of
+   this project runs and where (exit code 0 / 1, `--json`); `c4builder feedback` and
+   `c4builder doctor` find it the same way, without `-p`. A second `c4builder --site -w` for the same
+   project exits with code 1 and the address of the running one. The server comes up right
    after `serving your docsify site` (and `-o`/`--open-change` opens the browser then), before the diagrams are
    rendered: on a cold cache they show a `rendering…` placeholder and are drawn in the
    background (`rendering N diagrams in background…` → `rendered N diagrams in T s`), the page
    open in the browser first; a render error shows an error placeholder and `✗` in the log,
    the server stays up. Its output is for viewing, not for publishing — run `c4builder` for
-   that. `c4builder site` builds and serves without watching (also never exits). In `-w` a
-   human can select text on a page and add a question: it lands in the source `.md` under the
-   `questionsHeading` section (`Open questions` by default) — read it there, not in `docs/`.
-   With the `reviewLog` key a **Review** button writes a remark as a row of the nearest
-   `reviewLog.file` (`review.md`) instead.
+   that. `c4builder site` builds and serves without watching (also never exits). In `-w`, with
+   the `comments` key (former name `reviewLog`), a human can select text on a page and press **Comment**: the comment
+   lands as a row of the nearest `comments.file` (`review.md`) — read it there, not in `docs/`.
+   The `buttons` key relabels the selection buttons (`agent`, `comment`).
    `C4BUILDER_RENDER_CONCURRENCY=<n>` sets the number of parallel PlantUML processes (default
    `min(4, CPU − 1)`); the output does not depend on it.
 
 ## Feedback from the page
 
 When the user wants to look at the pages and tell you what to fix, use the `c4builder-review`
-skill (`/c4builder-review [change-id|page]`): it checks the server, gives the link to the page and
+skill (`/c4builder-review [change-id|page]`): it checks the server with `c4builder status`, gives the link to the page and
 runs the batch loop.
 
 In short: under an agent (`CLAUDECODE`, `CODEX_THREAD_ID`, `GEMINI_CLI`, `OPENCODE`, `COPILOT_CLI`,
-`AI_AGENT`, or `--agent`) `c4builder --site -w` adds a **Feedback** button to text selected on a
+`AI_AGENT`, or `--agent`) `c4builder --site -w` adds a **Tell agent** button to text selected on a
 page. The comments do not go into the files: `c4builder feedback --wait --as <name>`, run in the
 background with your change or task as `<name>`, exits with one batch on stdout. When `<name>` is an
 OpenSpec change of the site, it first prints `Change page: http://localhost:<port>/#/change/<name>`
@@ -225,6 +236,8 @@ reads, its `fix:` lines say what to run.
   agent hangs.
 - Building the whole project to validate one edited diagram — `c4builder check <file>` is faster
   and writes nothing.
+- Ignoring `⚠ … undeclared element` because the exit code is 0 — the diagram has a stray empty
+  element instead of the intended relation.
 - A page "missing" from the output because its file or folder starts with `_`.
 - `generateLocalImages: false` in a project with `.d2`, `.bpmn`, `.mmd` or `.wireflow.json` files — they have no online
   renderer, the build stops with an error.

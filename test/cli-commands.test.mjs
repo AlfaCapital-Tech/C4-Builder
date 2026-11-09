@@ -34,7 +34,9 @@ describe('позиционные подкоманды CLI', () => {
         const res = run('nwe');
         expect(res.status).toBe(1);
         expect(res.stderr).toContain('unknown command: nwe');
-        expect(res.stderr).toContain('check, jre, site, new, config, update, feedback, skills');
+        expect(res.stderr).toContain(
+            'check, jre, site, new, config, update, feedback, skills, doctor, status'
+        );
         expect(listTree(dir)).toEqual(before); // ни .c4builder, ни docs
     });
 
@@ -76,7 +78,18 @@ describe('справочные команды без побочных эффек
         const res = run('--help');
         expect(res.status, res.stderr).toBe(0);
         expect(res.stdout).toContain('Usage: c4builder');
-        for (const cmd of ['check', 'jre', 'site', 'new', 'config', 'update', 'feedback', 'skills', 'doctor'])
+        for (const cmd of [
+            'check',
+            'jre',
+            'site',
+            'new',
+            'config',
+            'update',
+            'feedback',
+            'skills',
+            'doctor',
+            'status'
+        ])
             expect(res.stdout).toMatch(new RegExp(`^  ${cmd}\\b`, 'm'));
     });
 

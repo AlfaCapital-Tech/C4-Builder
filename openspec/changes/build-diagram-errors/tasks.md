@@ -2,8 +2,9 @@
 
 ## 1. Общий разборщик ошибок движка
 
-- [x] 1.1 Создать `src/core/render/errors.ts` с `describeRenderError(err, { lib })` (design §1): PlantUML-блок `ERROR` → `line N+1: msg`, `.iuml` — без номера, `Bpmn/Mermaid/WireflowError` → `problems`, сбой процесса PlantUML без `ERROR` → первая строка + `(run with --verbose for details)`, прочее — `message`; юнит-тест на каждый случай (включая stderr из issue с Java-стеком) проходит
-- [x] 1.2 Перевести `src/cli/commands/check.ts` на разборщик (повтор `.iuml` с C4-контекстом сохранить); `npm run test:unit -- check` зелёный без правок ожиданий
+- [x] 1.1 `renderDiagram` (`diagrams.ts`): блок `ERROR` stderr → `PlantUmlInputError extends DiagramError` (`line N+1: msg` в `problems`, позиция в `details`, весь вывод в message; CRLF нормализован), сбой процесса — `Error`; `src/core/render/errors.ts` без своего разбора: `describeRenderError(err)` — `problems` / первая строка + `(run with --verbose for details)` / `errorText`; `placeholderText`, `errorDetails`, `DiagramEnvironmentError`, `DiagramBuildError`; юнит-тесты (включая stderr из issue с Java-стеком) проходят
+- [x] 1.2 `src/cli/commands/check.ts`: повтор `.iuml` с C4-контекстом по классу `PlantUmlInputError`, без собственного regex; текстовый вывод через `describeRenderError`, `--verbose` печатает `errorDetails`; `npm run test:unit -- check` зелёный
+- [x] 1.3 Один способ завершения процесса — `exitAfterWrite` в `src/util/exit.ts` (из `check`), используется `check` и `index.ts`; предупреждения `⚠` всех движков (`warnings.ts`) — в stderr, одним потоком со строками `✗`; тесты `check` ждут `⚠` в stderr
 
 ## 2. Полный список ошибок в строгой сборке
 

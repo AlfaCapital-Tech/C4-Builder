@@ -41,9 +41,20 @@ GitLab CI, checking diagrams and publishing to GitLab Pages (`.c4builder` has
 
 ```yaml
 check:
-  image: ghcr.io/alfacapital-tech/c4builder:0.9.0
+  image: node:24
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  variables:
+    GIT_DEPTH: 0  # the MR base commit for git diff
   script:
-    - find src \( -name '*.puml' -o -name '*.d2' -o -name '*.bpmn' -o -name '*.mmd' -o -name '*.wireflow.json' -o -name wireflow.json \) -exec c4builder check {} +
+    - npm i -g @alfacapital-tech/c4builder@0.15.0
+    - git -c core.quotePath=false diff --name-only --diff-filter=d "$CI_MERGE_REQUEST_DIFF_BASE_SHA" HEAD
+      -- '*.puml' '*.iuml' '*.d2' '*.bpmn' '*.mmd' '*.wireflow.json' 'wireflow.json' '*/wireflow.json'
+      | c4builder check --strict --format gitlab --files-from - > gl-code-quality-report.json
+  artifacts:
+    when: always
+    reports:
+      codequality: gl-code-quality-report.json
 
 pages:
   image: ghcr.io/alfacapital-tech/c4builder:0.9.0
@@ -52,6 +63,39 @@ pages:
   artifacts:
     paths: [public]
 ```
+
+The `check` job checks the diagrams changed in the MR and puts findings into a GitLab Code
+Quality report: they show up in the MR widget and in the diff on the right line, not only in the
+job log. `when: always` keeps the report when the job fails. The c4builder image has no `git`, so
+the job runs on `node:24`, and c4builder downloads a JRE itself. `--format` and `--files-from` —
+since c4builder 0.15.0: the version is pinned, an older one fails the job on an unknown option.
+
+GitHub Actions, checking the diagrams changed in a PR with annotations in the diff:
+
+```yaml
+on: pull_request
+jobs:
+  diagrams:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - run: npm i -g @alfacapital-tech/c4builder@0.15.0
+      - run: >
+          git -c core.quotePath=false diff --name-only --diff-filter=d "origin/${{ github.base_ref }}...HEAD"
+          -- '*.puml' '*.iuml' '*.d2' '*.bpmn' '*.mmd' '*.wireflow.json' 'wireflow.json' '*/wireflow.json'
+          | c4builder check --strict --format github --files-from -
+```
+
+The list of changed files reaches `check` in one call through `--files-from -`, not through
+`xargs`: it splits a long list into several calls, and the GitLab report would become several
+JSON arrays in a row. `core.quotePath=false` keeps `git` from escaping non-ASCII characters in
+paths. If no diagrams changed in the PR, the list is empty: a machine format prints an empty
+report and exits with 0. The step needs no Java up front — c4builder downloads a JRE
+itself, and its messages go to stderr without mixing with the annotations. The format and the
+finding fields are in [CLI and configuration](05%20CLI%20and%20configuration/05%20CLI%20and%20configuration.md).
 
 GitHub Actions without Docker: Node from `setup-node`, Java from `setup-java` (or let c4builder
 download a JRE itself):
@@ -120,7 +164,9 @@ render. The log gets a `✗ <file>: line <N>: <message>` line for every broken d
 one run, with no stack traces and no ASCII banner; the full engine output comes with `c4builder -v`
 or the `DEBUG=c4builder` variable (see "Diagram errors in a build" on the
 [CLI and configuration](05%20CLI%20and%20configuration/05%20CLI%20and%20configuration.md) page). A
-separate quick `c4builder check` step on changed files prints the same lines before the full build.
+separate quick `c4builder check` step on changed files prints the same lines before the full build. With `--strict` the step fails on warnings too — for example, on a C4
+relation to an undeclared element, which the build only prints. With `--format github` or
+`--format gitlab` errors and warnings go straight into the PR/MR diff (snippets above).
 
 ## How this site is built
 

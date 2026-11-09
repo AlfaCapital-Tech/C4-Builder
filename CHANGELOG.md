@@ -11,6 +11,77 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
   engine output. Soft errors (`⚠`, `site -w`) use the same short text, and all diagram error lines
   and `build aborted` go to stderr; the ASCII banner and screen clearing appear only in a
   terminal (#62)
+- Warnings `⚠ <file>: …` of `c4builder check` and of the build go to stderr, like the `✗`
+  lines (stdout of `check` keeps only `✓` lines); exit codes do not change (#62)
+- **BREAKING** Site: the **Question** button of `site -w` is gone together with its routes, the
+  highlighting and removal of questions and the `questions` / `questionsHeading` keys (old configs
+  still load — the keys are ignored; questions already written stay in the `.md` as plain text).
+  Comments for people go to the review log (`comments`), changes — to the agent (#61)
+- Site: the selection buttons are named by recipient — **Comment** / «Комментарий» (the review log,
+  was **Review**; its popover button is **Add comment**) and **Tell agent** / «Сказать агенту» (was
+  **Feedback**). The agent bar no longer says review: **Send to agent** (was **Submit review**),
+  **Add** (was **Add to review**), **Remove**, `To agent: 2 pending (1 page)` (#61)
+- New `.c4builder` key `buttons`: `{ "agent": "…", "comment": "…" }` relabels the selection buttons,
+  shown as is in any interface language; `buttons.comment` overrides `reviewLog.label` (#61)
+- The `.c4builder` key of the review log is now `comments` (same fields, no `label` — use
+  `buttons.comment`); the former `reviewLog` is still read when `comments` is absent, its `label`
+  still labels the button (#61)
+- `c4builder check --format <text|json|github|gitlab>`: `json` prints one JSON array of findings
+  (`file`, `line`, `column`, `engine`, `severity`, `rule`, `element`, `message`) for all engines;
+  `github` prints workflow commands that GitHub Actions shows as annotations in the PR diff;
+  `gitlab` prints a GitLab Code Quality report for `artifacts: reports: codequality`. BPMN and
+  wireflow findings get the line of the element `id`, a D2 error in an imported file points to
+  that file. In these formats stdout holds only the report (JRE messages go to stderr), and
+  without files they print an empty report with exit code 0. `--json` is the same as
+  `--format json`; the text output and exit codes do not change. The site page "Docker and CI"
+  has ready jobs for GitHub Actions and GitLab CI (#65)
+- `c4builder check --files-from <file>` (`-` for stdin): also check the paths listed one per line,
+  empty lines skipped. The CI jobs pipe `git diff --name-only` into one `check` call, so a machine
+  format prints one report (with `xargs` a long list could become several JSON arrays). An empty
+  list is an empty report and exit code 0, in `text` too. `--format` and `--files-from` with any
+  other command or a build are now an error with exit code 1 instead of being ignored (#65)
+- A C4 relation to an undeclared alias (`Rel(u, nope, …)` with a typo — PlantUML silently draws an
+  empty circle) is a warning in `c4builder check` and in the build:
+  `⚠ <file>: line <N>: Rel to undeclared element "nope"`; covers `Rel*`, `BiRel*`, `RelIndex*` and
+  `Lay_*` called in the diagram file, plain `A --> B` arrows are not affected. The exit code does
+  not change; a diagram restored from the build cache is not re-checked (#60)
+- `c4builder check --strict` exits with code 1 on any warning (PlantUML, BPMN, wireflow) and prints
+  `✗ <file>: <K> warning(s), failing with --strict` — for CI and coding agents
+- `doctor skills` no longer reports duplicates from uninstalled Claude Code plugins: it reads the
+  installed plugins from `~/.claude/plugins/installed_plugins.json` instead of walking the plugin
+  cache, so leftovers marked `.orphaned_at`, old versions and plugins installed in other projects
+  do not count; an unrecognized registry is `skipped` (#74)
+- `site` / `--site [-w]` writes a state file next to the config while it runs —
+  `.c4builder.server.json` (`<file>.server.json` for `-c <file>`) with the port, address, pid,
+  version and watch mode — and removes it on Ctrl+C, `SIGTERM` or a normal exit; a file left by a
+  killed process is ignored. Add `.c4builder.server.json` to the `.gitignore` of existing projects
+  (the `c4builder new` template has it) (#64)
+- `c4builder status [--json]` — whether the site of this project is running: address, pid, version,
+  watch, agent mode, `feedback` listeners and their queues; exit code 0 — running, 1 — not. It only
+  reads and works outside a project. A c4builder server of another project on the port (a sibling
+  worktree with the same `webPort`) is not taken for this one: `running: false`, `busy: true` and
+  `otherProject` in JSON; a server that is alive but did not answer in time is
+  `running: true, responding: false` (#64)
+- `c4builder feedback` and `c4builder doctor runtime` find the running site by its state file:
+  without `-p` they take its port, otherwise `webPort` as before; `feedback` refuses a server of
+  another project, `doctor` warns about it (#64)
+- A second `site` / `--site -w` for the same config no longer builds and starts another server: it
+  prints `c4builder site is already running for this project at <url> (pid N)` and exits with code
+  1; with `--open` / `--open-change <id>` it opens that address of the running server and exits
+  with code 0; asked for `-w` (or `--agent`) while the running server has no `-w`, it exits with
+  code 1 and advises to restart it with `-w`. `SIGHUP` is not caught: `nohup` works as before (#64)
+- The `c4builder-review` and `c4builder` skills check the server with `c4builder status` instead of
+  `curl` and no longer pass `-p` to `feedback`
+- `openspec` plugin: the `filter` option — dropdown filters above the Changes tables (summary,
+  Changes page, group pages; checkboxes, a search box for long lists, a `Reset` button) that keep
+  only the rows with the selected `Schema` or extra-column values, e.g.
+  `"filter": ["Schema", "Assignee"]`; multi-select, AND between columns, a nested change is judged
+  by its own value and keeps its parent dimmed for context; the selection is stored in the browser
+  per column header and follows the reader across the pages; the script `changes-filter.js` is
+  linked on every site with the plugin, like its stylesheet
+- plugin contract: `assets.scripts` / `assets.styles` accept `{ name, content }` next to file
+  paths — the core writes the string to `dist/vendor/plugins/<name>/`, so a plugin keeps its own
+  site script in source like the core scripts
 
 ## v0.14.0
 

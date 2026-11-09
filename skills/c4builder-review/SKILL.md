@@ -1,23 +1,23 @@
 ---
 name: c4builder-review
-description: Review c4builder pages with a human right on the local site - the human selects text in c4builder --site -w and leaves comments with the Feedback button, the agent receives them in batches with c4builder feedback --wait --as <name>, edits the sources and waits for the next batch until Approve. Use when asked to discuss a change on the site, to show the pages or a design, to review a page, the design or OpenSpec artifacts, when the human says they will leave comments on the page, right after proposing an OpenSpec change in a repository with c4builder, and on /c4builder-review [change-id|page].
+description: Review c4builder pages with a human right on the local site - the human selects text in c4builder --site -w and leaves comments with the Tell agent button, the agent receives them in batches with c4builder feedback --wait --as <name>, edits the sources and waits for the next batch until Approve. Use when asked to discuss a change on the site, to show the pages or a design, to review a page, the design or OpenSpec artifacts, when the human says they will leave comments on the page, right after proposing an OpenSpec change in a repository with c4builder, and on /c4builder-review [change-id|page].
 ---
 
 # c4builder-review: page comments to the agent
 
 The human looks at the pages in the browser (`c4builder --site -w`), selects text and presses:
 
-- **Feedback** — a comment to you. It is not written to the files and comes to you in a batch:
-  **Send now** sends one comment, **Add to review** → **Submit review** sends several (from several
-  pages too), **Approve** means nothing more to change.
-- **Question** — a question for people: c4builder appends it to the source `.md` under the
-  `questionsHeading` section (`Open questions` by default). It is not a task for you — leave it
-  alone unless asked.
-- **Review** (only with the `reviewLog` key of `.c4builder`) — a remark for the review log: c4builder
-  appends it as a row of the nearest `reviewLog.file` (`review.md` by default). Not a task for you either.
+- **Tell agent** — a comment to you. It is not written to the files and comes to you in a batch:
+  **Send now** sends one comment, **Add** → **Send to agent** sends several (from several pages
+  too), **Approve** means nothing more to change.
+- **Comment** (only with the `comments` key of `.c4builder`, formerly `reviewLog`) — a comment for people in the review
+  log: c4builder appends it as a row of the nearest `comments.file` (`review.md` by default). It is
+  not a task for you — leave it alone unless asked.
 
-Invocation: `/c4builder-review [change-id|page]`. The port is `webPort` from `.c4builder`
-(`<port>` below); when the server runs with `-p <n>`, pass the same `-p <n>` to the commands below.
+The `buttons` key of `.c4builder` may relabel both buttons (`agent`, `comment`).
+
+Invocation: `/c4builder-review [change-id|page]`. `<port>` below is the port of the running site
+from `c4builder status` (step 1); the commands find the server of this project by themselves.
 
 The listener name (`<name>` below) is how the page picks the agent when several share one
 `site -w`: the change id from the argument, otherwise the name of your task. Letters, digits,
@@ -26,14 +26,31 @@ The listener name (`<name>` below) is how the page picks the agent when several 
 ## 1. Server
 
 ```bash
-curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:<port>/
+c4builder status
 ```
 
-`200` — the server is up; never start a second one. Otherwise ask the user to start
-`c4builder --site -w`, or ask whether you may start it yourself in the background — many teams
-keep the preview server in the human's hands. If it exits with `port <port> is already in use —
-pass a different one, e.g. -p <n>`, restart it with that `-p <n>`: `<port>` below is then `<n>`,
-and the commands take the same `-p <n>`.
+Exit code 0 — the site of this project is up: `<port>` below is the port in its first line
+`site is running at http://localhost:<port> (pid …)`; never start a second one (it would refuse
+with `c4builder site is already running for this project`). `listeners:` shows the other agents
+reviewing on the same site and their queues; `c4builder status --json` prints the same as one
+JSON object (`running`, `url`, `port`, `listeners`).
+
+`… but did not answer in time` (exit code 0) — the server is busy, usually with a build: wait a few
+seconds and run `c4builder status` again; never start a second one.
+
+`no c4builder site of this project on … — the port is used by the c4builder site of another
+project` (exit code 1) — another worktree's site holds the port: do not review on it; start this
+project's site on a free port, `c4builder --site -w -p <n>`.
+
+Exit code 1 (`no c4builder site on …`) — ask the user to start `c4builder --site -w`, or ask whether
+you may start it yourself in the background — many teams keep the preview server in the human's
+hands. If it exits with `port <port> is already in use — pass a different one, e.g. -p <n>`,
+restart it with that `-p <n>` and run `c4builder status` again: the commands below find the server
+by its state file, without `-p`.
+
+`unknown command: status` — the CLI is older than this skill: tell the user, `c4builder update`
+updates it (only when they agree). Until then `<port>` is `webPort` from `.c4builder`, and a server
+on another port needs the same `-p <n>` in `c4builder feedback`.
 
 The server answers right after `serving your docsify site`, before the diagrams are rendered: on
 a cold cache the pages show `rendering…` placeholders that turn into images by themselves, the
@@ -47,8 +64,8 @@ broken diagram worth fixing before the human reaches it.
   — the short permanent address the `openspec` plugin declares for every change (active, nested or
   archived). It does not depend on the `mount`, `groupKey` and `nameKey` options, and the browser
   swaps it for the real page path. Do not search the build output and do not build the long path
-  by hand. `curl` cannot check a `#/…` address — the hash never reaches the server: check `/`
-  (step 1) and the `Change page: …` line that `c4builder feedback --as <change-id>` prints on
+  by hand. No command can check a `#/…` address — the hash never reaches the server: rely on
+  `c4builder status` (step 1) and the `Change page: …` line that `c4builder feedback --as <change-id>` prints on
   stderr in step 3. No such line means the site has no change with this id: a typo, not built yet
   (the next rebuild adds it), or a CLI older than 0.10.0 — only then fall back to the build output:
   `find <distFolder> -path '*<change-id>*' -name '*.md' | head` (`distFolder` from `.c4builder`,
@@ -58,8 +75,8 @@ broken diagram worth fixing before the human reaches it.
   `http://localhost:<port>/#/<path without .md>`.
 - No argument: the home page `http://localhost:<port>/`.
 
-Give the link, remind in two lines what **Feedback** and **Question** do (see above) and say your
-listener name: with several agents the human picks it in **Send to** on the review bar.
+Give the link, remind in two lines what **Tell agent** and **Comment** do (see above) and say your
+listener name: with several agents the human picks it in **Send to** on the agent bar.
 
 ## 3. Wait
 
@@ -71,7 +88,7 @@ c4builder feedback --wait --as <name>
 
 It exits when a batch arrives; its stdout is the batch. When `<name>` is a change of the site, it
 first prints `Change page: http://localhost:<port>/#/change/<name>` on stderr — the link from step
-2 confirmed by the server. Connecting turns the **Feedback** button on by itself, the server needs
+2 confirmed by the server. Connecting turns the **Tell agent** button on by itself, the server needs
 no restart. Errors:
 
 - `--as <name> is required` (exit code 2) — the name is missing or invalid: fix it and run again;
@@ -101,8 +118,8 @@ quoted selection; `## General` is the overall comment of a review.
 
 - Edit the files listed in `Sources` (change artifacts, `src/` and so on), never the build output.
   No `Sources` — find the quote in the sources (`grep -rn`). The page reloads by itself.
-- Do not copy comments into the questions section: they are instructions to you, not questions
-  for people.
+- Do not copy comments into the review log: they are instructions to you, not comments for
+  people.
 - A comment that is unclear or debatable — ask in the chat instead of guessing; do the rest of the
   batch.
 - After the edits report briefly in the chat what you did for each comment number. Then run

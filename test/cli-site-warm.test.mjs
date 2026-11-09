@@ -229,7 +229,7 @@ describe('site -w: событие image и приоритет страницы',
     const start = async (port, prioritize) => {
         const emitter = new EventEmitter();
         const server = await cmdSite(
-            { DIST_FOLDER: distDir, WEB_PORT: String(port), QUESTIONS_HEADING: 'Open questions' },
+            { DIST_FOLDER: distDir, WEB_PORT: String(port) },
             { port, watch: true },
             emitter,
             () => ({ pages: new Map(), redirects: new Map() }),

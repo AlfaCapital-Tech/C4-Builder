@@ -1,9 +1,11 @@
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
+import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 
+import { cmdSite } from './dist.mjs';
 import { agentEnv, REPO_ROOT, serveSite, TMP_ROOT, updateCheckEnv } from './helpers.mjs';
 
 // Подсказка после сборки печатает `c4builder site` — форма обязана работать наравне
@@ -60,6 +62,8 @@ describe('c4builder site', () => {
             expect(Number(hint[1])).toBeGreaterThan(port + (v6 ? 2 : 1));
             expect(Number(hint[1])).toBeLessThanOrEqual(port + 10);
             expect(res.stdout).not.toContain('go to');
+            // сервер не поднялся — файла состояния нет (change site-server-state)
+            expect(fs.existsSync(path.join(dir, '.c4builder.server.json'))).toBe(false);
         } finally {
             for (const s of busy) s.close();
         }
@@ -102,6 +106,8 @@ describe('плашка о новой версии в site -w', () => {
 
 // Комментарии к выделенному тексту (change site-comments): запись в исходник страницы,
 // защита по Origin, неизвестная страница, без -w ни скрипта, ни маршрута.
+// Вопросы удалены (change site-button-names): сниппет страницы остаётся (журнал, агент), а
+// маршрута вопросов нет.
 describe('комментарии в site -w', () => {
     const post = (port, body, headers = {}) =>
         fetch(`http://127.0.0.1:${port}/__c4builder/comments`, {
@@ -111,90 +117,21 @@ describe('комментарии в site -w', () => {
         });
     const readme = path.join(dir, 'src', 'README.md');
 
-    it('POST с Origin сайта дописывает раздел в исходник; чужой Origin, пустой комментарий и неизвестная страница отклоняются', async () => {
+    it('сниппет только в отдаче dev-сервера; маршрута вопросов нет, исходник не тронут', async () => {
         const port = 28324;
         const before = fs.readFileSync(readme, 'utf8');
-        try {
-            await serve(['site', '-w', '-p', String(port)], {
-                onReady: async () => {
-                    const html = await (await fetch(`http://127.0.0.1:${port}/`)).text();
-                    expect(html).toContain('__c4builderComments');
-                    expect(fs.readFileSync(path.join(dir, 'docs', 'index.html'), 'utf8')).not.toContain(
-                        '__c4builderComments'
-                    );
-
-                    expect((await post(port, { page: 'Overview.md', comment: 'x' })).status).toBe(403);
-                    expect(
-                        (
-                            await post(
-                                port,
-                                { page: 'Overview.md', comment: 'x' },
-                                { Origin: 'http://evil.test' }
-                            )
-                        ).status
-                    ).toBe(403);
-                    // DNS rebinding: Host и Origin согласованы, но домен чужой. fetch Host не
-                    // подменяет — нужен голый http.request.
-                    const rebound = await new Promise((resolve, reject) => {
-                        const body = JSON.stringify({ page: 'Overview.md', comment: 'x' });
-                        http.request(
-                            {
-                                host: '127.0.0.1',
-                                port,
-                                method: 'POST',
-                                path: '/__c4builder/comments',
-                                headers: {
-                                    Host: `evil.test:${port}`,
-                                    Origin: `http://evil.test:${port}`,
-                                    'Content-Type': 'application/json',
-                                    'Content-Length': Buffer.byteLength(body)
-                                }
-                            },
-                            (res) => resolve(res.resume().statusCode)
-                        )
-                            .on('error', reject)
-                            .end(body);
-                    });
-                    expect(rebound).toBe(403);
-                    const origin = { Origin: `http://127.0.0.1:${port}` };
-                    expect((await post(port, { page: 'Nope.md', comment: 'x' }, origin)).status).toBe(404);
-                    expect((await post(port, { page: 'Overview.md', comment: '  ' }, origin)).status).toBe(
-                        400
-                    );
-                    expect(fs.readFileSync(readme, 'utf8')).toBe(before);
-
-                    const ok = await post(
-                        port,
-                        { page: '/Overview.md', quote: 'root', section: 'root', comment: 'Why?' },
-                        origin
-                    );
-                    expect(ok.status).toBe(200);
-                    expect(await ok.json()).toEqual({ file: 'src/README.md', number: null });
-                    expect(fs.readFileSync(readme, 'utf8')).toBe(
-                        '# root\n\n## Open questions\n\n- Why? — «root» (§ root)\n'
-                    );
-
-                    const del = await fetch(`http://127.0.0.1:${port}/__c4builder/comments`, {
-                        method: 'DELETE',
-                        headers: { 'Content-Type': 'application/json', ...origin },
-                        body: JSON.stringify({ page: 'Overview.md', text: 'Why? — «root» (§ root)' })
-                    });
-                    expect(del.status).toBe(200);
-                    expect(fs.readFileSync(readme, 'utf8')).toBe('# root\n\n## Open questions\n\n');
-                    expect(
-                        (
-                            await fetch(`http://127.0.0.1:${port}/__c4builder/comments`, {
-                                method: 'DELETE',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ page: 'Overview.md', text: 'x' })
-                            })
-                        ).status
-                    ).toBe(403);
-                }
-            });
-        } finally {
-            fs.writeFileSync(readme, before);
-        }
+        await serve(['site', '-w', '-p', String(port)], {
+            onReady: async () => {
+                const html = await (await fetch(`http://127.0.0.1:${port}/`)).text();
+                expect(html).toContain('__c4builderComments');
+                expect(fs.readFileSync(path.join(dir, 'docs', 'index.html'), 'utf8')).not.toContain(
+                    '__c4builderComments'
+                );
+                const origin = { Origin: `http://127.0.0.1:${port}` };
+                expect((await post(port, { page: 'Overview.md', comment: 'x' }, origin)).status).toBe(404);
+                expect(fs.readFileSync(readme, 'utf8')).toBe(before);
+            }
+        });
     }, 60_000);
 
     it('без -w нет ни скрипта, ни маршрута', async () => {
@@ -215,7 +152,8 @@ describe('комментарии в site -w', () => {
     }, 60_000);
 });
 
-// Журнал ревью (change site-review-log): маршрут и кнопка есть только с `reviewLog`; файл —
+// Журнал комментариев (change site-review-log, ключ `comments` — site-button-names): маршрут и
+// кнопка есть только с `comments` или прежним `reviewLog`; файл —
 // ближайший вверх от исходника страницы; строка — по шаблону cells с автором из конфига.
 describe('журнал ревью в site -w', () => {
     const rdir = fs.mkdtempSync(path.join(TMP_ROOT, 'cli-site-review-'));
@@ -231,7 +169,7 @@ describe('журнал ревью в site -w', () => {
         path.join(rdir, '.c4builder'),
         JSON.stringify({
             ...CONFIG,
-            reviewLog: {
+            comments: {
                 heading: 'Remarks',
                 cells: ['', '{artifact} → {section}', '{text}', '{author}', ''],
                 author: 'Reviewer'
@@ -247,6 +185,46 @@ describe('журнал ревью в site -w', () => {
             },
             body: JSON.stringify(body)
         });
+
+    it('чужой Origin и DNS rebinding — 403, журнал не тронут', async () => {
+        const port = 28330;
+        const before = fs.readFileSync(log, 'utf8');
+        await serveSite(rdir, ['site', '-w', '-p', String(port)], {
+            onReady: async () => {
+                const body = { page: 'Change/Change.md', comment: 'x' };
+                const evil = await fetch(`http://127.0.0.1:${port}/__c4builder/review-log`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Origin: 'http://evil.test' },
+                    body: JSON.stringify(body)
+                });
+                expect(evil.status).toBe(403);
+                // DNS rebinding: Host и Origin согласованы, но домен чужой. fetch Host не
+                // подменяет — нужен голый http.request.
+                const rebound = await new Promise((resolve, reject) => {
+                    const raw = JSON.stringify(body);
+                    http.request(
+                        {
+                            host: '127.0.0.1',
+                            port,
+                            method: 'POST',
+                            path: '/__c4builder/review-log',
+                            headers: {
+                                Host: `evil.test:${port}`,
+                                Origin: `http://evil.test:${port}`,
+                                'Content-Type': 'application/json',
+                                'Content-Length': Buffer.byteLength(raw)
+                            }
+                        },
+                        (res) => resolve(res.resume().statusCode)
+                    )
+                        .on('error', reject)
+                        .end(raw);
+                });
+                expect(rebound).toBe(403);
+                expect(fs.readFileSync(log, 'utf8')).toBe(before);
+            }
+        });
+    }, 60_000);
 
     it('POST дописывает строку в ближайший review.md; без Origin — 403; нет файла выше — 404', async () => {
         const port = 28326;
@@ -318,7 +296,7 @@ describe('журнал ревью в site -w', () => {
         });
     }, 60_000);
 
-    it('questions: false — кнопки и маршрута вопросов нет; reviewLog.enabled: false — журнала нет', async () => {
+    it('comments.enabled: false — журнала нет; старый ключ questions не мешает', async () => {
         const port = 28328;
         const cfg = path.join(rdir, '.c4builder');
         const saved = fs.readFileSync(cfg, 'utf8');
@@ -328,14 +306,14 @@ describe('журнал ревью в site -w', () => {
             JSON.stringify({
                 ...parsed,
                 questions: false,
-                reviewLog: { ...parsed.reviewLog, enabled: false }
+                comments: { ...parsed.comments, enabled: false }
             })
         );
         try {
             await serveSite(rdir, ['site', '-w', '-p', String(port)], {
                 onReady: async () => {
                     const html = await (await fetch(`http://127.0.0.1:${port}/`)).text();
-                    expect(html).toContain('var QUESTIONS = false');
+                    expect(html).toContain('__c4builderComments');
                     expect(html).not.toContain('"review.md"');
                     const origin = { Origin: `http://127.0.0.1:${port}` };
                     const res = await fetch(`http://127.0.0.1:${port}/__c4builder/comments`, {
@@ -352,7 +330,7 @@ describe('журнал ревью в site -w', () => {
         }
     }, 60_000);
 
-    it('без reviewLog маршрута нет', async () => {
+    it('без comments маршрута нет', async () => {
         const port = 28327;
         await serve(['site', '-w', '-p', String(port)], {
             onReady: async () => {
@@ -360,6 +338,34 @@ describe('журнал ревью в site -w', () => {
                 expect((await post(port, { page: 'Overview.md', comment: 'x' })).status).toBe(404);
             }
         });
+    }, 60_000);
+
+    it('прежний ключ reviewLog работает как comments', async () => {
+        const port = 28335;
+        const cfg = path.join(rdir, '.c4builder');
+        const saved = fs.readFileSync(cfg, 'utf8');
+        const savedLog = fs.readFileSync(log, 'utf8');
+        const { comments, ...rest } = JSON.parse(saved);
+        fs.writeFileSync(cfg, JSON.stringify({ ...rest, reviewLog: comments }));
+        fs.writeFileSync(log, TABLE);
+        try {
+            await serveSite(rdir, ['site', '-w', '-p', String(port)], {
+                onReady: async () => {
+                    const ok = await post(port, {
+                        page: 'Change/Change.md',
+                        section: 'Flow',
+                        comment: 'Old'
+                    });
+                    expect(ok.status).toBe(200);
+                    expect(fs.readFileSync(log, 'utf8')).toBe(
+                        `${TABLE}| 1 | Change → Flow | Old | Reviewer |  |\n`
+                    );
+                }
+            });
+        } finally {
+            fs.writeFileSync(cfg, saved);
+            fs.writeFileSync(log, savedLog);
+        }
     }, 60_000);
 });
 
@@ -513,4 +519,243 @@ describe('--open / --open-change <id> в site', () => {
         expect(out).toContain(`go to http://localhost:${port}\n`);
         expect(out).not.toContain('#/change/');
     }, 60_000);
+});
+
+// Эндпоинт состояния (change site-server-state, D5): во всех режимах, только для запросов команд CLI.
+// Сервер — в процессе теста: pid в ответе — process.pid.
+describe('GET /__c4builder/status', () => {
+    const distDir = path.join(dir, 'status-dist');
+    fs.mkdirSync(distDir, { recursive: true });
+    fs.writeFileSync(path.join(distDir, 'index.html'), '<html><body></body></html>');
+    const FB = { 'X-C4builder-Feedback': '1' };
+    const start = (port, watch) =>
+        cmdSite(
+            { DIST_FOLDER: distDir, WEB_PORT: String(port) },
+            { port, watch, agent: { on: true, name: 'claude-code', explicit: false }, pollMs: 10_000 },
+            new EventEmitter()
+        );
+
+    it('site -w: 200 с pid и слушателем foo для команды CLI, 403 со страницы', async () => {
+        const port = 28430;
+        const base = `http://127.0.0.1:${port}`;
+        const server = await start(port, true);
+        const poll = new AbortController();
+        try {
+            // long-poll слушателя foo висит, пока не прервём
+            const waiting = fetch(`${base}/__c4builder/feedback/next?as=foo`, {
+                headers: FB,
+                signal: poll.signal
+            }).catch(() => {});
+            await new Promise((r) => setTimeout(r, 200));
+            const res = await fetch(`${base}/__c4builder/status`, { headers: FB });
+            expect(res.status).toBe(200);
+            expect(await res.json()).toMatchObject({
+                pid: process.pid,
+                port,
+                watch: true,
+                agent: { on: true, name: 'claude-code' },
+                listeners: [{ name: 'foo', state: 'listening', queued: 0 }],
+                unaddressed: 0
+            });
+            const page = await fetch(`${base}/__c4builder/status`, { headers: { ...FB, Origin: base } });
+            expect(page.status).toBe(403);
+            expect((await fetch(`${base}/__c4builder/status`)).status).toBe(403);
+            poll.abort();
+            await waiting;
+        } finally {
+            poll.abort();
+            await new Promise((r) => server.close(r));
+        }
+    });
+
+    it('без -w — тот же ответ с пустыми списками и выключенным агентским режимом', async () => {
+        const port = 28431;
+        const server = await start(port, false);
+        try {
+            const res = await fetch(`http://127.0.0.1:${port}/__c4builder/status`, { headers: FB });
+            expect(res.status).toBe(200);
+            expect(await res.json()).toMatchObject({
+                pid: process.pid,
+                port,
+                watch: false,
+                agent: { on: false },
+                listeners: [],
+                unaddressed: 0
+            });
+        } finally {
+            await new Promise((r) => server.close(r));
+        }
+    });
+});
+
+// Файл состояния и один сервер на конфиг (change site-server-state, D2, D3, D7) — настоящий процесс CLI:
+// удаление проверяется по сигналам, а отказ второго сервера — до сборки.
+describe('файл состояния site', () => {
+    const life = path.join(dir, 'life');
+    fs.mkdirSync(path.join(life, 'src'), { recursive: true });
+    fs.writeFileSync(path.join(life, 'src', 'README.md'), '# root\n');
+    fs.writeFileSync(path.join(life, '.c4builder'), JSON.stringify({ ...CONFIG, webPort: '28439' }));
+    fs.writeFileSync(path.join(life, 'other.c4builder'), JSON.stringify({ ...CONFIG, webPort: '28439' }));
+    const STATE = path.join(life, '.c4builder.server.json');
+    const env = agentEnv({ BROWSER: 'none' });
+    const launch = (args) => {
+        const child = spawn(process.execPath, [CLI, ...args], { cwd: life, env });
+        let out = '';
+        child.stdout.on('data', (d) => (out += d));
+        child.stderr.on('data', (d) => (out += d));
+        const exited = new Promise((r) => child.on('exit', (code, signal) => r({ code, signal, out })));
+        const serving = new Promise((resolve, reject) => {
+            const timer = setInterval(() => {
+                if (!out.includes('serving your docsify site')) return;
+                clearInterval(timer);
+                resolve();
+            }, 50);
+            exited.then(() => {
+                clearInterval(timer);
+                reject(new Error(`процесс завершился вместо запуска сервера:\n${out}`));
+            });
+        });
+        return { child, exited, serving };
+    };
+    const run = (args) =>
+        new Promise((resolve) => {
+            const child = spawn(process.execPath, [CLI, ...args], { cwd: life, env });
+            let stdout = '';
+            let stderr = '';
+            child.stdout.on('data', (d) => (stdout += d));
+            child.stderr.on('data', (d) => (stderr += d));
+            child.on('exit', (code) => resolve({ code, stdout, stderr }));
+        });
+
+    it.each([
+        ['SIGINT', 28432],
+        ['SIGTERM', 28433]
+    ])(
+        'файл с port/url/pid/watch после serving, удалён после %s',
+        async (signal, port) => {
+            const server = launch(['--site', '-w', '-p', String(port)]);
+            try {
+                await server.serving;
+                expect(JSON.parse(fs.readFileSync(STATE, 'utf8'))).toMatchObject({
+                    port,
+                    url: `http://localhost:${port}`,
+                    pid: server.child.pid,
+                    watch: true
+                });
+            } finally {
+                server.child.kill(signal);
+            }
+            const { code } = await server.exited;
+            expect(code).toBe(signal === 'SIGINT' ? 130 : 143);
+            expect(fs.existsSync(STATE)).toBe(false);
+        },
+        60_000
+    );
+
+    it('повторный запуск — код 1 без сборки, первый жив; --open-change — код 0; другой -c — второй сервер', async () => {
+        const port = 28434;
+        const first = launch(['site', '-w', '-p', String(port)]);
+        try {
+            await first.serving;
+            const before = fs.readFileSync(STATE, 'utf8');
+            const again = await run(['--site', '-w']);
+            expect(again.code).toBe(1);
+            expect(again.stderr).toContain(
+                `c4builder site is already running for this project at http://localhost:${port} (pid ${first.child.pid})`
+            );
+            expect(again.stdout).not.toContain('built in');
+            expect(fs.readFileSync(STATE, 'utf8')).toBe(before);
+            const status = await fetch(`http://127.0.0.1:${port}/__c4builder/status`, {
+                headers: { 'X-C4builder-Feedback': '1' }
+            });
+            expect((await status.json()).pid).toBe(first.child.pid);
+
+            const open = await run(['site', '--open-change', 'nope']);
+            expect(open.code, open.stderr).toBe(0);
+            expect(open.stdout).toContain(`go to http://localhost:${port}/#/change/nope`);
+            expect(open.stderr).toContain('warning: the site has no page change/nope');
+            expect(open.stdout).not.toContain('built in');
+
+            const other = launch(['--site', '-w', '-c', 'other.c4builder', '-p', String(port + 1)]);
+            try {
+                await other.serving;
+                expect(
+                    JSON.parse(fs.readFileSync(path.join(life, 'other.c4builder.server.json'), 'utf8'))
+                ).toMatchObject({ port: port + 1, pid: other.child.pid });
+            } finally {
+                other.child.kill('SIGTERM');
+                await other.exited;
+            }
+            expect(fs.existsSync(path.join(life, 'other.c4builder.server.json'))).toBe(false);
+            expect(fs.readFileSync(STATE, 'utf8')).toBe(before);
+        } finally {
+            first.child.kill('SIGTERM');
+            await first.exited;
+        }
+    }, 90_000);
+
+    it('файл убитого процесса (SIGKILL) недействителен: следующий запуск перезаписывает его', async () => {
+        const port = 28436;
+        const killed = launch(['site', '-w', '-p', String(port)]);
+        try {
+            await killed.serving;
+        } finally {
+            killed.child.kill('SIGKILL');
+        }
+        await killed.exited;
+        expect(JSON.parse(fs.readFileSync(STATE, 'utf8')).pid).toBe(killed.child.pid);
+        const next = launch(['site', '-w', '-p', String(port + 1)]);
+        try {
+            await next.serving;
+            expect(JSON.parse(fs.readFileSync(STATE, 'utf8'))).toMatchObject({
+                port: port + 1,
+                pid: next.child.pid
+            });
+        } finally {
+            next.child.kill('SIGTERM');
+            await next.exited;
+        }
+    }, 90_000);
+
+    // D3: SIGHUP не перехватывается — под nohup сервер переживает закрытие терминала, как раньше. Без
+    // nohup процесс гибнет от сигнала, файл остаётся и недействителен по pid.
+    it('SIGHUP завершает сервер сигналом, без обработчика: файл остаётся', async () => {
+        const server = launch(['site', '-w', '-p', '28440']);
+        try {
+            await server.serving;
+        } finally {
+            server.child.kill('SIGHUP');
+        }
+        const { code, signal } = await server.exited;
+        expect({ code, signal }).toEqual({ code: null, signal: 'SIGHUP' });
+        expect(JSON.parse(fs.readFileSync(STATE, 'utf8')).pid).toBe(server.child.pid);
+        fs.rmSync(STATE);
+    }, 60_000);
+
+    // D7: просили -w (или --agent), а работающий сервер без него — не переиспользуем молча, даже с --open.
+    it('работающий сервер без -w, повторный запуск с -w или --agent — код 1 и совет перезапустить с -w', async () => {
+        const plain = launch(['site', '-p', '28441']);
+        try {
+            await plain.serving;
+            for (const args of [
+                ['--site', '-w'],
+                ['site', '-w', '--open-change', 'nope'],
+                ['site', '--agent', '--open']
+            ]) {
+                const res = await run(args);
+                expect(res.code, args.join(' ')).toBe(1);
+                expect(res.stderr).toContain(
+                    `c4builder site is already running for this project at http://localhost:28441 (pid ${plain.child.pid}) without -w — stop that process and start c4builder site -w`
+                );
+                expect(res.stdout).not.toContain('go to');
+            }
+            // без -w — прежнее поведение: открыть работающий
+            const open = await run(['site', '--open']);
+            expect(open.code, open.stderr).toBe(0);
+            expect(open.stdout).toContain('go to http://localhost:28441');
+        } finally {
+            plain.child.kill('SIGTERM');
+            await plain.exited;
+        }
+    }, 90_000);
 });

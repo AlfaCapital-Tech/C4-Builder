@@ -77,7 +77,17 @@ docker run --rm -v "$PWD:/pwd" ghcr.io/alfacapital-tech/c4builder:latest c4build
 ```
 
 Image tags: `latest`, `rc`, `X.Y.Z`, `edge` (last master commit). The same image works as a
-CI job image — `c4builder` is on `PATH`, so `c4builder doctor` runs inside it too.
+CI job image — `c4builder` is on `PATH`, so `c4builder doctor` runs inside it too. To show
+diagram errors in the PR/MR diff, run `c4builder check --strict --format github <files>`
+(GitHub Actions annotations) or `--format gitlab <files> > gl-code-quality-report.json` with
+`artifacts: { when: always, reports: { codequality: gl-code-quality-report.json } }` (GitLab Code
+Quality); without files both print an empty report and exit 0. Pass the changed files as
+`git -c core.quotePath=false diff --name-only … | c4builder check --format … --files-from -`
+(one path per line, `-` is stdin), not through `xargs`: it may split the list into several
+calls, and the report would be several JSON arrays. `--format` and `--files-from` need
+c4builder 0.15.0+ (pin `@alfacapital-tech/c4builder@0.15.0` or the `0.15.0` image tag); the
+image has no `git`, so a diff-based job runs on `node:24` with the npm package. Ready jobs:
+the site page "Docker and CI".
 
 ## 4. Java for PlantUML
 

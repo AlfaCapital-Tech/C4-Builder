@@ -94,6 +94,31 @@ describe('c4builder feedback', () => {
         });
     }, 60_000);
 
+    // change site-server-state, D6: сайт поднят на другом -p (webPort занят) — порт из файла состояния.
+    it('сервер на -p, отличном от webPort: feedback без -p находит его по файлу состояния', async () => {
+        const base = 'http://127.0.0.1:28352';
+        await serveSite(project, ['site', '-w', '-p', '28352'], {
+            env: agentEnv(),
+            onReady: async () => {
+                const posted = await fetch(`${base}/__c4builder/feedback`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Origin: base },
+                    body: JSON.stringify({
+                        to: 'foo',
+                        decision: 'submitted',
+                        comments: [
+                            { page: 'Overview.md', quote: 'foo bar', section: 'root', comment: 'Rename' }
+                        ]
+                    })
+                });
+                expect(posted.status).toBe(200);
+                const res = await feedback(project, '--wait', '--as', 'foo');
+                expect(res.code, res.stderr).toBe(0);
+                expect(res.stdout).toContain('Decision: submitted');
+            }
+        });
+    }, 60_000);
+
     it('сервер с --no-agent — код 1 и сообщение про --no-agent', async () => {
         await serveSite(project, ['site', '-w', '--no-agent', '-p', '28351'], {
             env: agentEnv({ CLAUDECODE: '1' }),
@@ -126,7 +151,7 @@ describe('ящики feedback в site -w', () => {
 
     const start = async (port, { agent, pollMs = 10_000, idleMs = 30_000, mailboxTtlMs } = {}) => {
         const server = await cmdSite(
-            { DIST_FOLDER: distDir, WEB_PORT: String(port), QUESTIONS_HEADING: 'Open questions' },
+            { DIST_FOLDER: distDir, WEB_PORT: String(port) },
             { port, watch: true, agent, pollMs, idleMs, mailboxTtlMs },
             new EventEmitter(),
             () => ({ pages: PAGES, redirects: REDIRECTS })

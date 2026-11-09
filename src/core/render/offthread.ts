@@ -1,7 +1,6 @@
 import { Worker } from 'node:worker_threads';
 
-import { BpmnError } from './bpmnrenderer.ts';
-import { MermaidError } from './mermaidrenderer.ts';
+import { DiagramError, type DiagramProblem } from './problem.ts';
 
 // BPMN и mermaid рендерятся в jsdom синхронными кусками до секунды и больше на диаграмму:
 // в главном потоке dev-сервера это время молчат HTTP, SSE и события `image`. Здесь — тот
@@ -14,26 +13,22 @@ interface Reply {
     id: number;
     svg?: Uint8Array;
     error?: string;
-    /** Типизированная ошибка движка: её класс и problems (см. jsdomworker.ts). */
-    kind?: 'bpmn' | 'mermaid';
+    /** Структура ошибки движка (DiagramError): замечания и их печатные строки (см. jsdomworker.ts). */
+    details?: DiagramProblem[];
     problems?: string[];
 }
 
-// Ошибка движка из воркера — тем же классом, что в главном потоке: describeRenderError
-// разбирает её так же, как у check и обычной сборки.
-const engineError = ({ error = '', kind, problems = [] }: Reply, file: string): Error =>
-    kind === 'bpmn'
-        ? new BpmnError(file, problems)
-        : kind === 'mermaid' && problems.length
-          ? new MermaidError(file, problems[0])
-          : new Error(error);
+// Ошибка движка из воркера — снова DiagramError: describeRenderError и заглушка читают её так
+// же, как у check и обычной сборки (класс BpmnError/MermaidError для этого не нужен).
+const engineError = ({ error = '', details, problems }: Reply): Error =>
+    details ? new DiagramError(error, details, problems) : new Error(error);
 
 /** Сбой самого worker-потока, а не движка: вход диаграммы тут ни при чём. */
 export class RenderWorkerError extends Error {}
 
 let worker: Worker | null = null;
 let nextId = 0;
-const waiting = new Map<number, { file: string; resolve: (b: Buffer) => void; reject: (e: Error) => void }>();
+const waiting = new Map<number, { resolve: (b: Buffer) => void; reject: (e: Error) => void }>();
 
 // Воркер погиб (ошибка загрузки модуля, падение) — отклоняем ждущих и забываем его:
 // следующий рендер поднимет новый.
@@ -54,7 +49,7 @@ const getWorker = (): Worker => {
         const job = waiting.get(reply.id);
         if (!job) return;
         waiting.delete(reply.id);
-        if (reply.error !== undefined) job.reject(engineError(reply, job.file));
+        if (reply.error !== undefined) job.reject(engineError(reply));
         else job.resolve(Buffer.from(reply.svg ?? new Uint8Array()));
     });
     w.on('error', (err: Error) => {
@@ -71,7 +66,7 @@ const getWorker = (): Worker => {
 export const renderOffThread = (engine: OffThreadEngine, source: string, file: string): Promise<Buffer> =>
     new Promise((resolve, reject) => {
         const id = nextId++;
-        waiting.set(id, { file, resolve, reject });
+        waiting.set(id, { resolve, reject });
         getWorker().postMessage({ id, engine, source, file });
     });
 

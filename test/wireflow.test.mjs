@@ -14,12 +14,20 @@ import {
     layoutWireflow,
     parseWireflow,
     rasterizeSvgToPng,
+    problemText,
     renderKey,
-    renderWireflowSvg,
+    renderWireflowSvg as renderWireflowSvgRaw,
     stripEmbeddedImages,
     wireflowCatalogVersion
 } from './dist.mjs';
 import { REPO_ROOT, TMP_ROOT } from './helpers.mjs';
+
+// Предупреждения рендерер отдаёт структурой (check --format); ожидания ниже — печатные строки
+// `⚠ <file>: …`, которые из структуры собирает problemText.
+const renderWireflowSvg = (...args) => {
+    const out = renderWireflowSvgRaw(...args);
+    return { ...out, warnings: out.warnings.map(problemText) };
+};
 
 // Движок wireflow (change wireflow-diagrams): реестр движков по суффиксу, разбор и валидация
 // экспорта редактора Wireflow, раскладка (группы, размеры карточек), SVG без браузера,

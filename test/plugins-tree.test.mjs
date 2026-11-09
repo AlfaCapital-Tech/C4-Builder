@@ -25,7 +25,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 export default {
     name: 'demo',
-    assets: { styles: [path.resolve('assets/demo.css')], scripts: [path.resolve('assets/demo.js')] },
+    // ассет строкой — у плагина нет файла, ядро пишет его под своим именем
+    assets: {
+        styles: [path.resolve('assets/demo.css')],
+        scripts: [path.resolve('assets/demo.js'), { name: 'inline.js', content: 'window.inline=1;' }]
+    },
     watchPaths: () => ['no-such-dir'],
     afterScan(ctx) {
         ctx.addPage({ path: ['A', 'Virt'], markdown: 'virtual under real folder' });
@@ -107,9 +111,10 @@ describe('виртуальные страницы в сборке', () => {
         expect(html).toMatch(/<link rel="stylesheet" href="vendor\/plugins\/demo\/demo.css">\s*<\/head>/);
         // Скрипт переадресаций подключается после ассетов плагинов — он тоже перед </body>.
         expect(html).toMatch(
-            /<script src="vendor\/plugins\/demo\/demo.js"><\/script>\s*(<script src="vendor\/c4builder-redirects.js"><\/script>\s*)?<\/body>/
+            /<script src="vendor\/plugins\/demo\/demo.js"><\/script>\s*<script src="vendor\/plugins\/demo\/inline.js"><\/script>\s*(<script src="vendor\/c4builder-redirects.js"><\/script>\s*)?<\/body>/
         );
         expect(read('vendor/plugins/demo/demo.css')).toBe('body{}');
+        expect(read('vendor/plugins/demo/inline.js')).toBe('window.inline=1;');
         expect(read('after-build.txt')).toBe('ok');
     });
 
@@ -125,6 +130,31 @@ describe('виртуальные страницы в сборке', () => {
         expect(read('vendor/c4builder-redirects.js')).not.toMatch(/https?:\/\//);
         // Комментарии (русские) остаются в исходнике в src — в выход не попадают.
         expect(read('vendor/c4builder-redirects.js')).not.toMatch(/\/\/|\/\*|[\u0400-\u04ff]/);
+    });
+});
+
+describe('ассет строкой при шаблоне, который уже подключил это имя', () => {
+    let d;
+    const readI = (rel) => fs.readFileSync(path.join(d, 'docs', rel), 'utf8');
+    beforeAll(() => {
+        d = makeFixture('inline-linked', PLUGIN, { ...CONFIG, docsifyTemplate: 'tpl.mjs' });
+        // копия сгенерированного index.html: тег строкового ассета уже есть, файла в dist ещё нет
+        fs.writeFileSync(
+            path.join(d, 'tpl.mjs'),
+            "export default (o) => '<!DOCTYPE html><html><head></head><body><script>window.$docsify = ' +\n" +
+                '  JSON.stringify(o) + \';</script><script src="vendor/docsify.min.js"></script>\' +\n' +
+                '  \'<script src="vendor/plugins/demo/inline.js"></script></body></html>\';\n'
+        );
+        runBuild(d);
+    });
+    afterAll(() => fs.rmSync(d, { recursive: true, force: true }));
+
+    it('файл записан, тег не задвоен; файловый ассет подключён как обычно', () => {
+        const html = readI('index.html');
+        expect(readI('vendor/plugins/demo/inline.js')).toBe('window.inline=1;');
+        expect(html.match(/vendor\/plugins\/demo\/inline\.js/g)).toHaveLength(1);
+        expect(html).toContain('<script src="vendor/plugins/demo/demo.js"></script>');
+        expect(readI('vendor/plugins/demo/demo.js')).toBe('window.demo=1;');
     });
 });
 

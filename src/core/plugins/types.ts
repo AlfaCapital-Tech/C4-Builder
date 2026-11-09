@@ -31,6 +31,11 @@ export interface PageDiagram {
      * как у диаграмм из папки проекта. Не задан — каталог страницы (fenced-блоки).
      */
     origin?: string;
+    /**
+     * Строка N в content — строка N + lineOffset в source: блок в markdown начинается не с первой
+     * строки страницы, а обёртка `@startuml` сдвигает ещё на одну. Не задан — строки совпадают.
+     */
+    lineOffset?: number;
 }
 
 /** Виртуальная страница: путь сегментами от корня сайта, markdown и диаграммы. */
@@ -62,14 +67,21 @@ export interface BuildCtx {
     options: BuildOptions;
 }
 
+/**
+ * Ассет сайта от плагина: абсолютный путь файла либо строка `{ name, content }` — свой скрипт
+ * плагина живёт в `src`, как скрипты ядра в compose/site.scripts.ts, а не файлом в vendor/.
+ * `name` — имя файла без каталогов (каталоги отбрасываются).
+ */
+export type PluginAsset = string | { name: string; content: string };
+
 export interface Plugin<O = unknown> {
     name: string;
     /** Схема опций; для встроенных плагинов — строгая (неизвестный ключ = ошибка). */
     options?: z.ZodType<O>;
     /** Дополнительные пути для watch-режима (относительно cwd либо абсолютные). */
     watchPaths?: (opts: O) => string[];
-    /** Абсолютные пути файлов, копируемых в `dist/vendor/plugins/<name>/` и подключаемых в index.html. */
-    assets?: { scripts?: string[]; styles?: string[] };
+    /** Ассеты сайта: попадают в `dist/vendor/plugins/<name>/` (файл — копией, строка — записью) и в index.html. */
+    assets?: { scripts?: PluginAsset[]; styles?: PluginAsset[] };
     requires?: { executeScript?: boolean };
     afterScan?: (ctx: ScanCtx, opts: O) => Promise<void> | void;
     afterBuild?: (ctx: BuildCtx, opts: O) => Promise<void> | void;

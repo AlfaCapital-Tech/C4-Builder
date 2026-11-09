@@ -33,6 +33,8 @@ import {
     errorDetails,
     placeholderText
 } from './errors.ts';
+import { DiagramError, type DiagramProblem, errorText, problemText } from './problem.ts';
+import { warnUndeclaredRels } from './plantumllint.ts';
 // Шрифт-пин общий с resvg-растеризатором (одна точка правды, см. fonts.ts).
 import { FONTS_DIR, DEFAULT_FONT_NAME } from './fonts.ts';
 import { VENDOR_DIR, packageJson } from '../../util/paths.ts';
@@ -297,6 +299,33 @@ export const renderArgv = ({
     '-pipe'
 ];
 
+// stderr PlantUML в -pipe при ошибке входа: `ERROR` / позиция / описание. Позиция — 0-based
+// строка диаграммы; файловая диаграмма уходит в движок без изменений (scan/tree.ts), поэтому для
+// файла с одной диаграммой это строка файла N+1.
+// ponytail: в файле с несколькими @startuml позиция считается от начала блока — смещение
+// не учитываем, добавить, если такие файлы станут проверять.
+const PUML_ERROR = /^ERROR\n(\d+)\n(.*)$/m;
+
+/**
+ * Синтаксическая ошибка входа PlantUML: problem — `line N: <описание>` (details для
+ * `check --format`), message — весь вывод процесса (стек Java) для --verbose. Сбой процесса без
+ * блока `ERROR` (нет памяти, таймаут) — обычная Error: контекстом диаграммы он не лечится.
+ */
+export class PlantUmlInputError extends DiagramError {
+    constructor(output: string, problem: DiagramProblem) {
+        super(output, [problem], [problemText(problem)]);
+    }
+}
+
+/** Ошибка процесса PlantUML по коду выхода и stderr (нормализованному до `\n`); экспорт — для тестов. */
+export const plantUmlFailure = (code: number | null, stderr: string): Error => {
+    const output = `PlantUML exited with code ${code}\n${stderr}`;
+    const m = stderr.match(PUML_ERROR);
+    return m
+        ? new PlantUmlInputError(output, { line: Number(m[1]) + 1, message: m[2].trim() })
+        : new Error(output);
+};
+
 export const renderDiagram = (content: string | Buffer, options: RenderDiagramOptions): Promise<Buffer> =>
     new Promise((resolve, reject) => {
         const child = spawn(options.javaBin, renderArgv(options));
@@ -311,10 +340,12 @@ export const renderDiagram = (content: string | Buffer, options: RenderDiagramOp
         }
 
         // Smetana печатает диагностический шум (UNSURE_ABOUT…) — это не ошибка
-        // рендера, пользователю не показываем; остальной stderr пробрасываем.
+        // рендера, пользователю не показываем; остальной stderr пробрасываем. java на Windows
+        // печатает `\r\n` — без нормализации блок ERROR не узнаётся.
         const cleanStderr = (): string =>
             Buffer.concat(stderr)
                 .toString('utf8')
+                .replace(/\r\n?/g, '\n')
                 .split('\n')
                 .filter((line) => line.trim() && !/UNSURE_ABOUT/.test(line))
                 .join('\n');
@@ -356,9 +387,7 @@ export const renderDiagram = (content: string | Buffer, options: RenderDiagramOp
             if (settled) return;
             settled = true;
             const errText = cleanStderr();
-            if (code !== 0) {
-                return reject(new Error(`PlantUML exited with code ${code}\n${errText}`));
-            }
+            if (code !== 0) return reject(plantUmlFailure(code, errText));
             if (errText) process.stderr.write(`${errText}\n`);
             resolve(Buffer.concat(stdout));
         });
@@ -400,9 +429,6 @@ export const pendingPlaceholderSvg = (name: string): string =>
 // Заглушки свёрстаны вендорным шрифтом — системные им не нужны, а resvg с
 // loadSystemFonts сканирует все шрифты системы (до нескольких секунд на каждую растеризацию
 // при useSystemFonts), задерживая отдачу страницы ради картинки «rendering…».
-// Сообщение ошибки окружения без имени диаграммы: оно общее для всех диаграмм сборки.
-const messageText = (err: unknown): string => `${(err as Error)?.message || err}`;
-
 const rasterizePlaceholder = (svg: Buffer): Promise<Buffer> => rasterizeSvgToPng(svg, false);
 
 export interface GenerateImagesFlags {
@@ -691,6 +717,17 @@ export const generateImages = async (
                             isDitaa,
                             useSystemFonts: options.USE_SYSTEM_FONTS
                         });
+                        // Связь C4 на необъявленный алиас — предупреждение, как в `check`. Только
+                        // при рендере: диаграмма из кэша не перерисовывается и не перепроверяется.
+                        // Детектор читает SVG, а сборка может отдать PlantUML-PNG напрямую (ditaa)
+                        // — тогда молчим. Строка блока в markdown — строка страницы (lineOffset).
+                        if (!isDitaa && (needsRaster || outFormat === 'svg'))
+                            warnUndeclaredRels(
+                                file,
+                                `${diagramContent}`,
+                                rendered.toString(),
+                                diagram.lineOffset
+                            );
                     }
                     const image = needsRaster
                         ? await rasterizeSvgToPng(rendered, options.USE_SYSTEM_FONTS)
@@ -725,7 +762,7 @@ export const generateImages = async (
                     }
                     // Нет java / упал воркер — одно сообщение и стоп: у остальных диаграмм та же
                     // причина, строка на каждый файл была бы шумом.
-                    if (environment) throw new DiagramEnvironmentError(messageText(err), { cause: err });
+                    if (environment) throw new DiagramEnvironmentError(errorText(err), { cause: err });
                     failures.push({ index: order, file, problems, cause: err });
                 }
             };

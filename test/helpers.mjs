@@ -49,8 +49,10 @@ export const agentEnv = (extra = {}) => ({
 });
 
 // `c4builder site …` в cwd: onReady выполняется, пока сервер жив; после него процесс гасится.
-// Резолвится выводом сервера. onReady получает `waitFor(re, ms)` — ждёт строку вывода, появившуюся
-// ПОСЛЕ предыдущего совпадения (курсор), чтобы различать повторяющиеся `built in`.
+// Резолвится выводом сервера, когда процесс завершился: следующий запуск в том же каталоге не должен
+// застать файл состояния гаснущего сервера (change site-server-state) и отказаться стартовать.
+// onReady получает `waitFor(re, ms)` — ждёт строку вывода, появившуюся ПОСЛЕ предыдущего совпадения
+// (курсор), чтобы различать повторяющиеся `built in`.
 export const serveSite = (cwd, args, { env = process.env, onReady = async () => {} } = {}) =>
     new Promise((resolve, reject) => {
         const child = spawn(process.execPath, [path.join(REPO_ROOT, 'dist', 'index.js'), ...args], {
@@ -60,6 +62,7 @@ export const serveSite = (cwd, args, { env = process.env, onReady = async () => 
         });
         let out = '';
         let ready = false;
+        let failed;
         let cursor = 0;
         const waiters = [];
         const check = () => {
@@ -97,7 +100,9 @@ export const serveSite = (cwd, args, { env = process.env, onReady = async () => 
             clearTimeout(done);
             cursor = out.indexOf('serving your docsify site');
             onReady({ waitFor, output: () => out })
-                .then(() => resolve(out), reject)
+                .catch((e) => {
+                    failed = e;
+                })
                 .finally(() => child.kill('SIGTERM'));
         });
         // stderr — в тот же поток для waitFor: предупреждения CLI (agent, --open-change) идут туда.
@@ -109,6 +114,8 @@ export const serveSite = (cwd, args, { env = process.env, onReady = async () => 
             clearTimeout(done);
             if (!ready)
                 reject(new Error(`процесс завершился (exit=${code}) вместо запуска сервера:\n${out}`));
+            else if (failed) reject(failed);
+            else resolve(out);
         });
     });
 

@@ -49,9 +49,8 @@ export interface BuildOptions {
     DIAGRAM_FORMAT: string;
     D2_LAYOUT: string;
     MD_FILE_NAME: string;
-    // Кнопка «Вопрос» страницы `site -w`; false — фича выключена целиком.
-    QUESTIONS: boolean;
-    QUESTIONS_HEADING: string;
+    // Свои подписи кнопок у выделения страницы `site -w` (change site-button-names).
+    BUTTONS: { agent?: string; comment?: string };
     // Журнал ревью страницы `site -w` (change site-review-log); undefined — кнопки нет.
     REVIEW_LOG?: ReviewLogOptions;
     UI_LANGUAGE: 'auto' | 'en' | 'ru';

@@ -12,7 +12,8 @@ import {
     describeRenderError,
     MermaidError,
     placeholderText,
-    plantUmlInputError,
+    plantUmlFailure,
+    PlantUmlInputError,
     VERBOSE_HINT,
     WireflowError
 } from './dist.mjs';
@@ -25,7 +26,6 @@ const CLI = path.join(REPO_ROOT, 'dist', 'index.js');
 
 // stderr PlantUML из issue: Java-стек, а суть — в хвостовом блоке ERROR / позиция / описание.
 const ISSUE_STDERR = [
-    'PlantUML exited with code 200',
     'java.lang.StringIndexOutOfBoundsException: Index 16 out of bounds for length 16',
     '\tat java.base/java.lang.String.charAt(String.java:1624)',
     '\tat net.sourceforge.plantuml.tim.Eater.eatOneChar(Eater.java:247)',
@@ -35,45 +35,50 @@ const ISSUE_STDERR = [
     'Fatal parsing error'
 ].join('\n');
 
-describe('describeRenderError — общий разбор для check и сборки', () => {
-    it('PlantUML с блоком ERROR → `line N+1: msg`, Java-стек отброшен', () => {
-        expect(describeRenderError(new Error(ISSUE_STDERR))).toEqual(['line 4: Fatal parsing error']);
-        expect(plantUmlInputError(new Error(ISSUE_STDERR))).toEqual({
-            line: 4,
-            message: 'Fatal parsing error'
-        });
+describe('ошибка PlantUML — структура у источника (renderDiagram), общий текст для check и сборки', () => {
+    it('блок ERROR → PlantUmlInputError: problem `line N+1: msg`, details с позицией, message — весь вывод', () => {
+        const err = plantUmlFailure(200, ISSUE_STDERR);
+        expect(err).toBeInstanceOf(PlantUmlInputError);
+        expect(err.problems).toEqual(['line 4: Fatal parsing error']);
+        expect(err.details).toEqual([{ line: 4, message: 'Fatal parsing error' }]);
+        expect(err.message).toBe(`PlantUML exited with code 200\n${ISSUE_STDERR}`);
+        expect(describeRenderError(err)).toEqual(['line 4: Fatal parsing error']);
     });
 
-    it('CRLF (java на Windows) — разбирается так же', () => {
-        const crlf = new Error(ISSUE_STDERR.replace(/\n/g, '\r\n'));
-        expect(describeRenderError(crlf)).toEqual(['line 4: Fatal parsing error']);
-        expect(plantUmlInputError(crlf)).toEqual({ line: 4, message: 'Fatal parsing error' });
-        const proc = new Error('PlantUML exited with code 1\r\njava.lang.OutOfMemoryError\r\n');
-        expect(describeRenderError(proc)).toEqual([`PlantUML exited with code 1 ${VERBOSE_HINT}`]);
+    it('без блока ERROR — обычная Error с кодом и stderr', () => {
+        const err = plantUmlFailure(1, 'java.lang.OutOfMemoryError: Java heap space');
+        expect(err).not.toBeInstanceOf(PlantUmlInputError);
+        expect(err.message).toBe('PlantUML exited with code 1\njava.lang.OutOfMemoryError: Java heap space');
     });
 
     it('текст заглушки: разобранная суть, иначе хвост stderr — без подсказки про флаг CLI', () => {
-        expect(placeholderText(new Error(ISSUE_STDERR))).toBe('line 4: Fatal parsing error');
+        expect(placeholderText(plantUmlFailure(200, ISSUE_STDERR))).toBe('line 4: Fatal parsing error');
         const proc = new Error('PlantUML did not finish in 120 s and was aborted\njava.lang.Thread.sleep');
         expect(placeholderText(proc)).toBe(proc.message);
         expect(placeholderText(proc)).not.toContain('--verbose');
-        expect(placeholderText(new BpmnError('a.bpmn', ['T [r] x', 'U [r] y']))).toBe('T [r] x\nU [r] y');
-    });
-
-    it('.iuml (lib) — без номера строки: позиция относится к обёртке', () => {
-        expect(describeRenderError(new Error(ISSUE_STDERR), { lib: true })).toEqual(['Fatal parsing error']);
+        const bpmn = new BpmnError('a.bpmn', [
+            { element: 'T', rule: 'r', message: 'x' },
+            { element: 'U', rule: 'r', message: 'y' }
+        ]);
+        expect(placeholderText(bpmn)).toBe('T [r] x\nU [r] y');
     });
 
     it('BPMN / mermaid / wireflow → их problems по строке', () => {
-        expect(describeRenderError(new BpmnError('a.bpmn', ['T [rule] x', 'U [rule] y']))).toEqual([
-            'T [rule] x',
-            'U [rule] y'
-        ]);
-        expect(describeRenderError(new MermaidError('a.mmd', 'line 2: Expecting X'))).toEqual([
+        expect(
+            describeRenderError(
+                new BpmnError('a.bpmn', [
+                    { element: 'T', rule: 'rule', message: 'x' },
+                    { element: 'U', rule: 'rule', message: 'y' }
+                ])
+            )
+        ).toEqual(['T [rule] x', 'U [rule] y']);
+        expect(describeRenderError(new MermaidError('a.mmd', { line: 2, message: 'Expecting X' }))).toEqual([
             'line 2: Expecting X'
         ]);
         expect(
-            describeRenderError(new WireflowError('a.json', ['edge "e": target "x9" is not a node']))
+            describeRenderError(
+                new WireflowError('a.json', [{ message: 'edge "e": target "x9" is not a node' }])
+            )
         ).toEqual(['edge "e": target "x9" is not a node']);
     });
 

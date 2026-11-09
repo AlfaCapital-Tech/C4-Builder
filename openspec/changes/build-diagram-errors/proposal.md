@@ -38,7 +38,8 @@ _нет_
 ## Impact
 
 - `src/core/render/diagrams.ts` — сбор ошибок рендера вместо броска на первой; короткий формат
-  в soft-путях; новый модуль разбора ошибок движка `src/core/render/errors.ts`.
+  в soft-путях; ошибка входа PlantUML — `DiagramError` из `renderDiagram`; модуль
+  `src/core/render/errors.ts` — ошибки сборки поверх `problem.ts`; `⚠` всех движков — в stderr.
 - `src/cli/commands/check.ts` — использует общий разбор (вывод не меняется).
 - `src/core/build.ts`, `src/cli/dispatch.ts`, `src/index.ts` — печать списка ошибок, код 1 без
   стека, `--verbose`/`DEBUG`; `intro()`/`clearConsole()` только в TTY; `src/cli/commands/help.ts`.
