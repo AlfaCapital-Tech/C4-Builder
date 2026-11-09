@@ -3,7 +3,7 @@
 User-facing changes of C4-Builder. Every pull request that changes behaviour adds a line to
 `## Unreleased`; the release commit renames it to `## vX.Y.Z`.
 
-## Unreleased
+## v0.15.0
 
 - A build with broken diagrams prints one `✗ <file>: line <N>: <message>` line per diagram — the
   same text as `c4builder check` — lists all of them in one run, then `build aborted` and exit
