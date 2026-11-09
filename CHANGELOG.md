@@ -26,6 +26,10 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
   not change; a diagram restored from the build cache is not re-checked (#60)
 - `c4builder check --strict` exits with code 1 on any warning (PlantUML, BPMN, wireflow) and prints
   `✗ <file>: <K> warning(s), failing with --strict` — for CI and coding agents
+- `doctor skills` no longer reports duplicates from uninstalled Claude Code plugins: it reads the
+  installed plugins from `~/.claude/plugins/installed_plugins.json` instead of walking the plugin
+  cache, so leftovers marked `.orphaned_at`, old versions and plugins installed in other projects
+  do not count; an unrecognized registry is `skipped` (#74)
 
 ## v0.14.0
 
