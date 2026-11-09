@@ -55,7 +55,7 @@ on another port needs the same `-p <n>` in `c4builder feedback`.
 The server answers right after `serving your docsify site`, before the diagrams are rendered: on
 a cold cache the pages show `rendering…` placeholders that turn into images by themselves, the
 open page first. That is normal — give the link without waiting. The background rendering ends
-with `rendered N diagrams in T s` in the server output; `✗ Diagram "<file>": <reason>` there is a
+with `rendered N diagrams in T s` in the server output; `✗ <file>: line <N>: <message>` there is a
 broken diagram worth fixing before the human reaches it.
 
 ## 2. Link

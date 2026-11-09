@@ -2,7 +2,8 @@ import figlet from 'figlet';
 import chalk from 'chalk';
 
 export default (): void => {
-    console.log(chalk.blue(figlet.textSync('c4builder')));
+    // Баннер — только в терминале (как intro в dispatch): в pipe/файле он лишь шум.
+    if (process.stdout.isTTY) console.log(chalk.blue(figlet.textSync('c4builder')));
     console.log(`
 Full documentation
 ${chalk.blue('https://alfacapital-tech.github.io/C4-Builder/ru/')} (in Russian)

@@ -3,7 +3,8 @@ import chalk from 'chalk';
 import { type DiagramProblem, problemText } from './problem.ts';
 
 // Предупреждения рендера диаграмм — общий канал всех движков: рендер не прерывают, печатаются
-// строкой `⚠ <file>: <problemText>` (её разбирают агенты и хуки). Счётчик нужен `check --strict`:
+// строкой `⚠ <file>: <problemText>` (её разбирают агенты и хуки) в stderr — один поток со
+// строками `✗` сборки и `check`, stdout `check` остаётся для `✓`. Счётчик нужен `check --strict`:
 // движки печатают сами, а код возврата решает команда. В worker-потоке (dev-сервер) счётчик
 // свой — его там никто не читает.
 let count = 0;
@@ -14,7 +15,7 @@ let listener: WarningListener | null = null;
 export const warnDiagram = (file: string, problem: DiagramProblem): void => {
     count++;
     if (listener) listener(file, problem);
-    else console.log(chalk.yellow(`⚠ ${file}: ${problemText(problem)}`));
+    else console.error(chalk.yellow(`⚠ ${file}: ${problemText(problem)}`));
 };
 
 export const diagramWarningCount = (): number => count;

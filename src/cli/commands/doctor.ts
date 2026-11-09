@@ -509,7 +509,9 @@ const fullBuild = async (ctx: Ctx): Promise<Check> => {
     const started = Date.now();
     try {
         await step(['--new', '--name', 'doctor', '-y'], dir);
-        await step([], path.join(dir, 'doctor'));
+        // --verbose: без него ошибка диаграммы — одна короткая строка, а хвосту лога в details нужна
+        // причина (stderr движка): ради неё doctor и запускают.
+        await step(['--verbose'], path.join(dir, 'doctor'));
         return check('render.full', 'ok', `template project built in ${seconds(started)}`, {
             details: tail(log)
         });

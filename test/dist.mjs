@@ -14,9 +14,19 @@ export {
     renderKey,
     DiagramQueue,
     generateImages,
-    pendingPlaceholderSvg
+    pendingPlaceholderSvg,
+    plantUmlFailure,
+    PlantUmlInputError
 } from '../dist/core/render/diagrams.js';
 export { build } from '../dist/core/build.js';
+export {
+    describeRenderError,
+    DiagramBuildError,
+    placeholderText,
+    VERBOSE_HINT
+} from '../dist/core/render/errors.js';
+export { exitAfterWrite } from '../dist/util/exit.js';
+export { debugEnabled } from '../dist/cli/verbose.js';
 export { teardownD2 } from '../dist/core/render/d2renderer.js';
 export { renderOffThread, teardownOffThread } from '../dist/core/render/offthread.js';
 export { acquireBuildLock, BuildLockHeldError, waitBuildLock } from '../dist/util/lock.js';

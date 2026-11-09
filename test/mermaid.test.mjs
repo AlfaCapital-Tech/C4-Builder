@@ -274,7 +274,10 @@ describe('сборка проекта', () => {
             'src/README.md': '# Home\n\n```mermaid\nmindmap\n  root\n```\n'
         });
         expect(res.status, `${res.stdout}${res.stderr}`).toBe(0);
-        expect(res.stdout).toMatch(/⚠ .*\(src\/README\.md\).*unsupported mermaid diagram type 'mindmap'/);
+        // Строка — внутри блока, а не страницы: рядом с путём страницы — имя картинки блока.
+        expect(res.stderr).toMatch(
+            /⚠ src\/README\.md \(README-[0-9a-f]{8}\.svg\): line 1: unsupported mermaid diagram type 'mindmap'/
+        );
         const [, image] = /!\[diagram\]\((README-[0-9a-f]{8}\.svg)\)/.exec(
             fs.readFileSync(path.join(root, 'docs', 'README.md'), 'utf8')
         );

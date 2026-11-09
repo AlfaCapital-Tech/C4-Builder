@@ -43,9 +43,41 @@ Flags:
 | `--format <format>` | for `check`: `text` (default), `json`, `github`, `gitlab`, see "Checking diagrams" below |
 | `--json` | for `doctor` (see "Diagnostics" below), `status` and `check` (same as `--format json`) |
 | `--files-from <file>` | for `check`: also the paths from a file, one per line; `-` — stdin |
-| `-v, --verbose`, `--full`, `--offline` | for `doctor`, see "Diagnostics" below |
+| `-v, --verbose` | for a build and `check`: the full engine output and stack on a diagram error (the same as `DEBUG=c4builder`), see "Diagram errors in a build" below; for `doctor` — see "Diagnostics" |
+| `--full`, `--offline` | for `doctor`, see "Diagnostics" below |
 | `-V, --version` | version |
 | `-h, --help` | flags and positional commands |
+
+## Diagram errors in a build
+
+A build without `-w` (`c4builder`, `c4builder site`) renders every diagram and prints each broken
+one as a single line on stderr — the same text `c4builder check` prints for that file:
+
+```text
+✗ src/dangling.puml: line 4: Fatal parsing error
+
+build aborted — the previous build is backed up in ./docs_bk
+```
+
+- The line number counts from the start of the file, from 1. In a file with several `@startuml`
+  and in files pulled in with `!include` the position counts from the start of the block; for a
+  diagram block in markdown it is inside the block, and the image name follows the page path:
+  `✗ src/README.md (README-1a2b3c4d.svg): …`.
+- All broken diagrams are listed in one run, the correct ones are still rendered and cached. Then
+  `build aborted — …` (the previous output, if any, stays in `docs_bk`) and exit code 1 — no Java
+  or Node stack trace.
+- No Java, or the render thread crashed — the build stops at once with one message for all
+  diagrams; errors of other diagrams found before that are printed along with it.
+- `-v, --verbose` or the `DEBUG` environment variable set to `c4builder` (a comma- or
+  space-separated list, `*` — everything) add the full engine output and stack of every error
+  after the `✗` lines — what is worth attaching to an issue.
+- The ASCII banner and the screen clearing appear only in a terminal: not in CI, an agent log or
+  a file.
+
+Soft errors — a placeholder instead of a broken markdown block (`⚠`) and errors in `site -w` (`✗`)
+— print the same short text on stderr, with `-v` also the full engine output. The placeholder image
+shows the same gist of the error, and for a PlantUML process failure with no position — the tail of
+its output.
 
 ## The `--site -w` dev server
 
@@ -74,7 +106,7 @@ rendered 179 diagrams in 118.4 s
   source edits made during the rendering land on the site. Finished images also show up when you
   come back to a page that had a placeholder.
 - A render error in the background does not stop the server: the diagram shows an error
-  placeholder, the log gets `✗ Diagram "<file>": <reason>`. As long as the diagram input (the file
+  placeholder, the log gets `✗ <file>: line <N>: <message>`, as in `check`. As long as the diagram input (the file
   and its includes/imports) is unchanged, the rebuilds of this run do not render it again — they
   carry the placeholder over and print a gray `unchanged since it failed, not re-rendered` line.
   Fixing the file triggers a regular rebuild that renders it; a new `site -w` run retries every
@@ -182,8 +214,8 @@ machine: `NO_UPDATE_NOTIFIER=1`.
 ## Checking diagrams
 
 `c4builder check <files...>` checks diagrams with the same engine as the build, without a project
-or `.c4builder`. The default output is text: `✓ <file>` on stdout, `✗ <file>: <problem>` on
-stderr, warnings as `⚠ <file>: <message>`. Each engine has its own problem shape (see
+or `.c4builder`. The default output is text: `✓ <file>` on stdout, `✗ <file>: <problem>` and
+warnings `⚠ <file>: <message>` on stderr. Each engine has its own problem shape (see
 [Diagrams](03%20Diagrams/03%20Diagrams.md)). Agents and CI get machine formats:
 
 | `--format` | Output on stdout |

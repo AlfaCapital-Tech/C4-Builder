@@ -224,7 +224,7 @@ describe('c4builder check', () => {
     it('только warning в .bpmn → код 0, предупреждение в выводе', () => {
         const res = check('warn.bpmn');
         expect(res.status, res.stderr).toBe(0);
-        expect(res.stdout).toMatch(/⚠ warn\.bpmn: F3 \[c4builder\/gateway-flow-labels\]/);
+        expect(res.stderr).toMatch(/⚠ warn\.bpmn: F3 \[c4builder\/gateway-flow-labels\]/);
         expect(res.stdout).toMatch(/✓ warn\.bpmn/);
     });
 
@@ -252,7 +252,7 @@ describe('c4builder check', () => {
         expect(bad.stderr).toMatch(/^✗ bad\.wireflow\.json: .*e1.*x9/m);
         const warn = check('warn.wireflow.json');
         expect(warn.status, warn.stderr).toBe(0);
-        expect(warn.stdout).toMatch(/⚠ warn\.wireflow\.json: .*no-such-template/);
+        expect(warn.stderr).toMatch(/⚠ warn\.wireflow\.json: .*no-such-template/);
         expect(warn.stdout).toMatch(/✓ warn\.wireflow\.json/);
         const ctrl = check('ctrl.wireflow.json');
         expect(ctrl.status, ctrl.stderr).toBe(0);
@@ -262,21 +262,21 @@ describe('c4builder check', () => {
     it('Rel/Lay на необъявленный алиас → ⚠ с номером строки, код 0; с --strict → ✗, код 1', () => {
         const res = check('dangling.puml', 'implicit.puml');
         expect(res.status, res.stderr).toBe(0);
-        expect(res.stdout).toMatch(/^⚠ dangling\.puml: line 7: Rel to undeclared element "typo"$/m);
-        expect(res.stdout).toMatch(/^⚠ dangling\.puml: line 9: Rel to undeclared element "nope"$/m);
-        expect(res.stdout).toMatch(/^⚠ dangling\.puml: line 11: Lay_R to undeclared element "ghost"$/m);
-        expect(res.stdout.match(/⚠/g)).toHaveLength(3); // объявленные u и c1 не задеты
+        expect(res.stderr).toMatch(/^⚠ dangling\.puml: line 7: Rel to undeclared element "typo"$/m);
+        expect(res.stderr).toMatch(/^⚠ dangling\.puml: line 9: Rel to undeclared element "nope"$/m);
+        expect(res.stderr).toMatch(/^⚠ dangling\.puml: line 11: Lay_R to undeclared element "ghost"$/m);
+        expect(res.stderr.match(/⚠/g)).toHaveLength(3); // объявленные u и c1 не задеты
         expect(res.stdout).toMatch(/✓ implicit\.puml/);
 
         const variants = check('rel-variants.puml');
         expect(variants.status, variants.stderr).toBe(0);
-        expect(variants.stdout).toMatch(
+        expect(variants.stderr).toMatch(
             /^⚠ rel-variants\.puml: line 5: BiRel to undeclared element "bogus"$/m
         );
-        expect(variants.stdout).toMatch(
+        expect(variants.stderr).toMatch(
             /^⚠ rel-variants\.puml: line 6: RelIndex to undeclared element "missing"$/m
         );
-        expect(variants.stdout.match(/⚠/g)).toHaveLength(2);
+        expect(variants.stderr.match(/⚠/g)).toHaveLength(2);
 
         const forms = check('rel-forms.puml');
         expect(forms.status, forms.stderr).toBe(0);
@@ -285,23 +285,23 @@ describe('c4builder check', () => {
             [6, 'nope2'],
             [8, 'nope3']
         ])
-            expect(forms.stdout).toMatch(
+            expect(forms.stderr).toMatch(
                 new RegExp(
                     `^⚠ rel-forms\\.puml: line ${line}: RelIndex to undeclared element "${alias}"$`,
                     'm'
                 )
             );
         // Многострочный вызов — строка имени макроса.
-        expect(forms.stdout).toMatch(/^⚠ rel-forms\.puml: line 9: Rel to undeclared element "nope4"$/m);
-        expect(forms.stdout).toMatch(/^⚠ rel-forms\.puml: line 11: Rel to undeclared element "nope5"$/m);
-        expect(forms.stdout.match(/⚠/g)).toHaveLength(5);
+        expect(forms.stderr).toMatch(/^⚠ rel-forms\.puml: line 9: Rel to undeclared element "nope4"$/m);
+        expect(forms.stderr).toMatch(/^⚠ rel-forms\.puml: line 11: Rel to undeclared element "nope5"$/m);
+        expect(forms.stderr.match(/⚠/g)).toHaveLength(5);
 
         const qualified = check('rel-qualified.puml');
         expect(qualified.status, qualified.stderr).toBe(0);
-        expect(qualified.stdout).toMatch(
+        expect(qualified.stderr).toMatch(
             /^⚠ rel-qualified\.puml: line 7: Rel to undeclared element "b9\.db"$/m
         );
-        expect(qualified.stdout.match(/⚠/g)).toHaveLength(1);
+        expect(qualified.stderr.match(/⚠/g)).toHaveLength(1);
 
         const strict = check('--strict', 'dangling.puml', 'implicit.puml', 'warn.bpmn');
         expect(strict.status).toBe(1);

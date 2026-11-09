@@ -31,9 +31,11 @@ updates it.
    the node or edge id).
    Fix until the exit code is 0; with `--strict` warnings count too: `⚠ <file>: line <N>: Rel to
    undeclared element "<alias>"` means a typo in a relation alias.
-3. Run `c4builder` and make sure it exits with code 0. Leave `c4builder --site -w` to a
-   human or run it in the background; `c4builder status` tells whether it already runs and on
-   which port — do not start a second one. When the human reviews the pages, also run
+3. Run `c4builder` and make sure it exits with code 0. Broken diagrams print the same `✗` lines
+   as `check` (all of them in one run) and exit with code 1; `-v` adds the full engine output.
+   Leave `c4builder --site -w` to a human or run it in the background; `c4builder status` tells
+   whether it already runs and on which port — do not start a second one. When the human
+   reviews the pages, also run
    `c4builder feedback --wait --as <name>` in the background, `<name>` being your change or
    task: on exit it prints a batch of comments (page, `Sources`, quote, text) — apply them to
    `src/`, run it again with the same name, and stop on `Decision: approved`. Without `--as`

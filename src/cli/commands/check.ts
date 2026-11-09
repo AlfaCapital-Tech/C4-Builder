@@ -4,21 +4,18 @@ import { readFile } from 'node:fs/promises';
 import { text as streamText } from 'node:stream/consumers';
 
 import { VENDOR_DIR } from '../../util/paths.ts';
+import { exitAfterWrite } from '../../util/exit.ts';
 import { VENDORED_JAR } from '../../util/utils.ts';
 import { resolveJava } from '../../core/render/jre.ts';
-import { renderDiagram } from '../../core/render/diagrams.ts';
+import { PlantUmlInputError, renderDiagram } from '../../core/render/diagrams.ts';
 import { renderD2, teardownD2 } from '../../core/render/d2renderer.ts';
 import { renderBpmn, teardownBpmn } from '../../core/render/bpmnrenderer.ts';
 import { renderMermaid, teardownMermaid } from '../../core/render/mermaidrenderer.ts';
 import { renderWireflow } from '../../core/render/wireflowrenderer.ts';
+// Короткий текст и подробности ошибки — общие со сборкой: один файл даёт один и тот же текст.
+import { describeRenderError, errorDetails } from '../../core/render/errors.ts';
 import { warnUndeclaredRels } from '../../core/render/plantumllint.ts';
-import {
-    DiagramError,
-    type DiagramProblem,
-    errorText,
-    isDiagramError,
-    problemText
-} from '../../core/render/problem.ts';
+import { DiagramError, type DiagramProblem, errorText, problemText } from '../../core/render/problem.ts';
 import { captureDiagramWarnings, diagramWarningCount } from '../../core/render/warnings.ts';
 import {
     type Diagnostic,
@@ -37,12 +34,6 @@ import { type Format, formatReport, realFile, reportBase } from './check.report.
 // в сборке (системный `plantuml` может отличаться версией). Код выхода 0 — все файлы ок,
 // 1 — есть ошибка (движка, неизвестного расширения или чтения файла), а с `--strict` —
 // и предупреждение (для CI и pre-commit).
-
-// stderr PlantUML в -pipe: `ERROR` / позиция / описание. Позиция — 0-based строка
-// диаграммы, для файла с одной диаграммой это file:N+1.
-// ponytail: в файле с несколькими @startuml позиция считается от начала блока — смещение
-// не учитываем, добавить, если такие файлы станут проверять.
-const PUML_ERROR = /^ERROR\n(\d+)\n(.*)$/m;
 
 const JAR_PATH = path.join(VENDOR_DIR, VENDORED_JAR.jar);
 
@@ -86,14 +77,14 @@ const checkPlantUml = async (abs: string, log: Log): Promise<void> => {
             if (!isLib && !isDitaa) warnUndeclaredRels(relative(abs), content.toString(), svg.toString());
             return;
         } catch (e) {
-            const m = errorText(e).match(PUML_ERROR);
-            if (!m) throw e;
+            // Повтор — только на ошибке входа: сбой процесса java контекстом C4 не лечится.
+            if (!(e instanceof PlantUmlInputError)) throw e;
             if (i < attempts.length - 1) continue;
-            // Для .iuml позиция относится к обёртке, а не к файлу — не показываем.
-            const problem: DiagramProblem = isLib
-                ? { message: m[2] }
-                : { line: Number(m[1]) + 1, message: m[2] };
-            throw new DiagramError(problemText(problem), [problem]);
+            if (!isLib) throw e;
+            // Для .iuml позиция относится к обёртке, а не к файлу — не показываем; полный вывод
+            // движка (message) остаётся для --verbose.
+            const problem: DiagramProblem = { message: e.details[0].message };
+            throw new DiagramError(e.message, [problem], [problemText(problem)]);
         }
     }
 };
@@ -183,8 +174,8 @@ const checkFiles = async (
     }
 };
 
-// Текст: `✓`/`✗` по файлу, предупреждения печатают сами движки (`⚠`).
-const checkText = async (files: string[], strict: boolean): Promise<number> => {
+// Текст: `✓`/`✗` по файлу, предупреждения печатают сами движки (`⚠`, тоже stderr).
+const checkText = async (files: string[], strict: boolean, verbose: boolean): Promise<number> => {
     let failed = false;
     await checkFiles(
         files,
@@ -193,8 +184,9 @@ const checkText = async (files: string[], strict: boolean): Promise<number> => {
             if (failure) {
                 failed = true;
                 const { error } = failure;
-                for (const p of isDiagramError(error) ? error.problems : [errorText(error)])
-                    console.error(chalk.red(`✗ ${file}: ${p}`));
+                for (const p of describeRenderError(error)) console.error(chalk.red(`✗ ${file}: ${p}`));
+                // Сбой процесса PlantUML в короткой строке обещает подробности по --verbose.
+                if (verbose) console.error(chalk.gray(errorDetails(error)));
             } else if (strict && warnings) {
                 failed = true;
                 console.error(chalk.red(`✗ ${file}: ${warnings} warning(s), failing with --strict`));
@@ -266,17 +258,9 @@ const readList = async (from: string): Promise<string[]> => {
     return content.split(/\r?\n/).filter((line) => line.trim() !== '');
 };
 
-// Выход явный и при успехе: висящий handle упавшего движка (воркер D2, окно jsdom) иначе
-// подвесил бы CI. Но process.exit не ждёт асинхронной записи в pipe (macOS) — выходим из
-// колбэка последней записи: колбэки потока идут по порядку, значит всё выше уже записано.
-const exitAfterWrite = (code: number, out = ''): Promise<never> =>
-    new Promise(() => {
-        process.stdout.write(out, () => process.stderr.write('', () => process.exit(code)));
-    });
-
 export default async (
     files: string[],
-    opts: { strict?: boolean; format?: Format; json?: boolean; filesFrom?: string } = {}
+    opts: { strict?: boolean; format?: Format; json?: boolean; filesFrom?: string; verbose?: boolean } = {}
 ): Promise<void> => {
     const format = opts.format ?? (opts.json ? 'json' : 'text');
     const list = opts.filesFrom === undefined ? files : [...files, ...(await readList(opts.filesFrom))];
@@ -289,5 +273,5 @@ export default async (
         console.log(chalk.red(`usage: c4builder check [--strict] <file...>  (${EXTENSIONS.join(' | ')})`));
         process.exit(1);
     }
-    return exitAfterWrite(await checkText(list, !!opts.strict));
+    return exitAfterWrite(await checkText(list, !!opts.strict, !!opts.verbose));
 };
