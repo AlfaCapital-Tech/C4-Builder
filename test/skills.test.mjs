@@ -33,10 +33,17 @@ const COMMANDS = [
     'feedback',
     'skills',
     'doctor',
-    'status'
+    'status',
+    'list',
+    'reset',
+    'docs',
+    'help'
 ];
 const FLAG = /(?<![\w-])--?[a-zA-Z][\w-]*/g;
-const help = spawnSync(process.execPath, [CLI, '--help'], { encoding: 'utf8' }).stdout;
+// Общая справка несёт только глобальные опции, остальные — в справках команд (change command-help);
+// флаговые алиасы (`--site`, `--new`…) не печатаются нигде — скиллы учат позиционной форме.
+const helpOf = (...args) => spawnSync(process.execPath, [CLI, ...args], { encoding: 'utf8' }).stdout;
+const help = [helpOf('--help'), ...COMMANDS.map((cmd) => helpOf(cmd, '--help'))].join('\n');
 const KNOWN_FLAGS = new Set(help.match(FLAG));
 
 // Frontmatter Agent Skills — плоские `key: value` между `---`; YAML-парсера в зависимостях
@@ -64,7 +71,11 @@ const cliCommands = (text) => {
 };
 
 describe('скиллы', () => {
-    it('help CLI разобран', () => expect(KNOWN_FLAGS.has('--site')).toBe(true));
+    it('help CLI разобран', () => {
+        expect(KNOWN_FLAGS.has('--watch')).toBe(true); // общая справка
+        expect(KNOWN_FLAGS.has('--wait')).toBe(true); // справка feedback
+        expect(KNOWN_FLAGS.has('--site')).toBe(false); // алиас — не каноническая форма
+    });
 
     it('набор скиллов — ровно поставляемый (README, AGENTS.md ссылаются на него)', () =>
         expect(SKILLS).toEqual(['c4builder', 'c4builder-review', 'c4builder-setup']));

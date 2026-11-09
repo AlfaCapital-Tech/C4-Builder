@@ -5,6 +5,7 @@ import path from 'node:path';
 import chalk from 'chalk';
 
 import { isPathInside } from '../util/archive.ts';
+import type { ExitCodes } from '../util/exit.ts';
 import { PACKAGE_ROOT, packageJson as pkg } from '../util/paths.ts';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -121,17 +122,25 @@ const installedGlobally = (globalRoot: string): boolean => {
 
 // `c4builder update`: ставит новейшую версию при глобальной npm-установке, иначе подсказывает,
 // как обновиться. Ставим точную версию, а не @latest: для пререлиза новейшей бывает и latest.
+export const EXIT = {
+    ok: [0, 'up to date, or updated'],
+    failed: [
+        1,
+        'the registry is unreachable, or this copy is not a global npm install (npm exit code if npm fails)'
+    ]
+} as const satisfies ExitCodes;
+
 export const cmdUpdate = (): void => {
     if (process.env.C4BUILDER_DOCKER) {
         console.log('c4builder runs in the Docker image, pull the new image instead:');
         console.log('  docker pull ghcr.io/alfacapital-tech/c4builder:latest');
-        process.exit(1);
+        process.exit(EXIT.failed[0]);
     }
     const view = npmSync(VIEW, { stdio: ['ignore', 'pipe', 'inherit'], timeout: 60_000 });
     if (view.status !== 0) {
         const reason = view.error?.message ?? `npm exited with code ${view.status}`;
         console.error(chalk.red(`could not query the npm registry: ${reason}`));
-        process.exit(1);
+        process.exit(EXIT.failed[0]);
     }
     const next = newestVersion(pkg.version, view.stdout);
     if (!next) {
@@ -141,12 +150,14 @@ export const cmdUpdate = (): void => {
     const root = npmSync(['root', '-g'], { stdio: ['ignore', 'pipe', 'ignore'], timeout: 60_000 });
     if (root.status === 0 && installedGlobally(root.stdout.trim())) {
         console.log(`updating c4builder ${pkg.version} -> ${next}`);
-        process.exit(npmSync(['install', '-g', `${pkg.name}@${next}`], { stdio: 'inherit' }).status ?? 1);
+        process.exit(
+            npmSync(['install', '-g', `${pkg.name}@${next}`], { stdio: 'inherit' }).status ?? EXIT.failed[0]
+        );
     }
     console.log(
         `c4builder ${next} is available (current ${pkg.version}), but this copy is not a global npm install.`
     );
     console.log(`update the project dependency:  npm i -D ${pkg.name}@${next}`);
     console.log(`or run the new version once:    npx ${pkg.name}@${next}`);
-    process.exit(1);
+    process.exit(EXIT.failed[0]);
 };

@@ -1,4 +1,5 @@
 import chalk from 'chalk';
+import type { ExitCodes } from '../../util/exit.ts';
 import {
     resolveJava,
     detectSystemJava,
@@ -13,6 +14,11 @@ import {
 // `c4builder jre info` — машиночитаемые параметры managed-JRE (JSON): путь кеша и
 // материал ключа для внешних кешей (actions/cache в CI) из единственного источника
 // истины, вместо grep констант по исходникам и хардкода пути.
+export const EXIT = {
+    ok: [0, 'success'],
+    failed: [1, 'unknown subcommand, or the download failed']
+} as const satisfies ExitCodes;
+
 export default async (args: string[] = [], { force = false }: { force?: boolean } = {}): Promise<void> => {
     const action = args[0];
     if (action === 'info') {
@@ -24,7 +30,7 @@ export default async (args: string[] = [], { force = false }: { force?: boolean 
     if (action !== 'install') {
         console.log(chalk.red(`unknown subcommand: c4builder jre ${action || ''}`.trim()));
         console.log(chalk.gray('available: c4builder jre install [--force] | jre info'));
-        process.exit(1);
+        process.exit(EXIT.failed[0]);
     }
 
     try {
@@ -42,6 +48,6 @@ export default async (args: string[] = [], { force = false }: { force?: boolean 
         console.log(chalk.green(`JRE ready (${from}): ${resolved.path}`));
     } catch (e) {
         console.log(chalk.red((e as Error).message));
-        process.exit(1);
+        process.exit(EXIT.failed[0]);
     }
 };

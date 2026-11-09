@@ -6,6 +6,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import chalk from 'chalk';
 
+import type { ExitCodes } from '../../util/exit.ts';
 import { detectAgent } from '../agent.ts';
 import { compareVersions, newestVersion, npmCommand, viewArgs, WIN } from '../update.ts';
 import { packageSkills, SKILLS_DIR, skillRoots, stampIn, unstamp } from './skills.ts';
@@ -625,7 +626,7 @@ const pathsCheck = async (ctx: Ctx, config: C4ConfigFile): Promise<Check> => {
 
 const project = async (ctx: Ctx): Promise<Check[]> => {
     const p = ctx.project;
-    if (!p) return [check('project.config', 'skipped', 'no .c4builder here', { fix: 'c4builder --new' })];
+    if (!p) return [check('project.config', 'skipped', 'no .c4builder here', { fix: 'c4builder new' })];
     const name = path.relative(ctx.cwd, p.file);
     if (p.error !== undefined)
         return [
@@ -711,6 +712,14 @@ const runtime = async (ctx: Ctx): Promise<Check[]> => {
 
 const GROUPS = { env, skills, render, project, runtime };
 type Group = keyof typeof GROUPS;
+// Для справки `doctor --help`: перечень групп берётся отсюда, а не пишется в тексте второй раз.
+export const GROUP_NAMES = Object.keys(GROUPS) as Group[];
+
+export const EXIT = {
+    ok: [0, 'no errors'],
+    errors: [1, 'errors found (with --strict, warnings too)'],
+    unknownGroup: [2, 'unknown group']
+} as const satisfies ExitCodes;
 const TITLES: Record<Group, string> = {
     env: 'Environment',
     skills: 'Skills',
@@ -756,7 +765,7 @@ export default async (
     if (unknown.length) {
         console.error(`unknown doctor group: ${unknown.join(', ')}`);
         console.error(`available groups: ${Object.keys(GROUPS).join(', ')}`);
-        process.exit(2);
+        process.exit(EXIT.unknownGroup[0]);
     }
     const groups = (Object.keys(GROUPS) as Group[]).filter((g) => !args.length || args.includes(g));
     const cwd = process.cwd();
@@ -831,5 +840,5 @@ export default async (
         lines.push(`${plural(errors, 'error')}, ${plural(warnings, 'warning')}`);
         console.log(lines.join('\n'));
     }
-    process.exitCode = errors || (opts.strict && warnings) ? 1 : 0;
+    process.exitCode = errors || (opts.strict && warnings) ? EXIT.errors[0] : EXIT.ok[0];
 };

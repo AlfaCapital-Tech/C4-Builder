@@ -136,7 +136,7 @@ repository — run it when the user asked for the setup of this project, otherwi
 `c4builder doctor skills` shows what is installed where: missing, outdated or edited copies, a
 stale personal copy that shadows the project skills (for example from `npx skills add -g`; remove
 it only with the user's consent) and copies in Claude Code plugins (informational, no fix). A
-project created with `c4builder --new` already has the skills.
+project created with `c4builder new` already has the skills.
 
 ## Report
 

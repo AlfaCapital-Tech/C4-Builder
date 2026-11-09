@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { text as streamText } from 'node:stream/consumers';
 
 import { VENDOR_DIR } from '../../util/paths.ts';
-import { exitAfterWrite } from '../../util/exit.ts';
+import { type ExitCodes, exitAfterWrite } from '../../util/exit.ts';
 import { VENDORED_JAR } from '../../util/utils.ts';
 import { resolveJava } from '../../core/render/jre.ts';
 import { PlantUmlInputError, renderDiagram } from '../../core/render/diagrams.ts';
@@ -34,6 +34,14 @@ import { type Format, formatReport, realFile, reportBase } from './check.report.
 // в сборке (системный `plantuml` может отличаться версией). Код выхода 0 — все файлы ок,
 // 1 — есть ошибка (движка, неизвестного расширения или чтения файла), а с `--strict` —
 // и предупреждение (для CI и pre-commit).
+
+export const EXIT = {
+    ok: [0, 'all files are valid (with --strict: and without warnings)'],
+    failed: [
+        1,
+        'at least one file has errors (with --strict: or warnings), no files given, or --files-from cannot be read'
+    ]
+} as const satisfies ExitCodes;
 
 const JAR_PATH = path.join(VENDOR_DIR, VENDORED_JAR.jar);
 
@@ -112,7 +120,8 @@ const CHECKERS: Record<string, Checker> = {
         run: async (abs) => renderWireflow(await readFile(abs, 'utf8'), relative(abs))
     }
 };
-const EXTENSIONS = Object.keys(CHECKERS);
+// Экспорт — для справки `check --help`: список расширений там не расходится с кодом.
+export const EXTENSIONS = Object.keys(CHECKERS);
 const EXPECTED = `${EXTENSIONS.slice(0, -1).join(', ')} or ${EXTENSIONS[EXTENSIONS.length - 1]}`;
 
 const checkerFor = (abs: string): Checker | undefined => {
@@ -193,7 +202,7 @@ const checkText = async (files: string[], strict: boolean, verbose: boolean): Pr
             } else console.log(chalk.green(`✓ ${file}`));
         }
     );
-    return failed ? 1 : 0;
+    return failed ? EXIT.failed[0] : EXIT.ok[0];
 };
 
 // Машинный формат: замечания копятся и печатаются одним отчётом в конце (json и gitlab — один
@@ -226,7 +235,10 @@ const checkMachine = async (
     } finally {
         captureDiagramWarnings(null);
     }
-    return { code: failed ? 1 : 0, report: formatReport(format, uniqueDiagnostics(all), reportBase(format)) };
+    return {
+        code: failed ? EXIT.failed[0] : EXIT.ok[0],
+        report: formatReport(format, uniqueDiagnostics(all), reportBase(format))
+    };
 };
 
 // BPMN и wireflow сообщают только id — строку и колонку берём из объявления id в исходнике.
@@ -253,7 +265,7 @@ const readList = async (from: string): Promise<string[]> => {
         content = from === '-' ? await streamText(process.stdin) : await readFile(from, 'utf8');
     } catch (e) {
         console.error(chalk.red(`--files-from: cannot read ${from}: ${errorText(e)}`));
-        process.exit(1);
+        process.exit(EXIT.failed[0]);
     }
     return content.split(/\r?\n/).filter((line) => line.trim() !== '');
 };
@@ -271,7 +283,7 @@ export default async (
     // Пустой список из --files-from — «изменённых диаграмм нет», а не ошибка вызова.
     if (list.length === 0 && opts.filesFrom === undefined) {
         console.log(chalk.red(`usage: c4builder check [--strict] <file...>  (${EXTENSIONS.join(' | ')})`));
-        process.exit(1);
+        process.exit(EXIT.failed[0]);
     }
     return exitAfterWrite(await checkText(list, !!opts.strict, !!opts.verbose));
 };

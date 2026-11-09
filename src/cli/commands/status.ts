@@ -1,15 +1,24 @@
+import type { ExitCodes } from '../../util/exit.ts';
 import { findServer } from '../server-state.ts';
 
 // `c4builder status [--json]` (change site-server-state, D8): работает ли dev-сервер этого проекта.
 // Код 0/1 — скилл проверяет сервер одним вызовом вместо curl. Только читает: без Configstore, файлов
 // не создаёт и недействительный файл состояния не удаляет — его перезапишет следующий сервер.
+export const EXIT = {
+    running: [0, 'the site of this project is running (even when busy and not answering in time)'],
+    notRunning: [
+        1,
+        'not running: the port is free, or used by another process or by the site of another project'
+    ]
+} as const satisfies ExitCodes;
+
 export default async (configPath: string, opts: { port?: number; json?: boolean }): Promise<void> => {
     const found = await findServer(configPath, { port: opts.port });
     const { port, source, url } = found;
     // Не отвечающий вовремя сервер из файла — работает (pid жив, порт занят им): второй не поднять,
     // и `running: false` отправило бы агента запускать его.
     const running = found.kind === 'own' || found.kind === 'unresponsive';
-    process.exitCode = running ? 0 : 1;
+    process.exitCode = running ? EXIT.running[0] : EXIT.notRunning[0];
 
     if (opts.json) {
         const report =

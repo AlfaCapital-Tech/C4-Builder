@@ -1,11 +1,11 @@
 ---
 name: c4builder-review
-description: Review c4builder pages with a human right on the local site - the human selects text in c4builder --site -w and leaves comments with the Tell agent button, the agent receives them in batches with c4builder feedback --wait --as <name>, edits the sources and waits for the next batch until Approve. Use when asked to discuss a change on the site, to show the pages or a design, to review a page, the design or OpenSpec artifacts, when the human says they will leave comments on the page, right after proposing an OpenSpec change in a repository with c4builder, and on /c4builder-review [change-id|page].
+description: Review c4builder pages with a human right on the local site - the human selects text in c4builder site -w and leaves comments with the Tell agent button, the agent receives them in batches with c4builder feedback --wait --as <name>, edits the sources and waits for the next batch until Approve. Use when asked to discuss a change on the site, to show the pages or a design, to review a page, the design or OpenSpec artifacts, when the human says they will leave comments on the page, right after proposing an OpenSpec change in a repository with c4builder, and on /c4builder-review [change-id|page].
 ---
 
 # c4builder-review: page comments to the agent
 
-The human looks at the pages in the browser (`c4builder --site -w`), selects text and presses:
+The human looks at the pages in the browser (`c4builder site -w`), selects text and presses:
 
 - **Tell agent** — a comment to you. It is not written to the files and comes to you in a batch:
   **Send now** sends one comment, **Add** → **Send to agent** sends several (from several pages
@@ -40,9 +40,9 @@ seconds and run `c4builder status` again; never start a second one.
 
 `no c4builder site of this project on … — the port is used by the c4builder site of another
 project` (exit code 1) — another worktree's site holds the port: do not review on it; start this
-project's site on a free port, `c4builder --site -w -p <n>`.
+project's site on a free port, `c4builder site -w -p <n>`.
 
-Exit code 1 (`no c4builder site on …`) — ask the user to start `c4builder --site -w`, or ask whether
+Exit code 1 (`no c4builder site on …`) — ask the user to start `c4builder site -w`, or ask whether
 you may start it yourself in the background — many teams keep the preview server in the human's
 hands. If it exits with `port <port> is already in use — pass a different one, e.g. -p <n>`,
 restart it with that `-p <n>` and run `c4builder status` again: the commands below find the server
@@ -94,7 +94,7 @@ no restart. Errors:
 - `--as <name> is required` (exit code 2) — the name is missing or invalid: fix it and run again;
 - `no c4builder site -w on …` (exit code 1) — no server or it crashed: back to step 1;
 - `agent feedback is disabled on …` (exit code 1) — the server runs without `-w` or with
-  `--no-agent`: ask the user to restart `c4builder --site -w`;
+  `--no-agent`: ask the user to restart `c4builder site -w`;
 - `unknown command: feedback` or `unknown option '--as'` — the CLI is older than this skill: tell
   the user, `c4builder update` updates it (only when they agree).
 

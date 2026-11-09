@@ -138,7 +138,7 @@ Plugins: ${
     if (issues.length) {
         console.log(
             chalk.yellow(
-                '⚠ Invalid keys in .c4builder (shown as "not set", fix them with `c4builder --config`):'
+                '⚠ Invalid keys in .c4builder (shown as "not set", fix them with `c4builder config`):'
             )
         );
         for (const { key, value, message } of issues)

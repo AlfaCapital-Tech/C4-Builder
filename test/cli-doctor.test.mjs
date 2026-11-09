@@ -99,13 +99,13 @@ describe('команда doctor', () => {
     it('вне проекта без терминала — проверки выполняются, project skipped, каталог пуст', () => {
         const { cwd, run, json } = sandbox({ git: false });
         const res = run(['--offline']);
-        expect(res.stderr).not.toContain('run c4builder --new, or c4builder --config');
+        expect(res.stderr).not.toContain('run c4builder new, or c4builder config');
         for (const title of ['Environment', 'Skills (all agents)', 'Render', 'Project', 'Runtime'])
             expect(res.stdout).toMatch(new RegExp(`^${title.replace(/[()]/g, '\\$&')}$`, 'm'));
         expect(lastLine(res.stdout)).toMatch(/^\d+ errors?, \d+ warnings?$/);
         const { report } = json(['project', '--offline']);
         expect(report.checks).toEqual([
-            { id: 'project.config', status: 'skipped', message: 'no .c4builder here', fix: 'c4builder --new' }
+            { id: 'project.config', status: 'skipped', message: 'no .c4builder here', fix: 'c4builder new' }
         ]);
         expect(fs.readdirSync(cwd)).toEqual([]);
     });

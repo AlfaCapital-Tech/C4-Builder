@@ -112,7 +112,7 @@ folder.
   first one wins), gets no short address — the build prints a warning and goes on. The address map lives in `index.html` (`$docsify.c4builder.redirects`) together
   with the local script `vendor/c4builder-redirects.js`, so the address works on a published site
   too; with your own `docsifyTemplate` — as long as the template writes the options it receives into
-  `window.$docsify` as a whole. `c4builder --site -w --open-change <id>` and the `Change page` line of the
+  `window.$docsify` as a whole. `c4builder site -w --open-change <id>` and the `Change page` line of the
   `feedback` command use this address, see
   [CLI & configuration](05%20CLI%20and%20configuration/05%20CLI%20and%20configuration.md).
 

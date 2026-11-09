@@ -15,7 +15,7 @@ rendered at build time, not in the browser (plantuml.com, client-side mermaid). 
 `generateLocalImages: false` (diagram images link to `plantumlServerUrl`), a custom `webTheme`
 or `docsifyTemplate` that uses them, external images in page text.
 
-- To view it locally, run `c4builder site` (or `--site -w` to rebuild on changes), by default at
+- To view it locally, run `c4builder site` (or `c4builder site -w` to rebuild on changes), by default at
   `http://localhost:3000`. Double-clicking `index.html` will not work: docsify loads pages with
   requests and needs an HTTP server.
 - To publish it, copy the output folder to any static hosting: GitHub Pages, GitLab Pages,

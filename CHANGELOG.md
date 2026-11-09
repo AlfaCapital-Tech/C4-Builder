@@ -82,6 +82,12 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
 - plugin contract: `assets.scripts` / `assets.styles` accept `{ name, content }` next to file
   paths — the core writes the string to `dist/vendor/plugins/<name>/`, so a plugin keeps its own
   site script in source like the core scripts
+- `c4builder <command> --help` (`-h`, `c4builder help <command>`) prints the help of that command:
+  purpose, usage, its own options, output format, exit codes and examples — no files, no config,
+  no new-version notice. `c4builder --help` lists the commands and only the global options
+  (`-c`, `-w`, `-p`, `--system-fonts`, `-V`, `-h`); scripts parsing it see fewer flags. New
+  positional forms `c4builder list`, `reset`, `docs`; the flag forms `--site`, `--new`, `--config`,
+  `--list`, `--reset`, `--docs` still work but are no longer shown in the help (#63)
 
 ## v0.14.0
 
