@@ -64,7 +64,7 @@ and a system font that has them — the output then depends on the machine.
 
 `.d2` files are rendered by the bundled D2 engine (WASM → SVG), which is the optional npm
 dependency `@terrastruct/d2`. A `.d2` file in a project without it stops the build with an
-install hint. D2 has no online renderer, so `generateLocalImages` must stay `true`.
+install hint.
 
 - Imports: `@file` / spread `...@file` (without the `.d2` extension), resolved by
   c4builder itself — no network. Keep shared classes in a `_`-prefixed file

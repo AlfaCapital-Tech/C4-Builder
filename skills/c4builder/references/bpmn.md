@@ -135,4 +135,3 @@ rules) and is the same in `check` and in the build — there is no project confi
 - The engine packages (`bpmn-js`, `bpmn-moddle`, `bpmnlint`, `bpmn-auto-layout`, `jsdom`)
   are optional npm dependencies, loaded only when the project has a `.bpmn`. An install with
   `--omit=optional` stops such a build with a hint to reinstall c4builder.
-- Like D2, BPMN has no online renderer: `generateLocalImages` must stay `true`.

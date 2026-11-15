@@ -3,6 +3,20 @@
 User-facing changes of C4-Builder. Every pull request that changes behaviour adds a line to
 `## Unreleased`; the release commit renames it to `## vX.Y.Z`.
 
+## Unreleased
+
+- **BREAKING (config):** online PlantUML rendering is removed — every diagram is rendered locally
+  and diagram sources never go to an external render server. `generateLocalImages` and
+  `plantumlServerUrl` are gone from the defaults, the setup wizard, `--list` and new projects;
+  `c4builder doctor` no longer reports them as missing. An old `.c4builder` with
+  `generateLocalImages: false` builds locally with exit code 0 and a warning naming both keys
+  (the file is not modified); `true` and `plantumlServerUrl` are ignored silently. Such projects
+  now need Java (resolved automatically, or a private JRE is downloaded) or the Docker image;
+  remove both keys from `.c4builder` (#33)
+- **BREAKING (output):** `vendor/docsify-plantuml.min.js` is no longer shipped or copied to the
+  site. A custom `docsifyTemplate` that loads it gets a build warning; the build passes — remove
+  the `<script>` tag from the template (#33)
+
 ## v0.15.0
 
 - A build with broken diagrams prints one `✗ <file>: line <N>: <message>` line per diagram — the

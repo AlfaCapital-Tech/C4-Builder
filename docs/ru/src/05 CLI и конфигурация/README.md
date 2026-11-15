@@ -519,8 +519,6 @@ required` с примером, к серверу команда не обращ�
 | `includeLinkToDiagram` | `false` | ссылка вместо картинки диаграммы |
 | `embedDiagram` | `false` | картинка в markdown base64-строкой |
 | `excludeOtherFiles` | `false` | не копировать прочие файлы из исходников |
-| `generateLocalImages` | `true` | локальный рендер; `false` — ссылки на онлайн-сервер |
-| `plantumlServerUrl` | `https://www.plantuml.com/plantuml` | сервер для `generateLocalImages: false` |
 | `diagramFormat` | `svg` | `svg` или `png` |
 | `d2Layout` | `dagre` | раскладка D2: `dagre` или `elk` |
 | `useSystemFonts` | `false` | системные шрифты вместо вендорного |

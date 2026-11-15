@@ -22,11 +22,11 @@
 
 ## 4. Актуализация
 
-- [ ] 4.1 Сайт ru/en: удалить раздел «Онлайн-сервер PlantUML» на страницах «Диаграммы», строки `generateLocalImages`/`plantumlServerUrl` из таблиц конфига на «CLI и конфигурация», переписать абзац о внешних адресах на «Выводы» (без онлайн-режима и с предупреждением о `docsify-plantuml`) — тест `docs-parity` зелёный, `grep -rn "plantumlServerUrl\|generateLocalImages" docs/ru/src docs/en/src` пуст
-- [ ] 4.2 Удалить оба ключа из `docs/ru/.c4builder` и `docs/en/.c4builder` — сайт документации собирается без предупреждения о ключах
-- [ ] 4.3 `skills/c4builder`: `SKILL.md` и `references/` (`config.md`, `diagrams.md`, `bpmn.md`, `mermaid.md`, `wireflow.md`) — убрать ключи и упоминания онлайн-рендера; проверить `template/AGENTS.md` — тест `skills` зелёный, `grep -rn "plantumlServerUrl\|generateLocalImages" skills template` пуст
-- [ ] 4.4 CHANGELOG `## Unreleased`: **BREAKING (config)** — онлайн-рендер удалён, `generateLocalImages: false` даёт предупреждение и локальную сборку (нужна Java или Docker-образ), ключи можно удалить; `docsify-plantuml.min.js` больше не поставляется — запись присутствует
-- [ ] 4.5 Итоговая проверка: `npm run build && npm run check && npm test` зелёные
+- [x] 4.1 Сайт ru/en: удалить раздел «Онлайн-сервер PlantUML» на страницах «Диаграммы», строки `generateLocalImages`/`plantumlServerUrl` из таблиц конфига на «CLI и конфигурация», переписать абзац о внешних адресах на «Выводы» (без онлайн-режима и с предупреждением о `docsify-plantuml`) — тест `docs-parity` зелёный, `grep -rn "plantumlServerUrl\|generateLocalImages" docs/ru/src docs/en/src` пуст
+- [x] 4.2 Удалить оба ключа из `docs/ru/.c4builder` и `docs/en/.c4builder` — сайт документации собирается без предупреждения о ключах
+- [x] 4.3 `skills/c4builder`: `SKILL.md` и `references/` (`config.md`, `diagrams.md`, `bpmn.md`, `mermaid.md`, `wireflow.md`) — убрать ключи и упоминания онлайн-рендера; проверить `template/AGENTS.md` — тест `skills` зелёный, `grep -rn "plantumlServerUrl\|generateLocalImages" skills template` пуст
+- [x] 4.4 CHANGELOG `## Unreleased`: **BREAKING (config)** — онлайн-рендер удалён, `generateLocalImages: false` даёт предупреждение и локальную сборку (нужна Java или Docker-образ), ключи можно удалить; `docsify-plantuml.min.js` больше не поставляется — запись присутствует
+- [x] 4.5 Итоговая проверка: `npm run build && npm run check && npm test` зелёные
 
 ## Workflow follow-up
 

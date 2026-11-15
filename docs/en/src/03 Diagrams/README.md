@@ -253,13 +253,6 @@ With `diagramFormat: png`, c4builder renders SVG and rasterizes it with
 [resvg](https://github.com/thx/resvg-js) using the same bundled font. The PNG is consistent for
 PlantUML, D2, BPMN, mermaid and wireflow and needs no browser. ditaa stays a native PlantUML PNG.
 
-## Online PlantUML server
-
-With `generateLocalImages: false`, diagrams are not rendered locally: the output links to the
-server from `plantumlServerUrl` (default `https://www.plantuml.com/plantuml`). This means diagram
-sources go to an external server, and D2, BPMN, mermaid and wireflow do not work in this mode — the build stops
-with an error. The mode is kept for compatibility; local rendering is the main one.
-
 ## Checking individual diagrams
 
 ```bash
