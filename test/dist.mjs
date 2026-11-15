@@ -44,6 +44,7 @@ export { CHANGES_FILTER_JS } from '../dist/plugins/openspec/filter.script.js';
 export {
     foldIncludes,
     clearIncludeCache,
+    generateTree,
     engineForFile,
     diagramBaseName,
     diagramExt
@@ -63,7 +64,12 @@ export {
 } from '../dist/cli/commands/check.problems.js';
 export { formatGithub, formatGitlab, formatJson, reportBase } from '../dist/cli/commands/check.report.js';
 export { DiagramError, problemText } from '../dist/core/render/problem.js';
-export { diagramRefRegex, generateLlmsFull, stripEmbeddedImages } from '../dist/core/compose/markdown.js';
+export {
+    diagramRefRegex,
+    generateLlmsFull,
+    generateMD,
+    stripEmbeddedImages
+} from '../dist/core/compose/markdown.js';
 export { compareVersions, newestVersion } from '../dist/cli/update.js';
 export { defineOptions } from '../dist/cli/options.js';
 export { COMMAND_HELP, FLAG_ALIASES, GLOBAL_OPTIONS } from '../dist/cli/help.js';

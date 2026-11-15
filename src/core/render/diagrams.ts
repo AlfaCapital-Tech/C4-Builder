@@ -8,7 +8,6 @@ import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 
 import { writeFile, VENDORED_JAR } from '../../util/utils.ts';
-import { httpGetBuffer } from '../../util/http.ts';
 // D2-бэкенд: только статические хелперы (парсинг импортов) грузятся сразу; сам
 // движок @terrastruct/d2 тянется лениво внутри renderD2/teardownD2.
 import { renderD2, foldD2Imports } from './d2renderer.ts';
@@ -254,11 +253,6 @@ export const getMime = (format: string): string => {
     if (format === 'svg') return `image/svg+xml`;
     return `image/${format}`;
 };
-
-// Загрузка удалённо отрендеренной картинки (embed-ветка онлайн-рендера PlantUML) в
-// base64. Редиректы и таймауты берём из общего util/http: прежде здесь был голый GET
-// без обоих — 302 от PlantUML-сервера ронял embed-сборку, а зависший сокет вешал её.
-export const httpGet = async (url: string): Promise<string> => (await httpGetBuffer(url)).toString('base64');
 
 // Прямой вызов PlantUML: layout считает встроенный Java-движок Smetana
 // (`-Playout=smetana`), внешний graphviz/dot не нужен. Диаграмма подаётся в stdin

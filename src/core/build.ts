@@ -8,7 +8,7 @@ import { makeDirectory, writeFile, writeProgress } from '../util/utils.ts';
 import { clearD2FileCache } from './render/d2renderer.ts';
 import { type BuildOptions, DIST_BACKUP_FOLDER_SUFFIX } from '../config/options.ts';
 // Фазы сборки: scan (дерево исходников) → render (диаграммы) → compose (markdown/сайт).
-import { generateTree, engineSupportsRemote, clearIncludeCache } from './scan/tree.ts';
+import { generateTree, clearIncludeCache } from './scan/tree.ts';
 import {
     generateImages,
     type CacheConf,
@@ -67,15 +67,11 @@ const build = async (
     const redirects: Redirects = new Map();
     const bkFolderName = options.DIST_FOLDER + DIST_BACKUP_FOLDER_SUFFIX;
 
-    // Generating local images, remove old backup image folder, rename current dist folder to new backup
-    if (options.GENERATE_LOCAL_IMAGES) {
-        await fsextra.removeSync(bkFolderName);
-        if (await fsextra.existsSync(options.DIST_FOLDER)) {
-            await fsextra.rename(options.DIST_FOLDER, bkFolderName);
-        }
-    } else {
-        //clear dist directory
-        await fsextra.emptyDir(options.DIST_FOLDER);
+    // Прошлый вывод уезжает в бэкап: из него рендер берёт неизменённые картинки, а при падении
+    // сборки он остаётся единственной полной копией удачного билда.
+    await fsextra.removeSync(bkFolderName);
+    if (await fsextra.existsSync(options.DIST_FOLDER)) {
+        await fsextra.rename(options.DIST_FOLDER, bkFolderName);
     }
     await makeDirectory(path.join(options.DIST_FOLDER));
 
@@ -95,36 +91,16 @@ const build = async (
         // неотличимы от реальных папок (диаграммы, sidebar, поиск, complete).
         await runAfterScan(tree, options, plugins, redirects);
 
-        // У движков без онлайн-рендера (D2, см. remoteRender в DIAGRAM_ENGINES) при
-        // выключенной локальной генерации диаграммы не во что превратить — ссылки на
-        // SVG вели бы в никуда. Падаем сразу с понятной ошибкой, а не молча битым выводом.
-        if (!options.GENERATE_LOCAL_IMAGES) {
-            const offline = new Set(
-                tree.flatMap((item) =>
-                    item.diagrams.filter((d) => !engineSupportsRemote(d.engine)).map((d) => d.engine)
-                )
-            );
-            if (offline.size) {
-                throw new Error(
-                    `The project has diagrams with no online render server (${[...offline].join(', ')}), ` +
-                        'but generateLocalImages is off — enable local image generation ' +
-                        '(generateLocalImages).'
-                );
-            }
-        }
-
-        if (options.GENERATE_LOCAL_IMAGES) {
-            console.log(chalk.blue('generating images'));
-            pending = await generateImages(
-                tree,
-                options,
-                (count, total) => writeProgress(count, total, 'images'),
-                cacheConf,
-                bkFolderName,
-                flags
-            );
-            console.log('');
-        }
+        console.log(chalk.blue('generating images'));
+        pending = await generateImages(
+            tree,
+            options,
+            (count, total) => writeProgress(count, total, 'images'),
+            cacheConf,
+            bkFolderName,
+            flags
+        );
+        console.log('');
         if (options.GENERATE_MD) {
             console.log(chalk.blue('generating markdown files'));
             await generateMD(tree, options, (count, total) => writeProgress(count, total, 'files'));
@@ -203,7 +179,7 @@ const build = async (
         // сломавшийся рендер уничтожает рабочий вывод).
         if (ok) {
             await fsextra.removeSync(bkFolderName);
-        } else if (options.GENERATE_LOCAL_IMAGES && fsextra.existsSync(bkFolderName)) {
+        } else if (fsextra.existsSync(bkFolderName)) {
             // stderr — вместе со строками `✗`: в `2>&1 | tail` и в логе CI они идут подряд.
             console.error(
                 chalk.yellow(`\nbuild aborted — the previous build is backed up in ./${bkFolderName}`)

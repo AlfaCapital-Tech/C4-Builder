@@ -3,16 +3,16 @@
 ## 1. Конфиг и легаси-детект
 
 - [x] 1.1 Удалить `plantumlServerUrl` и `generateLocalImages` из `defaultConfig`; в схеме удалить `plantumlServerUrl`, `generateLocalImages` перевести в `optBool()` без дефолта (D1) — `npm run build` проходит, `new -y` пишет конфиг без обоих ключей
-- [ ] 1.2 В `dispatch.ts` убрать `GENERATE_LOCAL_IMAGES`/`PLANTUML_SERVER_URL` из `BuildOptions`, добавить `LEGACY_LOCAL_IMAGES_OFF` (`generateLocalImages === false`); в `build.ts` — `WARNING:` с именами обоих ключей рядом с PDF-предупреждением, конфиг не мутируется — тест: `false` → предупреждение и код 0, `.c4builder` побайтно не изменён; `true` → без предупреждения
+- [x] 1.2 В `dispatch.ts` убрать `GENERATE_LOCAL_IMAGES`/`PLANTUML_SERVER_URL` из `BuildOptions`, добавить `LEGACY_LOCAL_IMAGES_OFF` (`generateLocalImages === false`); в `build.ts` — `WARNING:` с именами обоих ключей рядом с PDF-предупреждением, конфиг не мутируется — тест: `false` → предупреждение и код 0, `.c4builder` побайтно не изменён; `true` → без предупреждения
 - [x] 1.3 Мастер: убрать вопрос `plantumlServerUrl`, чекбокс `generateLocalImages` и оба ключа из `WIZARD_KEYS`; `--list`: убрать две строки (D4) — тест: `doctor` на конфиге без этих ключей даёт `project.complete: ok`, сборка без TTY не запускает мастер
 
 ## 2. Удаление онлайн-рендера
 
-- [ ] 2.1 Удалить `remoteRender` из `DIAGRAM_ENGINES` и `engineSupportsRemote`; в `build.ts` удалить проверку «no online render server» и схлопнуть ветки `GENERATE_LOCAL_IMAGES` (рендер, восстановление бэкапа); в `scan/tree.ts` и `plugins/tree.ts` — условие создания каталогов выхода — `npm run build` и `npm run check` проходят
-- [ ] 2.2 В `compose/markdown.ts` удалить ветку `isRemoteUrl` и условие `GENERATE_LOCAL_IMAGES` у `imgContent`; в `util/utils.ts` удалить `plantUmlServerUrl` и кодировщик (`urlTextFrom` и помощники, если больше нигде не используются) — `grep -rn "plantuml.com\|plantUmlServerUrl" src` пуст
-- [ ] 2.3 Перевести `compose-h1` и `compose-adjacent-embeds` на локальный режим с заранее записанным фиктивным SVG (D5) — тесты зелёные, проверки alt/порядка/ссылок сохранены
-- [ ] 2.4 Перевести `llms`, `cli-site`, `plugins-tree` на конфиг без онлайн-режима: убрать `.puml` из фикстур, где диаграмма не предмет теста, иначе полагаться на JRE — `npm run test:unit` зелёный
-- [ ] 2.5 Тест сценария «Старый конфиг»: проект с `.puml` и `.d2`, `generateLocalImages: false` + `plantumlServerUrl` → код 0, обе диаграммы локальные, в выходах нет `plantuml.com`, предупреждение называет оба ключа — тест зелёный
+- [x] 2.1 Удалить `remoteRender` из `DIAGRAM_ENGINES` и `engineSupportsRemote`; в `build.ts` удалить проверку «no online render server» и схлопнуть ветки `GENERATE_LOCAL_IMAGES` (рендер, восстановление бэкапа); в `scan/tree.ts` и `plugins/tree.ts` — условие создания каталогов выхода — `npm run build` и `npm run check` проходят
+- [x] 2.2 В `compose/markdown.ts` удалить ветку `isRemoteUrl` и условие `GENERATE_LOCAL_IMAGES` у `imgContent`; в `util/utils.ts` удалить `plantUmlServerUrl` и кодировщик (`urlTextFrom` и помощники, если больше нигде не используются) — `grep -rn "plantuml.com\|plantUmlServerUrl" src` пуст
+- [x] 2.3 Перевести `compose-h1` и `compose-adjacent-embeds` на локальный режим с заранее записанным фиктивным SVG (D5) — тесты зелёные, проверки alt/порядка/ссылок сохранены
+- [x] 2.4 Перевести `llms`, `cli-site`, `plugins-tree` на конфиг без онлайн-режима: убрать `.puml` из фикстур, где диаграмма не предмет теста, иначе полагаться на JRE — `npm run test:unit` зелёный
+- [x] 2.5 Тест сценария «Старый конфиг»: проект с `.puml` и `.d2`, `generateLocalImages: false` + `plantumlServerUrl` → код 0, обе диаграммы локальные, в выходах нет `plantuml.com`, предупреждение называет оба ключа — тест зелёный
 
 ## 3. Клиентский рендер PlantUML
 

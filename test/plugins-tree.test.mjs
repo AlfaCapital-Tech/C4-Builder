@@ -198,12 +198,16 @@ describe('ошибки плагинов прерывают сборку', () => 
 });
 
 describe('addPage (юнит)', () => {
+    // addPage создаёт каталог выхода страницы всегда (картинки диаграмм рендерятся при любом
+    // наборе выходов) — во временный каталог, а не в cwd репозитория.
+    fs.mkdirSync(TMP_ROOT, { recursive: true });
+    const out = fs.mkdtempSync(path.join(TMP_ROOT, 'addpage-'));
+    afterAll(() => fs.rmSync(out, { recursive: true, force: true }));
     const opts = {
         ROOT_FOLDER: 'src',
-        DIST_FOLDER: 'x',
+        DIST_FOLDER: out,
         GENERATE_WEBSITE: false,
-        GENERATE_MD: false,
-        GENERATE_LOCAL_IMAGES: false
+        GENERATE_MD: false
     };
     const mk = (dir, parent) => ({
         dir,

@@ -124,8 +124,6 @@ function getOptions(c: Partial<C4ConfigFile>): BuildOptions | Partial<BuildOptio
         // Легаси-детект: онлайн-рендер PlantUML удалён, сборка всегда локальная. Предупреждаем
         // только о явном `false` — `true` и адрес сервера записаны в каждый старый конфиг.
         LEGACY_LOCAL_IMAGES_OFF: c.generateLocalImages === false,
-        GENERATE_LOCAL_IMAGES: true,
-        PLANTUML_SERVER_URL: '',
         EMBED_DIAGRAM: c.embedDiagram,
         ROOT_FOLDER: c.rootFolder,
         DIST_FOLDER: c.distFolder,

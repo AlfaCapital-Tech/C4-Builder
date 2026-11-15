@@ -172,7 +172,6 @@ const memCache = () => {
 const OPTIONS = (dir) => ({
     ROOT_FOLDER: path.join(dir, 'src'),
     DIST_FOLDER: path.join(dir, 'docs'),
-    GENERATE_LOCAL_IMAGES: true,
     GENERATE_MD: false,
     GENERATE_WEBSITE: false,
     GENERATE_LLMS: false,
