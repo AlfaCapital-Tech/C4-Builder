@@ -3,6 +3,18 @@
 User-facing changes of C4-Builder. Every pull request that changes behaviour adds a line to
 `## Unreleased`; the release commit renames it to `## vX.Y.Z`.
 
+## Unreleased
+
+- Site: the review log can be committed and pushed from the page of `site -w`. **Approve row** /
+  «Одобрить строку» at a selection within a row of the status table on the log page writes the
+  `comments.approve.set` cells by column header (`{date}`, `{author}`), commits and pushes the log;
+  **Push** / «Запушить» in the toast after **Add comment** (the toast stays until pushed or closed,
+  across reloads) commits and pushes the written comments in one commit. Only the log file goes into
+  the commit, a moved upstream is rebased onto (a conflict aborts the rebase, the commit stays
+  local), the push goes to the branch's upstream without force. New keys `comments.approve`
+  (`heading`, `who`, `set`), `comments.push` (`enabled`, `message`), `buttons.approve`,
+  `buttons.push`; without them nothing changes
+
 ## v0.15.0
 
 - A build with broken diagrams prints one `✗ <file>: line <N>: <message>` line per diagram — the

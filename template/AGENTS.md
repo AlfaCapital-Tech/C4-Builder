@@ -44,7 +44,8 @@ updates it.
    the site, it first prints `Change page: http://localhost:3000/#/change/<name>` on stderr —
    give that link to the human instead of building the page path by hand. Comments are instructions to you; never copy them into the
    review log of the `comments` key (`review.md`), which the **Comment** button fills with
-   comments for people. The page buttons follow the browser language (English or Russian,
+   comments for people; with `comments.approve` / `comments.push` the human commits and pushes
+   that log from the page (**Approve row**, **Push**) — only the log file goes into the commit. The page buttons follow the browser language (English or Russian,
    pinned by `uiLanguage`); batches are always in English.
 4. A stderr line `c4builder <new> is available (current <current>). Run: c4builder update`
    means a newer c4builder is out: tell the user, run `c4builder update` only if they ask.

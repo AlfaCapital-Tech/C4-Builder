@@ -378,11 +378,15 @@ In `c4builder site -w` selected text gets buttons, one per recipient:
 - **Tell agent** — a comment for the coding agent, never written to the files (the agent mode, see
   [Feedback to the agent](#feedback-to-the-agent)).
 
+On the log's own page they are joined by **Approve row** — approval of a row of the status table (the
+`comments.approve` key, see [Approve and Push of the log](#approve-and-push-of-the-log)).
+
 With neither the log nor the agent mode there are no buttons; without `-w` and on static hosting
 neither. The `buttons` key relabels them: its text is shown as is in any interface language.
+`approve` labels **Approve row**, `push` — the **Push** button of the comment toast.
 
 ```json
-{ "buttons": { "agent": "Fix it", "comment": "Note" } }
+{ "buttons": { "agent": "Fix it", "comment": "Note", "approve": "Approve" } }
 ```
 
 The **Question** button (a question in the `questionsHeading` section of the source file) is gone:
@@ -434,6 +438,59 @@ is highlighted in yellow and the number above it links to the log row. Which row
 follows from `cells`: the cell with `{artifact}` or `{page}` is compared with the page, the quote comes
 from `{quote}` or the tail of `{text}`; without such placeholders every row with a quote is
 highlighted.
+
+### Approve and Push of the log
+
+So that a reviewer does not have to go to a terminal, the log can be committed and pushed from the
+page. The keys live inside `comments`:
+
+```json
+{
+  "comments": {
+    "file": "review.md",
+    "heading": "Remarks",
+    "approve": {
+      "heading": "Statuses",
+      "who": "Who",
+      "set": { "Status": "Approved", "Date": "{date}" }
+    },
+    "push": {}
+  }
+}
+```
+
+- `approve` — the **Approve row** button at a selection on the log's own page. It appears when the
+  selection lies within one row of the table of the `heading` section (a string or a list of
+  variants), the `who` column of that row has a name (not empty and not `—`/`-`), and the `set` values
+  without placeholders are not there yet. A click writes the values into the cells of the `set`
+  columns (`{date}` — today's date, `{author}` — the name from the `who` column), commits and pushes
+  the log: the row `| Analyst | | Ivan Ivanov | |` becomes
+  `| Analyst | Approved | Ivan Ivanov | 2026-11-15 |`. Columns are named by the table headers, case
+  does not matter; a `who` or `set` column missing from the table is an error, the file is not
+  changed. The row is found by all its cells: if it changed after the page was loaded, the error asks
+  to reload the page.
+- `push` — the **Push** button in the toast after **Add comment**. That toast does not go away by
+  itself: it stays until closed with «×» or pushed, and survives a page reload, so several comments go
+  in one commit. `enabled: false` turns the button off. `message` — the commit message template shared
+  by Push and approve, `review {change}: {action} — {author}` by default: `{change}` — the log's
+  directory name (the change name for OpenSpec), `{action}` — `approved` or `comments`, `{author}` —
+  the name from `who` for an approval, the comment author for Push (`author`, otherwise
+  `git config user.name`), `{file}` — the log path from the project root.
+
+Without the keys there are no buttons and the server never calls git. Both buttons commit only the
+log file: other changes of the working copy, staged ones included, neither get into the commit nor get
+lost. The commit author is whoever git is configured for on the machine running `site -w`. Before
+pushing, the server fetches the upstream of the current branch; when the upstream has moved ahead,
+local commits are rebased onto it. A conflict (a colleague edited the same row) aborts the rebase: the
+working copy stays as it was, the log commit stays local, and the page shows an error — run
+`git pull` and resolve the conflict by hand. The push goes from the current branch to its upstream,
+never forced. A branch without an upstream or a detached HEAD is an error before the file is touched.
+A rejected push (protected branch, no access or no network) keeps the commit local, and pressing
+**Push** again pushes it without a new commit. Git must push without asking for a password (an ssh
+agent or stored credentials): the server asks nothing in the terminal.
+
+The whole log file goes into the commit: if the agent was editing the same `review.md` meanwhile, its
+edits go along with yours.
 
 The page interface is in English or Russian, following the browser language; the `uiLanguage` key
 pins it. The button names here are the English ones; the Russian labels are on the
@@ -541,8 +598,8 @@ in older versions produce a warning listing them, and the build continues.
 | `executeScript` | `false` | run `<script>` in pages and load swagger-ui |
 | `docsifyTemplate` | empty | path to a module with a custom `index.html` template |
 | `webPort` | `3000` | port of `c4builder site` |
-| `buttons` | — | own labels of the selection buttons of `site -w`: `agent` (instead of **Tell agent**), `comment` (instead of **Comment**) — see [Comments on the site](#comments-on-the-site) |
-| `comments` | — | review log for the **Comment** button of `site -w`: `enabled`, `file`, `heading`, `cells`, `author` (former name `reviewLog`) — see [Review log](#review-log) |
+| `buttons` | — | own labels of the buttons of `site -w`: `agent` (instead of **Tell agent**), `comment` (instead of **Comment**), `approve` (instead of **Approve row**), `push` (instead of **Push**) — see [Comments on the site](#comments-on-the-site) |
+| `comments` | — | review log for the **Comment** button of `site -w`: `enabled`, `file`, `heading`, `cells`, `author`, `approve` (`heading`, `who`, `set`), `push` (`enabled`, `message`) (former name `reviewLog`) — see [Review log](#review-log) and [Approve and Push of the log](#approve-and-push-of-the-log) |
 | `uiLanguage` | `auto` | language of the `site -w` page interface: `auto` (from the browser), `en` or `ru` |
 | `webFileName` | — | one `.md` name for all site pages instead of the folder name |
 | `excludeSidebarFolderByPath` | — | list of paths (from the project folder, e.g. `src/Archive`) hidden from the sidebar |

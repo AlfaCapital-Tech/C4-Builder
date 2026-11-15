@@ -114,7 +114,11 @@ and exit codes; it writes nothing and works outside a project.
    that. `c4builder site` builds and serves without watching (also never exits). In `-w`, with
    the `comments` key (former name `reviewLog`), a human can select text on a page and press **Comment**: the comment
    lands as a row of the nearest `comments.file` (`review.md`) — read it there, not in `docs/`.
-   The `buttons` key relabels the selection buttons (`agent`, `comment`).
+   The `buttons` key relabels the buttons (`agent`, `comment`, `approve`, `push`). With
+   `comments.approve` / `comments.push` the human approves a status table row (**Approve row**) or
+   pushes written comments (**Push** in the comment toast) from the page: c4builder commits only the
+   log file and pushes it — your uncommitted edits elsewhere stay as they are, but your edits of the
+   same log file go into that commit.
    `C4BUILDER_RENDER_CONCURRENCY=<n>` sets the number of parallel PlantUML processes (default
    `min(4, CPU − 1)`); the output does not depend on it.
 
