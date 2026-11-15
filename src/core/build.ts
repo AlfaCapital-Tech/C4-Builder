@@ -64,13 +64,14 @@ const build = async (
     const start_date = new Date();
     let pages: PageSources = new Map();
     let pending: DiagramQueue | undefined;
+    let loadsClientPlantuml = false;
     const redirects: Redirects = new Map();
     const bkFolderName = options.DIST_FOLDER + DIST_BACKUP_FOLDER_SUFFIX;
 
     // Прошлый вывод уезжает в бэкап: из него рендер берёт неизменённые картинки, а при падении
     // сборки он остаётся единственной полной копией удачного билда.
-    await fsextra.removeSync(bkFolderName);
-    if (await fsextra.existsSync(options.DIST_FOLDER)) {
+    fsextra.removeSync(bkFolderName);
+    if (fsextra.existsSync(options.DIST_FOLDER)) {
         await fsextra.rename(options.DIST_FOLDER, bkFolderName);
     }
     await makeDirectory(path.join(options.DIST_FOLDER));
@@ -108,7 +109,9 @@ const build = async (
         }
         if (options.GENERATE_WEBSITE) {
             console.log(chalk.blue('generating docsify site'));
-            pages = await generateWebMD(tree, options, redirects);
+            const site = await generateWebMD(tree, options, redirects);
+            pages = site.pages;
+            loadsClientPlantuml = site.loadsClientPlantuml;
             await injectSiteAssets(plugins, options);
             injectRedirects(options, redirects);
         }
@@ -141,14 +144,12 @@ const build = async (
             );
         }
 
-        // Онлайн-рендер PlantUML удалён: сборка уже прошла локально, а ключи старого конфига
-        // лишь называем — `.c4builder` не мутируем, как и с PDF-ключами.
-        if (options.LEGACY_LOCAL_IMAGES_OFF) {
+        if (loadsClientPlantuml) {
             console.log(chalk.bold(chalk.yellow('WARNING:')));
             console.log(
                 chalk.yellow(
-                    'Online PlantUML rendering is no longer supported; diagrams are always rendered locally. ' +
-                        'Remove manually from .c4builder: generateLocalImages, plantumlServerUrl.'
+                    'docsifyTemplate loads docsify-plantuml: client-side PlantUML rendering is no longer shipped ' +
+                        '(diagrams are rendered at build time). Remove the docsify-plantuml <script> tag from the template.'
                 )
             );
         }
@@ -178,7 +179,7 @@ const build = async (
         // полная копия прошлого удачного билда, её нельзя терять (иначе первый же
         // сломавшийся рендер уничтожает рабочий вывод).
         if (ok) {
-            await fsextra.removeSync(bkFolderName);
+            fsextra.removeSync(bkFolderName);
         } else if (fsextra.existsSync(bkFolderName)) {
             // stderr — вместе со строками `✗`: в `2>&1 | tail` и в логе CI они идут подряд.
             console.error(

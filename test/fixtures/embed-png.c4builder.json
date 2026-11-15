@@ -21,8 +21,6 @@
   "diagramsOnTop": false,
   "embedDiagram": true,
   "excludeOtherFiles": false,
-  "generateLocalImages": true,
-  "plantumlServerUrl": "https://www.plantuml.com/plantuml",
   "diagramFormat": "png",
   "charset": "UTF-8",
   "hasRun": true

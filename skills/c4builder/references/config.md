@@ -45,8 +45,10 @@ Validation rules:
 
 Diagrams are always rendered locally (Java + bundled PlantUML, bundled D2, BPMN, mermaid and
 wireflow engines); there is no online render mode, and diagram sources never leave the machine.
-An old `.c4builder` with the removed online-render keys still builds, with a warning that names
-them — delete them from the file.
+An old `.c4builder` with the removed online-render keys still builds locally: only
+`generateLocalImages: false` prints a warning naming `generateLocalImages` and
+`plantumlServerUrl`; `generateLocalImages: true` and any `plantumlServerUrl` are silently
+ignored. Delete both keys from the file.
 
 | Key | Default | Meaning |
 |---|---|---|
@@ -77,8 +79,9 @@ them — delete them from the file.
 |---|---|---|
 | `plugins` | `[]` | `"name"` or `["name", { options }]` — see [plugins.md](plugins.md). Unlike other keys, a malformed entry always fails the build |
 
-Legacy keys (`plantumlVersion`, `generatePDF`, `generateCompletePDF`) only produce a
-warning — remove them when you see one.
+Legacy keys (`plantumlVersion`, `generatePDF`, `generateCompletePDF`, `generateLocalImages: false`)
+only produce a warning — remove them when you see one. `plantumlServerUrl` and
+`generateLocalImages: true` are dropped without a warning; remove them too.
 
 Complete config written by `c4builder new --name demo -y` — start from it when adding
 c4builder to an existing repository:

@@ -1,7 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import fsextra from 'fs-extra';
-import chalk from 'chalk';
 import { createRequire } from 'node:module';
 
 import defaultDocsifyTemplate from './docsify.template.ts';
@@ -429,13 +428,16 @@ export const generateMD = async (
 
 /** Страница сайта (posix-путь `.md` от корня dist, как его грузит docsify) → исходные файлы. */
 export type PageSources = Map<string, string[]>;
+// Итог сборки сайта: источники страниц и признак пользовательского шаблона, подключающего
+// клиентский рендер PlantUML (предупреждение печатает build — compose в консоль не пишет).
+export type WebSite = { pages: PageSources; loadsClientPlantuml: boolean };
 
 export const generateWebMD = async (
     tree: TreeItem[],
     options: BuildOptions,
     // Переадресации плагинов (change site-agent-review) — в опции docsify, см. DocsifyOptions.
     redirects: Redirects = new Map()
-): Promise<PageSources> => {
+): Promise<WebSite> => {
     const filePromises: Promise<void>[] = [];
     let docsifySideBar = '';
     const pages: PageSources = new Map();
@@ -505,16 +507,10 @@ export const generateWebMD = async (
     });
     // Проверяем готовый index.html, а не исходник шаблона: так ловится любая форма шаблона
     // (CJS/ESM/TS, теги, собранные в рантайме). Сам скрипт больше не поставляется — тег даст 404,
-    // а при наличии файла он слал бы исходники диаграмм на внешний сервер рендера.
-    if (indexHtml.includes('docsify-plantuml')) {
-        console.log(chalk.bold(chalk.yellow('WARNING:')));
-        console.log(
-            chalk.yellow(
-                'docsifyTemplate loads docsify-plantuml: client-side PlantUML rendering is no longer shipped ' +
-                    '(diagrams are rendered at build time). Remove the docsify-plantuml <script> tag from the template.'
-            )
-        );
-    }
+    // а при наличии файла он слал бы исходники диаграмм на внешний сервер рендера. Только у
+    // пользовательского шаблона и только тег <script>: подстрока в имени проекта, repoUrl или
+    // ключах переадресаций встроенного шаблона — не клиентский рендер.
+    const loadsClientPlantuml = !!options.DOCSIFY_TEMPLATE && /<script[^>]*docsify-plantuml/i.test(indexHtml);
     filePromises.push(writeFile(path.join(options.DIST_FOLDER, `index.html`), indexHtml));
 
     //copy local docsify vendor files to dist
@@ -540,5 +536,5 @@ export const generateWebMD = async (
     filePromises.push(writeFile(path.join(options.DIST_FOLDER, '_sidebar.md'), docsifySideBar));
 
     await Promise.all(filePromises);
-    return pages;
+    return { pages, loadsClientPlantuml };
 };

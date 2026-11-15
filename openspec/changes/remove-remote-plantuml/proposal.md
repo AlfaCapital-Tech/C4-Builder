@@ -38,6 +38,8 @@ _нет_
   ключи дают предупреждение; сценарий совместимости шаблона с `docsify-plantuml` меняется с «файл есть,
   нет 404» на «предупреждение, сборка проходит».
 - `output-formats`: из требования к `llms-full.txt` убирается упоминание удалённого `generateLocalImages`.
+- `regression-testing`: из контракта варианта `default` golden-теста убирается `generateLocalImages=true` —
+  ключа больше нет, рендер всегда локальный; ключ удаляется и из `test/fixtures/*.c4builder.json`.
 
 ## Impact
 

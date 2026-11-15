@@ -61,7 +61,6 @@ export interface BuildOptions {
     EXCLUDE_SIDEBAR_FOLDER_BY_PATH?: string[];
     LEGACY_PLANTUML_VERSION?: string;
     LEGACY_PDF_KEYS?: string[];
-    LEGACY_LOCAL_IMAGES_OFF?: boolean;
     HAS_RUN?: boolean;
 }
 
