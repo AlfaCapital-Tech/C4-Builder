@@ -322,3 +322,53 @@ export const deleteRow = (
     if ('markdown' in result) fs.writeFileSync(file, result.markdown);
     return result;
 };
+
+/** Заголовки колонок таблицы раздела `heading` как в файле; нет раздела или таблицы — undefined. */
+export const tableHeader = (markdown: string, heading: string): string[] | undefined => {
+    const lines = markdown.split(/\r?\n/);
+    const section = findSection(lines, heading);
+    const table = section && findTable(lines, section.start, section.end);
+    return table ? splitRow(lines[table.header]) : undefined;
+};
+
+/** Новые значения ячеек по индексам колонок; строятся по ячейкам найденной строки. */
+export type RowUpdate = (cells: string[]) => Record<number, string>;
+
+export type UpdateResult = { markdown: string; cells: string[] } | { error: 'not-found' | 'ambiguous' };
+
+/**
+ * Переписывает ячейки строки таблицы раздела `heading`, найденной по всем ячейкам (`match` — как их
+ * видит страница, сравнение через `plain`): ровно одна строка, иначе ошибка — строку, которую
+ * человек видел, могли изменить после загрузки страницы. Строка пересобирается в `| a | b |`,
+ * остальные строки файла и перевод строки не меняются. Значения экранируются от `|`; HTML —
+ * забота вызывающего, как у `appendRow`. `cells` в ответе — исходные ячейки строки.
+ */
+export const updateRow = (
+    markdown: string,
+    heading: string,
+    match: string[],
+    update: RowUpdate
+): UpdateResult => {
+    const eol = markdown.includes('\r\n') ? '\r\n' : '\n';
+    const lines = markdown.split(/\r?\n/);
+    const section = findSection(lines, heading);
+    const table = section && findTable(lines, section.start, section.end);
+    if (!table) return { error: 'not-found' };
+    const want = match.map(plain);
+    const found: number[] = [];
+    for (let i = table.header + 2; i <= table.last; i++) {
+        const cells = splitRow(lines[i]);
+        if (want.length === cells.length && want.every((c, k) => plain(cells[k]) === c)) found.push(i);
+    }
+    if (!found.length) return { error: 'not-found' };
+    if (found.length > 1) return { error: 'ambiguous' };
+    const cells = splitRow(lines[found[0]]);
+    const next = [...cells];
+    for (const [k, v] of Object.entries(update(cells))) {
+        const i = Number(k);
+        while (next.length <= i) next.push('');
+        next[i] = escapeCell(v);
+    }
+    lines[found[0]] = `| ${next.join(' | ')} |`;
+    return { markdown: lines.join(eol), cells };
+};

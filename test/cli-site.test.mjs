@@ -6,7 +6,7 @@ import path from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 
 import { cmdSite } from './dist.mjs';
-import { agentEnv, REPO_ROOT, serveSite, TMP_ROOT, updateCheckEnv } from './helpers.mjs';
+import { agentEnv, gitSandbox, REPO_ROOT, serveSite, TMP_ROOT, updateCheckEnv } from './helpers.mjs';
 
 // Подсказка после сборки печатает `c4builder site` — форма обязана работать наравне
 // с `--site`, иначе allowExcessArguments молча глотает её и команда просто пересобирает.
@@ -365,6 +365,154 @@ describe('журнал ревью в site -w', () => {
         } finally {
             fs.writeFileSync(cfg, saved);
             fs.writeFileSync(log, savedLog);
+        }
+    }, 60_000);
+});
+
+// Апрув строки и Push журнала (change site-review-approve-push): маршруты на репозитории с
+// bare-remote во временном каталоге, автор и подпись коммитов — из подменённого глобального конфига.
+describe('апрув и push журнала в site -w', () => {
+    const box = gitSandbox('cli-site-git-');
+    afterAll(() => fs.rmSync(box.base, { recursive: true, force: true }));
+    const env = { ...process.env, ...box.env };
+    const LOG = [
+        '# Ревью',
+        '',
+        '## Статусы',
+        '',
+        '| Роль | Статус | Кто | Дата |',
+        '|------|--------|-----|------|',
+        '| Аналитик | | Иванов Иван | |',
+        '| Тестировщик | | — | |',
+        '',
+        '## Замечания',
+        '',
+        '| # | Где | Замечание | Автор |',
+        '|---|---|---|---|',
+        ''
+    ].join('\n');
+    const COMMENTS = {
+        heading: 'Замечания',
+        cells: ['', '{artifact} → {section}', '{text}', '{author}'],
+        approve: { heading: 'Статусы', who: 'Кто', set: { Статус: 'Approved', Дата: '{date}' } },
+        push: {}
+    };
+    const page = 'add-push-platform/add-push-platform.md';
+    box.init((dir) => {
+        fs.mkdirSync(path.join(dir, 'src', 'add-push-platform'), { recursive: true });
+        fs.writeFileSync(path.join(dir, 'src', 'README.md'), '# root\n');
+        fs.writeFileSync(
+            path.join(dir, 'src', 'add-push-platform', 'README.md'),
+            '# change\n\n## Flow\n\nfoo bar\n'
+        );
+        fs.writeFileSync(path.join(dir, 'src', 'add-push-platform', 'review.md'), LOG);
+        fs.writeFileSync(path.join(dir, 'notes.md'), 'notes\n');
+        fs.writeFileSync(path.join(dir, '.gitignore'), 'docs/\n.c4builder.server.json\n');
+        fs.writeFileSync(path.join(dir, '.c4builder'), JSON.stringify({ ...CONFIG, comments: COMMENTS }));
+    });
+    const log = path.join(box.work, 'src', 'add-push-platform', 'review.md');
+    const cfg = path.join(box.work, '.c4builder');
+    const call = (port, route, body, headers = { Origin: `http://127.0.0.1:${port}` }) =>
+        fetch(`http://127.0.0.1:${port}/__c4builder/review-log${route}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...headers },
+            body: JSON.stringify(body)
+        });
+    const today = () => {
+        const d = new Date();
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    };
+
+    it('approve: 403 без Origin, 404 не журнал, 409 устаревшая строка; успех — коммит в remote', async () => {
+        const port = 28336;
+        await serveSite(box.work, ['site', '-w', '-p', String(port)], {
+            env,
+            onReady: async () => {
+                const html = await (await fetch(`http://127.0.0.1:${port}/`)).text();
+                expect(html).toContain('"approve":{"heading":[');
+                const row = { page, cells: ['Аналитик', '', 'Иванов Иван', ''] };
+                expect((await call(port, '/approve', row, {})).status).toBe(403);
+                expect((await call(port, '/approve', { ...row, page: 'Overview.md' })).status).toBe(404);
+                const stale = await call(port, '/approve', {
+                    ...row,
+                    cells: ['Аналитик', '', 'Сидоров', '']
+                });
+                expect(stale.status).toBe(409);
+                expect((await stale.json()).error).toContain('reload it');
+                expect(fs.readFileSync(log, 'utf8')).toBe(LOG);
+                expect(box.remoteLog()).toEqual(['init']);
+                const ok = await call(port, '/approve', row);
+                const body = await ok.json();
+                expect(ok.status, JSON.stringify(body)).toBe(200);
+                expect(body).toMatchObject({
+                    file: 'src/add-push-platform/review.md',
+                    pushed: true,
+                    message: 'review add-push-platform: approved — Иванов Иван'
+                });
+                expect(fs.readFileSync(log, 'utf8')).toBe(
+                    LOG.replace(
+                        '| Аналитик | | Иванов Иван | |',
+                        `| Аналитик | Approved | Иванов Иван | ${today()} |`
+                    )
+                );
+                expect(box.remoteLog()[0]).toBe('review add-push-platform: approved — Иванов Иван');
+                // строка уже одобрена — повтор с прежними ячейками не находит её
+                expect((await call(port, '/approve', row)).status).toBe(409);
+            }
+        });
+    }, 60_000);
+
+    it('push: три комментария — один коммит только журнала; повтор — нечего пушить; чужой Origin — 403', async () => {
+        const port = 28337;
+        const before = box.remoteLog().length;
+        fs.appendFileSync(path.join(box.work, 'notes.md'), 'local edit\n');
+        await serveSite(box.work, ['site', '-w', '-p', String(port)], {
+            env,
+            onReady: async () => {
+                for (const comment of ['One', 'Two', 'Three']) {
+                    const r = await call(port, '', { page, quote: 'foo bar', section: 'Flow', comment });
+                    expect(r.status).toBe(200);
+                }
+                expect((await call(port, '/push', { page }, { Origin: 'http://evil.test' })).status).toBe(
+                    403
+                );
+                const ok = await call(port, '/push', { page });
+                const body = await ok.json();
+                expect(ok.status, JSON.stringify(body)).toBe(200);
+                expect(body).toMatchObject({ file: 'src/add-push-platform/review.md', pushed: true });
+                const remote = box.remoteLog();
+                expect(remote.length).toBe(before + 1);
+                expect(remote[0]).toBe('review add-push-platform: comments — Ivan Ivanov');
+                expect(box.git(box.remote, 'show', '--name-only', '--format=', 'main')).toBe(
+                    'src/add-push-platform/review.md'
+                );
+                expect(box.git(box.remote, 'show', '--format=', 'main').match(/^\+\| \d+ \|/gm)).toHaveLength(
+                    3
+                );
+                expect(box.git(box.work, 'diff', '--name-only').split('\n')).toContain('notes.md');
+                const again = await call(port, '/push', { page });
+                expect(await again.json()).toMatchObject({ commit: null, pushed: false });
+            }
+        });
+    }, 60_000);
+
+    it('без approve и с push.enabled: false — маршруты 404', async () => {
+        const port = 28338;
+        const saved = fs.readFileSync(cfg, 'utf8');
+        const { approve, ...rest } = COMMENTS;
+        fs.writeFileSync(cfg, JSON.stringify({ ...CONFIG, comments: { ...rest, push: { enabled: false } } }));
+        try {
+            await serveSite(box.work, ['site', '-w', '-p', String(port)], {
+                env,
+                onReady: async () => {
+                    const html = await (await fetch(`http://127.0.0.1:${port}/`)).text();
+                    expect(html).toContain('"approve":null,"push":false');
+                    expect((await call(port, '/approve', { page, cells: ['x'] })).status).toBe(404);
+                    expect((await call(port, '/push', { page })).status).toBe(404);
+                }
+            });
+        } finally {
+            fs.writeFileSync(cfg, saved);
         }
     }, 60_000);
 });

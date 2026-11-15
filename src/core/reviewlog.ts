@@ -16,7 +16,9 @@ import {
     plain,
     type RowRef,
     type RemoveResult,
+    tableHeader,
     tableRows,
+    updateRow,
     writeRow
 } from './sections.ts';
 
@@ -28,6 +30,15 @@ export interface ReviewLogOptions {
     cells?: string[];
     author?: string;
     label?: string;
+    approve?: ApproveOptions;
+    push?: { enabled: boolean; message: string };
+}
+
+/** Ключ `comments.approve`: раздел таблицы статусов, колонка ревьюера и значения ячеек по колонкам. */
+export interface ApproveOptions {
+    heading: string[];
+    who: string;
+    set: Record<string, string>;
 }
 
 export interface RemarkInput {
@@ -224,6 +235,58 @@ export const deleteRemark = (
 ): RemoveResult => {
     const heading = findHeading(readLog(reviewFile), headings);
     return heading ? deleteRow(reviewFile, heading, ref, { anyCell: true, cells }) : { error: 'not-found' };
+};
+
+/** Прочерк в колонке ревьюера — «ревьюер не назначен», как и пустая ячейка. */
+export const isNoName = (cell: string): boolean => /^(|-|—|–)$/.test(plain(cell));
+
+const sameColumn = (a: string, b: string): boolean => plain(a).toLowerCase() === plain(b).toLowerCase();
+
+/** Итог апрува строки: новый текст журнала и имя ревьюера либо причина отказа. */
+export type ApproveResult =
+    | { markdown: string; author: string }
+    | { error: 'not-found' | 'ambiguous' | 'no-name' | 'approved' }
+    | { error: 'no-column'; column: string };
+
+/**
+ * Апрув строки таблицы статусов (change site-review-approve-push): строка раздела `heading` ищется по
+ * всем ячейкам `cells` (как их видит страница), в ячейки колонок `set` пишутся значения с
+ * подстановками `{date}` и `{author}` (имя из колонки `who`). Файл не пишется — вызывающий сначала
+ * проверяет git: апрув без upstream не должен оставить изменённый журнал.
+ */
+export const approveRow = (
+    markdown: string,
+    opts: ApproveOptions,
+    cells: string[],
+    date: string = today()
+): ApproveResult => {
+    const heading = findHeading(markdown, opts.heading);
+    const header = heading && tableHeader(markdown, heading);
+    if (!heading || !header) return { error: 'not-found' };
+    const index = (name: string): number => header.findIndex((h) => sameColumn(h, name));
+    const columns = [opts.who, ...Object.keys(opts.set)];
+    const missing = columns.find((c) => index(c) < 0);
+    if (missing !== undefined) return { error: 'no-column', column: missing };
+    const who = index(opts.who);
+    let author = '';
+    let approved = true;
+    const result = updateRow(markdown, heading, cells, (row) => {
+        author = plain(row[who] ?? '');
+        const vars = { date, author: escapeHtml(author) };
+        const out: Record<number, string> = {};
+        for (const [column, template] of Object.entries(opts.set)) {
+            const i = index(column);
+            // Литерал без подстановок уже стоит — эта колонка апрува выполнена.
+            if (!/\{\w+\}/.test(template) && plain(row[i] ?? '') !== plain(template)) approved = false;
+            out[i] = fillCells([template], vars)[0];
+        }
+        return out;
+    });
+    if ('error' in result) return result;
+    if (isNoName(author)) return { error: 'no-name' };
+    const literals = Object.values(opts.set).filter((v) => !/\{\w+\}/.test(v));
+    if (literals.length && approved) return { error: 'approved' };
+    return { markdown: result.markdown, author };
 };
 
 /** Дописывает замечание в журнал и возвращает номер строки таблицы (null — список). */

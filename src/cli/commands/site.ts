@@ -12,7 +12,9 @@ import type { BuildResult } from '../../core/build.ts';
 import type { PageSources } from '../../core/compose/markdown.ts';
 import { batchSchema, type FeedbackBatch, formatBatch, LISTENER_NAME } from '../../core/feedback.ts';
 import { redirectKey } from '../../core/plugins/tree.ts';
+import { commitMessage, publishFile, ReviewGitError, serialQueue } from '../../core/reviewgit.ts';
 import {
+    approveRow,
     deleteRemark,
     findReviewFile,
     isReviewFile,
@@ -39,7 +41,9 @@ import {
     FEEDBACK_PATH,
     type MailboxState,
     PAGE_PATH,
-    REVIEW_LOG_PATH
+    REVIEW_APPROVE_PATH,
+    REVIEW_LOG_PATH,
+    REVIEW_PUSH_PATH
 } from './site.comments.ts';
 
 const COMMENT_MAX = 2000;
@@ -443,7 +447,12 @@ export default (
                     mailboxes: agentState().mailboxes,
                     project: projectKey,
                     language: currentConfiguration.UI_LANGUAGE,
-                    reviewLog: reviewLog && { file: reviewLog.file, heading: reviewLog.heading },
+                    reviewLog: reviewLog && {
+                        file: reviewLog.file,
+                        heading: reviewLog.heading,
+                        approve: reviewLog.approve ?? null,
+                        push: !!reviewLog.push && reviewLog.push.enabled !== false
+                    },
                     labels: buttonLabels(currentConfiguration.BUTTONS, reviewLog?.label)
                 }) +
                 (next ? updateBanner(next) : '');
@@ -627,6 +636,106 @@ export default (
                     res.status(500).json({ error: `could not remove the remark: ${(e as Error).message}` });
                 }
             });
+
+            // Апрув строки и Push журнала (change site-review-approve-push): маршрут есть, только если
+            // задан его ключ, иначе 404. Git-операции — строго по одной: две вкладки, нажавшие кнопку
+            // одновременно, столкнулись бы на index.lock. Шаблон сообщения — общий для обоих действий
+            // и действует, даже если сама кнопка Push выключена.
+            const queue = serialQueue();
+            const template = reviewLog.push?.message ?? 'review {change}: {action} — {author}';
+            const messageFor = (file: string, action: string, who: string): string =>
+                commitMessage(template, {
+                    change: path.basename(path.dirname(file)),
+                    action,
+                    author: who,
+                    file: relOf(file)
+                });
+            const gitFailure = (res: express.Response, e: unknown): void => {
+                if (e instanceof ReviewGitError) res.status(e.status).json({ error: e.message });
+                else res.status(500).json({ error: `git failed: ${(e as Error).message}` });
+            };
+            const deny = (res: express.Response): void => {
+                res.status(403).json({ error: 'review log changes are accepted only from the site itself' });
+            };
+            const approve = reviewLog.approve;
+            if (approve) {
+                app.post(REVIEW_APPROVE_PATH, express.json({ limit: '64kb' }), async (req, res) => {
+                    if (!fromSite(req)) return deny(res);
+                    const body = (req.body ?? {}) as Record<string, unknown>;
+                    const found = localSources(str(body.page));
+                    const file = found && ownLog(found.sources);
+                    if (!file) {
+                        res.status(404).json({ error: `page ${str(body.page)} is not the review log` });
+                        return;
+                    }
+                    const cells = Array.isArray(body.cells) ? body.cells.map(str) : [];
+                    if (!cells.length) {
+                        res.status(400).json({ error: 'row cells are empty' });
+                        return;
+                    }
+                    const rel = relOf(file);
+                    // Отказ апрува — до git: устаревшая строка или ошибка конфига не должны ни
+                    // менять файл, ни трогать репозиторий.
+                    const plan = () => {
+                        const r = approveRow(fs.readFileSync(file, 'utf8'), approve, cells);
+                        if (!('error' in r)) return r;
+                        const reasons = {
+                            'not-found': `row not found in ${rel} — the page may be stale, reload it`,
+                            ambiguous: `several identical rows in ${rel} — approve it by hand`,
+                            'no-name': `the row has no reviewer in column "${approve.who}"`,
+                            approved: `the row is already approved in ${rel} — reload the page`,
+                            'no-column': `column "${'column' in r ? r.column : ''}" not found in the table of ${approve.heading.join(' / ')} in ${rel}`
+                        };
+                        throw new ReviewGitError(reasons[r.error], r.error === 'no-column' ? 500 : 409);
+                    };
+                    try {
+                        const out = await queue(async () => {
+                            const first = plan();
+                            const message = messageFor(file, 'approved', first.author);
+                            // Файл перечитывается после проверки git: между ними его мог поправить агент.
+                            const result = await publishFile({
+                                cwd,
+                                file,
+                                message,
+                                edit: () => fs.writeFileSync(file, plan().markdown)
+                            });
+                            return { ...result, message };
+                        });
+                        console.log(chalk.gray(`row approved in ${rel}${out.pushed ? ' and pushed' : ''}`));
+                        res.json({ file: rel, ...out });
+                    } catch (e) {
+                        gitFailure(res, e);
+                    }
+                });
+            }
+            if (reviewLog.push && reviewLog.push.enabled !== false) {
+                app.post(REVIEW_PUSH_PATH, express.json({ limit: '64kb' }), async (req, res) => {
+                    if (!fromSite(req)) return deny(res);
+                    const body = (req.body ?? {}) as Record<string, unknown>;
+                    const found = localSources(str(body.page));
+                    const source = found && firstSource(found.sources);
+                    const file =
+                        (found && ownLog(found.sources)) ||
+                        (source && findReviewFile(path.dirname(source), reviewLog.file, cwd));
+                    if (!file) {
+                        res.status(404).json({
+                            error: `${reviewLog.file} not found for page ${str(body.page)}`
+                        });
+                        return;
+                    }
+                    const rel = relOf(file);
+                    const message = messageFor(file, 'comments', author);
+                    try {
+                        const out = await queue(() => publishFile({ cwd, file, message }));
+                        console.log(
+                            chalk.gray(out.commit || out.pushed ? `${rel} pushed` : `${rel}: nothing to push`)
+                        );
+                        res.json({ file: rel, ...out, message: out.commit ? message : null });
+                    } catch (e) {
+                        gitFailure(res, e);
+                    }
+                });
+            }
         }
 
         // Замечания агенту (change site-agent-feedback): FIFO пачек в памяти (design D3), страница

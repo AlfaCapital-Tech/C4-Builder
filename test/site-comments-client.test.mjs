@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { buttonLabels, commentsSnippet } from '../dist/cli/commands/site.comments.js';
+import { UI_STRINGS } from './dist.mjs';
 
 // Клиентский сниппет страницы `site -w` в jsdom: кнопки у выделения — журнал ревью (Comment) и
 // агент (Tell agent), поповер, черновик для агента и панель (changes site-comments,
@@ -681,5 +682,173 @@ describe('кнопка журнала ревью', () => {
             'Сказать агенту',
             'Комментарий'
         ]);
+    });
+});
+
+// Апрув строки таблицы статусов (change site-review-approve-push): кнопка у выделения только на
+// странице журнала, в одной строке таблицы раздела approve.heading с именем и без апрува.
+describe('кнопка Approve row', () => {
+    const APPROVE = { heading: ['Статусы'], who: 'Кто', set: { Статус: 'Approved', Дата: '{date}' } };
+    const LOG = { file: 'review.md', heading: ['Замечания'], approve: APPROVE };
+    const BODY = `<h1>Ревью</h1><h2>Статусы</h2>
+<table><thead><tr><th>Роль</th><th>Статус</th><th>Кто</th><th>Дата</th></tr></thead><tbody>
+<tr><td>Аналитик</td><td></td><td id="who1">Иванов Иван</td><td></td></tr>
+<tr><td id="role2">Тестировщик</td><td></td><td id="who2">—</td><td></td></tr>
+<tr><td>Разработчик</td><td>Approved</td><td id="who3">Петров Пётр</td><td>2026-11-01</td></tr>
+</tbody></table>
+<h2>Замечания</h2>
+<table><thead><tr><th>#</th><th>Где</th><th>Что</th></tr></thead><tbody>
+<tr><td>1</td><td>design</td><td id="rm">Иванов Иван</td></tr>
+</tbody></table>`;
+    const page = (opts = {}) =>
+        agentPage({
+            agent: false,
+            languages: ['en'],
+            reviewLog: LOG,
+            body: BODY,
+            reply: { file: 'src/review.md', log: true },
+            ...opts
+        });
+    // Выделение от начала текста одного элемента до конца другого и кнопки у него.
+    const select = async (p, from, to = from) => {
+        const range = p.doc.createRange();
+        range.setStart(p.doc.getElementById(from).firstChild, 0);
+        const end = p.doc.getElementById(to).firstChild;
+        range.setEnd(end, end.length);
+        const sel = p.window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        p.doc.dispatchEvent(new p.window.Event('selectionchange'));
+        await sleep(20);
+        return p.buttons();
+    };
+
+    it('строка с именем — Comment и Approve row; запрос с ячейками строки, тост с результатом', async () => {
+        const p = await page();
+        expect(await select(p, 'who1')).toEqual(['Comment', 'Approve row']);
+        p.window.__reply = { file: 'src/review.md', commit: 'abc1234', pushed: true };
+        p.byText(p.doc.querySelector('.c4b-cbtns'), 'Approve row').click();
+        await sleep(20);
+        expect(p.window.__calls.at(-1)).toEqual({
+            url: '/__c4builder/review-log/approve',
+            method: 'POST',
+            body: { page: 'A.md', cells: ['Аналитик', '', 'Иванов Иван', ''] }
+        });
+        expect(p.toast()).toBe('Row approved in src/review.md and pushed');
+    });
+
+    it('нет кнопки: две строки, строка без имени, уже одобренная, раздел «Замечания»', async () => {
+        const p = await page();
+        expect(await select(p, 'who1', 'role2')).toEqual(['Comment']);
+        expect(await select(p, 'who2')).toEqual(['Comment']);
+        expect(await select(p, 'who3')).toEqual(['Comment']);
+        expect(await select(p, 'rm')).toEqual(['Comment']);
+        expect(await select(p, 'who1')).toEqual(['Comment', 'Approve row']);
+    });
+
+    it('не страница журнала и без ключа approve — кнопки нет', async () => {
+        const other = await page({ reply: { file: 'src/review.md', log: false, remarks: [] } });
+        expect(await select(other, 'who1')).toEqual(['Comment']);
+        const off = await page({ reviewLog: { file: 'review.md', heading: ['Замечания'] } });
+        expect(await select(off, 'who1')).toEqual(['Comment']);
+        expect(off.doc.querySelectorAll('.c4b-cbtns button').length).toBe(2);
+    });
+
+    it('подпись из buttons.approve на любом языке; ошибка сервера — тост с префиксом', async () => {
+        const p = await page({ languages: ['ru'], labels: { approve: 'Approve' } });
+        expect(await select(p, 'who1')).toEqual(['Комментарий', 'Approve']);
+        p.window.__error = 'row not found';
+        p.byText(p.doc.querySelector('.c4b-cbtns'), 'Approve').click();
+        await sleep(20);
+        expect(p.toast()).toBe('Не удалось одобрить: row not found');
+    });
+
+    it('подписи по умолчанию не совпадают с Approve панели агенту', async () => {
+        const ru = await page({ languages: ['ru'] });
+        expect(await select(ru, 'who1')).toEqual(['Комментарий', 'Одобрить строку']);
+        expect(UI_STRINGS.en.approveRow).not.toBe(UI_STRINGS.en.approve);
+        expect(UI_STRINGS.ru.approveRow).not.toBe(UI_STRINGS.ru.approve);
+        expect(UI_STRINGS.en.push).not.toBe(UI_STRINGS.en.approve);
+    });
+});
+
+// Push из тоста комментария (change site-review-approve-push): липкий тост без таймера, состояние в
+// sessionStorage — переживает livereload, следующие комментарии обновляют тот же тост.
+describe('кнопка Push в тосте комментария', () => {
+    const LOG = { file: 'review.md', heading: ['Remarks'], push: true };
+    const sticky = (p) => p.doc.querySelectorAll('.c4b-sticky');
+    const comment = async (p, text, number) => {
+        p.window.__reply = { file: 'src/review.md', number };
+        await p.write('t', 'Comment', text, 'Add comment');
+    };
+
+    it('тост с Push и «×» не исчезает по таймеру и переживает перезагрузку', async () => {
+        const p = await agentPage({ agent: false, languages: ['en'], reviewLog: LOG });
+        await comment(p, 'Why?', 4);
+        expect(sticky(p).length).toBe(1);
+        const el = sticky(p)[0];
+        expect(el.querySelector('span').textContent).toBe('Added to src/review.md as #4');
+        expect([...el.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Push', '×']);
+        await sleep(5300);
+        expect(sticky(p).length).toBe(1);
+        // перезагрузка: состояние вкладки в sessionStorage
+        const q = await agentPage({
+            agent: false,
+            languages: ['en'],
+            reviewLog: LOG,
+            session: p.dump('sessionStorage')
+        });
+        expect(sticky(q).length).toBe(1);
+        // следующий комментарий обновляет тот же тост
+        await comment(q, 'And this', 5);
+        expect(sticky(q).length).toBe(1);
+        expect(sticky(q)[0].querySelector('span').textContent).toBe('Added to src/review.md as #5');
+        q.window.__reply = { file: 'src/review.md', commit: 'abc1234', pushed: true };
+        q.byText(sticky(q)[0], 'Push').click();
+        await sleep(20);
+        expect(q.window.__calls.at(-1)).toEqual({
+            url: '/__c4builder/review-log/push',
+            method: 'POST',
+            body: { page: 'A.md' }
+        });
+        expect(sticky(q).length).toBe(0);
+        expect(q.toast()).toBe('Pushed src/review.md');
+        expect(q.window.sessionStorage.getItem('__c4builderPush:p1')).toBeNull();
+    }, 15_000);
+
+    it('нечего пушить; ошибка — тост остаётся с текстом ошибки, «×» закрывает', async () => {
+        const p = await agentPage({ agent: false, languages: ['en'], reviewLog: LOG });
+        await comment(p, 'Why?', 4);
+        p.window.__error = 'push to origin/main was rejected';
+        p.byText(sticky(p)[0], 'Push').click();
+        await sleep(20);
+        expect(sticky(p).length).toBe(1);
+        expect(sticky(p)[0].textContent).toContain('Push failed: push to origin/main was rejected');
+        expect(p.byText(sticky(p)[0], 'Push').disabled).toBe(false);
+        p.window.__error = '';
+        p.window.__reply = { file: 'src/review.md', commit: null, pushed: false };
+        p.byText(sticky(p)[0], 'Push').click();
+        await sleep(20);
+        expect(p.toast()).toBe('Nothing to push');
+        await comment(p, 'More', 5);
+        p.byText(sticky(p)[0], '×').click();
+        expect(sticky(p).length).toBe(0);
+        expect(p.window.sessionStorage.getItem('__c4builderPush:p1')).toBeNull();
+    });
+
+    it('без ключа push — прежний тост без кнопки; подпись из buttons.push', async () => {
+        const p = await agentPage({ agent: false, languages: ['en'], reviewLog: { ...LOG, push: false } });
+        await comment(p, 'Why?', 4);
+        expect(sticky(p).length).toBe(0);
+        expect(p.toast()).toBe('Added to src/review.md as #4');
+        const q = await agentPage({
+            agent: false,
+            languages: ['ru'],
+            reviewLog: LOG,
+            labels: { push: 'Send' }
+        });
+        q.window.__reply = { file: 'src/review.md', number: 4 };
+        await q.write('t', 'Комментарий', 'Почему?', 'Добавить комментарий');
+        expect([...sticky(q)[0].querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Send', '×']);
     });
 });

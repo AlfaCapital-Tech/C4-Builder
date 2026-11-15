@@ -49,7 +49,18 @@ export const UI_STRINGS = {
         commentTo: 'To: {target}',
         cancel: 'Cancel',
         addToReview: 'Add',
-        sendNow: 'Send now'
+        sendNow: 'Send now',
+        approveRow: 'Approve row',
+        approveRowTitle: 'Mark this row approved in the review log, commit and push it',
+        approvedRow: 'Row approved in {file}',
+        approvedPushed: 'Row approved in {file} and pushed',
+        approveFailed: 'Approve failed: {error}',
+        push: 'Push',
+        pushTitle: 'Commit the review log and push it',
+        pushed: 'Pushed {file}',
+        nothingToPush: 'Nothing to push',
+        pushFailed: 'Push failed: {error}',
+        closeToast: 'Close'
     },
     ru: {
         feedback: 'Сказать агенту',
@@ -98,6 +109,17 @@ export const UI_STRINGS = {
         commentTo: 'Куда: {target}',
         cancel: 'Отмена',
         addToReview: 'Добавить',
-        sendNow: 'Отправить'
+        sendNow: 'Отправить',
+        approveRow: 'Одобрить строку',
+        approveRowTitle: 'Отметить строку одобренной в журнале ревью, закоммитить и запушить',
+        approvedRow: 'Строка одобрена в {file}',
+        approvedPushed: 'Строка одобрена в {file} и запушена',
+        approveFailed: 'Не удалось одобрить: {error}',
+        push: 'Запушить',
+        pushTitle: 'Закоммитить журнал ревью и запушить',
+        pushed: '{file} запушен',
+        nothingToPush: 'Пушить нечего',
+        pushFailed: 'Не удалось запушить: {error}',
+        closeToast: 'Закрыть'
     }
 };

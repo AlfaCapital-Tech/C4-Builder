@@ -34,20 +34,45 @@ export const isValidPort = (s: string): boolean => /^\d+$/.test(s) && Number(s) 
 // с подстановками `{comment}`, `{quote}`, `{text}`, `{section}`, `{artifact}`, `{page}`,
 // `{author}`, `{date}`, `{number}`; `author` — вместо git user.name; `enabled: false` выключает
 // кнопку, не удаляя настройку.
+const headingList = z.preprocess(
+    (v) => (typeof v === 'string' ? [v] : Array.isArray(v) ? v.map(String) : strPre(v)),
+    z.array(z.string().min(1)).min(1)
+);
 const commentsLogFields = {
     enabled: bool(true),
     file: str('review.md'),
-    heading: z.preprocess(
-        (v) => (typeof v === 'string' ? [v] : Array.isArray(v) ? v.map(String) : strPre(v)),
-        z.array(z.string().min(1)).min(1).default(['Review'])
-    ),
+    heading: headingList.default(['Review']),
     cells: nullish(
         z.preprocess(
             (v) => (Array.isArray(v) ? v.map((x) => (x == null ? '' : String(x))) : v),
             z.array(z.string()).optional()
         )
     ),
-    author: optStr()
+    author: optStr(),
+    // Апрув строки таблицы статусов со страницы журнала (change site-review-approve-push). Колонки —
+    // по названиям, а не по номерам: таблицы статусов в шаблонах проектов обрастают колонками.
+    // Обязательны все три поля: апрув без колонки ревьюера или без значений ничего не отмечает.
+    approve: nullish(
+        z
+            .object({
+                heading: headingList,
+                who: z.preprocess(strPre, z.string().min(1)),
+                set: z
+                    .record(z.string(), z.preprocess(strPre, z.string()))
+                    .refine((o) => Object.keys(o).length > 0, 'expected at least one column to set')
+            })
+            .optional()
+    ),
+    // Кнопка Push в тосте комментария и шаблон сообщения коммита — общий для пуша и апрува.
+    // `push: {}` включает кнопку; `enabled: false` выключает, не удаляя настройку.
+    push: nullish(
+        z
+            .object({
+                enabled: bool(true),
+                message: str('review {change}: {action} — {author}')
+            })
+            .optional()
+    )
 };
 
 export const configSchema = z.object({
@@ -101,12 +126,15 @@ export const configSchema = z.object({
     // Свои подписи кнопок у выделения в `site -w` (change site-button-names): `agent` — кнопка
     // агенту, `comment` — кнопка журнала (перекрывает старый `reviewLog.label`). Одна строка на все
     // языки интерфейса: проект обычно пишет на одном языке, а подписи по умолчанию и так
-    // переводит словарь. Пусто или нет ключа — подпись словаря.
+    // переводит словарь. Пусто или нет ключа — подпись словаря. `approve` — кнопка апрува строки,
+    // `push` — кнопка в тосте комментария (change site-review-approve-push).
     buttons: nullish(
         z
             .object({
                 agent: optStr(),
-                comment: optStr()
+                comment: optStr(),
+                approve: optStr(),
+                push: optStr()
             })
             .default({})
     ),

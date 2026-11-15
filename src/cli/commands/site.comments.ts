@@ -4,6 +4,9 @@ export const FEEDBACK_PATH = '/__c4builder/feedback';
 export const FEEDBACK_HEADER = 'X-C4builder-Feedback';
 // Комментарий в журнал ревью (change site-review-log): POST с цитатой, разделом и текстом.
 export const REVIEW_LOG_PATH = '/__c4builder/review-log';
+// Апрув строки таблицы статусов и Push журнала (change site-review-approve-push): коммит и пуш файла.
+export const REVIEW_APPROVE_PATH = '/__c4builder/review-log/approve';
+export const REVIEW_PUSH_PATH = '/__c4builder/review-log/push';
 // Адрес страницы change'а по имени слушателя (change site-agent-review): читает `c4builder feedback`.
 export const PAGE_PATH = '/__c4builder/page';
 
@@ -42,6 +45,10 @@ const CSS = [
     '.c4b-review .c4b-del{opacity:1}',
     '.c4b-ctoast{position:fixed;left:16px;bottom:16px;z-index:1003;max-width:420px;padding:8px 14px;border-radius:6px;background:#2c3e50;color:#fff;font:13px/1.4 sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.3)}',
     '.c4b-ctoast.c4b-err{background:#c0392b}',
+    '.c4b-ctoast button{margin-left:10px;padding:2px 10px;border:1px solid #fff;border-radius:4px;background:none;color:#fff;font:13px sans-serif;cursor:pointer}',
+    '.c4b-ctoast button.c4b-x{margin-left:6px;padding:2px 6px;border-color:transparent}',
+    '.c4b-ctoast button:disabled{opacity:.6;cursor:default}',
+    '.c4b-cbtns button.c4b-ap{border-color:#2c7a4b}',
     'mark.c4b-hl{background:#fff3a0;color:inherit;padding:0;border-radius:2px}',
     'mark.c4b-dhl{background:#cfe3ff;color:inherit;padding:0;border-radius:2px}',
     'sup.c4b-ref{font-size:.7em;line-height:0;margin-left:1px;user-select:none}',
@@ -64,14 +71,23 @@ const jsValue = (v: unknown): string =>
 export type MailboxState = { name: string; state: 'listening' | 'reconnecting'; queued: number };
 // Журнал ревью для страницы (change site-review-log): файл и раздел — в подсказке поля ввода;
 // null — кнопки нет.
-export type ReviewLogState = { file: string; heading: string[] };
+// `approve` — таблица статусов для кнопки апрува строки, `push` — кнопка Push в тосте комментария
+// (change site-review-approve-push).
+export type ReviewLogState = {
+    file: string;
+    heading: string[];
+    approve?: { heading: string[]; who: string; set: Record<string, string> } | null;
+    push?: boolean;
+};
 // Свои подписи кнопок у выделения (ключ `buttons`, change site-button-names); пусто — словарь.
-export type ButtonLabels = { agent?: string; comment?: string };
+export type ButtonLabels = { agent?: string; comment?: string; approve?: string; push?: string };
 // `reviewLog.label` — прежний способ подписать кнопку журнала: остаётся ради старых конфигов,
 // `buttons.comment` его перекрывает. Пустые строки — «не задано», подпись берётся из словаря.
 export const buttonLabels = (buttons?: ButtonLabels, reviewLogLabel?: string): ButtonLabels => ({
     agent: buttons?.agent || undefined,
-    comment: buttons?.comment || reviewLogLabel || undefined
+    comment: buttons?.comment || reviewLogLabel || undefined,
+    approve: buttons?.approve || undefined,
+    push: buttons?.push || undefined
 });
 
 // Начальное состояние агентского режима и ключ проекта вставляет сервер, дальше его обновляют
@@ -98,11 +114,14 @@ export const commentsSnippet = ({
     window.__c4builderComments = true;
     var FEEDBACK = '${FEEDBACK_PATH}';
     var REVIEW_LOG_URL = '${REVIEW_LOG_PATH}';
+    var APPROVE_URL = '${REVIEW_APPROVE_PATH}';
+    var PUSH_URL = '${REVIEW_PUSH_PATH}';
     var REVIEW_LOG = ${jsValue(reviewLog)};
     var LABELS = ${jsValue(labels)};
     var TOAST_KEY = '__c4builderCommentToast';
     var DRAFT_KEY = '__c4builderReview:' + ${jsValue(project)};
     var TARGET_KEY = '__c4builderTarget:' + ${jsValue(project)};
+    var PUSH_KEY = '__c4builderPush:' + ${jsValue(project)};
     var AGENT = { on: ${agent}, mailboxes: ${jsValue(mailboxes)} };
     var BLOCKS = 'p,li,td,th,h1,h2,h3,h4,h5,h6,pre,blockquote,dd,dt,div,section,details,summary';
     var style = document.createElement('style');
@@ -131,12 +150,14 @@ export const commentsSnippet = ({
     var collapse = function (s) { return String(s).replace(/\\s+/g, ' ').trim(); };
     var same = function (a, b) { return collapse(a).toLowerCase() === collapse(b).toLowerCase(); };
 
-    var toastEl = null, toastTimer = 0;
+    var toastEl = null, toastTimer = 0, stickyEl = null;
     var toast = function (msg, err) {
         if (toastEl) toastEl.remove();
         toastEl = document.createElement('div');
         toastEl.className = 'c4b-ctoast' + (err ? ' c4b-err' : '');
         toastEl.textContent = msg;
+        // The sticky Push toast keeps its place at the bottom; a regular one goes above it.
+        if (stickyEl) toastEl.style.bottom = (24 + stickyEl.offsetHeight) + 'px';
         document.body.appendChild(toastEl);
         clearTimeout(toastTimer);
         toastTimer = setTimeout(function () { if (toastEl) { toastEl.remove(); toastEl = null; } }, err ? 8000 : 5000);
@@ -325,6 +346,7 @@ export const commentsSnippet = ({
     // One GET per rendered page: the server says whether the page is the log (decorate rows) or
     // which remarks belong to it (highlight quotes). The marker lives on the first rendered element,
     // so a re-render by docsify clears it and the page is synced again.
+    var logFirst = null;
     var syncLog = function () {
         var root = content();
         if (!REVIEW_LOG || !root || !root.firstElementChild || root.firstElementChild.hasAttribute('data-c4b-log')) return;
@@ -335,7 +357,7 @@ export const commentsSnippet = ({
             if (!res.ok) return;
             return res.json().then(function (data) {
                 if (pageFile() !== page || content() !== root || root.firstElementChild !== first) return;
-                if (data.log) decorateLog(root);
+                if (data.log) { logFirst = first; decorateLog(root); }
                 else highlightRemarks(root, data);
             });
         }, function () {});
@@ -377,6 +399,13 @@ export const commentsSnippet = ({
         rvBtn.title = t('reviewTitle');
         btns.appendChild(rvBtn);
     }
+    var apBtn = null;
+    if (REVIEW_LOG && REVIEW_LOG.approve) {
+        apBtn = button(LABELS.approve || t('approveRow'), null, 'c4b-ap');
+        apBtn.title = t('approveRowTitle');
+        apBtn.hidden = true;
+        btns.appendChild(apBtn);
+    }
     document.body.appendChild(btns);
     var pop = null;
 
@@ -417,9 +446,45 @@ export const commentsSnippet = ({
         for (var i = 0; i < btns.children.length; i++) if (!btns.children[i].hidden) return true;
         return false;
     };
+    // The status row under the selection (key comments.approve): both ends in one row of the table
+    // of the approve section on the log page itself, with a reviewer name, not approved yet. The
+    // server checks the row again: the page may be stale.
+    var approveTarget = function (range) {
+        var A = REVIEW_LOG && REVIEW_LOG.approve, root = content();
+        if (!A || !root || !logFirst || root.firstElementChild !== logFirst) return null;
+        var rowOf = function (n) {
+            var el = n && (n.nodeType === 1 ? n : n.parentNode);
+            return el && el.closest ? el.closest('tr') : null;
+        };
+        var tr = rowOf(range.startContainer);
+        if (!tr || tr !== rowOf(range.endContainer) || !root.contains(tr)) return null;
+        var table = tr.closest('table'), h = null;
+        A.heading.some(function (name) { return !!(h = findHeading(root, name)); });
+        if (!h || !sectionOf(h).some(function (el) { return el === table || el.contains(table); })) return null;
+        var cells = tr.querySelectorAll('td');
+        if (!cells.length) return null;
+        var heads = table.querySelectorAll('thead th');
+        var col = function (name) {
+            for (var i = 0; i < heads.length; i++) if (same(heads[i].textContent, name)) return i;
+            return -1;
+        };
+        var texts = [];
+        for (var c = 0; c < cells.length; c++) texts.push(collapse(cells[c].textContent));
+        var who = col(A.who);
+        if (who < 0 || /^(|-|\\u2013|\\u2014)$/.test(texts[who] || '')) return null;
+        var literals = 0, done = 0;
+        Object.keys(A.set).forEach(function (name) {
+            if (/\\{\\w+\\}/.test(A.set[name])) return;
+            literals++;
+            var i = col(name);
+            if (i >= 0 && same(texts[i] || '', A.set[name])) done++;
+        });
+        return literals && done === literals ? null : { cells: texts };
+    };
     var update = function () {
         if (pop) return;
         var s = selection();
+        if (apBtn) apBtn.hidden = !(s && approveTarget(s.range));
         if (!s || !anyButton()) { btns.hidden = true; return; }
         btns.hidden = false;
         place(btns, anchorRect(s.range));
@@ -454,6 +519,61 @@ export const commentsSnippet = ({
     var failure = function (key) {
         return function (err) { toast(t(key, { error: err && err.message ? err.message : err }), true); };
     };
+
+    // The Push toast (key comments.push) has no timer: it stays until pushed or closed and survives
+    // the livereload that follows every write to the log. Later comments update the same toast, so
+    // several comments go in one commit; logs of several changes are pushed one by one.
+    var pushState = function () {
+        try { return JSON.parse(sessionStorage.getItem(PUSH_KEY) || 'null'); } catch (e) { return null; }
+    };
+    var savePush = function (st) {
+        try {
+            if (st) sessionStorage.setItem(PUSH_KEY, JSON.stringify(st));
+            else sessionStorage.removeItem(PUSH_KEY);
+        } catch (e) {}
+    };
+    var closeSticky = function () { if (stickyEl) { stickyEl.remove(); stickyEl = null; } };
+    var showPush = function (st, error) {
+        closeSticky();
+        stickyEl = document.createElement('div');
+        stickyEl.className = 'c4b-ctoast c4b-sticky' + (error ? ' c4b-err' : '');
+        var text = document.createElement('span');
+        text.textContent = error || st.msg;
+        var push = button(LABELS.push || t('push'), null, 'c4b-push');
+        push.title = t('pushTitle');
+        var x = button('\\u00d7', function () { savePush(null); closeSticky(); }, 'c4b-x');
+        x.title = t('closeToast');
+        push.addEventListener('click', function () {
+            push.disabled = true;
+            var files = Object.keys(st.logs), done = [], changed = false;
+            var next = function () {
+                if (!files.length) return Promise.resolve();
+                var file = files.shift();
+                return send({ page: st.logs[file] }, 'POST', PUSH_URL).then(function (r) {
+                    delete st.logs[file];
+                    done.push(r.file || file);
+                    changed = changed || !!(r.commit || r.pushed);
+                    return next();
+                });
+            };
+            next().then(function () {
+                savePush(null);
+                closeSticky();
+                toast(changed ? t('pushed', { file: done.join(', ') }) : t('nothingToPush'));
+            }, function (err) {
+                savePush(st);
+                showPush(st, t('pushFailed', { error: err && err.message ? err.message : err }));
+            });
+        });
+        stickyEl.appendChild(text);
+        stickyEl.appendChild(push);
+        stickyEl.appendChild(x);
+        document.body.appendChild(stickyEl);
+    };
+    if (REVIEW_LOG && REVIEW_LOG.push) {
+        var restored = pushState();
+        if (restored && restored.logs && Object.keys(restored.logs).length) showPush(restored);
+    }
 
     // The tab's recipient lives in sessionStorage: it survives livereload, is per tab and is
     // copied with a duplicated tab. Recipients are the server's mailboxes plus the tab's own.
@@ -714,8 +834,17 @@ export const commentsSnippet = ({
             primary = draft().length ? add : now;
         } else {
             primary = button(t('addRemark'), run(function (c) {
-                return send(item(c), 'POST', REVIEW_LOG_URL).then(function (r) {
+                var it = item(c);
+                return send(it, 'POST', REVIEW_LOG_URL).then(function (r) {
                     var msg = t(r.number ? 'addedNumber' : 'added', { file: r.file, number: r.number });
+                    if (REVIEW_LOG.push) {
+                        var st = pushState() || {};
+                        st.logs = st.logs || {};
+                        st.logs[r.file] = it.page;
+                        st.msg = msg;
+                        savePush(st);
+                        return showPush(st);
+                    }
                     try { sessionStorage.setItem(TOAST_KEY, msg); } catch (e) {}
                     toast(msg);
                 });
@@ -752,6 +881,17 @@ export const commentsSnippet = ({
     btns.addEventListener('mousedown', function (e) { e.preventDefault(); });
     fbBtn.addEventListener('click', openFor('feedback'));
     if (rvBtn) rvBtn.addEventListener('click', openFor('review'));
+    if (apBtn) apBtn.addEventListener('click', function () {
+        var s = selection(), row = s && approveTarget(s.range);
+        if (!row) return;
+        apBtn.disabled = true;
+        btns.hidden = true;
+        send({ page: pageFile(), cells: row.cells }, 'POST', APPROVE_URL).then(function (r) {
+            var msg = t(r.pushed ? 'approvedPushed' : 'approvedRow', { file: r.file });
+            try { sessionStorage.setItem(TOAST_KEY, msg); } catch (e) {}
+            toast(msg);
+        }, failure('approveFailed')).then(function () { apBtn.disabled = false; });
+    });
     document.addEventListener('mousedown', function (e) {
         if (pop && !pop.contains(e.target) && !btns.contains(e.target)) close();
     });
