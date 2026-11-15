@@ -16,9 +16,9 @@
 
 ## 3. Клиентский рендер PlantUML
 
-- [ ] 3.1 Удалить `vendor/docsify/docsify-plantuml.min.js` и его запись в `vendor/docsify/LICENSES.md` (D3) — в выходе шаблонного проекта нет файла `docsify-plantuml.min.js`
-- [ ] 3.2 В compose после вызова `docsifyTemplate(...)` проверять готовый `index.html` на `docsify-plantuml` и печатать `WARNING:` (D2), опцию `plantuml` в шаблон оставить — тест в `page-fences`: пользовательский шаблон с тегом → предупреждение, код 0, файла в выходе нет, опции содержат `nativeEmoji: true`
-- [ ] 3.3 Обновить комментарии, ссылающиеся на `docsify-plantuml` как на поставляемый файл (`scan/fences.ts`, `scan/tree.ts`, `render/diagrams.ts`, `test/offline-site.test.mjs`) — `npm test` зелёный, `npm run test:golden` без изменений эталонов
+- [x] 3.1 Удалить `vendor/docsify/docsify-plantuml.min.js` и его запись в `vendor/docsify/LICENSES.md` (D3) — в выходе шаблонного проекта нет файла `docsify-plantuml.min.js`
+- [x] 3.2 В compose после вызова `docsifyTemplate(...)` проверять готовый `index.html` на `docsify-plantuml` и печатать `WARNING:` (D2), опцию `plantuml` в шаблон оставить — тест в `page-fences`: пользовательский шаблон с тегом → предупреждение, код 0, файла в выходе нет, опции содержат `nativeEmoji: true`
+- [x] 3.3 Обновить комментарии, ссылающиеся на `docsify-plantuml` как на поставляемый файл (`scan/fences.ts`, `scan/tree.ts`, `render/diagrams.ts`, `test/offline-site.test.mjs`) — `npm test` зелёный, `npm run test:golden` без изменений эталонов
 
 ## 4. Актуализация
 

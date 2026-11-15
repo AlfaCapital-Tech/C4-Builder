@@ -69,7 +69,7 @@ const leaking = (dir) =>
     fs
         .readdirSync(path.join(dir, 'docs'), { recursive: true })
         .map(String)
-        .filter((f) => /\.(md|html|txt)$/.test(f))
+        .filter((f) => /\.(md|html|js|txt)$/.test(f))
         .filter((f) => fs.readFileSync(path.join(dir, 'docs', f), 'utf8').includes('plantuml.com'));
 const page = (dir) => fs.readFileSync(path.join(dir, 'docs', 'README.md'), 'utf8');
 

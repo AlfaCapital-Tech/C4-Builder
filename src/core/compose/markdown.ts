@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import fsextra from 'fs-extra';
+import chalk from 'chalk';
 import { createRequire } from 'node:module';
 
 import defaultDocsifyTemplate from './docsify.template.ts';
@@ -482,29 +483,39 @@ export const generateWebMD = async (
     };
 
     //docsify homepage
-    filePromises.push(
-        writeFile(
-            path.join(options.DIST_FOLDER, `index.html`),
-            docsifyTemplate({
-                name: options.PROJECT_NAME,
-                repo: options.REPO_NAME,
-                loadSidebar: true,
-                auto2top: true,
-                homepage: `${options.WEB_FILE_NAME || rootName()}.md`,
-                plantuml: {
-                    skin: 'classic'
-                },
-                stylesheet: options.WEB_THEME,
-                alias: { '/.*/_sidebar.md': '/_sidebar.md' },
-                nativeEmoji: true,
-                supportSearch: options.SUPPORT_SEARCH,
-                executeScript: options.EXECUTE_SCRIPT,
-                // Ключ только при включённом сворачивании: при false index.html остаётся прежним.
-                ...(options.SIDEBAR_COLLAPSE ? { sidebarDisplayLevel: 1 } : {}),
-                ...(redirects.size ? { c4builder: { redirects: Object.fromEntries(redirects) } } : {})
-            })
-        )
-    );
+    // Опция `plantuml` — для пользовательских шаблонов, которые к ней обращаются: её удаление
+    // дало бы TypeError в чужом коде, а встроенному шаблону она не нужна.
+    const indexHtml = docsifyTemplate({
+        name: options.PROJECT_NAME,
+        repo: options.REPO_NAME,
+        loadSidebar: true,
+        auto2top: true,
+        homepage: `${options.WEB_FILE_NAME || rootName()}.md`,
+        plantuml: {
+            skin: 'classic'
+        },
+        stylesheet: options.WEB_THEME,
+        alias: { '/.*/_sidebar.md': '/_sidebar.md' },
+        nativeEmoji: true,
+        supportSearch: options.SUPPORT_SEARCH,
+        executeScript: options.EXECUTE_SCRIPT,
+        // Ключ только при включённом сворачивании: при false index.html остаётся прежним.
+        ...(options.SIDEBAR_COLLAPSE ? { sidebarDisplayLevel: 1 } : {}),
+        ...(redirects.size ? { c4builder: { redirects: Object.fromEntries(redirects) } } : {})
+    });
+    // Проверяем готовый index.html, а не исходник шаблона: так ловится любая форма шаблона
+    // (CJS/ESM/TS, теги, собранные в рантайме). Сам скрипт больше не поставляется — тег даст 404,
+    // а при наличии файла он слал бы исходники диаграмм на внешний сервер рендера.
+    if (indexHtml.includes('docsify-plantuml')) {
+        console.log(chalk.bold(chalk.yellow('WARNING:')));
+        console.log(
+            chalk.yellow(
+                'docsifyTemplate loads docsify-plantuml: client-side PlantUML rendering is no longer shipped ' +
+                    '(diagrams are rendered at build time). Remove the docsify-plantuml <script> tag from the template.'
+            )
+        );
+    }
+    filePromises.push(writeFile(path.join(options.DIST_FOLDER, `index.html`), indexHtml));
 
     //copy local docsify vendor files to dist
     const docsifyVendorSrc = path.join(VENDOR_DIR, 'docsify');

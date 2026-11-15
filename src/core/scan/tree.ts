@@ -167,9 +167,9 @@ export const generateTree = async (dir: string, options: BuildOptions): Promise<
         }
 
         // Блоки ```plantuml и ```mermaid в страницах рендерим при сборке: иначе текст
-        // диаграммы доезжал до браузера и клиентский рендер (docsify-plantuml, в т.ч. в
-        // пользовательских шаблонах) отправлял его наружу. puml/d2 остаются кодом — так
-        // показывают исходник.
+        // диаграммы доезжал бы до браузера, и клиентский рендер из пользовательского шаблона
+        // (пакет его больше не поставляет) отправлял бы его наружу. puml/d2 остаются кодом —
+        // так показывают исходник.
         const fences = createFenceExtractor(['plantuml', 'mermaid']);
         const mdFiles = files.filter((x) => path.extname(x).toLowerCase() === '.md');
         for (const mdFile of mdFiles) {

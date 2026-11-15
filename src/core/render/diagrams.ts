@@ -404,7 +404,7 @@ const placeholderSvg = (w: number, h: number, color: string, frame: string, line
     '</svg>';
 
 // Картинка-заглушка вместо упавшей «мягкой» диаграммы: ошибка видна на странице,
-// сайт остаётся собранным (так же вёл себя онлайн-рендер docsify-plantuml).
+// сайт остаётся собранным — битый блок в тексте страницы не должен ронять всю документацию.
 const errorPlaceholderSvg = (name: string, reason: string): string => {
     const lines = [`${name}: diagram not rendered`, ...reason.split('\n')]
         .flatMap((l) => l.match(/.{1,88}/g) ?? [''])
@@ -665,7 +665,7 @@ export const generateImages = async (
             const lane: DiagramLane = registeredEngine(diagram.engine) ?? 'plantuml';
 
             // Заглушка с ошибкой вместо картинки: у «мягких» диаграмм — всегда (блоки в markdown
-            // плагинов писались под онлайн-рендер, где битый блок давал картинку с ошибкой, а
+            // плагинов писались под клиентский рендер, где битый блок давал картинку с ошибкой, а
             // не падение сборки), при softErrors — у любых: фоновый рендер не должен ронять
             // dev-сервер. Чексумма в кэш не сохраняется: следующая пересборка перерисует (в
             // сессии dev-сервера — только при изменении входа, см. failedRenders).
