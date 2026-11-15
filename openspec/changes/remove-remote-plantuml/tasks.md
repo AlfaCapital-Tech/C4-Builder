@@ -2,9 +2,9 @@
 
 ## 1. Конфиг и легаси-детект
 
-- [ ] 1.1 Удалить `plantumlServerUrl` и `generateLocalImages` из `defaultConfig`; в схеме удалить `plantumlServerUrl`, `generateLocalImages` перевести в `optBool()` без дефолта (D1) — `npm run build` проходит, `new -y` пишет конфиг без обоих ключей
+- [x] 1.1 Удалить `plantumlServerUrl` и `generateLocalImages` из `defaultConfig`; в схеме удалить `plantumlServerUrl`, `generateLocalImages` перевести в `optBool()` без дефолта (D1) — `npm run build` проходит, `new -y` пишет конфиг без обоих ключей
 - [ ] 1.2 В `dispatch.ts` убрать `GENERATE_LOCAL_IMAGES`/`PLANTUML_SERVER_URL` из `BuildOptions`, добавить `LEGACY_LOCAL_IMAGES_OFF` (`generateLocalImages === false`); в `build.ts` — `WARNING:` с именами обоих ключей рядом с PDF-предупреждением, конфиг не мутируется — тест: `false` → предупреждение и код 0, `.c4builder` побайтно не изменён; `true` → без предупреждения
-- [ ] 1.3 Мастер: убрать вопрос `plantumlServerUrl`, чекбокс `generateLocalImages` и оба ключа из `WIZARD_KEYS`; `--list`: убрать две строки (D4) — тест: `doctor` на конфиге без этих ключей даёт `project.complete: ok`, сборка без TTY не запускает мастер
+- [x] 1.3 Мастер: убрать вопрос `plantumlServerUrl`, чекбокс `generateLocalImages` и оба ключа из `WIZARD_KEYS`; `--list`: убрать две строки (D4) — тест: `doctor` на конфиге без этих ключей даёт `project.complete: ok`, сборка без TTY не запускает мастер
 
 ## 2. Удаление онлайн-рендера
 

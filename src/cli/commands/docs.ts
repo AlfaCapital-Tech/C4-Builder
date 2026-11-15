@@ -35,8 +35,6 @@ Uses docsify to generate a website with a sidebar for navigation. The site can b
     Changes the default theme of the generated docsify website
     ${chalk.cyan('Generate llms.txt for AI agents')} (${chalk.gray('.c4builder → "generateLLMS"')})
     Writes llms.txt (page index) and llms-full.txt (all pages with diagram sources) to the site root.
-${chalk.cyan('Generate diagram images locally')}
-Uses the localy installed plantuml package to build svg images for each diagram.
 ${chalk.cyan('Replace diagrams with a link')}
 Replaces the diagram images with links.
 ${chalk.cyan('Include breadcrumbs')}
@@ -49,7 +47,5 @@ ${chalk.cyan('Place diagrams before text')}
 Choose to place diagrams before or after the text.
 ${chalk.cyan('Exclude other files')}
 Choose to exlude other files from being published in destination folder.
-${chalk.cyan('Use external PlantUML server')}
-Change the PlantUML server.
     `);
 };

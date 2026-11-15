@@ -80,11 +80,6 @@ Embed SVG diagram : ${
             ? chalk.green(currentConfiguration.EMBED_DIAGRAM)
             : chalk.red('not set')
     }
-Generate diagram images locally: ${
-        currentConfiguration.GENERATE_LOCAL_IMAGES !== undefined
-            ? chalk.green(currentConfiguration.GENERATE_LOCAL_IMAGES)
-            : chalk.red('not set')
-    }
 Replace diagrams with a link: ${
         currentConfiguration.INCLUDE_LINK_TO_DIAGRAM !== undefined
             ? chalk.green(currentConfiguration.INCLUDE_LINK_TO_DIAGRAM)
@@ -98,11 +93,6 @@ Exclude sidebar folder by path: ${
 Place diagrams before text: ${
         currentConfiguration.DIAGRAMS_ON_TOP !== undefined
             ? chalk.green(currentConfiguration.DIAGRAMS_ON_TOP)
-            : chalk.red('not set')
-    }
-PlantUML server url: ${
-        currentConfiguration.PLANTUML_SERVER_URL !== undefined
-            ? chalk.green(currentConfiguration.PLANTUML_SERVER_URL)
             : chalk.red('not set')
     }
 Diagram format: ${

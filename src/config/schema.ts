@@ -84,8 +84,6 @@ export const configSchema = z.object({
     diagramsOnTop: bool(defaultConfig.diagramsOnTop),
     embedDiagram: bool(defaultConfig.embedDiagram),
     excludeOtherFiles: bool(defaultConfig.excludeOtherFiles),
-    generateLocalImages: bool(defaultConfig.generateLocalImages),
-    plantumlServerUrl: str(defaultConfig.plantumlServerUrl),
     diagramFormat: str(defaultConfig.diagramFormat),
     d2Layout: str(defaultConfig.d2Layout),
     charset: str(defaultConfig.charset),
@@ -146,6 +144,10 @@ export const configSchema = z.object({
     plantumlVersion: optStr(),
     generatePDF: optBool(),
     generateCompletePDF: optBool(),
+    // Онлайн-рендер PlantUML удалён: ключ остался в схеме без дефолта, чтобы `false` можно было
+    // отличить от отсутствия и предупредить. `plantumlServerUrl` не нужен даже для этого —
+    // нестрогая схема его молча отбрасывает.
+    generateLocalImages: optBool(),
     checksums: z.unknown().optional()
 });
 

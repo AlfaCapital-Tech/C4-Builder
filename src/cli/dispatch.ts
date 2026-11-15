@@ -121,7 +121,11 @@ function getOptions(c: Partial<C4ConfigFile>): BuildOptions | Partial<BuildOptio
         // Легаси-детект: PDF-вывод удалён, но truthy-ключи в старых .c4builder
         // ловим здесь (где доступен conf) и отдаём build.js для предупреждения.
         LEGACY_PDF_KEYS: (['generatePDF', 'generateCompletePDF'] as const).filter((k) => c[k]),
-        GENERATE_LOCAL_IMAGES: c.generateLocalImages,
+        // Легаси-детект: онлайн-рендер PlantUML удалён, сборка всегда локальная. Предупреждаем
+        // только о явном `false` — `true` и адрес сервера записаны в каждый старый конфиг.
+        LEGACY_LOCAL_IMAGES_OFF: c.generateLocalImages === false,
+        GENERATE_LOCAL_IMAGES: true,
+        PLANTUML_SERVER_URL: '',
         EMBED_DIAGRAM: c.embedDiagram,
         ROOT_FOLDER: c.rootFolder,
         DIST_FOLDER: c.distFolder,
@@ -139,7 +143,6 @@ function getOptions(c: Partial<C4ConfigFile>): BuildOptions | Partial<BuildOptio
         CHARSET: c.charset,
         WEB_PORT: c.webPort,
         HAS_RUN: c.hasRun,
-        PLANTUML_SERVER_URL: c.plantumlServerUrl,
         DIAGRAM_FORMAT: c.diagramFormat,
         D2_LAYOUT: c.d2Layout,
         MD_FILE_NAME: 'README',
@@ -418,16 +421,8 @@ export default async () => {
                 const more = paths.length > 1 ? ` (+${paths.length - 1} more)` : '';
                 console.log(chalk.gray(`\n${name}${more} changed. Rebuilding...`));
                 if (isBuilding) {
+                    // Правка во время сборки не теряется: после текущей сборки цикл пересоберёт.
                     attemptedWatchBuild = true;
-                    if (options.GENERATE_LOCAL_IMAGES)
-                        console.log(
-                            chalk.bold(
-                                chalk.yellow(
-                                    'Build already in progress, consider disabling local image generation '
-                                )
-                            )
-                        );
-
                     return;
                 }
 

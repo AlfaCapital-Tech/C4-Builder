@@ -165,6 +165,18 @@ const build = async (
             );
         }
 
+        // Онлайн-рендер PlantUML удалён: сборка уже прошла локально, а ключи старого конфига
+        // лишь называем — `.c4builder` не мутируем, как и с PDF-ключами.
+        if (options.LEGACY_LOCAL_IMAGES_OFF) {
+            console.log(chalk.bold(chalk.yellow('WARNING:')));
+            console.log(
+                chalk.yellow(
+                    'Online PlantUML rendering is no longer supported; diagrams are always rendered locally. ' +
+                        'Remove manually from .c4builder: generateLocalImages, plantumlServerUrl.'
+                )
+            );
+        }
+
         await runAfterBuild(options, plugins);
 
         console.log(chalk.green(`built in ${(Date.now() - start_date.getTime()) / 1000} seconds`));
