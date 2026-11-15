@@ -129,14 +129,21 @@ const findTable = (lines: string[], start: number, end: number): Table | undefin
  * страница: сравнение через `plain`, число ячеек тоже должно совпасть.
  */
 const findRowByCells = (lines: string[], table: Table, cells: string[]): number[] => {
-    const want = cells.map(plain);
+    // Сравнение в ширину заголовка: docsify дорисовывает короткую строку пустыми ячейками и не
+    // показывает лишние. Ячейки страницы сверх ширины должны быть пустыми.
+    const want = fitRow(cells, table.cols);
+    if (cells.slice(table.cols).some((c) => plain(c))) return [];
     const found: number[] = [];
     for (let i = table.header + 2; i <= table.last; i++) {
-        const row = splitRow(lines[i]);
-        if (want.length === row.length && want.every((c, k) => plain(row[k]) === c)) found.push(i);
+        const row = fitRow(splitRow(lines[i]), table.cols);
+        if (want.every((c, k) => row[k] === c)) found.push(i);
     }
     return found;
 };
+
+/** Ячейки строки как их показывает страница: через `plain`, дополнены пустыми или обрезаны до `width`. */
+export const fitRow = (cells: string[], width: number): string[] =>
+    Array.from({ length: width }, (_, k) => plain(cells[k] ?? ''));
 
 /** Готовые ячейки строки либо их фабрика по номеру строки (номер известен только здесь). */
 export type Cells = string[] | ((number: number | null) => string[]);

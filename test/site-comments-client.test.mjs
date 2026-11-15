@@ -588,15 +588,14 @@ describe('кнопка журнала ревью', () => {
         ]);
         p.window.__reply = { file: 'src/review.md', number: 4 };
         await p.write('t', 'Comment', 'Wrong', 'Add comment');
-        // первый вызов — GET синхронизации страницы с журналом, последний — его повтор после записи
+        // первый вызов — GET синхронизации страницы с журналом; git-состояние без push/approve не спрашивается
         expect(p.window.__calls).toEqual([
             { url: '/__c4builder/review-log?page=A.md', method: 'GET', body: undefined },
             {
                 url: '/__c4builder/review-log',
                 method: 'POST',
                 body: { page: 'A.md', quote: 'foo bar', section: 'Flow', comment: 'Wrong' }
-            },
-            { url: '/__c4builder/review-log?page=A.md', method: 'GET', body: undefined }
+            }
         ]);
         expect(p.toast()).toBe('Added to src/review.md as #4');
     });
@@ -691,6 +690,8 @@ describe('кнопка журнала ревью', () => {
 describe('кнопка Approve row', () => {
     const APPROVE = { heading: ['Статусы'], who: 'Кто', set: { Статус: 'Approved', Дата: '{date}' } };
     const LOG = { file: 'review.md', heading: ['Замечания'], approve: APPROVE };
+    // Одобренные строки отдаёт сервер (правило одно — серверное).
+    const APPROVED = ['Разработчик', 'Approved', 'Петров Пётр', '2026-11-01'];
     const BODY = `<h1>Ревью</h1><h2>Статусы</h2>
 <table><thead><tr><th>Роль</th><th>Статус</th><th>Кто</th><th>Дата</th></tr></thead><tbody>
 <tr><td>Аналитик</td><td></td><td id="who1">Иванов Иван</td><td></td></tr>
@@ -707,7 +708,7 @@ describe('кнопка Approve row', () => {
             languages: ['en'],
             reviewLog: LOG,
             body: BODY,
-            reply: { file: 'src/review.md', log: true },
+            reply: { file: 'src/review.md', log: true, approved: [APPROVED] },
             ...opts
         });
     // Выделение от начала текста одного элемента до конца другого и кнопки у него.
@@ -801,9 +802,10 @@ describe('кнопка Approve row: повтор и служебные элем�
 
     it('одобренная строка, коммит журнала не запушен (GET unpushed) — кнопка есть, повтор шлёт строку', async () => {
         const LOG = { file: 'review.md', heading: ['Замечания'], approve: APPROVE };
-        const done = await page(LOG, { file: 'src/review.md', log: true });
+        const approved = [['Разработчик', 'Approved', 'Петров Пётр', '2026-11-01']];
+        const done = await page(LOG, { file: 'src/review.md', log: true, approved });
         expect(await select(done, 'who3')).toEqual(['Comment']);
-        const p = await page(LOG, { file: 'src/review.md', log: true, unpushed: true });
+        const p = await page(LOG, { file: 'src/review.md', log: true, approved, unpushed: true });
         expect(await select(p, 'who3')).toEqual(['Comment', 'Approve row']);
         expect(await approve(p)).toEqual(['Разработчик', 'Approved', 'Петров Пётр', '2026-11-01']);
         expect(p.toast()).toBe('Row approved in src/review.md and pushed');
@@ -865,7 +867,7 @@ describe('плашка Push журнала', () => {
         expect(bar(p).hidden).toBe(true);
         expect(p.toast()).toBe('Pushed src/review.md');
         expect(p.window.__calls.at(-1)).toEqual({
-            url: '/__c4builder/review-log?page=A.md',
+            url: '/__c4builder/review-log/state?page=A.md',
             method: 'GET',
             body: undefined
         });
@@ -1050,5 +1052,52 @@ describe('Approve row после успеха', () => {
         expect(ap.disabled).toBe(false);
         p.window.__error = '';
         expect(await select(p)).toEqual(['Comment', 'Approve row']);
+    });
+});
+
+// Перезагрузка по livereload во время запроса страницы (code review): сниппет livereload ждёт ответа
+// (window.__c4builderBusy), перед перезагрузкой тост на экране сохраняется и показывается снова.
+describe('livereload во время запроса', () => {
+    const LOG = { file: 'review.md', heading: ['Remarks'], push: true };
+    const PENDING = {
+        file: 'src/review.md',
+        log: false,
+        remarks: [],
+        pending: { changed: true, unpushed: 0 }
+    };
+
+    it('перезагрузка ждёт ответа Push; тост результата переживает перезагрузку', async () => {
+        const p = await agentPage({ agent: false, languages: ['en'], reviewLog: LOG, reply: PENDING });
+        p.window.__reply = { file: 'src/review.md', commit: 'abc1234', pushed: true };
+        p.doc.querySelector('.c4b-logbar button').click();
+        expect(p.window.__c4builderBusy).toBe(1);
+        // так сниппет livereload откладывает перезагрузку, пришедшую посреди запроса
+        let saved = null;
+        let reloads = 0;
+        p.window.__c4builderReloadLater = () => {
+            reloads++;
+            p.window.__c4builderBeforeReload();
+            saved = p.window.sessionStorage.getItem('__c4builderCommentToast');
+        };
+        await sleep(20);
+        expect(reloads).toBe(1);
+        expect(p.window.__c4builderBusy).toBe(0);
+        expect(JSON.parse(saved)).toEqual({ msg: 'Pushed src/review.md', err: false });
+        const q = await agentPage({
+            agent: false,
+            languages: ['en'],
+            reviewLog: LOG,
+            session: { __c4builderCommentToast: saved }
+        });
+        expect(q.toast()).toBe('Pushed src/review.md');
+    });
+
+    it('без перезагрузки тост не сохраняется и не всплывает потом снова', async () => {
+        const p = await agentPage({ agent: false, languages: ['en'], reviewLog: LOG, reply: PENDING });
+        p.window.__reply = { file: 'src/review.md', commit: null, pushed: false };
+        p.doc.querySelector('.c4b-logbar button').click();
+        await sleep(20);
+        expect(p.toast()).toBe('Nothing to push');
+        expect(p.window.sessionStorage.getItem('__c4builderCommentToast')).toBeNull();
     });
 });

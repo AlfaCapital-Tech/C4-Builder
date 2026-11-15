@@ -7,6 +7,8 @@ export const REVIEW_LOG_PATH = '/__c4builder/review-log';
 // Апрув строки таблицы статусов и Push журнала (change site-review-approve-push): коммит и пуш файла.
 export const REVIEW_APPROVE_PATH = '/__c4builder/review-log/approve';
 export const REVIEW_PUSH_PATH = '/__c4builder/review-log/push';
+// Git-состояние журнала страницы для плашки Push и повторного апрува — отдельно, через очередь.
+export const REVIEW_STATE_PATH = '/__c4builder/review-log/state';
 // Адрес страницы change'а по имени слушателя (change site-agent-review): читает `c4builder feedback`.
 export const PAGE_PATH = '/__c4builder/page';
 
@@ -123,6 +125,7 @@ export const commentsSnippet = ({
     var FEEDBACK = '${FEEDBACK_PATH}';
     var REVIEW_LOG_URL = '${REVIEW_LOG_PATH}';
     var APPROVE_URL = '${REVIEW_APPROVE_PATH}';
+    var STATE_URL = '${REVIEW_STATE_PATH}';
     var PUSH_URL = '${REVIEW_PUSH_PATH}';
     var REVIEW_LOG = ${jsValue(reviewLog)};
     var LABELS = ${jsValue(labels)};
@@ -169,8 +172,20 @@ export const commentsSnippet = ({
     };
     try {
         var saved = sessionStorage.getItem(TOAST_KEY);
-        if (saved) { sessionStorage.removeItem(TOAST_KEY); toast(saved); }
+        if (saved) {
+            sessionStorage.removeItem(TOAST_KEY);
+            var kept = saved.charAt(0) === '{' ? JSON.parse(saved) : { msg: saved };
+            toast(kept.msg, kept.err);
+        }
     } catch (e) {}
+    // Called by the livereload snippet right before it reloads the page: the toast on screen (the
+    // result of a comment, approve or push) is shown again after the reload.
+    window.__c4builderBeforeReload = function () {
+        if (!toastEl) return;
+        try {
+            sessionStorage.setItem(TOAST_KEY, JSON.stringify({ msg: toastEl.textContent, err: toastEl.classList.contains('c4b-err') }));
+        } catch (e) {}
+    };
 
     var content = function () { return document.querySelector('.markdown-section'); };
     var headingLevel = function (el) { return /^H[1-6]$/.test(el.tagName) ? Number(el.tagName[1]) : 0; };
@@ -301,7 +316,6 @@ export const commentsSnippet = ({
             if (item.cells) body.cells = item.cells;
             send(body, 'DELETE', url).then(function (r) {
                 var msg = t('removed', { file: r.file });
-                try { sessionStorage.setItem(TOAST_KEY, msg); } catch (e) {}
                 toast(msg);
                 refreshLog();
             }, function (err) {
@@ -352,7 +366,7 @@ export const commentsSnippet = ({
     // One GET per rendered page: the server says whether the page is the log (decorate rows) or
     // which remarks belong to it (highlight quotes). The marker lives on the first rendered element,
     // so a re-render by docsify clears it and the page is synced again.
-    var logFirst = null, logUnpushed = false;
+    var logFirst = null, logUnpushed = false, logApproved = [];
     var syncLog = function () {
         var root = content();
         if (!REVIEW_LOG || !root || !root.firstElementChild || root.firstElementChild.hasAttribute('data-c4b-log')) return;
@@ -363,22 +377,23 @@ export const commentsSnippet = ({
             if (!res.ok) { if (pageFile() === page) updateBar(null); return; }
             return res.json().then(function (data) {
                 if (pageFile() !== page || content() !== root || root.firstElementChild !== first) return;
-                updateBar(data);
-                if (data.log) { logFirst = first; logUnpushed = !!data.unpushed; decorateLog(root); }
+                if (data.log) { logFirst = first; logApproved = data.approved || []; decorateLog(root); }
                 else highlightRemarks(root, data);
+                refreshLog();
             });
         }, function () {});
     };
-    // The same GET after an action on the page (comment, removal, approve, push): only the git
-    // state — the Push bar and whether an approved row may be pushed again.
+    // The git state of the page's log (the Push bar, whether an approved row may be pushed again): a
+    // separate request — the server answers it after a running git operation — asked only with push or
+    // approve, on every render and after an action on the page.
     var refreshLog = function () {
-        if (!REVIEW_LOG) return;
+        if (!REVIEW_LOG || !(REVIEW_LOG.push || REVIEW_LOG.approve)) return;
         var page = pageFile();
-        fetch(REVIEW_LOG_URL + '?page=' + encodeURIComponent(page), { method: 'GET' }).then(function (res) {
+        fetch(STATE_URL + '?page=' + encodeURIComponent(page), { method: 'GET' }).then(function (res) {
             return res.ok ? res.json() : null;
         }).then(function (data) {
             if (pageFile() !== page) return;
-            if (data && data.log) logUnpushed = !!data.unpushed;
+            logUnpushed = !!(data && data.unpushed);
             updateBar(data);
         }, function () {});
     };
@@ -501,17 +516,12 @@ export const commentsSnippet = ({
         for (var c = 0; c < cells.length; c++) texts.push(cellText(cells[c]));
         var who = col(A.who);
         if (who < 0 || /^(|-|\\u2013|\\u2014)$/.test(texts[who] || '')) return null;
-        var literals = 0, done = 0;
-        Object.keys(A.set).forEach(function (name) {
-            if (/\\{\\w+\\}/.test(A.set[name])) return;
-            literals++;
-            var i = col(name);
-            if (i >= 0 && same(texts[i] || '', A.set[name])) done++;
-        });
-        // An approved row whose commit was not pushed (the push was rejected) keeps the button:
-        // pressing it again pushes that commit.
-        if (approvedRows[JSON.stringify(texts)] && !logUnpushed) return null;
-        return literals && done === literals && !logUnpushed ? null : { cells: texts };
+        // Approved is the server's rule (the "approved" rows of the log GET), or approved from this
+        // page a moment ago. Such a row whose commit was not pushed (the push was rejected) keeps the
+        // button: pressing it again pushes that commit.
+        var key = JSON.stringify(texts);
+        var approved = approvedRows[key] || logApproved.some(function (row) { return JSON.stringify(row) === key; });
+        return approved && !logUnpushed ? null : { cells: texts };
     };
     var update = function () {
         if (pop) return;
@@ -536,8 +546,18 @@ export const commentsSnippet = ({
         if (!p) return (window.$docsify && window.$docsify.homepage) || 'README.md';
         return /\\.md$/i.test(p) ? p : p + '.md';
     };
+    // While a request is running, a livereload (the server wrote the log) waits for it: the reload
+    // happens after the caller has shown the result, which then survives the reload.
+    var busyDone = function () {
+        setTimeout(function () {
+            window.__c4builderBusy = Math.max(0, (window.__c4builderBusy || 1) - 1);
+            var later = window.__c4builderReloadLater;
+            if (!window.__c4builderBusy && later) { window.__c4builderReloadLater = null; later(); }
+        }, 0);
+    };
     var send = function (body, method, url) {
-        return fetch(url, {
+        window.__c4builderBusy = (window.__c4builderBusy || 0) + 1;
+        var request = fetch(url, {
             method: method || 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body)
@@ -547,6 +567,8 @@ export const commentsSnippet = ({
                 return data;
             });
         });
+        request.then(busyDone, busyDone);
+        return request;
     };
     var failure = function (key) {
         return function (err) { toast(t(key, { error: err && err.message ? err.message : err }), true); };
@@ -872,7 +894,6 @@ export const commentsSnippet = ({
             primary = button(t('addRemark'), run(function (c) {
                 return send(item(c), 'POST', REVIEW_LOG_URL).then(function (r) {
                     var msg = t(r.number ? 'addedNumber' : 'added', { file: r.file, number: r.number });
-                    try { sessionStorage.setItem(TOAST_KEY, msg); } catch (e) {}
                     toast(msg);
                     refreshLog();
                 });
@@ -921,7 +942,6 @@ export const commentsSnippet = ({
             logUnpushed = false;
             apBtn.hidden = true;
             var msg = t(r.pushed ? 'approvedPushed' : 'approvedRow', { file: r.file });
-            try { sessionStorage.setItem(TOAST_KEY, msg); } catch (e) {}
             toast(msg);
         }, failure('approveFailed')).then(function () { apBtn.disabled = false; refreshLog(); });
     });

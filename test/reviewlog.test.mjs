@@ -3,6 +3,7 @@ import path from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 
 import {
+    approvedRows,
     approveRow,
     deleteRemark,
     fillCells,
@@ -11,6 +12,7 @@ import {
     isReviewFile,
     parseRemarks,
     remarkVars,
+    removeRow,
     writeRemark
 } from './dist.mjs';
 import { TMP_ROOT } from './helpers.mjs';
@@ -332,5 +334,25 @@ describe('approveRow', () => {
         fs.writeFileSync(file, LOG);
         approveRow(fs.readFileSync(file, 'utf8'), OPTS, ROW);
         expect(fs.readFileSync(file, 'utf8')).toBe(LOG);
+    });
+    it('строка короче заголовка (docsify дорисовывает пустые ячейки) — находится и для апрува, и для удаления', () => {
+        const short = LOG.replace('| Аналитик | | Иванов Иван | |', '| Аналитик | | Иванов Иван |');
+        const r = approveRow(short, OPTS, ROW, '2026-11-15');
+        expect(r.markdown).toContain('| Аналитик | Approved | Иванов Иван | 2026-11-15 |');
+        const removed = removeRow(short, 'Статусы', { text: 'Аналитик' }, { cells: ROW });
+        expect(removed.markdown).not.toContain('| Аналитик |');
+        // лишние непустые ячейки страницы сверх ширины заголовка — не та строка
+        expect(approveRow(LOG, OPTS, [...ROW, 'x'])).toEqual({ error: 'not-found' });
+    });
+    it('approvedRows — одобренные строки по тому же правилу, что и отказ апрува', () => {
+        expect(approvedRows(LOG, OPTS)).toEqual([['Разработчик', 'Approved', 'Петров Пётр', '2026-11-01']]);
+        // регистр значения важен — как и при апруве: «approved» — не одобрена
+        const lower = LOG.replace('| Разработчик | Approved |', '| Разработчик | approved |');
+        expect(approvedRows(lower, OPTS)).toEqual([]);
+        expect(
+            approveRow(lower, OPTS, ['Разработчик', 'approved', 'Петров Пётр', '2026-11-01'], 'd')
+        ).toHaveProperty('markdown');
+        // set без литералов — одобренных строк не бывает
+        expect(approvedRows(LOG, { ...OPTS, set: { Дата: '{date}' } })).toEqual([]);
     });
 });

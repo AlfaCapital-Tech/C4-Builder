@@ -11,6 +11,7 @@ import {
     collapse,
     deleteRow,
     escapeHtml,
+    fitRow,
     formatEntry,
     markdownHasHeading,
     plain,
@@ -31,7 +32,8 @@ export interface ReviewLogOptions {
     author?: string;
     label?: string;
     approve?: ApproveOptions;
-    push?: { enabled: boolean; message: string };
+    /** Нормализован в `commentsLog`: включён ли Push и шаблон сообщения коммита. */
+    push: { enabled: boolean; message: string };
 }
 
 /** Ключ `comments.approve`: раздел таблицы статусов, колонка ревьюера и значения ячеек по колонкам. */
@@ -269,28 +271,47 @@ export const approveRow = (
     if (missing !== undefined) return { error: 'no-column', column: missing };
     const who = index(opts.who);
     let author = '';
-    // Одобрена — когда есть литералы без подстановок и все они уже стоят в своих колонках.
-    let literals = 0;
-    let done = 0;
+    let approved = false;
     const result = updateRow(markdown, heading, cells, (row) => {
         author = plain(row[who] ?? '');
+        approved = isApproved(row, opts, index);
         const vars = { date, author: escapeHtml(author) };
         const out: Record<number, string> = {};
-        for (const [column, template] of Object.entries(opts.set)) {
-            const i = index(column);
-            // Литерал без подстановок уже стоит — эта колонка апрува выполнена.
-            if (!/\{\w+\}/.test(template)) {
-                literals++;
-                if (plain(row[i] ?? '') === plain(template)) done++;
-            }
-            out[i] = fillCells([template], vars)[0];
-        }
+        for (const [column, template] of Object.entries(opts.set))
+            out[index(column)] = fillCells([template], vars)[0];
         return out;
     });
     if ('error' in result) return result;
     if (isNoName(author)) return { error: 'no-name' };
-    if (literals && done === literals) return { error: 'approved' };
+    if (approved) return { error: 'approved' };
     return { markdown: result.markdown, author };
+};
+
+/**
+ * Одобрена ли строка — единственное правило, его же видит страница (`approvedRows`): все литералы
+ * `set` (значения без подстановок) уже стоят в своих колонках. Без литералов строка не бывает
+ * одобренной: кнопка остаётся у каждой строки с именем (configWarnings предупреждает).
+ */
+const isApproved = (row: string[], opts: ApproveOptions, index: (name: string) => number): boolean => {
+    const literals = Object.entries(opts.set).filter(([, v]) => !/\{\w+\}/.test(v));
+    return (
+        literals.length > 0 && literals.every(([column, v]) => plain(row[index(column)] ?? '') === plain(v))
+    );
+};
+
+/**
+ * Одобренные строки таблицы статусов — ячейки как их показывает страница (`fitRow`): по ним
+ * страница прячет кнопку Approve row. Нет раздела, таблицы или колонки — пусто.
+ */
+export const approvedRows = (markdown: string, opts: ApproveOptions): string[][] => {
+    const heading = findHeading(markdown, opts.heading);
+    const header = heading && tableHeader(markdown, heading);
+    if (!heading || !header) return [];
+    const index = (name: string): number => header.findIndex((h) => sameColumn(h, name));
+    if (Object.keys(opts.set).some((c) => index(c) < 0)) return [];
+    return tableRows(markdown, heading)
+        .filter((r) => isApproved(r.cells, opts, index))
+        .map((r) => fitRow(r.cells, header.length));
 };
 
 /** Дописывает замечание в журнал и возвращает номер строки таблицы (null — список). */

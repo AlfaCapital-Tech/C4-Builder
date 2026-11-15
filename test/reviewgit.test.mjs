@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 
-import { publishFile, pushPending, ReviewGitError, serialQueue, unpushedLog } from './dist.mjs';
+import { publishFile, pushPending, ReviewGitError, reviewPending, serialQueue, sshEnv } from './dist.mjs';
 import { gitSandbox } from './helpers.mjs';
 
 // Коммит и пуш файла журнала (change site-review-approve-push) на временном репозитории с
@@ -308,20 +308,99 @@ describe('откат и дотолкивание', () => {
         expect(box.git(box.work, 'status', '--porcelain')).toBe('');
     });
 
-    it('незапушенный коммит журнала: unpushedLog — да, pushPending дотолкает без нового коммита', async () => {
+    it('незапушенный коммит журнала: reviewPending видит его, pushPending дотолкает без нового коммита', async () => {
         const box = sandbox();
         const hook = path.join(box.remote, 'hooks', 'pre-receive');
         fs.writeFileSync(hook, '#!/bin/sh\nexit 1\n', { mode: 0o755 });
-        expect(await unpushedLog(box.work, box.file)).toBe(false);
+        expect((await reviewPending(box.work, box.file)).unpushed).toBe(0);
         box.append('| 1 | Why? |');
         const err = await box.publish().catch((e) => e);
         expect(err.message).toContain('the commit stays local, press the button again to retry');
         expect(err.message).not.toContain('Push');
-        expect(await unpushedLog(box.work, box.file)).toBe(true);
+        expect(await reviewPending(box.work, box.file)).toEqual({ changed: false, unpushed: 1 });
         fs.rmSync(hook);
         const head = box.git(box.work, 'rev-parse', 'HEAD');
         expect(await pushPending(box.work, box.file)).toBe(true);
         expect(box.git(box.work, 'rev-parse', 'HEAD')).toBe(head);
-        expect(await unpushedLog(box.work, box.file)).toBe(false);
+        expect((await reviewPending(box.work, box.file)).unpushed).toBe(0);
+    });
+});
+
+// Второй раунд code review: откат только своей записи, untracked при showUntrackedFiles=no,
+// stdin закрыт, ssh в batch-режиме, подпись перенесённого коммита.
+describe('надёжность git-операций', () => {
+    it('коммит упал, а журнал успели поправить (hook дописал строку) — откат не затирает правку', async () => {
+        const box = sandbox();
+        const hook = path.join(box.work, '.git', 'hooks', 'pre-commit');
+        fs.writeFileSync(hook, '#!/bin/sh\necho "| 9 | Concurrent |" >> change/review.md\nexit 1\n', {
+            mode: 0o755
+        });
+        const err = await box.publish({ edit: () => box.append('| 1 | Why? |') }).catch((e) => e);
+        expect(err).toBeInstanceOf(ReviewGitError);
+        expect(err.message).toContain(
+            'the review log changed meanwhile, so the approval edit was not rolled back'
+        );
+        expect(fs.readFileSync(box.file, 'utf8')).toBe(`${LOG}| 1 | Why? |\n| 9 | Concurrent |\n`);
+    });
+
+    it('status.showUntrackedFiles=no — новый журнал всё равно виден и коммитится', async () => {
+        const box = sandbox();
+        box.git(box.work, 'config', 'status.showUntrackedFiles', 'no');
+        const file = path.join(box.work, 'change', 'new', 'review.md');
+        fs.mkdirSync(path.dirname(file), { recursive: true });
+        fs.writeFileSync(file, LOG);
+        expect(await reviewPending(box.work, file)).toEqual({ changed: true, unpushed: 0 });
+        const r = await publishFile({ cwd: box.work, file, message: 'new log' });
+        expect(r.commit).toBeTruthy();
+        expect(box.git(box.work, 'show', '--name-only', '--format=', 'HEAD')).toBe('change/new/review.md');
+    });
+
+    it('stdin git закрыт: hook, читающий stdin, получает EOF и не ждёт до таймаута', async () => {
+        const box = sandbox();
+        const hook = path.join(box.work, '.git', 'hooks', 'pre-commit');
+        fs.writeFileSync(hook, '#!/bin/sh\ncat > /dev/null\nexit 0\n', { mode: 0o755 });
+        box.append('| 1 | Why? |');
+        const started = Date.now();
+        expect((await box.publish()).pushed).toBe(true);
+        expect(Date.now() - started).toBeLessThan(10_000);
+    }, 20_000);
+
+    it('ssh в batch-режиме, если своей команды ssh нет; core.sshCommand и GIT_SSH_COMMAND не подменяются', async () => {
+        const plain = sandbox();
+        expect(await sshEnv(plain.work)).toEqual({ GIT_SSH_COMMAND: 'ssh -o BatchMode=yes' });
+        const own = sandbox();
+        own.git(own.work, 'config', 'core.sshCommand', 'ssh -i key');
+        expect(await sshEnv(own.work)).toEqual({});
+        const envSet = sandbox();
+        process.env.GIT_SSH_COMMAND = 'ssh -v';
+        try {
+            expect(await sshEnv(envSet.work)).toEqual({});
+        } finally {
+            delete process.env.GIT_SSH_COMMAND;
+        }
+    });
+
+    it('commit.gpgsign=true — перенесённый на upstream коммит подписан (gpg.program — заглушка)', async () => {
+        const box = sandbox();
+        // Заглушка gpg: git проверяет строку SIG_CREATED в status-fd и берёт подпись из stdout.
+        const fake = path.join(box.base, 'fake-gpg.sh');
+        fs.writeFileSync(
+            fake,
+            "#!/bin/sh\ncat > /dev/null\nprintf '\\n[GNUPG:] SIG_CREATED D 1 8 00 0 FAKE\\n' >&2\nprintf -- '-----BEGIN PGP SIGNATURE-----\\n\\nfake\\n-----END PGP SIGNATURE-----\\n'\n",
+            { mode: 0o755 }
+        );
+        box.git(box.work, 'config', 'gpg.program', fake);
+        box.git(box.work, 'config', 'commit.gpgsign', 'true');
+        box.git(box.work, 'config', 'user.signingkey', 'TESTKEY');
+        fs.writeFileSync(path.join(box.other, 'other.md'), 'colleague\n');
+        box.git(box.other, 'add', 'other.md');
+        box.git(box.other, 'commit', '-q', '-m', 'colleague');
+        box.git(box.other, 'push', '-q');
+        box.append('| 1 | Why? |');
+        expect((await box.publish()).pushed).toBe(true);
+        expect(box.remoteLog().slice(0, 2)).toEqual(['review change: comments', 'colleague']);
+        expect(box.git(box.remote, 'cat-file', 'commit', 'main')).toContain(
+            'gpgsig -----BEGIN PGP SIGNATURE-----'
+        );
     });
 });

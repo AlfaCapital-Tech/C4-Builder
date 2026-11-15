@@ -470,7 +470,7 @@ describe('апрув и push журнала в site -w', () => {
             env,
             onReady: async () => {
                 const state = async (pg) => {
-                    const r = await fetch(`http://127.0.0.1:${port}/__c4builder/review-log?page=${pg}`);
+                    const r = await fetch(`http://127.0.0.1:${port}/__c4builder/review-log/state?page=${pg}`);
                     return r.ok ? (await r.json()).pending : r.status;
                 };
                 expect(await state(page)).toEqual({ changed: false, unpushed: 0 });
@@ -519,6 +519,11 @@ describe('апрув и push журнала в site -w', () => {
                     expect((await call(port, '/push', { page })).status).toBe(404);
                     const get = await fetch(`http://127.0.0.1:${port}/__c4builder/review-log?page=${page}`);
                     expect(await get.json()).not.toHaveProperty('pending');
+                    // ни push, ни approve — git-состояние не нужно, маршрута нет
+                    const st = await fetch(
+                        `http://127.0.0.1:${port}/__c4builder/review-log/state?page=${page}`
+                    );
+                    expect(st.status).toBe(404);
                 }
             });
         } finally {
@@ -544,14 +549,13 @@ describe('апрув и push журнала в site -w', () => {
         const row = { page, cells: ['Тестировщик', '', 'Петров Пётр', ''] };
         const approved = { page, cells: ['Тестировщик', 'Approved', 'Петров Пётр', today()] };
         const check = async () =>
-            (await fetch(`http://127.0.0.1:${port}/__c4builder/review-log?page=${page}`)).json();
+            (await fetch(`http://127.0.0.1:${port}/__c4builder/review-log/state?page=${page}`)).json();
         try {
             await serveSite(box.work, ['site', '-w', '-p', String(port)], {
                 env,
                 onReady: async () => {
                     expect(await check()).toEqual({
                         file: 'src/add-push-platform/review.md',
-                        log: true,
                         unpushed: false
                     });
                     const rejected = await call(port, '/approve', row);
@@ -581,7 +585,7 @@ describe('апрув и push журнала в site -w', () => {
         const port = 28353;
         const hook = path.join(box.remote, 'hooks', 'pre-receive');
         const state = async () =>
-            (await (await fetch(`http://127.0.0.1:${port}/__c4builder/review-log?page=${page}`)).json())
+            (await (await fetch(`http://127.0.0.1:${port}/__c4builder/review-log/state?page=${page}`)).json())
                 .pending;
         try {
             await serveSite(box.work, ['site', '-w', '-p', String(port)], {
@@ -610,6 +614,77 @@ describe('апрув и push журнала в site -w', () => {
                 }
             });
         } finally {
+            fs.rmSync(hook, { force: true });
+        }
+    }, 60_000);
+
+    it('livereload откладывается до ответа апрува; комментарий во время пуша ждёт очередь; GET журнала — без git', async () => {
+        const port = 28354;
+        fs.writeFileSync(
+            log,
+            fs
+                .readFileSync(log, 'utf8')
+                .replace('| Тестировщик |', '| Разработчик | | Сидоров Семён | |\n| Тестировщик |')
+        );
+        box.git(box.work, 'commit', '-q', '-m', 'developer', '--', 'src/add-push-platform/review.md');
+        box.git(box.work, 'push', '-q');
+        const hook = path.join(box.remote, 'hooks', 'pre-receive');
+        // Поток livereload: моменты событий reload.
+        const reloads = [];
+        let sse;
+        try {
+            await serveSite(box.work, ['site', '-w', '-p', String(port)], {
+                env,
+                onReady: async ({ waitFor }) => {
+                    await new Promise((resolve) => {
+                        sse = http.get({ host: '127.0.0.1', port, path: '/__livereload' }, (res) => {
+                            res.setEncoding('utf8');
+                            res.on('data', (d) => {
+                                if (d.includes('event: reload')) reloads.push(Date.now());
+                            });
+                            resolve();
+                        });
+                    });
+                    // GET журнала отвечает без git: одобренные строки есть, git-состояния нет
+                    const fast = await (
+                        await fetch(`http://127.0.0.1:${port}/__c4builder/review-log?page=${page}`)
+                    ).json();
+                    expect(fast).not.toHaveProperty('pending');
+                    expect(Array.isArray(fast.approved)).toBe(true);
+                    // медленный пуш: запись журнала пересобирает сайт посреди запроса
+                    fs.writeFileSync(hook, '#!/bin/sh\nsleep 2\nexit 0\n', { mode: 0o755 });
+                    const approved = await call(port, '/approve', {
+                        page,
+                        cells: ['Разработчик', '', 'Сидоров Семён', '']
+                    });
+                    const answered = Date.now();
+                    expect(approved.status).toBe(200);
+                    expect(reloads.filter((t) => t < answered)).toEqual([]);
+                    await waitFor(/built in/);
+                    await new Promise((r) => setTimeout(r, 1000));
+                    expect(reloads.length).toBeGreaterThan(0);
+                    // комментарий во время пуша ждёт очередь: его ответ — после ответа пуша
+                    fs.appendFileSync(log, '\nhand edit\n');
+                    let pushedAt = 0;
+                    const pushing = call(port, '/push', { page }).then((r) => {
+                        pushedAt = Date.now();
+                        return r;
+                    });
+                    await new Promise((r) => setTimeout(r, 300));
+                    const comment = await call(port, '', {
+                        page,
+                        quote: 'foo bar',
+                        section: 'Flow',
+                        comment: 'Late'
+                    });
+                    const commentedAt = Date.now();
+                    expect(comment.status).toBe(200);
+                    expect((await pushing).status).toBe(200);
+                    expect(commentedAt).toBeGreaterThanOrEqual(pushedAt);
+                }
+            });
+        } finally {
+            sse?.destroy();
             fs.rmSync(hook, { force: true });
         }
     }, 60_000);

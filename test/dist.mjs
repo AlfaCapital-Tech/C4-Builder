@@ -81,6 +81,7 @@ export {
 export { UI_STRINGS } from '../dist/cli/commands/site.i18n.js';
 export { batchSchema, formatBatch } from '../dist/core/feedback.js';
 export {
+    approvedRows,
     approveRow,
     deleteRemark,
     fillCells,
@@ -116,7 +117,8 @@ export {
     ReviewGitError,
     serialQueue,
     syncAndPush,
-    unpushedLog
+    reviewPending,
+    sshEnv
 } from '../dist/core/reviewgit.js';
 export {
     MermaidError,

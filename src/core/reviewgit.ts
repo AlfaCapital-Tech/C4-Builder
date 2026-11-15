@@ -3,7 +3,7 @@
 // параллельно работает агент, поэтому поведение консервативное: в коммит идёт только файл журнала,
 // пушится только он (чужие незапушенные коммиты, merge в процессе — отказ), индекс и рабочая копия
 // не прячутся в stash, конфликт с upstream не разрешается автоматически, пуш — без force.
-import { execFile } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -45,41 +45,71 @@ interface GitOptions {
     env?: Record<string, string>;
 }
 
+// Вывод git больше этого — ошибка: журнал и служебные ответы маленькие, а память сервера общая.
+const MAX_OUTPUT = 64 * 1024 * 1024;
+
+// ssh без вопросов: пароль ключа и подтверждение host key ssh спрашивает не через stdin, а через
+// /dev/tty — терминал, где запущен `site -w`; GIT_TERMINAL_PROMPT на ssh не действует. Свою
+// команду ssh пользователя (переменные или core.sshCommand) не подменяем. Кэш — по каталогу.
+const sshEnvCache = new Map<string, Promise<Record<string, string>>>();
+export const sshEnv = (cwd: string): Promise<Record<string, string>> => {
+    const cached = sshEnvCache.get(cwd);
+    if (cached) return cached;
+    const found = (async (): Promise<Record<string, string>> => {
+        if (process.env.GIT_SSH_COMMAND || process.env.GIT_SSH) return {};
+        const own = await run(cwd, ['config', '--get', 'core.sshCommand'], {});
+        return own.code === 0 && own.stdout.trim() ? {} : { GIT_SSH_COMMAND: 'ssh -o BatchMode=yes' };
+    })();
+    sshEnvCache.set(cwd, found);
+    return found;
+};
+
 /**
- * git без shell: аргументы не интерпретируются, имя файла с пробелами или `;` безопасно.
- * `GIT_TERMINAL_PROMPT=0` — пуш по https без сохранённых учётных данных падает сразу, а не ждёт
- * ввода пароля в терминале сервера; `LC_ALL=C` — сообщения git в ответе странице на английском.
+ * git без shell: аргументы не интерпретируются, имя файла с пробелами или `;` безопасно. stdin
+ * закрыт (кроме команд с `input`): hook или credential helper, читающий stdin, получает EOF, а не
+ * ждёт ввода до таймаута. `GIT_TERMINAL_PROMPT=0` — пуш по https без сохранённых учётных данных
+ * падает сразу; `LC_ALL=C` — сообщения git в ответе странице на английском.
  */
-const git = (cwd: string, args: string[], { timeout = TIMEOUT, input, env }: GitOptions = {}): Promise<Run> =>
+const run = (cwd: string, args: string[], { timeout = TIMEOUT, input, env }: GitOptions): Promise<Run> =>
     new Promise((resolve) => {
-        const child = execFile(
-            'git',
-            args,
-            {
-                cwd,
-                timeout,
-                maxBuffer: 64 * 1024 * 1024,
-                env: { ...process.env, ...env, GIT_TERMINAL_PROMPT: '0', LC_ALL: 'C' }
-            },
-            (err, stdout, stderr) => {
-                const e = err as { code?: unknown; killed?: boolean; message: string } | null;
-                if (e?.killed) {
-                    resolve({
-                        code: -1,
-                        stdout: String(stdout),
-                        stderr: `git ${args[0]} timed out after ${timeout / 1000} s — git must work without asking for a password`
-                    });
-                    return;
-                }
-                if (e && typeof e.code !== 'number') {
-                    resolve({ code: -1, stdout: '', stderr: `cannot run git: ${e.message}` });
-                    return;
-                }
-                resolve({ code: e ? Number(e.code) : 0, stdout: String(stdout), stderr: String(stderr) });
+        const child = spawn('git', args, {
+            cwd,
+            env: { ...process.env, ...env, GIT_TERMINAL_PROMPT: '0', LC_ALL: 'C' },
+            stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe']
+        });
+        const out: Buffer[] = [];
+        const err: Buffer[] = [];
+        let size = 0;
+        let failure = '';
+        const collect = (into: Buffer[]) => (chunk: Buffer) => {
+            size += chunk.length;
+            if (size > MAX_OUTPUT && !failure) {
+                failure = `git ${args[0]} printed more than ${MAX_OUTPUT} bytes`;
+                child.kill();
             }
-        );
+            into.push(chunk);
+        };
+        child.stdout?.on('data', collect(out));
+        child.stderr?.on('data', collect(err));
+        const timer = setTimeout(() => {
+            failure = `git ${args[0]} timed out after ${timeout / 1000} s — git must push without asking for a password or confirmation`;
+            child.kill();
+        }, timeout);
+        child.on('error', (e) => {
+            failure = `cannot run git: ${e.message}`;
+        });
+        child.on('close', (code) => {
+            clearTimeout(timer);
+            const stdout = Buffer.concat(out).toString('utf8');
+            if (failure) resolve({ code: -1, stdout, stderr: failure });
+            else resolve({ code: code ?? -1, stdout, stderr: Buffer.concat(err).toString('utf8') });
+        });
+        child.stdin?.on('error', () => undefined);
         if (input !== undefined) child.stdin?.end(input);
     });
+
+const git = async (cwd: string, args: string[], options: GitOptions = {}): Promise<Run> =>
+    run(cwd, args, { ...options, env: { ...(await sshEnv(cwd)), ...options.env } });
 
 const must = async (cwd: string, args: string[], what: string, status = 500, options?: GitOptions) => {
     const r = await git(cwd, args, options);
@@ -186,7 +216,12 @@ export const preflight = async (cwd: string, file: string): Promise<Upstream> =>
  */
 export const commitFile = async (cwd: string, file: string, message: string): Promise<string | null> => {
     const rel = path.relative(cwd, file);
-    const status = await must(cwd, ['status', '--porcelain', '--', rel], 'git status failed');
+    // `--untracked-files=all`: иначе по status.showUntrackedFiles=no новый журнал выглядит чистым.
+    const status = await must(
+        cwd,
+        ['status', '--porcelain', '--untracked-files=all', '--', rel],
+        'git status failed'
+    );
     if (!status) return null;
     const added = status.startsWith('??');
     if (added) await must(cwd, ['add', '--', rel], `could not add ${rel}`);
@@ -268,9 +303,14 @@ const moveOnto = async (up: Upstream): Promise<void> => {
         );
         const tree = await must(top, ['write-tree'], 'git write-tree failed', 500, { env });
         const message = await must(top, ['log', '-1', '--format=%B', 'HEAD'], 'git log failed');
+        // commit-tree не читает commit.gpgsign сам: без -S перенесённый коммит в репозитории с
+        // обязательной подписью ушёл бы неподписанным.
+        const sign = await git(top, ['config', '--bool', '--get', 'commit.gpgsign']);
+        const key = (await git(top, ['config', '--get', 'user.signingkey'])).stdout.trim();
+        const signArgs = sign.stdout.trim() === 'true' ? [key ? `-S${key}` : '-S'] : [];
         const commit = await must(
             top,
-            ['commit-tree', tree, '-p', target, '-F', '-'],
+            ['commit-tree', ...signArgs, tree, '-p', target, '-F', '-'],
             'git commit-tree failed',
             500,
             {
@@ -290,9 +330,10 @@ const moveOnto = async (up: Upstream): Promise<void> => {
  * пуш `HEAD:<ветка>` — имя совпадает с upstream (preflight), явная форма не зависит от
  * `push.default` пользователя; без force. Возвращает, был ли пуш.
  */
-export const syncAndPush = async (cwd: string, up: Upstream): Promise<boolean> => {
-    // Нечего отдавать — и fetch не нужен: в HEAD нет коммитов, которых нет в upstream.
-    if (!(await ahead(cwd))) return false;
+export const syncAndPush = async (cwd: string, up: Upstream, known?: number): Promise<boolean> => {
+    // Нечего отдавать — и fetch не нужен: в HEAD нет коммитов, которых нет в upstream. Число уже
+    // известно из preflight (плюс наш коммит) — второй rev-list не нужен.
+    if (!(known ?? (await ahead(cwd)))) return false;
     await must(cwd, ['fetch', '--quiet', up.remote], `could not fetch ${up.remote} — ${RETRY}`, 502, {
         timeout: NETWORK_TIMEOUT
     });
@@ -302,7 +343,7 @@ export const syncAndPush = async (cwd: string, up: Upstream): Promise<boolean> =
     await must(
         cwd,
         ['push', up.remote, `HEAD:${up.branch}`],
-        `push to ${up.remote}/${up.branch} was rejected — ${RETRY}`,
+        `push to ${up.remote}/${up.branch} was rejected — ${RETRY}; git must push without asking for a password or confirmation`,
         502,
         { timeout: NETWORK_TIMEOUT }
     );
@@ -332,25 +373,28 @@ export const publishFile = async ({ cwd, file, message, edit }: PublishInput): P
     const up = await preflight(cwd, file);
     const before = edit ? fs.readFileSync(file, 'utf8') : undefined;
     edit?.();
+    const written = edit ? fs.readFileSync(file, 'utf8') : undefined;
     let commit: string | null;
     try {
         commit = await commitFile(cwd, file, message);
     } catch (e) {
-        if (before !== undefined) fs.writeFileSync(file, before);
+        // Откат — только своей записи: если файл поправили, пока шёл коммит (редактор, агент),
+        // старое содержимое затёрло бы чужую правку.
+        if (before !== undefined && written !== undefined) {
+            if (fs.readFileSync(file, 'utf8') === written) fs.writeFileSync(file, before);
+            else if (e instanceof ReviewGitError)
+                throw new ReviewGitError(
+                    `${e.message} (the review log changed meanwhile, so the approval edit was not rolled back)`,
+                    e.status
+                );
+        }
         throw e;
     }
-    const pushed = await syncAndPush(cwd, up);
+    const pushed = await syncAndPush(cwd, up, up.ahead + (commit ? 1 : 0));
     // Перенос на upstream меняет хэш: в ответе — тот коммит, что теперь в ветке.
     const head = commit && (await must(cwd, ['rev-parse', '--short', 'HEAD'], 'git rev-parse failed'));
     return { commit: head || null, pushed };
 };
-
-/**
- * Есть ли незапушенный коммит этого журнала, который можно дотолкать (повторный Approve row после
- * отклонённого пуша). Любой отказ preflight — нет: дотолкать нельзя.
- */
-export const unpushedLog = async (cwd: string, file: string): Promise<boolean> =>
-    (await preflight(cwd, file).catch(() => undefined))?.pending ?? false;
 
 /** Что пушить в журнале: изменён ли файл относительно HEAD и сколько незапушенных коммитов журнала. */
 export interface ReviewPending {
@@ -365,13 +409,24 @@ export interface ReviewPending {
 export const reviewPending = async (cwd: string, file: string): Promise<ReviewPending | null> => {
     const up = await preflight(cwd, file).catch(() => undefined);
     if (!up) return null;
-    const status = await git(cwd, ['status', '--porcelain', '--', path.relative(cwd, file)]);
+    const status = await git(cwd, [
+        'status',
+        '--porcelain',
+        '--untracked-files=all',
+        '--',
+        path.relative(cwd, file)
+    ]);
     return status.code === 0 ? { changed: !!status.stdout.trim(), unpushed: up.ahead } : null;
 };
 
-/** Дотолкать уже закоммиченный журнал без нового коммита (несохранённые правки файла не трогаются). */
-export const pushPending = async (cwd: string, file: string): Promise<boolean> =>
-    syncAndPush(cwd, await preflight(cwd, file));
+/**
+ * Дотолкать уже закоммиченный журнал без нового коммита (несохранённые правки файла не трогаются).
+ * `up` — уже сделанный preflight, чтобы не повторять его.
+ */
+export const pushPending = async (cwd: string, file: string, up?: Upstream): Promise<boolean> => {
+    const checked = up ?? (await preflight(cwd, file));
+    return syncAndPush(cwd, checked, checked.ahead);
+};
 
 /**
  * Очередь git-операций сервера: строго по одной. Две вкладки, нажавшие Push одновременно,

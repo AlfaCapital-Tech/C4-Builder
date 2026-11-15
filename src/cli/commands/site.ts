@@ -13,14 +13,15 @@ import type { PageSources } from '../../core/compose/markdown.ts';
 import { batchSchema, type FeedbackBatch, formatBatch, LISTENER_NAME } from '../../core/feedback.ts';
 import { redirectKey } from '../../core/plugins/tree.ts';
 import {
+    preflight,
     publishFile,
     pushPending,
     ReviewGitError,
     reviewPending,
-    serialQueue,
-    unpushedLog
+    serialQueue
 } from '../../core/reviewgit.ts';
 import {
+    approvedRows,
     approveRow,
     deleteRemark,
     fillCells,
@@ -51,7 +52,8 @@ import {
     PAGE_PATH,
     REVIEW_APPROVE_PATH,
     REVIEW_LOG_PATH,
-    REVIEW_PUSH_PATH
+    REVIEW_PUSH_PATH,
+    REVIEW_STATE_PATH
 } from './site.comments.ts';
 
 const COMMENT_MAX = 2000;
@@ -67,6 +69,9 @@ type Mailbox = {
 };
 
 const LIVERELOAD_PATH = '/__livereload';
+// Запас после ответа на запрос, менявший журнал, перед отложенной перезагрузкой: страница успевает
+// обработать ответ и показать тост (change site-review-approve-push).
+const RELOAD_GRACE_MS = 300;
 // Сигнал «читатель открыл страницу» для приоритета фонового рендера (change site-warm-start).
 const OPEN_PATH = '/__c4builder/open';
 // Восстановление скролла после reload: docsify рендерит контент асинхронно после fetch md,
@@ -142,12 +147,17 @@ const LIVERELOAD_SNIPPET = `
     var connect = function () {
         var es = new EventSource('${LIVERELOAD_PATH}');
         es.onopen = function () { delay = 1000; };
-        es.addEventListener('reload', function () {
+        var reload = function () {
             try {
                 sessionStorage.setItem(KEY, JSON.stringify({ y: window.scrollY, hash: location.hash }));
             } catch (e) {}
+            try { if (window.__c4builderBeforeReload) window.__c4builderBeforeReload(); } catch (e) {}
             es.close();
             location.reload();
+        };
+        es.addEventListener('reload', function () {
+            if (window.__c4builderBusy) { window.__c4builderReloadLater = reload; return; }
+            reload();
         });
         ['agent', 'delivered'].forEach(function (name) {
             es.addEventListener(name, function (e) {
@@ -400,6 +410,8 @@ export default (
             Math.min(mailboxTtlMs, 60_000)
         ).unref();
 
+        // Счётчик запросов, меняющих журнал, и отложенная ими перезагрузка (общие для всех потоков).
+        const reloadGate = { busy: 0, held: false };
         app.get(LIVERELOAD_PATH, (req, res) => {
             res.set({
                 'Content-Type': 'text/event-stream',
@@ -410,7 +422,14 @@ export default (
             res.flushHeaders();
             res.write('retry: 1000\n\n');
 
-            const onReload = () => res.write('event: reload\ndata: {}\n\n');
+            // Пока идёт запрос, меняющий журнал, перезагрузка откладывается (см. holdReload).
+            const onReload = () => {
+                if (reloadGate.busy) {
+                    reloadGate.held = true;
+                    return;
+                }
+                res.write('event: reload\ndata: {}\n\n');
+            };
             const onAgent = (data: unknown) => res.write(`event: agent\ndata: ${JSON.stringify(data)}\n\n`);
             const onDelivered = (data: unknown) =>
                 res.write(`event: delivered\ndata: ${JSON.stringify(data)}\n\n`);
@@ -459,7 +478,7 @@ export default (
                         file: reviewLog.file,
                         heading: reviewLog.heading,
                         approve: reviewLog.approve ?? null,
-                        push: !!reviewLog.push && reviewLog.push.enabled !== false
+                        push: reviewLog.push.enabled
                     },
                     labels: buttonLabels(currentConfiguration.BUTTONS, reviewLog?.label)
                 }) +
@@ -538,7 +557,32 @@ export default (
             };
             // `author: ""` в конфиге (как в примере документации) — не задан, а не пустой автор.
             const author = reviewLog.author || gitUser();
-            app.post(REVIEW_LOG_PATH, express.json({ limit: '64kb' }), (req, res) => {
+            // Запись журнала и git-операции — строго по одной: две вкладки, нажавшие кнопку
+            // одновременно, столкнулись бы на index.lock, комментарий, записанный во время коммита
+            // апрува, затёрся бы его откатом, а запись во время переноса на upstream дала бы ложный
+            // конфликт. Через ту же очередь читается и git-состояние для страницы: запрос во время
+            // пуша ждёт его конца и не видит устаревшее «не запушено».
+            const queue = serialQueue();
+            const pushOn = reviewLog.push.enabled;
+            const approve = reviewLog.approve;
+            // Пока идёт запрос, меняющий журнал, перезагрузка страниц по livereload откладывается и
+            // приходит одна после ответа (с запасом, чтобы страница успела показать тост): иначе
+            // запись в review.md перезагружает страницу посреди запроса, и ответ теряется.
+            const holdReload = (res: express.Response): void => {
+                reloadGate.busy++;
+                let released = false;
+                const release = (): void => {
+                    if (released) return;
+                    released = true;
+                    reloadGate.busy--;
+                    if (reloadGate.busy || !reloadGate.held) return;
+                    reloadGate.held = false;
+                    setTimeout(() => reloadEmitter.emit('reload'), RELOAD_GRACE_MS).unref();
+                };
+                res.on('finish', release);
+                res.on('close', release);
+            };
+            app.post(REVIEW_LOG_PATH, express.json({ limit: '64kb' }), async (req, res) => {
                 const target = resolveTarget(req, res);
                 if (!target) return;
                 const { file: source, body } = target;
@@ -552,8 +596,11 @@ export default (
                     return;
                 }
                 const rel = relOf(file);
+                holdReload(res);
                 try {
-                    const number = writeRemark(file, reviewLog, { ...parsed, source, author });
+                    const number = await queue(async () =>
+                        writeRemark(file, reviewLog, { ...parsed, source, author })
+                    );
                     console.log(chalk.gray(`remark added to ${rel}${number ? ` as #${number}` : ''}`));
                     res.json({ file: rel, number });
                 } catch (e) {
@@ -569,63 +616,79 @@ export default (
             // спрашивает это перед тем, как показать кнопки удаления у строк раздела).
             const ownLog = (sources: string[]): string | undefined =>
                 sources.find((s) => isReviewFile(s, reviewLog.file, cwd));
-            // Same-origin GET браузер шлёт без Origin — требуем лишь локальный Host и отвергаем чужой
-            // Origin: это чтение, ответ (путь файла) чужой странице всё равно не отдаётся без CORS.
-            // Страница журнала → `{ file, log: true }`; другая страница → её замечания из журнала
-            // `{ file, log: false, logPage, remarks }` для подсветки цитат; журнала нет — 404.
-            // Git-операции сервера — строго по одной: две вкладки, нажавшие кнопку одновременно,
-            // столкнулись бы на index.lock. Через ту же очередь идёт и чтение состояния для плашки
-            // Push и кнопки апрува: GET, пришедший во время пуша (livereload после записи журнала
-            // перезагружает страницу посреди запроса), ждёт его конца и не видит устаревшее «не
-            // запушено» — иначе кнопка оставалась бы видимой после успешного пуша.
-            const queue = serialQueue();
-            const pushOn = !!reviewLog.push && reviewLog.push.enabled !== false;
-            // Поля состояния git для ответа GET: `unpushed` — для кнопки апрува, `pending` — для
-            // плашки Push (только с включённым push; null — пушить нельзя).
-            const gitState = async (file: string, log: boolean): Promise<Record<string, unknown>> => {
-                if (!pushOn && !(log && reviewLog.approve)) return {};
-                const pending = await queue(() => reviewPending(cwd, file));
-                return {
-                    ...(log && reviewLog.approve ? { unpushed: (pending?.unpushed ?? 0) > 0 } : {}),
-                    ...(pushOn ? { pending } : {})
-                };
-            };
-            app.get(REVIEW_LOG_PATH, async (req, res) => {
-                if (!localHost(req) || (req.get('origin') && !fromSite(req))) {
-                    res.status(403).json({ error: 'comments are accepted only from the site itself' });
-                    return;
-                }
-                const found = localSources(str(req.query.page));
+            // Журнал страницы: сам журнал или ближайший от её исходника.
+            const logOf = (page: string): { file: string; source: string; own: boolean } | undefined => {
+                const found = localSources(page);
                 const own = found && ownLog(found.sources);
-                if (own) {
-                    // С апрувом — есть ли незапушенный коммит журнала: тогда кнопка видна и у уже
-                    // одобренной строки, повторный апрув его дотолкает.
-                    res.json({ file: relOf(own), log: true, ...(await gitState(own, true)) });
-                    return;
-                }
+                if (own) return { file: own, source: own, own: true };
                 const source = found && firstSource(found.sources);
                 const file = source && findReviewFile(path.dirname(source), reviewLog.file, cwd);
-                if (!source || !file) {
+                return source && file ? { file, source, own: false } : undefined;
+            };
+            // Same-origin GET браузер шлёт без Origin — требуем лишь локальный Host и отвергаем чужой
+            // Origin: это чтение, ответ (путь файла) чужой странице всё равно не отдаётся без CORS.
+            const readable = (req: express.Request, res: express.Response): boolean => {
+                if (localHost(req) && (!req.get('origin') || fromSite(req))) return true;
+                res.status(403).json({ error: 'comments are accepted only from the site itself' });
+                return false;
+            };
+            // Страница журнала → `{ file, log: true, approved? }` (одобренные строки таблицы статусов —
+            // правило «одобрено» одно, серверное); другая страница → её замечания для подсветки
+            // `{ file, log: false, logPage, remarks }`; журнала нет — 404. Без git: ответ сразу.
+            app.get(REVIEW_LOG_PATH, (req, res) => {
+                if (!readable(req, res)) return;
+                const log = logOf(str(req.query.page));
+                if (!log) {
                     res.status(404).json({
                         error: `${reviewLog.file} not found for page ${str(req.query.page)}`
                     });
                     return;
                 }
                 try {
+                    if (log.own) {
+                        res.json({
+                            file: relOf(log.file),
+                            log: true,
+                            ...(approve
+                                ? { approved: approvedRows(fs.readFileSync(log.file, 'utf8'), approve) }
+                                : {})
+                        });
+                        return;
+                    }
                     res.json({
-                        file: relOf(file),
+                        file: relOf(log.file),
                         log: false,
-                        logPage: pageOf(file) ?? null,
-                        remarks: parseRemarks(file, reviewLog, source),
-                        ...(await gitState(file, false))
+                        logPage: pageOf(log.file) ?? null,
+                        remarks: parseRemarks(log.file, reviewLog, log.source)
                     });
                 } catch (e) {
                     res.status(500).json({ error: `could not read the review log: ${(e as Error).message}` });
                 }
             });
+            // Git-состояние журнала страницы — отдельным запросом, через очередь: `pending` — для
+            // плашки Push (null — пушить нельзя), `unpushed` — для повторного апрува. Есть, только если
+            // включён push или задан approve: иначе страница его не спрашивает.
+            if (pushOn || approve) {
+                app.get(REVIEW_STATE_PATH, async (req, res) => {
+                    if (!readable(req, res)) return;
+                    const log = logOf(str(req.query.page));
+                    if (!log) {
+                        res.status(404).json({
+                            error: `${reviewLog.file} not found for page ${str(req.query.page)}`
+                        });
+                        return;
+                    }
+                    const pending = await queue(() => reviewPending(cwd, log.file));
+                    res.json({
+                        file: relOf(log.file),
+                        ...(pushOn ? { pending } : {}),
+                        ...(approve ? { unpushed: (pending?.unpushed ?? 0) > 0 } : {})
+                    });
+                });
+            }
             // Удаление строки журнала: номер и текст ячейки, видимой на странице, плюс
             // все ячейки строки (таблицы без номеров: одна ячейка бывает общей у нескольких строк).
-            app.delete(REVIEW_LOG_PATH, express.json({ limit: '64kb' }), (req, res) => {
+            app.delete(REVIEW_LOG_PATH, express.json({ limit: '64kb' }), async (req, res) => {
                 if (!fromSite(req)) {
                     res.status(403).json({ error: 'comments are accepted only from the site itself' });
                     return;
@@ -646,8 +709,11 @@ export default (
                 const number =
                     typeof body.number === 'number' ? body.number : Number(str(body.number)) || null;
                 const cells = Array.isArray(body.cells) ? body.cells.map(str) : undefined;
+                holdReload(res);
                 try {
-                    const result = deleteRemark(file, reviewLog.heading, { number, text }, cells);
+                    const result = await queue(async () =>
+                        deleteRemark(file, reviewLog.heading, { number, text }, cells)
+                    );
                     if ('error' in result) {
                         const messages = {
                             'not-found': `remark not found in ${rel} — the page may be stale, reload it`,
@@ -666,11 +732,10 @@ export default (
             });
 
             // Апрув строки и Push журнала (change site-review-approve-push): маршрут есть, только если
-            // задан его ключ, иначе 404; git-операции — через общую очередь `queue`. Шаблон сообщения —
-            // общий для обоих действий и действует, даже если сама кнопка Push выключена.
-            const template = reviewLog.push?.message ?? 'review {change}: {action} — {author}';
+            // задан его ключ, иначе 404. Шаблон сообщения коммита нормализован в конфиге и действует
+            // для обоих действий, даже если сама плашка Push выключена.
             const messageFor = (file: string, action: string, who: string): string =>
-                fillCells([template], {
+                fillCells([reviewLog.push.message], {
                     change: path.basename(path.dirname(file)),
                     action,
                     author: who,
@@ -683,7 +748,6 @@ export default (
             const deny = (res: express.Response): void => {
                 res.status(403).json({ error: 'review log changes are accepted only from the site itself' });
             };
-            const approve = reviewLog.approve;
             if (approve) {
                 app.post(REVIEW_APPROVE_PATH, express.json({ limit: '64kb' }), async (req, res) => {
                     if (!fromSite(req)) return deny(res);
@@ -714,13 +778,22 @@ export default (
                         };
                         throw new ReviewGitError(reasons[r.error], r.error === 'no-column' ? 500 : 409);
                     };
+                    holdReload(res);
                     try {
                         const out = await queue(async () => {
-                            // Строка уже одобрена, а коммит апрува не запушен (пуш отклонили) —
-                            // повтор дотолкает его без нового коммита, кнопки Push может и не быть.
+                            // Одобренная строка с незапушенным коммитом журнала (пуш отклонили):
+                            // повтор дотолкает коммит без нового — плашки Push может и не быть.
+                            // preflight — один раз, его результат идёт дальше в пуш.
                             const now = approveRow(fs.readFileSync(file, 'utf8'), approve, cells);
-                            if ('error' in now && now.error === 'approved' && (await unpushedLog(cwd, file)))
-                                return { commit: null, pushed: await pushPending(cwd, file), message: null };
+                            if ('error' in now && now.error === 'approved') {
+                                const up = await preflight(cwd, file).catch(() => undefined);
+                                if (up?.pending)
+                                    return {
+                                        commit: null,
+                                        pushed: await pushPending(cwd, file, up),
+                                        message: null
+                                    };
+                            }
                             const first = plan();
                             const message = messageFor(file, 'approved', first.author);
                             // Файл перечитывается после проверки git: между ними его мог поправить агент.
@@ -743,19 +816,17 @@ export default (
                 app.post(REVIEW_PUSH_PATH, express.json({ limit: '64kb' }), async (req, res) => {
                     if (!fromSite(req)) return deny(res);
                     const body = (req.body ?? {}) as Record<string, unknown>;
-                    const found = localSources(str(body.page));
-                    const source = found && firstSource(found.sources);
-                    const file =
-                        (found && ownLog(found.sources)) ||
-                        (source && findReviewFile(path.dirname(source), reviewLog.file, cwd));
-                    if (!file) {
+                    const log = logOf(str(body.page));
+                    if (!log) {
                         res.status(404).json({
                             error: `${reviewLog.file} not found for page ${str(body.page)}`
                         });
                         return;
                     }
+                    const { file } = log;
                     const rel = relOf(file);
                     const message = messageFor(file, 'comments', author);
+                    holdReload(res);
                     try {
                         const out = await queue(() => publishFile({ cwd, file, message }));
                         console.log(

@@ -172,8 +172,28 @@ describe('comments и прежний reviewLog', () => {
         expect(log({ comments: { file: 'a.md' }, reviewLog: { file: 'b.md', heading: 'B' } })).toEqual({
             enabled: true,
             file: 'a.md',
-            heading: ['Review']
+            heading: ['Review'],
+            push: { enabled: false, message: 'review {change}: {action} — {author}' }
         });
+    });
+    it('commentsLog: push нормализован — включён ли и шаблон сообщения всегда задан', () => {
+        const log = (raw) => commentsLog(configSchema.parse(raw));
+        expect(log({ comments: {} }).push).toEqual({
+            enabled: false,
+            message: 'review {change}: {action} — {author}'
+        });
+        expect(log({ comments: { push: {} } }).push.enabled).toBe(true);
+        expect(log({ comments: { push: { enabled: false, message: '{file}' } } }).push).toEqual({
+            enabled: false,
+            message: '{file}'
+        });
+    });
+    it('configWarnings: approve.set без литералов — предупреждение', () => {
+        const approve = (set) => ({ comments: { approve: { heading: 'S', who: 'W', set } } });
+        expect(configWarnings(approve({ Date: '{date}', By: '{author}' }))).toEqual([
+            'comments.approve.set has no value without placeholders — an approved row cannot be recognized, so Approve row stays on every named row and each press makes a new commit'
+        ]);
+        expect(configWarnings(approve({ Status: 'Approved', Date: '{date}' }))).toEqual([]);
     });
     it('commentsLog: enabled: false — журнала нет; label — из reviewLog', () => {
         const log = (raw) => commentsLog(configSchema.parse(raw));

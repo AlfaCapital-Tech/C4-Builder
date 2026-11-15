@@ -34,6 +34,9 @@ export const isValidPort = (s: string): boolean => /^\d+$/.test(s) && Number(s) 
 // с подстановками `{comment}`, `{quote}`, `{text}`, `{section}`, `{artifact}`, `{page}`,
 // `{author}`, `{date}`, `{number}`; `author` — вместо git user.name; `enabled: false` выключает
 // кнопку, не удаляя настройку.
+/** Шаблон сообщения коммита журнала по умолчанию — общий для Push и Approve row. */
+export const PUSH_MESSAGE = 'review {change}: {action} — {author}';
+
 const headingList = z.preprocess(
     (v) => (typeof v === 'string' ? [v] : Array.isArray(v) ? v.map(String) : strPre(v)),
     z.array(z.string().min(1)).min(1)
@@ -69,7 +72,7 @@ const commentsLogFields = {
         z
             .object({
                 enabled: bool(true),
-                message: str('review {change}: {action} — {author}')
+                message: str(PUSH_MESSAGE)
             })
             .optional()
     )
@@ -193,13 +196,20 @@ export type PluginEntry = C4ConfigFile['plugins'][number];
  * `label` — только у журнала из `reviewLog`: подпись выключенного или перекрытого блока
  * подписывала бы кнопку чужого журнала. `enabled: false` — журнала нет.
  */
-export const commentsLog = (
-    c: Pick<C4ConfigFile, 'comments' | 'reviewLog'>
-): (NonNullable<C4ConfigFile['comments']> & { label?: string }) | undefined => {
+export type CommentsLog = Omit<NonNullable<C4ConfigFile['comments']>, 'push'> & {
+    /** Нормализован: включён ли Push и шаблон сообщения (он действует и для апрува без Push). */
+    push: { enabled: boolean; message: string };
+    label?: string;
+};
+export const commentsLog = (c: Pick<C4ConfigFile, 'comments' | 'reviewLog'>): CommentsLog | undefined => {
     const log = c.comments ?? c.reviewLog;
     if (!log || log.enabled === false) return undefined;
-    const { label, ...fields } = log as NonNullable<C4ConfigFile['reviewLog']>;
-    return label ? { ...fields, label } : fields;
+    const { label, push, ...fields } = log as NonNullable<C4ConfigFile['reviewLog']>;
+    const normalized = {
+        ...fields,
+        push: { enabled: !!push && push.enabled !== false, message: push?.message ?? PUSH_MESSAGE }
+    };
+    return label ? { ...normalized, label } : normalized;
 };
 
 /**
@@ -212,5 +222,18 @@ export const configWarnings = (raw: Record<string, unknown>): string[] => {
     const comments = raw.comments;
     if (comments && typeof comments === 'object' && 'label' in comments)
         warnings.push('comments.label is ignored — use buttons.comment for the button text');
+    // Одобренную строку узнают по литералам `set` (значениям без подстановок): без них строка
+    // никогда не «одобрена», кнопка остаётся у каждой строки с именем, и каждое нажатие — коммит.
+    const log = (comments ?? raw.reviewLog) as { approve?: { set?: unknown } } | undefined;
+    const set = log && typeof log === 'object' ? log.approve?.set : undefined;
+    if (
+        set &&
+        typeof set === 'object' &&
+        Object.keys(set).length &&
+        Object.values(set).every((v) => /\{\w+\}/.test(String(v)))
+    )
+        warnings.push(
+            'comments.approve.set has no value without placeholders — an approved row cannot be recognized, so Approve row stays on every named row and each press makes a new commit'
+        );
     return warnings;
 };
