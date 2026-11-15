@@ -838,9 +838,9 @@ describe('плашка Push журнала', () => {
     it('pending в ответе GET — плашка с текстом и Push; без кнопки закрытия', async () => {
         const p = await agentPage({ agent: false, languages: ['en'], reviewLog: LOG, reply: PENDING });
         expect(bar(p).hidden).toBe(false);
-        expect(bar(p).querySelector('span').textContent).toBe(
-            'Review log: src/review.md has unpushed changes'
-        );
+        // короткий текст — рядом панель агента; полный путь — в подсказке
+        expect(bar(p).querySelector('span').textContent).toBe('Review log has unpushed changes');
+        expect(bar(p).querySelector('span').title).toBe('src/review.md');
         expect([...bar(p).querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Push']);
         // незапушенный коммит без правок файла — тоже плашка
         const q = await agentPage({
@@ -919,9 +919,7 @@ describe('плашка Push журнала', () => {
         expect(bar(p).hidden).toBe(false);
     });
 
-    it('над панелью агента; подпись из buttons.push, русский текст', async () => {
-        const solo = await agentPage({ agent: false, reviewLog: LOG, reply: PENDING });
-        expect(bar(solo).style.bottom).toBe('16px');
+    it('справа от панели агента в общем нижнем ряду; на узком экране — перенос над панелью', async () => {
         const p = await agentPage({
             agent: true,
             languages: ['ru'],
@@ -929,14 +927,65 @@ describe('плашка Push журнала', () => {
             reply: PENDING,
             labels: { push: 'Send' }
         });
-        Object.defineProperty(p.panel, 'offsetHeight', { value: 60 });
-        p.agentEvent({ on: true, mailboxes: [] });
+        const dock = p.doc.querySelector('.c4b-dock');
+        expect([...dock.children]).toEqual([p.panel, bar(p)]);
         expect(p.panel.hidden).toBe(false);
-        expect(bar(p).style.bottom).toBe('84px');
-        expect(barButton(p).textContent).toBe('Send');
-        expect(bar(p).querySelector('span').textContent).toBe(
-            'Журнал ревью: src/review.md — изменения не запушены'
+        expect(bar(p).hidden).toBe(false);
+        expect(dock.hidden).toBe(false);
+        // ряд по низу, перенос строки — вверх (wrap-reverse): плашка встаёт над панелью
+        const css = p.doc.head.querySelector('style').textContent;
+        expect(css).toContain(
+            '.c4b-dock{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:1000;display:flex;flex-wrap:wrap-reverse;align-items:flex-end;justify-content:center;gap:8px;'
         );
+        expect(css).not.toMatch(/\.c4b-(review|logbar)\{position:fixed/);
+        expect(barButton(p).textContent).toBe('Send');
+        expect(bar(p).querySelector('span').textContent).toBe('Журнал ревью не запушен');
+        // одна плашка без панели — одна в ряду (по центру)
+        const solo = await agentPage({ agent: false, reviewLog: LOG, reply: PENDING });
+        expect(solo.panel.hidden).toBe(true);
+        expect(bar(solo).hidden).toBe(false);
+    });
+});
+
+// Нижний ряд панелей не перекрывает конец страницы: у контента — нижний отступ высотой ряда.
+describe('нижний отступ контента под панелями', () => {
+    const LOG = { file: 'review.md', heading: ['Remarks'], push: true };
+    const PENDING = {
+        file: 'src/review.md',
+        log: false,
+        remarks: [],
+        pending: { changed: true, unpushed: 0 }
+    };
+    const CLEAN = { ...PENDING, pending: { changed: false, unpushed: 0 } };
+    const padding = (p) => p.doc.querySelector('.markdown-section').style.paddingBottom;
+    // В jsdom раскладки нет: высоту ряда задаём руками.
+    const height = (p, h) =>
+        Object.defineProperty(p.doc.querySelector('.c4b-dock'), 'offsetHeight', {
+            configurable: true,
+            value: h
+        });
+
+    it('панель агента без плашки — отступ высотой ряда; агент ушёл — отступ снят', async () => {
+        const p = await agentPage({ agent: false, reviewLog: LOG, reply: CLEAN });
+        expect(padding(p)).toBe('');
+        expect(p.doc.querySelector('.c4b-dock').hidden).toBe(true);
+        height(p, 50);
+        p.agentEvent({ on: true, mailboxes: [] });
+        expect(padding(p)).toBe('82px');
+        p.agentEvent({ on: false, mailboxes: [] });
+        expect(padding(p)).toBe('');
+    });
+
+    it('плашка появилась и ушла после Push — отступ появляется и снимается', async () => {
+        const p = await agentPage({ agent: false, reviewLog: LOG, reply: CLEAN });
+        height(p, 40);
+        p.window.__reply = { file: 'src/review.md', number: 4, pending: { changed: true, unpushed: 0 } };
+        await p.write('t', 'Comment', 'Why?', 'Add comment');
+        expect(padding(p)).toBe('72px');
+        p.window.__reply = { file: 'src/review.md', commit: 'abc1234', pushed: true };
+        p.doc.querySelector('.c4b-logbar button').click();
+        await sleep(20);
+        expect(padding(p)).toBe('');
     });
 });
 

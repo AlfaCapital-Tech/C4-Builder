@@ -26,9 +26,13 @@ const CSS = [
     '.c4b-cpop button,.c4b-review button{padding:4px 12px;border:1px solid #ccc;border-radius:4px;background:#fff;color:#2c3e50;cursor:pointer;font:13px sans-serif}',
     '.c4b-cpop button.c4b-primary,.c4b-review button.c4b-primary{border-color:#42b983;background:#42b983;color:#fff}',
     '.c4b-cpop button:disabled,.c4b-review button:disabled{opacity:.6;cursor:default}',
-    // Панель review — ниже кнопок у выделения и поповера: она прибита к низу экрана и иначе
-    // перекрывает их у выделения в нижних строках.
-    '.c4b-review{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:1000;width:520px;max-width:calc(100vw - 32px);box-sizing:border-box;padding:8px 12px;border:1px solid #3b82f6;border-radius:6px;background:#fff;color:#2c3e50;font:13px/1.4 sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.2)}',
+    // Нижний ряд панелей — общий фиксированный контейнер по центру: [панель агента][плашка журнала],
+    // выровнены по низу; одна — по центру. Не помещаются в ширину окна — плашка переносится НАД
+    // панелью (wrap-reverse: перенесённая строка встаёт выше первой). Ряд — ниже кнопок у выделения
+    // и поповера: он прибит к низу экрана и иначе перекрывает их у выделения в нижних строках.
+    '.c4b-dock{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:1000;display:flex;flex-wrap:wrap-reverse;align-items:flex-end;justify-content:center;gap:8px;width:max-content;max-width:calc(100vw - 32px)}',
+    '.c4b-dock[hidden]{display:none}',
+    '.c4b-review{position:relative;z-index:1000;width:520px;max-width:100%;box-sizing:border-box;padding:8px 12px;border:1px solid #3b82f6;border-radius:6px;background:#fff;color:#2c3e50;font:13px/1.4 sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.2)}',
     '.c4b-review .c4b-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px}',
     '.c4b-review .c4b-row small{flex:1;color:#888;white-space:nowrap}',
     // Выбор адресата сжимается вместе с select: длинные имена не выталкивают кнопки из строки.
@@ -45,11 +49,11 @@ const CSS = [
     '.c4b-review .c4b-del{opacity:1}',
     '.c4b-ctoast{position:fixed;left:16px;bottom:16px;z-index:1003;max-width:420px;padding:8px 14px;border-radius:6px;background:#2c3e50;color:#fff;font:13px/1.4 sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.3)}',
     '.c4b-ctoast.c4b-err{background:#c0392b}',
-    // Плашка Push журнала — внизу по центру, как панель агента, но цветом журнала (кнопка Comment):
-    // их не путают; при видимой панели агента плашка встаёт над ней (bottom считает скрипт).
-    '.c4b-logbar{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:1000;width:520px;max-width:calc(100vw - 32px);box-sizing:border-box;display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid #b58900;border-radius:6px;background:#fffbea;color:#2c3e50;font:13px/1.4 sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.2)}',
+    // Плашка Push журнала — в нижнем ряду справа от панели агента, цветом журнала (кнопка Comment):
+    // их не путают. Компактная — рядом панель 520px: короткий текст, путь файла — в подсказке.
+    '.c4b-logbar{display:flex;align-items:center;gap:8px;max-width:100%;box-sizing:border-box;padding:8px 12px;border:1px solid #b58900;border-radius:6px;background:#fffbea;color:#2c3e50;font:13px/1.4 sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.2)}',
     '.c4b-logbar[hidden]{display:none}',
-    '.c4b-logbar span{flex:1;min-width:0;overflow-wrap:anywhere}',
+    '.c4b-logbar span{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
     '.c4b-logbar button{flex:none;padding:4px 12px;border:1px solid #b58900;border-radius:4px;background:#b58900;color:#fff;cursor:pointer;font:13px sans-serif}',
     '.c4b-logbar button:disabled{opacity:.6;cursor:default}',
     '.c4b-cbtns button.c4b-ap{border-color:#2c7a4b}',
@@ -382,6 +386,7 @@ export const commentsSnippet = ({
         setTimeout(function () {
             try { syncLog(); } catch (e) {}
             try { highlightDraft(); } catch (e) {}
+            try { fitDock(); } catch (e) {}
         }, 50);
     };
     var docsifyVm = null;
@@ -677,7 +682,11 @@ export const commentsSnippet = ({
     panel.appendChild(head);
     panel.appendChild(list);
     panel.appendChild(general);
-    document.body.appendChild(panel);
+    // The bottom row: the agent bar and the review log bar side by side (see the CSS).
+    var dock = document.createElement('div');
+    dock.className = 'c4b-dock';
+    dock.appendChild(panel);
+    document.body.appendChild(dock);
 
     // The Push bar of the review log (key comments.push): shown while the page's log has something to
     // push. The state comes from the server with every GET of the log — it sees hand edits of the log,
@@ -707,18 +716,29 @@ export const commentsSnippet = ({
     barPush.title = t('pushTitle');
     bar.appendChild(barText);
     bar.appendChild(barPush);
-    document.body.appendChild(bar);
-    // Above the agent bar when it is shown, so neither covers the other.
-    var placeBar = function () {
-        bar.style.bottom = (panel.hidden ? 16 : 16 + panel.offsetHeight + 8) + 'px';
+    dock.appendChild(bar);
+    // The end of the page must scroll above the bottom row: the content gets a bottom padding of the
+    // row's height plus its gap to the window edge and some air; no row — no padding. Recomputed when
+    // a bar shows, hides or changes size (ResizeObserver; without it — on every change we make and on
+    // window resize).
+    var fitDock = function () {
+        dock.hidden = panel.hidden && bar.hidden;
+        var root = content();
+        if (!root) return;
+        root.style.paddingBottom = dock.hidden ? '' : (dock.offsetHeight + 32) + 'px';
     };
+    if (window.ResizeObserver) {
+        try { new ResizeObserver(fitDock).observe(dock); } catch (e) {}
+    }
+    window.addEventListener('resize', fitDock);
     var updateBar = function (data) {
         var p = REVIEW_LOG && REVIEW_LOG.push && data && data.pending;
         bar.hidden = !(p && (p.changed || p.unpushed));
+        fitDock();
         if (bar.hidden) return;
-        barText.textContent = t('logPending', { file: data.file });
+        barText.textContent = t('logPending');
+        barText.title = data.file;
         barPush.disabled = pushing;
-        placeBar();
     };
     var renderPanel = function () {
         panel.hidden = !AGENT.on;
@@ -749,7 +769,7 @@ export const commentsSnippet = ({
         discard.disabled = busy;
         approve.disabled = busy || !canSend();
         submit.disabled = busy || empty || !canSend();
-        placeBar();
+        fitDock();
     };
     var label = function (m) {
         return t(m.state === 'listening' ? 'stateListening' : 'stateReconnecting', { name: m.name }) +

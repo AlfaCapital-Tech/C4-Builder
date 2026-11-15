@@ -469,12 +469,13 @@ page. The keys live inside `comments`:
   does not matter; a `who` or `set` column missing from the table is an error, the file is not
   changed. The row is found by all its cells: if it changed after the page was loaded, the error asks
   to reload the page.
-- `push` — the review log bar at the bottom of a change page: «Review log: <path> has unpushed
-  changes» with a **Push** button. It is shown while the page's log has something to push: the file is
+- `push` — the review log bar at the bottom of a change page: «Review log has unpushed changes» with
+  a **Push** button (the file path is in its tooltip). It is shown while the page's log has something to push: the file is
   changed (comments from the page or an edit in an editor) or a log commit is unpushed (say, an
   approval whose push was rejected). The server reports the state with every page render, so the bar
   survives a reload and shows in a new tab; several comments go in one commit. The bar cannot be
-  closed — it goes away after the push. With the agent bar shown, it sits above it. With nothing to
+  closed — it goes away after the push. With the agent bar shown, it sits to its right (above it on a
+  narrow screen); the end of the page scrolls above the bars. With nothing to
   push, no git or no upstream there is no bar. `enabled: false` turns the bar off. `message` — the commit message template shared
   by Push and approve, `review {change}: {action} — {author}` by default: `{change}` — the log's
   directory name (the change name for OpenSpec), `{action}` — `approved` or `comments`, `{author}` —
