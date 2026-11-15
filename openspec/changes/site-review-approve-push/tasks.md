@@ -52,3 +52,17 @@
 - [x] 8.9 `push` нормализован в `commentsLog` (`PUSH_MESSAGE`); проверка — `config.test.mjs`
 - [x] 8.10 preflight один раз на пути повторного апрува, `ahead` передаётся в `syncAndPush`; проверка — прежний тест повторного апрува в `cli-site`
 - [x] 8.11 Спека, design, docs ru/en; проверка — `openspec validate --strict`, `npm run build && npm test && npm run check`
+
+## 9. Третий раунд code review
+
+- [x] 9.1 git в своей группе процессов: таймаут и лимит вывода убивают группу (SIGTERM, затем SIGKILL), вызов не ждёт пайпов внуков; проверка — `reviewgit.test.mjs`: hook с `sleep &` завершается и очередь работает; hook висит дольше таймаута 1 с — ошибка о таймауте, правка откатана
+- [x] 9.2 Серверная отсрочка livereload убрана, остаётся отсрочка на странице; проверка — jsdom: сниппет livereload откладывает reload во время запроса и сохраняет тост, без запроса — сразу; тест `cli-site` с отсрочкой сервера убран
+- [x] 9.3 Литерал `set` — непустое значение без подстановок; проверка — `reviewlog.test.mjs`, `config.test.mjs` (предупреждение для пустого значения)
+- [x] 9.4 Повторный апрув — только закоммиченный и не запушенный апрув строки; `unpushedRows` в state; ошибка preflight не глотается; проверка — `cli-site`: отметка строки после отклонённого пуша, дотолкивание, «не закоммичено» для правки руками; jsdom: кнопка по `unpushedRows`
+- [x] 9.5 Ignored-журнал — отказ в preflight; «нечего коммитить» после правки — откат и ошибка; проверка — `reviewgit.test.mjs`
+- [x] 9.6 Общая проверка колонок `statusTable`; `configError` в GET страницы журнала, тост один раз; проверка — `reviewlog.test.mjs`, jsdom
+- [x] 9.7 Одна проходка `git log` в preflight; кэш state 2 с со сбросом; state не спрашивается без журнала; проверка — прежние тесты preflight, `cli-site` (повтор state из кэша, правка руками видна после пересборки), jsdom (404 — без state)
+- [x] 9.8 `git fetch <remote> <ветка>`; проверка — `reviewgit.test.mjs`: чужая ветка remote не подтягивается
+- [x] 9.9 Апрув: одна проверка до git, пересчёт в `edit()`, автор из записанной строки; проверка — тесты апрува `cli-site`
+- [x] 9.10 `pending` убран из `Upstream`, `ahead` из одной проходки; проверка — тесты `reviewgit`
+- [x] 9.11 Спека, design, docs ru/en; проверка — `openspec validate --strict`, `npm run build && npm test && npm run check`

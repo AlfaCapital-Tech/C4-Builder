@@ -262,13 +262,10 @@ export const approveRow = (
     cells: string[],
     date: string = today()
 ): ApproveResult => {
-    const heading = findHeading(markdown, opts.heading);
-    const header = heading && tableHeader(markdown, heading);
-    if (!heading || !header) return { error: 'not-found' };
-    const index = (name: string): number => header.findIndex((h) => sameColumn(h, name));
-    const columns = [opts.who, ...Object.keys(opts.set)];
-    const missing = columns.find((c) => index(c) < 0);
-    if (missing !== undefined) return { error: 'no-column', column: missing };
+    const table = statusTable(markdown, opts);
+    if (!table) return { error: 'not-found' };
+    if ('column' in table) return { error: 'no-column', column: table.column };
+    const { heading, index } = table;
     const who = index(opts.who);
     let author = '';
     let approved = false;
@@ -293,7 +290,7 @@ export const approveRow = (
  * одобренной: кнопка остаётся у каждой строки с именем (configWarnings предупреждает).
  */
 const isApproved = (row: string[], opts: ApproveOptions, index: (name: string) => number): boolean => {
-    const literals = Object.entries(opts.set).filter(([, v]) => !/\{\w+\}/.test(v));
+    const literals = Object.entries(opts.set).filter(([, v]) => isLiteral(v));
     return (
         literals.length > 0 && literals.every(([column, v]) => plain(row[index(column)] ?? '') === plain(v))
     );
@@ -303,15 +300,40 @@ const isApproved = (row: string[], opts: ApproveOptions, index: (name: string) =
  * Одобренные строки таблицы статусов — ячейки как их показывает страница (`fitRow`): по ним
  * страница прячет кнопку Approve row. Нет раздела, таблицы или колонки — пусто.
  */
-export const approvedRows = (markdown: string, opts: ApproveOptions): string[][] => {
+export const approvedRows = (
+    markdown: string,
+    opts: ApproveOptions
+): { rows: string[][] } | { column: string } => {
+    const table = statusTable(markdown, opts);
+    if (!table) return { rows: [] };
+    if ('column' in table) return table;
+    return {
+        rows: tableRows(markdown, table.heading)
+            .filter((r) => isApproved(r.cells, opts, table.index))
+            .map((r) => fitRow(r.cells, table.width))
+    };
+};
+
+/**
+ * Литерал `set` — непустое значение без подстановок: по нему узнают одобренную строку. Пустое
+ * значение (очистить колонку) литералом не считается — иначе строка с пустой ячейкой «одобрена».
+ */
+export const isLiteral = (value: string): boolean => plain(value) !== '' && !/\{\w+\}/.test(value);
+
+/**
+ * Таблица статусов и индексы колонок по названиям — общая проверка для апрува и для страницы:
+ * нет колонки из `who` или `set` — `{ column }`; нет раздела или таблицы — undefined.
+ */
+const statusTable = (
+    markdown: string,
+    opts: ApproveOptions
+): { heading: string; width: number; index: (name: string) => number } | { column: string } | undefined => {
     const heading = findHeading(markdown, opts.heading);
     const header = heading && tableHeader(markdown, heading);
-    if (!heading || !header) return [];
+    if (!heading || !header) return undefined;
     const index = (name: string): number => header.findIndex((h) => sameColumn(h, name));
-    if (Object.keys(opts.set).some((c) => index(c) < 0)) return [];
-    return tableRows(markdown, heading)
-        .filter((r) => isApproved(r.cells, opts, index))
-        .map((r) => fitRow(r.cells, header.length));
+    const missing = [opts.who, ...Object.keys(opts.set)].find((c) => index(c) < 0);
+    return missing === undefined ? { heading, width: header.length, index } : { column: missing };
 };
 
 /** Дописывает замечание в журнал и возвращает номер строки таблицы (null — список). */

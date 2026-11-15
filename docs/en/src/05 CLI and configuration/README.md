@@ -505,9 +505,14 @@ without a command of your own (`core.sshCommand`, `GIT_SSH_COMMAND`) runs with `
 signing (`commit.gpgsign`) is kept; moving onto the upstream runs no hooks — the log commit has
 already passed them.
 
-A row counts as approved when the `set` columns with a value without placeholders hold exactly that
-value (case matters): such a row has no button. With no such values in `set` the build warns — the
-button stays at every named row, and each press makes a new commit.
+A row counts as approved when the `set` columns with a non-empty value without placeholders hold
+exactly that value (case matters): such a row has no button. With no such values in `set` the build
+warns — the button stays at every named row, and each press makes a new commit. A `who` or `set`
+column missing from the table is shown as an error on the log page. An approved row keeps the button
+when its approval is committed but not pushed: pressing it pushes that commit. A row marked approved
+in an editor and not committed is left alone — the error asks to commit it by hand. A log in
+`.gitignore` is an error before the edit. A hanging hook or ssh is stopped by the timeout together
+with every process it started.
 
 The whole log file goes into the commit: if the agent was editing the same `review.md` meanwhile, its
 edits go along with yours.

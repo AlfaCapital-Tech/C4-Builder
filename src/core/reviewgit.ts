@@ -24,10 +24,14 @@ interface Run {
     stderr: string;
 }
 
-// Обычная команда — быстро; сеть и хуки коммита (pre-commit проекта) — дольше.
-const TIMEOUT = 30_000;
-const NETWORK_TIMEOUT = 90_000;
-const COMMIT_TIMEOUT = 120_000;
+// Обычная команда — быстро; сеть и хуки коммита (pre-commit проекта) — дольше. Объект, а не
+// константы: тест уменьшает таймаут, чтобы проверить убийство зависшего hook'а.
+export const GIT_TIMEOUTS = { command: 30_000, network: 90_000, commit: 120_000 };
+// После выхода git ждём закрытия его вывода недолго: фоновый процесс hook'а (`sleep &`) держит
+// унаследованный пайп сколько угодно, а ответ git уже получен.
+const CLOSE_GRACE_MS = 2_000;
+// Между SIGTERM и SIGKILL группе процессов.
+const KILL_GRACE_MS = 1_000;
 
 // Подсказка в ошибке после неудачного пуша: кнопка, которую нажимали, — Push или Approve row
 // (подписи меняет проект), поэтому без названия.
@@ -70,39 +74,75 @@ export const sshEnv = (cwd: string): Promise<Record<string, string>> => {
  * ждёт ввода до таймаута. `GIT_TERMINAL_PROMPT=0` — пуш по https без сохранённых учётных данных
  * падает сразу; `LC_ALL=C` — сообщения git в ответе странице на английском.
  */
-const run = (cwd: string, args: string[], { timeout = TIMEOUT, input, env }: GitOptions): Promise<Run> =>
+const run = (
+    cwd: string,
+    args: string[],
+    { timeout = GIT_TIMEOUTS.command, input, env }: GitOptions
+): Promise<Run> =>
     new Promise((resolve) => {
+        // Своя группа процессов: по таймауту убиваем git вместе с ssh и hook'ами, которые он
+        // запустил, — иначе они держат пайпы, промис не завершается, и очередь встаёт навсегда.
+        const group = process.platform !== 'win32';
         const child = spawn('git', args, {
             cwd,
             env: { ...process.env, ...env, GIT_TERMINAL_PROMPT: '0', LC_ALL: 'C' },
-            stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe']
+            stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'],
+            detached: group
         });
         const out: Buffer[] = [];
         const err: Buffer[] = [];
         let size = 0;
         let failure = '';
-        const collect = (into: Buffer[]) => (chunk: Buffer) => {
-            size += chunk.length;
-            if (size > MAX_OUTPUT && !failure) {
-                failure = `git ${args[0]} printed more than ${MAX_OUTPUT} bytes`;
-                child.kill();
-            }
-            into.push(chunk);
-        };
-        child.stdout?.on('data', collect(out));
-        child.stderr?.on('data', collect(err));
-        const timer = setTimeout(() => {
-            failure = `git ${args[0]} timed out after ${timeout / 1000} s — git must push without asking for a password or confirmation`;
-            child.kill();
-        }, timeout);
-        child.on('error', (e) => {
-            failure = `cannot run git: ${e.message}`;
-        });
-        child.on('close', (code) => {
+        let done = false;
+        const finish = (code: number | null): void => {
+            if (done) return;
+            done = true;
             clearTimeout(timer);
+            child.stdout?.destroy();
+            child.stderr?.destroy();
             const stdout = Buffer.concat(out).toString('utf8');
             if (failure) resolve({ code: -1, stdout, stderr: failure });
             else resolve({ code: code ?? -1, stdout, stderr: Buffer.concat(err).toString('utf8') });
+        };
+        const kill = (why: string): void => {
+            failure = why;
+            const signal = (sig: NodeJS.Signals): void => {
+                try {
+                    if (group && child.pid) process.kill(-child.pid, sig);
+                    else child.kill(sig);
+                } catch {
+                    // группа уже завершилась
+                }
+            };
+            signal('SIGTERM');
+            setTimeout(() => signal('SIGKILL'), KILL_GRACE_MS).unref();
+            finish(null);
+        };
+        const collect = (into: Buffer[]) => (chunk: Buffer) => {
+            size += chunk.length;
+            if (size > MAX_OUTPUT) kill(`git ${args[0]} printed more than ${MAX_OUTPUT} bytes`);
+            else into.push(chunk);
+        };
+        child.stdout?.on('data', collect(out));
+        child.stderr?.on('data', collect(err));
+        const timer = setTimeout(
+            () =>
+                kill(
+                    `git ${args[0]} timed out after ${timeout / 1000} s — git must push without asking for a password or confirmation`
+                ),
+            timeout
+        );
+        child.on('error', (e) => {
+            failure = `cannot run git: ${e.message}`;
+            finish(null);
+        });
+        child.on('exit', (code) => {
+            const t = setTimeout(() => finish(code), CLOSE_GRACE_MS);
+            t.unref();
+            child.on('close', () => {
+                clearTimeout(t);
+                finish(code);
+            });
         });
         child.stdin?.on('error', () => undefined);
         if (input !== undefined) child.stdin?.end(input);
@@ -126,9 +166,7 @@ export interface Upstream {
     remote: string;
     /** Файл журнала от корня репозитория, через `/`. */
     log: string;
-    /** Незапушенные коммиты уже есть (только журнала — иначе preflight отказывает). */
-    pending: boolean;
-    /** Сколько их. */
+    /** Сколько незапушенных коммитов (только журнала — иначе preflight отказывает). */
     ahead: number;
 }
 
@@ -188,24 +226,29 @@ export const preflight = async (cwd: string, file: string): Promise<Upstream> =>
     // Путь журнала от корня — через realpath: /tmp и /private/tmp на macOS, симлинки проекта.
     const real = path.join(fs.realpathSync(path.dirname(file)), path.basename(file));
     const log = path.relative(top, real).split(path.sep).join('/');
-    const merges = Number(
-        await must(cwd, ['rev-list', '--count', '--merges', '@{upstream}..HEAD'], 'git rev-list failed')
-    );
-    // `-z`: имена без кавычек и \-экранирования кириллицы (core.quotepath).
-    const touched = (
-        await must(cwd, ['log', '-z', '--format=', '--name-only', '@{upstream}..HEAD'], 'git log failed')
+    // Ignored-журнал не закоммитить: отказ до правки, а не «успешный» апрув без коммита.
+    if ((await git(top, ['check-ignore', '-q', '--', log])).code === 0)
+        throw new ReviewGitError(`${log} is ignored by git — the review log cannot be committed`, 409);
+    // Незапушенные коммиты одной проходкой: строка коммита `\x01<хэш> <родители>`, за ней имена
+    // файлов; `-z` — имена без кавычек и \-экранирования кириллицы (core.quotepath).
+    const unpushed = (
+        await must(
+            cwd,
+            ['log', '-z', '--format=%x01%H %P', '--name-only', '@{upstream}..HEAD'],
+            'git log failed'
+        )
     )
-        .split(/[\0\n]/)
+        .split('\0')
+        .map((t) => t.replace(/^\n/, ''))
         .filter(Boolean);
-    if (merges || touched.some((f) => f !== log))
+    const commits = unpushed.filter((t) => t.startsWith('\x01'));
+    const merges = commits.some((t) => t.trim().split(' ').length > 2);
+    if (merges || unpushed.some((t) => !t.startsWith('\x01') && t !== log))
         throw new ReviewGitError(
             `branch ${branch} has unpushed commits besides the review log — push or drop them with git first`,
             409
         );
-    const ahead = Number(
-        await must(cwd, ['rev-list', '--count', '@{upstream}..HEAD'], 'git rev-list failed')
-    );
-    return { top, branch, remote, log, pending: ahead > 0, ahead };
+    return { top, branch, remote, log, ahead: commits.length };
 };
 
 /**
@@ -226,7 +269,7 @@ export const commitFile = async (cwd: string, file: string, message: string): Pr
     const added = status.startsWith('??');
     if (added) await must(cwd, ['add', '--', rel], `could not add ${rel}`);
     const commit = await git(cwd, ['commit', '--only', '-m', message, '--', rel], {
-        timeout: COMMIT_TIMEOUT
+        timeout: GIT_TIMEOUTS.commit
     });
     if (commit.code !== 0) {
         if (added) await git(cwd, ['reset', '-q', '--', rel]);
@@ -334,9 +377,15 @@ export const syncAndPush = async (cwd: string, up: Upstream, known?: number): Pr
     // Нечего отдавать — и fetch не нужен: в HEAD нет коммитов, которых нет в upstream. Число уже
     // известно из preflight (плюс наш коммит) — второй rev-list не нужен.
     if (!(known ?? (await ahead(cwd)))) return false;
-    await must(cwd, ['fetch', '--quiet', up.remote], `could not fetch ${up.remote} — ${RETRY}`, 502, {
-        timeout: NETWORK_TIMEOUT
-    });
+    await must(
+        cwd,
+        ['fetch', '--quiet', up.remote, up.branch],
+        `could not fetch ${up.remote} — ${RETRY}`,
+        502,
+        {
+            timeout: GIT_TIMEOUTS.network
+        }
+    );
     const behind = await git(cwd, ['merge-base', '--is-ancestor', '@{upstream}', 'HEAD']);
     if (behind.code === 1) await moveOnto(up);
     else if (behind.code !== 0) throw new ReviewGitError(`git merge-base failed${tail(behind)}`, 500);
@@ -345,7 +394,7 @@ export const syncAndPush = async (cwd: string, up: Upstream, known?: number): Pr
         ['push', up.remote, `HEAD:${up.branch}`],
         `push to ${up.remote}/${up.branch} was rejected — ${RETRY}; git must push without asking for a password or confirmation`,
         502,
-        { timeout: NETWORK_TIMEOUT }
+        { timeout: GIT_TIMEOUTS.network }
     );
     return true;
 };
@@ -354,7 +403,8 @@ export interface PublishInput {
     cwd: string;
     /** Абсолютный путь файла журнала внутри `cwd`. */
     file: string;
-    message: string;
+    /** Сообщение коммита; функция — вычисляется после правки (автор апрува — из записанной строки). */
+    message: string | (() => string);
     /** Правка файла после проверки git и до коммита (апрув пишет ячейки). */
     edit?: () => void;
 }
@@ -374,22 +424,33 @@ export const publishFile = async ({ cwd, file, message, edit }: PublishInput): P
     const before = edit ? fs.readFileSync(file, 'utf8') : undefined;
     edit?.();
     const written = edit ? fs.readFileSync(file, 'utf8') : undefined;
+    // Откат — только своей записи: если файл поправили, пока шёл коммит (редактор, агент),
+    // старое содержимое затёрло бы чужую правку.
+    const rollback = (e: ReviewGitError): ReviewGitError => {
+        if (before === undefined) return e;
+        if (fs.readFileSync(file, 'utf8') === written) {
+            fs.writeFileSync(file, before);
+            return e;
+        }
+        return new ReviewGitError(
+            `${e.message} (the review log changed meanwhile, so the approval edit was not rolled back)`,
+            e.status
+        );
+    };
     let commit: string | null;
     try {
-        commit = await commitFile(cwd, file, message);
+        commit = await commitFile(cwd, file, typeof message === 'function' ? message() : message);
     } catch (e) {
-        // Откат — только своей записи: если файл поправили, пока шёл коммит (редактор, агент),
-        // старое содержимое затёрло бы чужую правку.
-        if (before !== undefined && written !== undefined) {
-            if (fs.readFileSync(file, 'utf8') === written) fs.writeFileSync(file, before);
-            else if (e instanceof ReviewGitError)
-                throw new ReviewGitError(
-                    `${e.message} (the review log changed meanwhile, so the approval edit was not rolled back)`,
-                    e.status
-                );
-        }
-        throw e;
+        throw e instanceof ReviewGitError ? rollback(e) : e;
     }
+    // Правка есть, а коммитить нечего (assume-unchanged, skip-worktree) — апрув не дошёл бы до remote.
+    if (edit && !commit)
+        throw rollback(
+            new ReviewGitError(
+                `git sees no change in ${up.log} after the edit — check how git tracks it`,
+                409
+            )
+        );
     const pushed = await syncAndPush(cwd, up, up.ahead + (commit ? 1 : 0));
     // Перенос на upstream меняет хэш: в ответе — тот коммит, что теперь в ветке.
     const head = commit && (await must(cwd, ['rev-parse', '--short', 'HEAD'], 'git rev-parse failed'));
@@ -404,9 +465,13 @@ export interface ReviewPending {
 
 /**
  * Состояние для плашки Push. null — пушить нельзя (не git, нет upstream, чужие незапушенные коммиты,
- * merge в процессе): кнопка дала бы только ошибку, страница плашку не показывает.
+ * merge в процессе): кнопка дала бы только ошибку, страница плашку не показывает. `up` — сделанный
+ * preflight, чтобы вызывающий не повторял его.
  */
-export const reviewPending = async (cwd: string, file: string): Promise<ReviewPending | null> => {
+export const reviewPending = async (
+    cwd: string,
+    file: string
+): Promise<(ReviewPending & { up: Upstream }) | null> => {
     const up = await preflight(cwd, file).catch(() => undefined);
     if (!up) return null;
     const status = await git(cwd, [
@@ -416,8 +481,11 @@ export const reviewPending = async (cwd: string, file: string): Promise<ReviewPe
         '--',
         path.relative(cwd, file)
     ]);
-    return status.code === 0 ? { changed: !!status.stdout.trim(), unpushed: up.ahead } : null;
+    return status.code === 0 ? { changed: !!status.stdout.trim(), unpushed: up.ahead, up } : null;
 };
+
+/** Журнал в ревизии (`HEAD`, `@{upstream}`); нет файла — пусто. */
+export const logAt = (up: Upstream, rev: string): Promise<string> => blob(up.top, rev, up.log);
 
 /**
  * Дотолкать уже закоммиченный журнал без нового коммита (несохранённые правки файла не трогаются).

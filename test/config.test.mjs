@@ -191,9 +191,11 @@ describe('comments и прежний reviewLog', () => {
     it('configWarnings: approve.set без литералов — предупреждение', () => {
         const approve = (set) => ({ comments: { approve: { heading: 'S', who: 'W', set } } });
         expect(configWarnings(approve({ Date: '{date}', By: '{author}' }))).toEqual([
-            'comments.approve.set has no value without placeholders — an approved row cannot be recognized, so Approve row stays on every named row and each press makes a new commit'
+            'comments.approve.set has no non-empty value without placeholders — an approved row cannot be recognized, so Approve row stays on every named row and each press makes a new commit'
         ]);
         expect(configWarnings(approve({ Status: 'Approved', Date: '{date}' }))).toEqual([]);
+        // пустое значение (очистить колонку) — не литерал
+        expect(configWarnings(approve({ Note: '', Date: '{date}' }))).toHaveLength(1);
     });
     it('commentsLog: enabled: false — журнала нет; label — из reviewLog', () => {
         const log = (raw) => commentsLog(configSchema.parse(raw));

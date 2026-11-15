@@ -2,7 +2,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 
-import { publishFile, pushPending, ReviewGitError, reviewPending, serialQueue, sshEnv } from './dist.mjs';
+import {
+    GIT_TIMEOUTS,
+    publishFile,
+    pushPending,
+    ReviewGitError,
+    reviewPending,
+    serialQueue,
+    sshEnv
+} from './dist.mjs';
 import { gitSandbox } from './helpers.mjs';
 
 // Коммит и пуш файла журнала (change site-review-approve-push) на временном репозитории с
@@ -317,7 +325,7 @@ describe('откат и дотолкивание', () => {
         const err = await box.publish().catch((e) => e);
         expect(err.message).toContain('the commit stays local, press the button again to retry');
         expect(err.message).not.toContain('Push');
-        expect(await reviewPending(box.work, box.file)).toEqual({ changed: false, unpushed: 1 });
+        expect(await reviewPending(box.work, box.file)).toMatchObject({ changed: false, unpushed: 1 });
         fs.rmSync(hook);
         const head = box.git(box.work, 'rev-parse', 'HEAD');
         expect(await pushPending(box.work, box.file)).toBe(true);
@@ -349,7 +357,7 @@ describe('надёжность git-операций', () => {
         const file = path.join(box.work, 'change', 'new', 'review.md');
         fs.mkdirSync(path.dirname(file), { recursive: true });
         fs.writeFileSync(file, LOG);
-        expect(await reviewPending(box.work, file)).toEqual({ changed: true, unpushed: 0 });
+        expect(await reviewPending(box.work, file)).toMatchObject({ changed: true, unpushed: 0 });
         const r = await publishFile({ cwd: box.work, file, message: 'new log' });
         expect(r.commit).toBeTruthy();
         expect(box.git(box.work, 'show', '--name-only', '--format=', 'HEAD')).toBe('change/new/review.md');
@@ -402,5 +410,82 @@ describe('надёжность git-операций', () => {
         expect(box.git(box.remote, 'cat-file', 'commit', 'main')).toContain(
             'gpgsig -----BEGIN PGP SIGNATURE-----'
         );
+    });
+});
+
+// Третий раунд code review: зависший hook не вешает очередь, ignored-журнал и «нечего коммитить»
+// после правки — отказ, fetch — только ветки upstream.
+describe('третий раунд: зависания и отказы', () => {
+    it('hook оставил фоновый процесс с унаследованным выводом — вызов завершается, очередь работает', async () => {
+        const box = sandbox();
+        const hook = path.join(box.work, '.git', 'hooks', 'pre-commit');
+        fs.writeFileSync(hook, '#!/bin/sh\nsleep 30 &\nexit 0\n', { mode: 0o755 });
+        const queue = serialQueue();
+        box.append('| 1 | Why? |');
+        const started = Date.now();
+        const first = await queue(() => box.publish());
+        expect(first.pushed).toBe(true);
+        const second = await queue(() => box.publish());
+        expect(second).toEqual({ commit: null, pushed: false });
+        expect(Date.now() - started).toBeLessThan(15_000);
+    }, 30_000);
+
+    it('hook завис дольше таймаута — группа процессов убита, ошибка о таймауте, правка откатана', async () => {
+        const box = sandbox();
+        const hook = path.join(box.work, '.git', 'hooks', 'pre-commit');
+        fs.writeFileSync(hook, '#!/bin/sh\nsleep 30 &\nwait\n', { mode: 0o755 });
+        const saved = GIT_TIMEOUTS.commit;
+        GIT_TIMEOUTS.commit = 1_000;
+        try {
+            const started = Date.now();
+            const err = await box.publish({ edit: () => box.append('| 1 | Why? |') }).catch((e) => e);
+            expect(err).toBeInstanceOf(ReviewGitError);
+            expect(err.message).toContain('git commit timed out after 1 s');
+            expect(Date.now() - started).toBeLessThan(10_000);
+            expect(fs.readFileSync(box.file, 'utf8')).toBe(LOG);
+        } finally {
+            GIT_TIMEOUTS.commit = saved;
+        }
+    }, 30_000);
+
+    it('журнал в .gitignore — отказ до правки', async () => {
+        const box = sandbox();
+        const file = path.join(box.work, 'ignored', 'review.md');
+        fs.mkdirSync(path.dirname(file), { recursive: true });
+        fs.writeFileSync(file, LOG);
+        fs.writeFileSync(path.join(box.work, '.gitignore'), 'ignored/\n');
+        let edited = false;
+        const err = await publishFile({
+            cwd: box.work,
+            file,
+            message: 'x',
+            edit: () => {
+                edited = true;
+            }
+        }).catch((e) => e);
+        expect(err.status).toBe(409);
+        expect(err.message).toBe('ignored/review.md is ignored by git — the review log cannot be committed');
+        expect(edited).toBe(false);
+    });
+
+    it('после правки коммитить нечего (assume-unchanged) — правка откатывается, ошибка', async () => {
+        const box = sandbox();
+        box.git(box.work, 'update-index', '--assume-unchanged', 'change/review.md');
+        const err = await box.publish({ edit: () => box.append('| 1 | Why? |') }).catch((e) => e);
+        expect(err.status).toBe(409);
+        expect(err.message).toContain('git sees no change in change/review.md after the edit');
+        expect(fs.readFileSync(box.file, 'utf8')).toBe(LOG);
+    });
+
+    it('fetch — только ветка upstream: чужие ветки remote не подтягиваются', async () => {
+        const box = sandbox();
+        box.git(box.other, 'checkout', '-q', '-b', 'side');
+        fs.writeFileSync(path.join(box.other, 'side.md'), 'side\n');
+        box.git(box.other, 'add', 'side.md');
+        box.git(box.other, 'commit', '-q', '-m', 'side');
+        box.git(box.other, 'push', '-q', 'origin', 'side');
+        box.append('| 1 | Why? |');
+        expect((await box.publish()).pushed).toBe(true);
+        expect(box.git(box.work, 'branch', '-r')).not.toContain('origin/side');
     });
 });

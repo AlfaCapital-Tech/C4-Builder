@@ -556,23 +556,52 @@ describe('апрув и push журнала в site -w', () => {
                 onReady: async () => {
                     expect(await check()).toEqual({
                         file: 'src/add-push-platform/review.md',
-                        unpushed: false
+                        unpushedRows: []
                     });
                     const rejected = await call(port, '/approve', row);
                     expect(rejected.status).toBe(502);
                     const { error } = await rejected.json();
                     expect(error).toContain('protected branch');
                     expect(error).not.toContain('Push');
-                    expect(await check()).toMatchObject({ unpushed: true });
+                    // апрув закоммичен, не запушен — сервер отмечает именно эту строку
+                    expect(await check()).toMatchObject({ unpushedRows: [approved.cells] });
                     fs.rmSync(hook);
                     const again = await call(port, '/approve', approved);
                     const body = await again.json();
                     expect(again.status, JSON.stringify(body)).toBe(200);
                     expect(body).toMatchObject({ commit: null, pushed: true });
                     expect(box.remoteLog()[0]).toBe('review add-push-platform: approved — Петров Пётр');
-                    expect(await check()).toMatchObject({ unpushed: false });
+                    expect(await check()).toMatchObject({ unpushedRows: [] });
                     // запушено — повтор снова «уже одобрена»
                     expect((await call(port, '/approve', approved)).status).toBe(409);
+                    // одобрена руками и не закоммичена — честный отказ, файл не тронут
+                    fs.writeFileSync(
+                        log,
+                        fs
+                            .readFileSync(log, 'utf8')
+                            .replace(
+                                '| Тестировщик |',
+                                '| Ревьюер | Approved | Сидоров Семён | 2026-11-01 |\n| Тестировщик |'
+                            )
+                    );
+                    const before = fs.readFileSync(log, 'utf8');
+                    const manual = await call(port, '/approve', {
+                        page,
+                        cells: ['Ревьюер', 'Approved', 'Сидоров Семён', '2026-11-01']
+                    });
+                    expect(manual.status).toBe(409);
+                    expect((await manual.json()).error).toContain('is not committed');
+                    expect(fs.readFileSync(log, 'utf8')).toBe(before);
+                    box.git(
+                        box.work,
+                        'commit',
+                        '-q',
+                        '-m',
+                        'reviewer',
+                        '--',
+                        'src/add-push-platform/review.md'
+                    );
+                    box.git(box.work, 'push', '-q');
                 }
             });
         } finally {
@@ -590,9 +619,12 @@ describe('апрув и push журнала в site -w', () => {
         try {
             await serveSite(box.work, ['site', '-w', '-p', String(port)], {
                 env,
-                onReady: async () => {
+                onReady: async ({ waitFor }) => {
                     expect(await state()).toEqual({ changed: false, unpushed: 0 });
                     fs.appendFileSync(log, '\nhand edit\n');
+                    // правка в редакторе: пересборка сбрасывает кэш состояния
+                    await waitFor(/built in/);
+                    await new Promise((r) => setTimeout(r, 200));
                     expect(await state()).toEqual({ changed: true, unpushed: 0 });
                     fs.writeFileSync(hook, '#!/bin/sh\nexit 1\n', { mode: 0o755 });
                     expect((await call(port, '/push', { page })).status).toBe(502);
@@ -618,7 +650,7 @@ describe('апрув и push журнала в site -w', () => {
         }
     }, 60_000);
 
-    it('livereload откладывается до ответа апрува; комментарий во время пуша ждёт очередь; GET журнала — без git', async () => {
+    it('комментарий во время пуша ждёт очередь; GET журнала — без git; повторный state — из кэша', async () => {
         const port = 28354;
         fs.writeFileSync(
             log,
@@ -629,22 +661,10 @@ describe('апрув и push журнала в site -w', () => {
         box.git(box.work, 'commit', '-q', '-m', 'developer', '--', 'src/add-push-platform/review.md');
         box.git(box.work, 'push', '-q');
         const hook = path.join(box.remote, 'hooks', 'pre-receive');
-        // Поток livereload: моменты событий reload.
-        const reloads = [];
-        let sse;
         try {
             await serveSite(box.work, ['site', '-w', '-p', String(port)], {
                 env,
-                onReady: async ({ waitFor }) => {
-                    await new Promise((resolve) => {
-                        sse = http.get({ host: '127.0.0.1', port, path: '/__livereload' }, (res) => {
-                            res.setEncoding('utf8');
-                            res.on('data', (d) => {
-                                if (d.includes('event: reload')) reloads.push(Date.now());
-                            });
-                            resolve();
-                        });
-                    });
+                onReady: async () => {
                     // GET журнала отвечает без git: одобренные строки есть, git-состояния нет
                     const fast = await (
                         await fetch(`http://127.0.0.1:${port}/__c4builder/review-log?page=${page}`)
@@ -657,12 +677,13 @@ describe('апрув и push журнала в site -w', () => {
                         page,
                         cells: ['Разработчик', '', 'Сидоров Семён', '']
                     });
-                    const answered = Date.now();
                     expect(approved.status).toBe(200);
-                    expect(reloads.filter((t) => t < answered)).toEqual([]);
-                    await waitFor(/built in/);
-                    await new Promise((r) => setTimeout(r, 1000));
-                    expect(reloads.length).toBeGreaterThan(0);
+                    // state дважды подряд: второй ответ — из кэша, без git (быстро)
+                    const stateUrl = `http://127.0.0.1:${port}/__c4builder/review-log/state?page=${page}`;
+                    const first = await (await fetch(stateUrl)).json();
+                    const t0 = Date.now();
+                    expect(await (await fetch(stateUrl)).json()).toEqual(first);
+                    expect(Date.now() - t0).toBeLessThan(100);
                     // комментарий во время пуша ждёт очередь: его ответ — после ответа пуша
                     fs.appendFileSync(log, '\nhand edit\n');
                     let pushedAt = 0;
@@ -684,7 +705,6 @@ describe('апрув и push журнала в site -w', () => {
                 }
             });
         } finally {
-            sse?.destroy();
             fs.rmSync(hook, { force: true });
         }
     }, 60_000);

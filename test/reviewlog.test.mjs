@@ -344,15 +344,26 @@ describe('approveRow', () => {
         // лишние непустые ячейки страницы сверх ширины заголовка — не та строка
         expect(approveRow(LOG, OPTS, [...ROW, 'x'])).toEqual({ error: 'not-found' });
     });
+    it('пустое значение в set — не литерал: строка с пустой ячейкой не «одобрена»', () => {
+        const opts = { ...OPTS, set: { Статус: '', Дата: '{date}' } };
+        expect(approvedRows(LOG, opts)).toEqual({ rows: [] });
+        expect(approveRow(LOG, opts, ROW, 'd')).toHaveProperty('markdown');
+    });
+    it('нет колонки who или set — approvedRows называет колонку (как и апрув)', () => {
+        expect(approvedRows(LOG, { ...OPTS, who: 'Ревьюер' })).toEqual({ column: 'Ревьюер' });
+        expect(approvedRows(LOG, { ...OPTS, set: { Комментарий: 'ok' } })).toEqual({ column: 'Комментарий' });
+    });
     it('approvedRows — одобренные строки по тому же правилу, что и отказ апрува', () => {
-        expect(approvedRows(LOG, OPTS)).toEqual([['Разработчик', 'Approved', 'Петров Пётр', '2026-11-01']]);
+        expect(approvedRows(LOG, OPTS)).toEqual({
+            rows: [['Разработчик', 'Approved', 'Петров Пётр', '2026-11-01']]
+        });
         // регистр значения важен — как и при апруве: «approved» — не одобрена
         const lower = LOG.replace('| Разработчик | Approved |', '| Разработчик | approved |');
-        expect(approvedRows(lower, OPTS)).toEqual([]);
+        expect(approvedRows(lower, OPTS)).toEqual({ rows: [] });
         expect(
             approveRow(lower, OPTS, ['Разработчик', 'approved', 'Петров Пётр', '2026-11-01'], 'd')
         ).toHaveProperty('markdown');
         // set без литералов — одобренных строк не бывает
-        expect(approvedRows(LOG, { ...OPTS, set: { Дата: '{date}' } })).toEqual([]);
+        expect(approvedRows(LOG, { ...OPTS, set: { Дата: '{date}' } })).toEqual({ rows: [] });
     });
 });

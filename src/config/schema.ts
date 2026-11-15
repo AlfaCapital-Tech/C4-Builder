@@ -222,7 +222,7 @@ export const configWarnings = (raw: Record<string, unknown>): string[] => {
     const comments = raw.comments;
     if (comments && typeof comments === 'object' && 'label' in comments)
         warnings.push('comments.label is ignored — use buttons.comment for the button text');
-    // Одобренную строку узнают по литералам `set` (значениям без подстановок): без них строка
+    // Одобренную строку узнают по литералам `set` (непустым значениям без подстановок): без них строка
     // никогда не «одобрена», кнопка остаётся у каждой строки с именем, и каждое нажатие — коммит.
     const log = (comments ?? raw.reviewLog) as { approve?: { set?: unknown } } | undefined;
     const set = log && typeof log === 'object' ? log.approve?.set : undefined;
@@ -230,10 +230,10 @@ export const configWarnings = (raw: Record<string, unknown>): string[] => {
         set &&
         typeof set === 'object' &&
         Object.keys(set).length &&
-        Object.values(set).every((v) => /\{\w+\}/.test(String(v)))
+        Object.values(set).every((v) => !String(v ?? '').trim() || /\{\w+\}/.test(String(v)))
     )
         warnings.push(
-            'comments.approve.set has no value without placeholders — an approved row cannot be recognized, so Approve row stays on every named row and each press makes a new commit'
+            'comments.approve.set has no non-empty value without placeholders — an approved row cannot be recognized, so Approve row stays on every named row and each press makes a new commit'
         );
     return warnings;
 };

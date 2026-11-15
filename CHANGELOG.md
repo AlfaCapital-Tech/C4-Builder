@@ -13,7 +13,9 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
   and pushes it in one commit. Only the log file goes into
   the commit, a moved upstream gets the log commit moved onto it without rebase or stash (a
   conflict is an error, the commit stays local), the push goes only to an upstream branch of the same
-  name, without force; unpushed commits other than the log's or a merge in progress are a refusal. New keys `comments.approve`
+  name, without force; unpushed commits other than the log's, a merge in progress or an ignored log
+  are a refusal; git never prompts (ssh in batch mode, stdin closed) and a hanging hook is stopped by
+  the timeout. New keys `comments.approve`
   (`heading`, `who`, `set`), `comments.push` (`enabled`, `message`), `buttons.approve`,
   `buttons.push`; without them nothing changes
 

@@ -800,12 +800,12 @@ describe('кнопка Approve row: повтор и служебные элем�
         return p.window.__calls.filter((c) => c.method === 'POST').at(-1).body.cells;
     };
 
-    it('одобренная строка, коммит журнала не запушен (GET unpushed) — кнопка есть, повтор шлёт строку', async () => {
+    it('одобренная строка, коммит журнала не запушен (сервер отметил строку в unpushedRows) — кнопка есть, повтор шлёт строку', async () => {
         const LOG = { file: 'review.md', heading: ['Замечания'], approve: APPROVE };
         const approved = [['Разработчик', 'Approved', 'Петров Пётр', '2026-11-01']];
         const done = await page(LOG, { file: 'src/review.md', log: true, approved });
         expect(await select(done, 'who3')).toEqual(['Comment']);
-        const p = await page(LOG, { file: 'src/review.md', log: true, approved, unpushed: true });
+        const p = await page(LOG, { file: 'src/review.md', log: true, approved, unpushedRows: approved });
         expect(await select(p, 'who3')).toEqual(['Comment', 'Approve row']);
         expect(await approve(p)).toEqual(['Разработчик', 'Approved', 'Петров Пётр', '2026-11-01']);
         expect(p.toast()).toBe('Row approved in src/review.md and pushed');
@@ -1099,5 +1099,85 @@ describe('livereload во время запроса', () => {
         await sleep(20);
         expect(p.toast()).toBe('Nothing to push');
         expect(p.window.sessionStorage.getItem('__c4builderCommentToast')).toBeNull();
+    });
+});
+
+// Третий раунд code review: ошибка конфигурации апрува — тостом один раз; git-состояние не
+// спрашивается на странице без журнала.
+describe('страница журнала: конфиг и git-состояние', () => {
+    const APPROVE = { heading: ['Статусы'], who: 'Кто', set: { Статус: 'Approved' } };
+
+    it('нет колонки из who или set — тост с ошибкой один раз, кнопки апрува нет', async () => {
+        const error = 'comments.approve: column "Кто" not found in the table of Статусы in src/review.md';
+        const p = await agentPage({
+            agent: false,
+            languages: ['en'],
+            reviewLog: { file: 'review.md', heading: ['Remarks'], approve: APPROVE },
+            reply: { file: 'src/review.md', log: true, approved: [], configError: error }
+        });
+        expect(p.toast()).toBe(error);
+        expect(p.doc.querySelector('.c4b-ctoast').classList.contains('c4b-err')).toBe(true);
+        p.doc.querySelector('.c4b-ctoast').remove();
+        // повторная отрисовка страницы — без второго тоста
+        p.window.dispatchEvent(new p.window.Event('hashchange'));
+        await sleep(400);
+        expect(p.toast()).toBeUndefined();
+    });
+
+    it('страница без журнала (404) — git-состояние не спрашивается', async () => {
+        const p = await agentPage({
+            agent: false,
+            reviewLog: { file: 'review.md', heading: ['Remarks'], push: true, approve: APPROVE },
+            error: 'review.md not found'
+        });
+        expect(p.window.__calls.map((c) => c.url)).toEqual(['/__c4builder/review-log?page=A.md']);
+    });
+});
+
+// Отсрочка livereload — только на странице (сервер её не держит: иначе перезагрузка ждала бы во
+// всех вкладках): пока идёт запрос страницы, reload откладывается, перед перезагрузкой тост сохраняется.
+describe('сниппет livereload: отсрочка на время запроса', () => {
+    const load = async () => {
+        const { JSDOM } = await import('jsdom');
+        const { LIVERELOAD_SNIPPET } = await import('../dist/cli/commands/site.js');
+        const html = `<!DOCTYPE html><html><head></head><body>
+<script>
+window.__sources = [];
+window.EventSource = function (url) {
+    var self = this;
+    self.listeners = {};
+    self.closed = 0;
+    self.addEventListener = function (name, fn) { self.listeners[name] = fn; };
+    self.close = function () { self.closed++; };
+    window.__sources.push(self);
+};
+window.__saved = 0;
+window.__c4builderBeforeReload = function () { window.__saved++; };
+</script>
+${LIVERELOAD_SNIPPET}
+</body></html>`;
+        const { window } = new JSDOM(html, { runScripts: 'dangerously', url: 'http://localhost/#/A' });
+        return window;
+    };
+
+    it('во время запроса reload откладывается; после — перезагрузка с сохранением тоста', async () => {
+        const window = await load();
+        const es = window.__sources[0];
+        window.__c4builderBusy = 1;
+        es.listeners.reload();
+        expect(es.closed).toBe(0);
+        expect(window.__saved).toBe(0);
+        expect(typeof window.__c4builderReloadLater).toBe('function');
+        window.__c4builderReloadLater();
+        expect(es.closed).toBe(1);
+        expect(window.__saved).toBe(1);
+    });
+
+    it('без запроса — перезагрузка сразу', async () => {
+        const window = await load();
+        const es = window.__sources[0];
+        es.listeners.reload();
+        expect(es.closed).toBe(1);
+        expect(window.__saved).toBe(1);
     });
 });

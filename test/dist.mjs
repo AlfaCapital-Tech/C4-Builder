@@ -111,6 +111,7 @@ export {
 } from '../dist/core/sections.js';
 export {
     commitFile,
+    GIT_TIMEOUTS,
     preflight,
     publishFile,
     pushPending,

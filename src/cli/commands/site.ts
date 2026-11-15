@@ -13,6 +13,7 @@ import type { PageSources } from '../../core/compose/markdown.ts';
 import { batchSchema, type FeedbackBatch, formatBatch, LISTENER_NAME } from '../../core/feedback.ts';
 import { redirectKey } from '../../core/plugins/tree.ts';
 import {
+    logAt,
     preflight,
     publishFile,
     pushPending,
@@ -69,9 +70,8 @@ type Mailbox = {
 };
 
 const LIVERELOAD_PATH = '/__livereload';
-// Запас после ответа на запрос, менявший журнал, перед отложенной перезагрузкой: страница успевает
-// обработать ответ и показать тост (change site-review-approve-push).
-const RELOAD_GRACE_MS = 300;
+// Сколько живёт кэш git-состояния журнала (GET state) — страница спрашивает его при каждой отрисовке.
+const STATE_TTL_MS = 2_000;
 // Сигнал «читатель открыл страницу» для приоритета фонового рендера (change site-warm-start).
 const OPEN_PATH = '/__c4builder/open';
 // Восстановление скролла после reload: docsify рендерит контент асинхронно после fetch md,
@@ -88,7 +88,7 @@ const OPEN_PATH = '/__c4builder/open';
 // Приоритет очереди — по сигналу навигации docsify (beforeEach), а не по любому GET *.md:
 // поиск docsify после первой отрисовки запрашивает .md всех страниц sidebar и перебивал бы
 // открытую, которую сам docsify повторно не запрашивает (берёт из кэша).
-const LIVERELOAD_SNIPPET = `
+export const LIVERELOAD_SNIPPET = `
 <script>
 (function () {
     if (window.__c4builderLiveReload) return;
@@ -410,8 +410,6 @@ export default (
             Math.min(mailboxTtlMs, 60_000)
         ).unref();
 
-        // Счётчик запросов, меняющих журнал, и отложенная ими перезагрузка (общие для всех потоков).
-        const reloadGate = { busy: 0, held: false };
         app.get(LIVERELOAD_PATH, (req, res) => {
             res.set({
                 'Content-Type': 'text/event-stream',
@@ -422,14 +420,7 @@ export default (
             res.flushHeaders();
             res.write('retry: 1000\n\n');
 
-            // Пока идёт запрос, меняющий журнал, перезагрузка откладывается (см. holdReload).
-            const onReload = () => {
-                if (reloadGate.busy) {
-                    reloadGate.held = true;
-                    return;
-                }
-                res.write('event: reload\ndata: {}\n\n');
-            };
+            const onReload = () => res.write('event: reload\ndata: {}\n\n');
             const onAgent = (data: unknown) => res.write(`event: agent\ndata: ${JSON.stringify(data)}\n\n`);
             const onDelivered = (data: unknown) =>
                 res.write(`event: delivered\ndata: ${JSON.stringify(data)}\n\n`);
@@ -565,23 +556,20 @@ export default (
             const queue = serialQueue();
             const pushOn = reviewLog.push.enabled;
             const approve = reviewLog.approve;
-            // Пока идёт запрос, меняющий журнал, перезагрузка страниц по livereload откладывается и
-            // приходит одна после ответа (с запасом, чтобы страница успела показать тост): иначе
-            // запись в review.md перезагружает страницу посреди запроса, и ответ теряется.
-            const holdReload = (res: express.Response): void => {
-                reloadGate.busy++;
-                let released = false;
-                const release = (): void => {
-                    if (released) return;
-                    released = true;
-                    reloadGate.busy--;
-                    if (reloadGate.busy || !reloadGate.held) return;
-                    reloadGate.held = false;
-                    setTimeout(() => reloadEmitter.emit('reload'), RELOAD_GRACE_MS).unref();
-                };
-                res.on('finish', release);
-                res.on('close', release);
-            };
+            // Git-состояние журнала (GET state) кэшируется ненадолго: страница спрашивает его при каждой
+            // отрисовке, а это десяток процессов git. Любая наша запись или git-операция и любая
+            // пересборка (правка файла в редакторе) кэш сбрасывают.
+            const stateCache = new Map<string, { at: number; body: Record<string, unknown> }>();
+            reloadEmitter.on('reload', () => stateCache.clear());
+            const job = <T>(task: () => Promise<T>): Promise<T> =>
+                queue(async () => {
+                    stateCache.clear();
+                    try {
+                        return await task();
+                    } finally {
+                        stateCache.clear();
+                    }
+                });
             app.post(REVIEW_LOG_PATH, express.json({ limit: '64kb' }), async (req, res) => {
                 const target = resolveTarget(req, res);
                 if (!target) return;
@@ -596,9 +584,8 @@ export default (
                     return;
                 }
                 const rel = relOf(file);
-                holdReload(res);
                 try {
-                    const number = await queue(async () =>
+                    const number = await job(async () =>
                         writeRemark(file, reviewLog, { ...parsed, source, author })
                     );
                     console.log(chalk.gray(`remark added to ${rel}${number ? ` as #${number}` : ''}`));
@@ -649,9 +636,7 @@ export default (
                         res.json({
                             file: relOf(log.file),
                             log: true,
-                            ...(approve
-                                ? { approved: approvedRows(fs.readFileSync(log.file, 'utf8'), approve) }
-                                : {})
+                            ...(approve ? approvedState(log.file) : {})
                         });
                         return;
                     }
@@ -665,6 +650,22 @@ export default (
                     res.status(500).json({ error: `could not read the review log: ${(e as Error).message}` });
                 }
             });
+            // Одобренные строки таблицы статусов для кнопки апрува; нет колонки из `who` или `set` —
+            // ошибка конфигурации, страница показывает её (а не молча прячет кнопку).
+            const approvedState = (file: string): Record<string, unknown> => {
+                if (!approve) return {};
+                const r = approvedRows(fs.readFileSync(file, 'utf8'), approve);
+                return 'rows' in r
+                    ? { approved: r.rows }
+                    : {
+                          approved: [],
+                          configError: `comments.approve: column "${r.column}" not found in the table of ${approve.heading.join(' / ')} in ${relOf(file)}`
+                      };
+            };
+            const rowKeys = (text: string): string[] => {
+                const r = approve ? approvedRows(text, approve) : { rows: [] };
+                return 'rows' in r ? r.rows.map((row) => JSON.stringify(row)) : [];
+            };
             // Git-состояние журнала страницы — отдельным запросом, через очередь: `pending` — для
             // плашки Push (null — пушить нельзя), `unpushed` — для повторного апрува. Есть, только если
             // включён push или задан approve: иначе страница его не спрашивает.
@@ -678,12 +679,34 @@ export default (
                         });
                         return;
                     }
-                    const pending = await queue(() => reviewPending(cwd, log.file));
-                    res.json({
-                        file: relOf(log.file),
-                        ...(pushOn ? { pending } : {}),
-                        ...(approve ? { unpushed: (pending?.unpushed ?? 0) > 0 } : {})
+                    const cached = stateCache.get(log.file);
+                    if (cached && Date.now() - cached.at < STATE_TTL_MS) {
+                        res.json(cached.body);
+                        return;
+                    }
+                    const body = await queue(async () => {
+                        const state = await reviewPending(cwd, log.file);
+                        // Строки, одобренные в HEAD, но не в upstream (и так же в рабочей копии), —
+                        // их апрув закоммичен и не запушен: только у них кнопка остаётся, повтор
+                        // дотолкает коммит.
+                        let unpushedRows: string[][] = [];
+                        if (approve && log.own && state?.unpushed) {
+                            const pushed = new Set(rowKeys(await logAt(state.up, '@{upstream}')));
+                            const here = new Set(rowKeys(fs.readFileSync(log.file, 'utf8')));
+                            unpushedRows = rowKeys(await logAt(state.up, 'HEAD'))
+                                .filter((k) => !pushed.has(k) && here.has(k))
+                                .map((k) => JSON.parse(k));
+                        }
+                        return {
+                            file: relOf(log.file),
+                            ...(pushOn
+                                ? { pending: state && { changed: state.changed, unpushed: state.unpushed } }
+                                : {}),
+                            ...(approve ? { unpushedRows } : {})
+                        };
                     });
+                    stateCache.set(log.file, { at: Date.now(), body });
+                    res.json(body);
                 });
             }
             // Удаление строки журнала: номер и текст ячейки, видимой на странице, плюс
@@ -709,9 +732,8 @@ export default (
                 const number =
                     typeof body.number === 'number' ? body.number : Number(str(body.number)) || null;
                 const cells = Array.isArray(body.cells) ? body.cells.map(str) : undefined;
-                holdReload(res);
                 try {
-                    const result = await queue(async () =>
+                    const result = await job(async () =>
                         deleteRemark(file, reviewLog.heading, { number, text }, cells)
                     );
                     if ('error' in result) {
@@ -764,11 +786,8 @@ export default (
                         return;
                     }
                     const rel = relOf(file);
-                    // Отказ апрува — до git: устаревшая строка или ошибка конфига не должны ни
-                    // менять файл, ни трогать репозиторий.
-                    const plan = () => {
-                        const r = approveRow(fs.readFileSync(file, 'utf8'), approve, cells);
-                        if (!('error' in r)) return r;
+                    const approveIn = (text: string) => approveRow(text, approve, cells);
+                    const refuse = (r: Exclude<ReturnType<typeof approveIn>, { markdown: string }>) => {
                         const reasons = {
                             'not-found': `row not found in ${rel} — the page may be stale, reload it`,
                             ambiguous: `several identical rows in ${rel} — approve it by hand`,
@@ -776,32 +795,52 @@ export default (
                             approved: `the row is already approved in ${rel} — reload the page`,
                             'no-column': `column "${'column' in r ? r.column : ''}" not found in the table of ${approve.heading.join(' / ')} in ${rel}`
                         };
-                        throw new ReviewGitError(reasons[r.error], r.error === 'no-column' ? 500 : 409);
+                        return new ReviewGitError(reasons[r.error], r.error === 'no-column' ? 500 : 409);
                     };
-                    holdReload(res);
                     try {
-                        const out = await queue(async () => {
-                            // Одобренная строка с незапушенным коммитом журнала (пуш отклонили):
-                            // повтор дотолкает коммит без нового — плашки Push может и не быть.
-                            // preflight — один раз, его результат идёт дальше в пуш.
-                            const now = approveRow(fs.readFileSync(file, 'utf8'), approve, cells);
-                            if ('error' in now && now.error === 'approved') {
-                                const up = await preflight(cwd, file).catch(() => undefined);
-                                if (up?.pending)
+                        const out = await job(async () => {
+                            // Отказ апрува — до git: устаревшая строка или ошибка конфига не должны ни
+                            // менять файл, ни трогать репозиторий.
+                            const check = approveIn(fs.readFileSync(file, 'utf8'));
+                            if ('error' in check && check.error === 'approved') {
+                                // Уже одобрена: дотолкать можно только закоммиченный и не запушенный
+                                // апрув этой строки; ошибку preflight — как есть.
+                                const up = await preflight(cwd, file);
+                                const was = (text: string) => {
+                                    const r = approveIn(text);
+                                    return 'error' in r && r.error === 'approved';
+                                };
+                                const inHead = was(await logAt(up, 'HEAD'));
+                                if (inHead && !was(await logAt(up, '@{upstream}')))
                                     return {
                                         commit: null,
                                         pushed: await pushPending(cwd, file, up),
                                         message: null
                                     };
+                                if (!inHead)
+                                    throw new ReviewGitError(
+                                        `the approval of this row in ${rel} is not committed — commit the review log by hand or reload the page`,
+                                        409
+                                    );
                             }
-                            const first = plan();
-                            const message = messageFor(file, 'approved', first.author);
-                            // Файл перечитывается после проверки git: между ними его мог поправить агент.
+                            if ('error' in check) throw refuse(check);
+                            // Автор сообщения — из той же записи, что ушла в файл: файл перечитывается
+                            // после проверки git, его мог поправить агент.
+                            let author = check.author;
+                            let message = '';
                             const result = await publishFile({
                                 cwd,
                                 file,
-                                message,
-                                edit: () => fs.writeFileSync(file, plan().markdown)
+                                message: () => {
+                                    message = messageFor(file, 'approved', author);
+                                    return message;
+                                },
+                                edit: () => {
+                                    const r = approveIn(fs.readFileSync(file, 'utf8'));
+                                    if ('error' in r) throw refuse(r);
+                                    author = r.author;
+                                    fs.writeFileSync(file, r.markdown);
+                                }
                             });
                             return { ...result, message };
                         });
@@ -826,9 +865,8 @@ export default (
                     const { file } = log;
                     const rel = relOf(file);
                     const message = messageFor(file, 'comments', author);
-                    holdReload(res);
                     try {
-                        const out = await queue(() => publishFile({ cwd, file, message }));
+                        const out = await job(() => publishFile({ cwd, file, message }));
                         console.log(
                             chalk.gray(out.commit || out.pushed ? `${rel} pushed` : `${rel}: nothing to push`)
                         );

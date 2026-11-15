@@ -366,7 +366,12 @@ export const commentsSnippet = ({
     // One GET per rendered page: the server says whether the page is the log (decorate rows) or
     // which remarks belong to it (highlight quotes). The marker lives on the first rendered element,
     // so a re-render by docsify clears it and the page is synced again.
-    var logFirst = null, logUnpushed = false, logApproved = [];
+    var logFirst = null, logApproved = [], unpushedRows = {}, hasLog = false, configShown = false;
+    var keysOf = function (rows) {
+        var out = {};
+        (rows || []).forEach(function (row) { out[JSON.stringify(row)] = true; });
+        return out;
+    };
     var syncLog = function () {
         var root = content();
         if (!REVIEW_LOG || !root || !root.firstElementChild || root.firstElementChild.hasAttribute('data-c4b-log')) return;
@@ -374,11 +379,15 @@ export const commentsSnippet = ({
         first.setAttribute('data-c4b-log', '1');
         var page = pageFile();
         fetch(REVIEW_LOG_URL + '?page=' + encodeURIComponent(page), { method: 'GET' }).then(function (res) {
-            if (!res.ok) { if (pageFile() === page) updateBar(null); return; }
+            if (!res.ok) { if (pageFile() === page) { hasLog = false; updateBar(null); } return; }
             return res.json().then(function (data) {
                 if (pageFile() !== page || content() !== root || root.firstElementChild !== first) return;
+                hasLog = true;
                 if (data.log) { logFirst = first; logApproved = data.approved || []; decorateLog(root); }
                 else highlightRemarks(root, data);
+                // A misconfigured approve (a column of "who" or "set" is missing) is said once, not
+                // hidden behind an absent button.
+                if (data.configError && !configShown) { configShown = true; toast(data.configError, true); }
                 refreshLog();
             });
         }, function () {});
@@ -387,13 +396,13 @@ export const commentsSnippet = ({
     // separate request — the server answers it after a running git operation — asked only with push or
     // approve, on every render and after an action on the page.
     var refreshLog = function () {
-        if (!REVIEW_LOG || !(REVIEW_LOG.push || REVIEW_LOG.approve)) return;
+        if (!REVIEW_LOG || !(REVIEW_LOG.push || REVIEW_LOG.approve) || !hasLog) return;
         var page = pageFile();
         fetch(STATE_URL + '?page=' + encodeURIComponent(page), { method: 'GET' }).then(function (res) {
             return res.ok ? res.json() : null;
         }).then(function (data) {
             if (pageFile() !== page) return;
-            logUnpushed = !!(data && data.unpushed);
+            unpushedRows = keysOf(data && data.unpushedRows);
             updateBar(data);
         }, function () {});
     };
@@ -517,11 +526,11 @@ export const commentsSnippet = ({
         var who = col(A.who);
         if (who < 0 || /^(|-|\\u2013|\\u2014)$/.test(texts[who] || '')) return null;
         // Approved is the server's rule (the "approved" rows of the log GET), or approved from this
-        // page a moment ago. Such a row whose commit was not pushed (the push was rejected) keeps the
-        // button: pressing it again pushes that commit.
+        // page a moment ago. An approved row the server marks as committed but not pushed (the push
+        // was rejected) keeps the button: pressing it again pushes that commit.
         var key = JSON.stringify(texts);
-        var approved = approvedRows[key] || logApproved.some(function (row) { return JSON.stringify(row) === key; });
-        return approved && !logUnpushed ? null : { cells: texts };
+        var approved = approvedRows[key] || keysOf(logApproved)[key];
+        return approved && !unpushedRows[key] ? null : { cells: texts };
     };
     var update = function () {
         if (pop) return;
@@ -939,7 +948,7 @@ export const commentsSnippet = ({
             // Approved and pushed: the row keeps its old text until livereload re-renders the page,
             // so it is remembered — no button at it meanwhile.
             approvedRows[JSON.stringify(row.cells)] = true;
-            logUnpushed = false;
+            delete unpushedRows[JSON.stringify(row.cells)];
             apBtn.hidden = true;
             var msg = t(r.pushed ? 'approvedPushed' : 'approvedRow', { file: r.file });
             toast(msg);
