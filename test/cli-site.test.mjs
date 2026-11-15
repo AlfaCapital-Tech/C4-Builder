@@ -515,6 +515,57 @@ describe('апрув и push журнала в site -w', () => {
             fs.writeFileSync(cfg, saved);
         }
     }, 60_000);
+
+    it('approve без push: пуш отклонён — ошибка без упоминания Push; повторный Approve дотолкает коммит', async () => {
+        const port = 28339;
+        const saved = fs.readFileSync(cfg, 'utf8');
+        const { push, ...rest } = COMMENTS;
+        fs.writeFileSync(cfg, JSON.stringify({ ...CONFIG, comments: rest }));
+        fs.writeFileSync(
+            log,
+            fs
+                .readFileSync(log, 'utf8')
+                .replace('| Тестировщик | | — | |', '| Тестировщик | | Петров Пётр | |')
+        );
+        box.git(box.work, 'commit', '-q', '-m', 'tester', '--', 'src/add-push-platform/review.md');
+        box.git(box.work, 'push', '-q');
+        const hook = path.join(box.remote, 'hooks', 'pre-receive');
+        fs.writeFileSync(hook, '#!/bin/sh\necho "protected branch" >&2\nexit 1\n', { mode: 0o755 });
+        const row = { page, cells: ['Тестировщик', '', 'Петров Пётр', ''] };
+        const approved = { page, cells: ['Тестировщик', 'Approved', 'Петров Пётр', today()] };
+        const check = async () =>
+            (await fetch(`http://127.0.0.1:${port}/__c4builder/review-log?page=${page}`)).json();
+        try {
+            await serveSite(box.work, ['site', '-w', '-p', String(port)], {
+                env,
+                onReady: async () => {
+                    expect(await check()).toEqual({
+                        file: 'src/add-push-platform/review.md',
+                        log: true,
+                        unpushed: false
+                    });
+                    const rejected = await call(port, '/approve', row);
+                    expect(rejected.status).toBe(502);
+                    const { error } = await rejected.json();
+                    expect(error).toContain('protected branch');
+                    expect(error).not.toContain('Push');
+                    expect(await check()).toMatchObject({ unpushed: true });
+                    fs.rmSync(hook);
+                    const again = await call(port, '/approve', approved);
+                    const body = await again.json();
+                    expect(again.status, JSON.stringify(body)).toBe(200);
+                    expect(body).toMatchObject({ commit: null, pushed: true });
+                    expect(box.remoteLog()[0]).toBe('review add-push-platform: approved — Петров Пётр');
+                    expect(await check()).toMatchObject({ unpushed: false });
+                    // запушено — повтор снова «уже одобрена»
+                    expect((await call(port, '/approve', approved)).status).toBe(409);
+                }
+            });
+        } finally {
+            fs.rmSync(hook, { force: true });
+            fs.writeFileSync(cfg, saved);
+        }
+    }, 60_000);
 });
 
 // Агентский режим (change site-agent-feedback, D2): подсказка при старте и флаг в странице.

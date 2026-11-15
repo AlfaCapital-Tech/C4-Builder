@@ -12,10 +12,11 @@ import type { BuildResult } from '../../core/build.ts';
 import type { PageSources } from '../../core/compose/markdown.ts';
 import { batchSchema, type FeedbackBatch, formatBatch, LISTENER_NAME } from '../../core/feedback.ts';
 import { redirectKey } from '../../core/plugins/tree.ts';
-import { commitMessage, publishFile, ReviewGitError, serialQueue } from '../../core/reviewgit.ts';
+import { publishFile, pushPending, ReviewGitError, serialQueue, unpushedLog } from '../../core/reviewgit.ts';
 import {
     approveRow,
     deleteRemark,
+    fillCells,
     findReviewFile,
     isReviewFile,
     parseRemarks,
@@ -565,7 +566,7 @@ export default (
             // Origin: это чтение, ответ (путь файла) чужой странице всё равно не отдаётся без CORS.
             // Страница журнала → `{ file, log: true }`; другая страница → её замечания из журнала
             // `{ file, log: false, logPage, remarks }` для подсветки цитат; журнала нет — 404.
-            app.get(REVIEW_LOG_PATH, (req, res) => {
+            app.get(REVIEW_LOG_PATH, async (req, res) => {
                 if (!localHost(req) || (req.get('origin') && !fromSite(req))) {
                     res.status(403).json({ error: 'comments are accepted only from the site itself' });
                     return;
@@ -573,7 +574,13 @@ export default (
                 const found = localSources(str(req.query.page));
                 const own = found && ownLog(found.sources);
                 if (own) {
-                    res.json({ file: relOf(own), log: true });
+                    // С апрувом — есть ли незапушенный коммит журнала: тогда кнопка видна и у уже
+                    // одобренной строки, повторный апрув его дотолкает.
+                    res.json(
+                        reviewLog.approve
+                            ? { file: relOf(own), log: true, unpushed: await unpushedLog(cwd, own) }
+                            : { file: relOf(own), log: true }
+                    );
                     return;
                 }
                 const source = found && firstSource(found.sources);
@@ -644,12 +651,12 @@ export default (
             const queue = serialQueue();
             const template = reviewLog.push?.message ?? 'review {change}: {action} — {author}';
             const messageFor = (file: string, action: string, who: string): string =>
-                commitMessage(template, {
+                fillCells([template], {
                     change: path.basename(path.dirname(file)),
                     action,
                     author: who,
                     file: relOf(file)
-                });
+                })[0];
             const gitFailure = (res: express.Response, e: unknown): void => {
                 if (e instanceof ReviewGitError) res.status(e.status).json({ error: e.message });
                 else res.status(500).json({ error: `git failed: ${(e as Error).message}` });
@@ -690,6 +697,11 @@ export default (
                     };
                     try {
                         const out = await queue(async () => {
+                            // Строка уже одобрена, а коммит апрува не запушен (пуш отклонили) —
+                            // повтор дотолкает его без нового коммита, кнопки Push может и не быть.
+                            const now = approveRow(fs.readFileSync(file, 'utf8'), approve, cells);
+                            if ('error' in now && now.error === 'approved' && (await unpushedLog(cwd, file)))
+                                return { commit: null, pushed: await pushPending(cwd, file), message: null };
                             const first = plan();
                             const message = messageFor(file, 'approved', first.author);
                             // Файл перечитывается после проверки git: между ними его мог поправить агент.

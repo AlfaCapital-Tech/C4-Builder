@@ -120,8 +120,8 @@ With the `comments.approve` and `comments.push` keys the log is committed and pu
 written comments (see «Approve and Push of the log» on the
 [CLI and configuration](05%20CLI%20and%20configuration/05%20CLI%20and%20configuration.md) page).
 Only the log file goes into the commit, other changes of the working copy — the agent's included — are
-left alone; a conflict with the upstream aborts the rebase, no upstream is an error before the file is
-touched. But the log file is committed whole: if the agent edited the same `review.md`, its edits go
+left alone; unpushed agent commits in the branch are a refusal: the log never carries other work
+along. But the log file is committed whole: if the agent edited the same `review.md`, its edits go
 into that commit.
 
 ### Several agents

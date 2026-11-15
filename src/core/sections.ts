@@ -124,6 +124,20 @@ const findTable = (lines: string[], start: number, end: number): Table | undefin
     return undefined;
 };
 
+/**
+ * Строки таблицы (индексы строк файла), совпавшие со всеми ячейками `cells` — как их видит
+ * страница: сравнение через `plain`, число ячеек тоже должно совпасть.
+ */
+const findRowByCells = (lines: string[], table: Table, cells: string[]): number[] => {
+    const want = cells.map(plain);
+    const found: number[] = [];
+    for (let i = table.header + 2; i <= table.last; i++) {
+        const row = splitRow(lines[i]);
+        if (want.length === row.length && want.every((c, k) => plain(row[k]) === c)) found.push(i);
+    }
+    return found;
+};
+
 /** Готовые ячейки строки либо их фабрика по номеру строки (номер известен только здесь). */
 export type Cells = string[] | ((number: number | null) => string[]);
 
@@ -278,10 +292,10 @@ export const removeRow = (
         const { header, last, numeric, textCol } = table;
         const rows: { line: number; cells: string[] }[] = [];
         for (let i = header + 2; i <= last; i++) rows.push({ line: i, cells: splitRow(lines[i]) });
-        const wantCells = cells?.map(plain);
+        const byCells = cells && new Set(findRowByCells(lines, table, cells));
         const byText = rows.filter((r) =>
-            wantCells
-                ? wantCells.length === r.cells.length && wantCells.every((c, i) => plain(r.cells[i]) === c)
+            byCells
+                ? byCells.has(r.line)
                 : anyCell
                   ? r.cells.some((c) => plain(c) === want)
                   : plain(r.cells[textCol] ?? '') === want
@@ -354,12 +368,7 @@ export const updateRow = (
     const section = findSection(lines, heading);
     const table = section && findTable(lines, section.start, section.end);
     if (!table) return { error: 'not-found' };
-    const want = match.map(plain);
-    const found: number[] = [];
-    for (let i = table.header + 2; i <= table.last; i++) {
-        const cells = splitRow(lines[i]);
-        if (want.length === cells.length && want.every((c, k) => plain(cells[k]) === c)) found.push(i);
-    }
+    const found = findRowByCells(lines, table, match);
     if (!found.length) return { error: 'not-found' };
     if (found.length > 1) return { error: 'ambiguous' };
     const cells = splitRow(lines[found[0]]);

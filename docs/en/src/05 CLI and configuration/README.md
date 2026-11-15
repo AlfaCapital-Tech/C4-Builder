@@ -479,15 +479,23 @@ page. The keys live inside `comments`:
 
 Without the keys there are no buttons and the server never calls git. Both buttons commit only the
 log file: other changes of the working copy, staged ones included, neither get into the commit nor get
-lost. The commit author is whoever git is configured for on the machine running `site -w`. Before
-pushing, the server fetches the upstream of the current branch; when the upstream has moved ahead,
-local commits are rebased onto it. A conflict (a colleague edited the same row) aborts the rebase: the
-working copy stays as it was, the log commit stays local, and the page shows an error — run
-`git pull` and resolve the conflict by hand. The push goes from the current branch to its upstream,
-never forced. A branch without an upstream or a detached HEAD is an error before the file is touched.
-A rejected push (protected branch, no access or no network) keeps the commit local, and pressing
-**Push** again pushes it without a new commit. Git must push without asking for a password (an ssh
-agent or stored credentials): the server asks nothing in the terminal.
+lost. The commit author is whoever git is configured for on the machine running `site -w`. A failed
+commit (a pre-commit hook failed) rolls the approval edit back.
+
+Only the log is pushed, and only to a branch of the same name. Before touching the file the server
+refuses with an error when HEAD is detached; the branch has no upstream, the upstream is a branch with
+another name (`review-x` → `origin/master`) or is gone from the remote; a merge, rebase, cherry-pick or
+revert is in progress; the branch has unpushed commits other than log commits (the agent's work, a
+merge commit) — push those by hand.
+
+Before pushing, the server fetches the upstream; when it has moved ahead, the log commit is moved onto
+it: the log is merged with the upstream version, the index and working copy changes are left alone,
+no stash is used. A conflict (a colleague edited the same log row) or local changes to files changed
+upstream is an error: everything stays as it was, the log commit stays local — run `git pull` and
+resolve the conflict by hand. The push is never forced. A rejected push (protected branch, no access
+or no network) keeps the commit local, and pressing the button again pushes it without a new commit:
+an approved row with an unpushed commit keeps its **Approve row** button. Git must push without asking
+for a password (an ssh agent or stored credentials): the server asks nothing in the terminal.
 
 The whole log file goes into the commit: if the agent was editing the same `review.md` meanwhile, its
 edits go along with yours.

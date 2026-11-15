@@ -269,7 +269,9 @@ export const approveRow = (
     if (missing !== undefined) return { error: 'no-column', column: missing };
     const who = index(opts.who);
     let author = '';
-    let approved = true;
+    // Одобрена — когда есть литералы без подстановок и все они уже стоят в своих колонках.
+    let literals = 0;
+    let done = 0;
     const result = updateRow(markdown, heading, cells, (row) => {
         author = plain(row[who] ?? '');
         const vars = { date, author: escapeHtml(author) };
@@ -277,15 +279,17 @@ export const approveRow = (
         for (const [column, template] of Object.entries(opts.set)) {
             const i = index(column);
             // Литерал без подстановок уже стоит — эта колонка апрува выполнена.
-            if (!/\{\w+\}/.test(template) && plain(row[i] ?? '') !== plain(template)) approved = false;
+            if (!/\{\w+\}/.test(template)) {
+                literals++;
+                if (plain(row[i] ?? '') === plain(template)) done++;
+            }
             out[i] = fillCells([template], vars)[0];
         }
         return out;
     });
     if ('error' in result) return result;
     if (isNoName(author)) return { error: 'no-name' };
-    const literals = Object.values(opts.set).filter((v) => !/\{\w+\}/.test(v));
-    if (literals.length && approved) return { error: 'approved' };
+    if (literals && done === literals) return { error: 'approved' };
     return { markdown: result.markdown, author };
 };
 

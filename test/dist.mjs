@@ -110,12 +110,13 @@ export {
 } from '../dist/core/sections.js';
 export {
     commitFile,
-    commitMessage,
     preflight,
     publishFile,
+    pushPending,
     ReviewGitError,
     serialQueue,
-    syncAndPush
+    syncAndPush,
+    unpushedLog
 } from '../dist/core/reviewgit.js';
 export {
     MermaidError,

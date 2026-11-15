@@ -2,12 +2,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 
-import { commitMessage, publishFile, ReviewGitError, serialQueue } from './dist.mjs';
+import { publishFile, pushPending, ReviewGitError, serialQueue, unpushedLog } from './dist.mjs';
 import { gitSandbox } from './helpers.mjs';
 
 // Коммит и пуш файла журнала (change site-review-approve-push) на временном репозитории с
-// bare-remote: только журнал в коммите, rebase на ушедший вперёд upstream, отмена при конфликте,
-// ошибки без upstream, повтор после отклонённого пуша, очередь.
+// bare-remote: только журнал в коммите, перенос на ушедший вперёд upstream, отказ при конфликте,
+// отказы preflight, откат правки, повтор после отклонённого пуша, очередь.
 const boxes = [];
 afterAll(() => {
     for (const b of boxes) fs.rmSync(b.base, { recursive: true, force: true });
@@ -57,7 +57,7 @@ describe('publishFile', () => {
         expectDirty(box);
     });
 
-    it('upstream ушёл вперёд без конфликта — rebase и push, рабочая копия как была', async () => {
+    it('upstream ушёл вперёд без конфликта — перенос и push, рабочая копия как была', async () => {
         const box = sandbox();
         fs.writeFileSync(path.join(box.other, 'other.md'), 'colleague\n');
         box.git(box.other, 'add', 'other.md');
@@ -72,7 +72,7 @@ describe('publishFile', () => {
         expectDirty(box);
     });
 
-    it('конфликт — rebase отменён, рабочая копия как была, коммит локальный, 409', async () => {
+    it('конфликт журнала — отказ, рабочая копия как была, коммит локальный, 409', async () => {
         const box = sandbox();
         fs.appendFileSync(path.join(box.other, 'change', 'review.md'), '| 1 | Theirs |\n');
         box.git(box.other, 'commit', '-q', '-am', 'colleague');
@@ -168,17 +168,160 @@ describe('serialQueue', () => {
     });
 });
 
-describe('commitMessage', () => {
-    it('подстановки {change}, {action}, {author}, {file}; неизвестные остаются', () => {
-        expect(
-            commitMessage('review {change}: {action} — {author} ({file}) {x}', {
-                change: 'add-push-platform',
-                action: 'approved',
-                author: 'Иванов Иван',
-                file: 'openspec/changes/add-push-platform/review.md'
+// Отказы preflight (code review): пушится только журнал и только в ветку с тем же именем.
+describe('preflight: отказы до правки файла', () => {
+    // publishFile с правкой-флагом: отказ — до правки, коммита нет.
+    const refused = async (box) => {
+        const head = box.git(box.work, 'rev-parse', 'HEAD');
+        let edited = false;
+        const err = await box
+            .publish({
+                edit: () => {
+                    edited = true;
+                }
             })
-        ).toBe(
-            'review add-push-platform: approved — Иванов Иван (openspec/changes/add-push-platform/review.md) {x}'
+            .catch((e) => e);
+        expect(err).toBeInstanceOf(ReviewGitError);
+        expect(err.status).toBe(409);
+        expect(edited).toBe(false);
+        expect(box.git(box.work, 'rev-parse', 'HEAD')).toBe(head);
+        return err.message;
+    };
+
+    it('upstream — ветка с другим именем: отказ, в неё не пушится', async () => {
+        const box = sandbox();
+        box.git(box.work, 'checkout', '-q', '-b', 'review-x', '--track', 'origin/main');
+        expect(await refused(box)).toContain(
+            'branch review-x tracks origin/main, not a branch of the same name'
         );
+        expect(box.remoteLog()).toEqual(['init']);
+    });
+
+    it('незапушенный коммит другого файла (WIP агента) — отказ', async () => {
+        const box = sandbox();
+        fs.appendFileSync(path.join(box.work, 'change', 'tasks.md'), 'wip\n');
+        box.git(box.work, 'commit', '-q', '-am', 'wip');
+        expect(await refused(box)).toContain('has unpushed commits besides the review log');
+        expect(box.remoteLog()).toEqual(['init']);
+    });
+
+    it('незапушенный merge-коммит — отказ, даже если он трогает только журнал', async () => {
+        const box = sandbox();
+        box.git(box.work, 'checkout', '-q', '-b', 'side');
+        box.append('| 1 | Side |');
+        box.git(box.work, 'commit', '-q', '-am', 'side');
+        box.git(box.work, 'checkout', '-q', 'main');
+        box.git(box.work, 'merge', '-q', '--no-ff', '-m', 'merge side', 'side');
+        expect(await refused(box)).toContain('has unpushed commits besides the review log');
+    });
+
+    it('merge в процессе — отказ', async () => {
+        const box = sandbox();
+        box.git(box.work, 'checkout', '-q', '-b', 'side');
+        fs.appendFileSync(path.join(box.work, 'change', 'tasks.md'), 'side\n');
+        box.git(box.work, 'commit', '-q', '-am', 'side');
+        box.git(box.work, 'checkout', '-q', 'main');
+        box.git(box.work, 'merge', '-q', '--no-ff', '--no-commit', 'side');
+        expect(await refused(box)).toContain(
+            'MERGE_HEAD exists — a merge, rebase or cherry-pick is in progress'
+        );
+        box.git(box.work, 'merge', '--abort');
+    });
+
+    it('upstream-ветки больше нет (удалена в remote, fetch --prune) — отказ', async () => {
+        const box = sandbox();
+        box.git(box.work, 'update-ref', '-d', 'refs/remotes/origin/main');
+        expect(await refused(box)).toBe(
+            'upstream origin/main does not exist — push the branch with "git push -u origin main"'
+        );
+    });
+});
+
+describe('перенос на ушедший вперёд upstream', () => {
+    // Коллега правит другой файл и пушит: upstream уходит вперёд.
+    const colleague = (box, file = 'other.md', text = 'colleague\n') => {
+        fs.mkdirSync(path.dirname(path.join(box.other, file)), { recursive: true });
+        fs.writeFileSync(path.join(box.other, file), text);
+        box.git(box.other, 'add', file);
+        box.git(box.other, 'commit', '-q', '-m', 'colleague');
+        box.git(box.other, 'push', '-q');
+    };
+
+    it('индекс сохраняется как есть: новый файл, правка и большой файл (> 4 МБ) остаются staged', async () => {
+        const box = sandbox();
+        colleague(box);
+        fs.writeFileSync(path.join(box.work, 'new.md'), 'new\n');
+        fs.writeFileSync(path.join(box.work, 'big.txt'), 'x'.repeat(5 * 1024 * 1024));
+        fs.appendFileSync(path.join(box.work, 'change', 'design.md'), 'staged\n');
+        box.git(box.work, 'add', 'new.md', 'big.txt', 'change/design.md');
+        fs.appendFileSync(path.join(box.work, 'change', 'design.md'), 'unstaged on top\n');
+        box.append('| 1 | Why? |');
+        const r = await box.publish();
+        expect(r.pushed).toBe(true);
+        expect(box.remoteLog().slice(0, 2)).toEqual(['review change: comments', 'colleague']);
+        expect(box.git(box.work, 'diff', '--cached', '--name-only').split('\n')).toEqual([
+            'big.txt',
+            'change/design.md',
+            'new.md'
+        ]);
+        expect(box.git(box.work, 'diff', '--name-only')).toBe('change/design.md');
+        expect(box.git(box.work, 'stash', 'list')).toBe('');
+        expect(fs.readFileSync(path.join(box.work, 'other.md'), 'utf8')).toBe('colleague\n');
+    });
+
+    it('журнал правили оба в разных местах — слияние без конфликта', async () => {
+        const box = sandbox();
+        const theirs = fs.readFileSync(path.join(box.other, 'change', 'review.md'), 'utf8');
+        colleague(box, 'change/review.md', `Intro by colleague\n\n${theirs}`);
+        box.append('| 1 | Mine |');
+        expect((await box.publish()).pushed).toBe(true);
+        const remote = box.git(box.remote, 'show', 'main:change/review.md');
+        expect(remote).toContain('Intro by colleague');
+        expect(remote).toContain('| 1 | Mine |');
+        expect(fs.readFileSync(box.file, 'utf8')).toBe(`${remote}\n`);
+    });
+
+    it('локальная правка файла, изменённого в upstream, — отказ, всё как было', async () => {
+        const box = sandbox();
+        colleague(box, 'change/tasks.md', '# Tasks\ncolleague\n');
+        fs.appendFileSync(path.join(box.work, 'change', 'tasks.md'), 'mine\n');
+        box.append('| 1 | Why? |');
+        const err = await box.publish().catch((e) => e);
+        expect(err.status).toBe(409);
+        expect(err.message).toContain('local changes overlap with changes in origin/main');
+        expect(box.git(box.work, 'log', '-1', '--format=%s')).toBe('review change: comments');
+        expect(box.git(box.work, 'rev-list', '--count', 'HEAD')).toBe('2');
+        expect(fs.readFileSync(path.join(box.work, 'change', 'tasks.md'), 'utf8')).toBe('# Tasks\nmine\n');
+        expect(box.remoteLog()[0]).toBe('colleague');
+    });
+});
+
+describe('откат и дотолкивание', () => {
+    it('коммит не удался (pre-commit hook) — правка файла откатывается', async () => {
+        const box = sandbox();
+        const hook = path.join(box.work, '.git', 'hooks', 'pre-commit');
+        fs.writeFileSync(hook, '#!/bin/sh\necho "lint failed" >&2\nexit 1\n', { mode: 0o755 });
+        const err = await box.publish({ edit: () => box.append('| 1 | Why? |') }).catch((e) => e);
+        expect(err).toBeInstanceOf(ReviewGitError);
+        expect(err.message).toContain('lint failed');
+        expect(fs.readFileSync(box.file, 'utf8')).toBe(LOG);
+        expect(box.git(box.work, 'status', '--porcelain')).toBe('');
+    });
+
+    it('незапушенный коммит журнала: unpushedLog — да, pushPending дотолкает без нового коммита', async () => {
+        const box = sandbox();
+        const hook = path.join(box.remote, 'hooks', 'pre-receive');
+        fs.writeFileSync(hook, '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+        expect(await unpushedLog(box.work, box.file)).toBe(false);
+        box.append('| 1 | Why? |');
+        const err = await box.publish().catch((e) => e);
+        expect(err.message).toContain('the commit stays local, press the button again to retry');
+        expect(err.message).not.toContain('Push');
+        expect(await unpushedLog(box.work, box.file)).toBe(true);
+        fs.rmSync(hook);
+        const head = box.git(box.work, 'rev-parse', 'HEAD');
+        expect(await pushPending(box.work, box.file)).toBe(true);
+        expect(box.git(box.work, 'rev-parse', 'HEAD')).toBe(head);
+        expect(await unpushedLog(box.work, box.file)).toBe(false);
     });
 });

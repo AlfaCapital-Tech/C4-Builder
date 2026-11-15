@@ -118,7 +118,7 @@ and exit codes; it writes nothing and works outside a project.
    `comments.approve` / `comments.push` the human approves a status table row (**Approve row**) or
    pushes written comments (**Push** in the comment toast) from the page: c4builder commits only the
    log file and pushes it — your uncommitted edits elsewhere stay as they are, but your edits of the
-   same log file go into that commit.
+   same log file go into that commit; your unpushed commits in the branch make it refuse.
    `C4BUILDER_RENDER_CONCURRENCY=<n>` sets the number of parallel PlantUML processes (default
    `min(4, CPU − 1)`); the output does not depend on it.
 

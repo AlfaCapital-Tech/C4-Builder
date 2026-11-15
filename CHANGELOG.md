@@ -10,8 +10,9 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
   `comments.approve.set` cells by column header (`{date}`, `{author}`), commits and pushes the log;
   **Push** / «Запушить» in the toast after **Add comment** (the toast stays until pushed or closed,
   across reloads) commits and pushes the written comments in one commit. Only the log file goes into
-  the commit, a moved upstream is rebased onto (a conflict aborts the rebase, the commit stays
-  local), the push goes to the branch's upstream without force. New keys `comments.approve`
+  the commit, a moved upstream gets the log commit moved onto it without rebase or stash (a
+  conflict is an error, the commit stays local), the push goes only to an upstream branch of the same
+  name, without force; unpushed commits other than the log's or a merge in progress are a refusal. New keys `comments.approve`
   (`heading`, `who`, `set`), `comments.push` (`enabled`, `message`), `buttons.approve`,
   `buttons.push`; without them nothing changes
 

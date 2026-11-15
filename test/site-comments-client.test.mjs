@@ -772,6 +772,55 @@ describe('кнопка Approve row', () => {
     });
 });
 
+// Approve row: дотолкивание незапушенного апрува и ячейки без «×» журнала (code review).
+describe('кнопка Approve row: повтор и служебные элементы', () => {
+    const APPROVE = { heading: ['Статусы'], who: 'Кто', set: { Статус: 'Approved', Дата: '{date}' } };
+    const BODY = `<h1>Ревью</h1><h2>Статусы</h2>
+<table><thead><tr><th>Роль</th><th>Статус</th><th>Кто</th><th>Дата</th></tr></thead><tbody>
+<tr><td>Аналитик</td><td></td><td id="who1">Иванов Иван</td><td></td></tr>
+<tr><td>Разработчик</td><td>Approved</td><td id="who3">Петров Пётр</td><td>2026-11-01</td></tr>
+</tbody></table>`;
+    const page = (reviewLog, reply) =>
+        agentPage({ agent: false, languages: ['en'], reviewLog, body: BODY, reply });
+    const select = async (p, id) => {
+        const range = p.doc.createRange();
+        range.selectNodeContents(p.doc.getElementById(id));
+        p.window.getSelection().removeAllRanges();
+        p.window.getSelection().addRange(range);
+        p.doc.dispatchEvent(new p.window.Event('selectionchange'));
+        await sleep(20);
+        return p.buttons();
+    };
+    const approve = async (p) => {
+        p.window.__reply = { file: 'src/review.md', commit: null, pushed: true };
+        p.byText(p.doc.querySelector('.c4b-cbtns'), 'Approve row').click();
+        await sleep(20);
+        return p.window.__calls.at(-1).body.cells;
+    };
+
+    it('одобренная строка, коммит журнала не запушен (GET unpushed) — кнопка есть, повтор шлёт строку', async () => {
+        const LOG = { file: 'review.md', heading: ['Замечания'], approve: APPROVE };
+        const done = await page(LOG, { file: 'src/review.md', log: true });
+        expect(await select(done, 'who3')).toEqual(['Comment']);
+        const p = await page(LOG, { file: 'src/review.md', log: true, unpushed: true });
+        expect(await select(p, 'who3')).toEqual(['Comment', 'Approve row']);
+        expect(await approve(p)).toEqual(['Разработчик', 'Approved', 'Петров Пётр', '2026-11-01']);
+        expect(p.toast()).toBe('Row approved in src/review.md and pushed');
+    });
+
+    it('«×» журнала в ячейках таблицы статусов не попадает в ячейки запроса', async () => {
+        // Раздел журнала — h1 «Ревью»: таблица статусов внутри него, её строки получают «×».
+        const p = await page(
+            { file: 'review.md', heading: ['Ревью'], approve: APPROVE },
+            { file: 'f', log: true }
+        );
+        await sleep(50);
+        expect(p.doc.querySelectorAll('.c4b-del').length).toBe(2);
+        expect(await select(p, 'who1')).toEqual(['Comment', 'Approve row']);
+        expect(await approve(p)).toEqual(['Аналитик', '', 'Иванов Иван', '']);
+    });
+});
+
 // Push из тоста комментария (change site-review-approve-push): липкий тост без таймера, состояние в
 // sessionStorage — переживает livereload, следующие комментарии обновляют тот же тост.
 describe('кнопка Push в тосте комментария', () => {

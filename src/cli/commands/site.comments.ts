@@ -346,7 +346,7 @@ export const commentsSnippet = ({
     // One GET per rendered page: the server says whether the page is the log (decorate rows) or
     // which remarks belong to it (highlight quotes). The marker lives on the first rendered element,
     // so a re-render by docsify clears it and the page is synced again.
-    var logFirst = null;
+    var logFirst = null, logUnpushed = false;
     var syncLog = function () {
         var root = content();
         if (!REVIEW_LOG || !root || !root.firstElementChild || root.firstElementChild.hasAttribute('data-c4b-log')) return;
@@ -357,7 +357,7 @@ export const commentsSnippet = ({
             if (!res.ok) return;
             return res.json().then(function (data) {
                 if (pageFile() !== page || content() !== root || root.firstElementChild !== first) return;
-                if (data.log) { logFirst = first; decorateLog(root); }
+                if (data.log) { logFirst = first; logUnpushed = !!data.unpushed; decorateLog(root); }
                 else highlightRemarks(root, data);
             });
         }, function () {});
@@ -449,6 +449,13 @@ export const commentsSnippet = ({
     // The status row under the selection (key comments.approve): both ends in one row of the table
     // of the approve section on the log page itself, with a reviewer name, not approved yet. The
     // server checks the row again: the page may be stale.
+    // Cell text as the file has it: without our controls (the «×» of decorateLog, number links).
+    var cellText = function (cell) {
+        var copy = cell.cloneNode(true);
+        var ours = copy.querySelectorAll('.c4b-del, sup.c4b-ref, button');
+        for (var i = 0; i < ours.length; i++) ours[i].remove();
+        return collapse(copy.textContent);
+    };
     var approveTarget = function (range) {
         var A = REVIEW_LOG && REVIEW_LOG.approve, root = content();
         if (!A || !root || !logFirst || root.firstElementChild !== logFirst) return null;
@@ -469,7 +476,7 @@ export const commentsSnippet = ({
             return -1;
         };
         var texts = [];
-        for (var c = 0; c < cells.length; c++) texts.push(collapse(cells[c].textContent));
+        for (var c = 0; c < cells.length; c++) texts.push(cellText(cells[c]));
         var who = col(A.who);
         if (who < 0 || /^(|-|\\u2013|\\u2014)$/.test(texts[who] || '')) return null;
         var literals = 0, done = 0;
@@ -479,7 +486,9 @@ export const commentsSnippet = ({
             var i = col(name);
             if (i >= 0 && same(texts[i] || '', A.set[name])) done++;
         });
-        return literals && done === literals ? null : { cells: texts };
+        // An approved row whose commit was not pushed (the push was rejected) keeps the button:
+        // pressing it again pushes that commit.
+        return literals && done === literals && !logUnpushed ? null : { cells: texts };
     };
     var update = function () {
         if (pop) return;
