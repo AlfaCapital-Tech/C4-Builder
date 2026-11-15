@@ -3,6 +3,15 @@
 User-facing changes of C4-Builder. Every pull request that changes behaviour adds a line to
 `## Unreleased`; the release commit renames it to `## vX.Y.Z`.
 
+## Unreleased
+
+- Site: closing the full-screen image viewer (`Esc`, `×` or a click beside the image) no longer
+  jumps the page back to the top — the reader stays where they opened it. The page also keeps its
+  position while the viewer is open, so a live reload of `site -w`, the browser's **Back**/**Forward**
+  between anchors and the sidebar highlight no longer reset to the top; closing because of a
+  navigation (another page, an anchor, **Back**/**Forward**, also with `routerMode: 'history'`)
+  leaves scrolling to the navigation
+
 ## v0.15.0
 
 - A build with broken diagrams prints one `✗ <file>: line <N>: <message>` line per diagram — the

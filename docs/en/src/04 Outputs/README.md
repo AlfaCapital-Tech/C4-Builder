@@ -36,7 +36,9 @@ or `docsifyTemplate` that uses them, external images in page text.
   same. It opens fitted to the window, at most at the natural size, and zooms up to 4× of it, so a
   large diagram stays readable; very large diagrams zoom less (but at least to 1:1) so the browser
   does not run out of memory. Images inside links, buttons and `<summary>`, and those with
-  `data-no-zoom` are not opened.
+  `data-no-zoom` are not opened. Closing the viewer leaves the page where it was; on a move to
+  another page or an anchor (including the browser's **Back**/**Forward**) scrolling is up to the
+  navigation.
 - Site search is `supportSearch`, the repository link in the corner is `repoUrl`, a custom theme
   is `webTheme`, a custom `index.html` template is `docsifyTemplate`.
 

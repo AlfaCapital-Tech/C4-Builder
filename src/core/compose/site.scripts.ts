@@ -253,6 +253,26 @@ export const SIDEBAR_RESIZE_JS = `(function () {
  * открыт, фокус удерживается в нём (aria-modal), а клавиши обрабатываются, только когда фокус
  * внутри (по цели события): иначе ввод в поле за оверлеем менял бы зум. Стили вставляет сам скрипт (как у
  * резайзера sidebar). Комментариев внутри строки нет: она целиком уходит в dist.
+ * Блокировка прокрутки под просмотром — overflow:hidden только на html: он уходит на окно, и
+ * колесо, пробел и PageDown страницу за оверлеем не двигают, а позиция окна сохраняется. На body
+ * под блокировкой явно overflow:visible: тема docsify задаёт body{overflow-x:hidden} и
+ * body,html{height:100%}; пока у html overflow не visible, overflow body на окно не переходит, body
+ * становится обрезающим контейнером высотой в окно, документу нечего прокручивать, и браузер
+ * прижимает scrollY к 0 — на всё время просмотра. Отсюда сбрасывались позиция после закрытия,
+ * сохранённая живой перезагрузкой (она читает scrollY), прокрутка из истории при «Назад» между
+ * якорями и подсветка раздела в sidebar. body{height:auto} не помогает: .content у docsify
+ * позиционирован абсолютно и высоту body не задаёт.
+ * Явный возврат позиции оставлен страховкой для пользовательских тем и шаблонов, где body всё же
+ * обрежет содержимое: позиция читается в open() до класса c4-zoom-open и только при переходе
+ * «закрыт → открыт», scrollTo — в close() сразу после снятия класса, в той же задаче, до
+ * отрисовки. behavior:'instant' — чтобы scroll-behavior:smooth темы не превратил возврат в
+ * анимацию; старые движки на незнакомое значение бросают исключение, тогда — scrollTo(x, y).
+ * Закрытие из-за перехода (closeForNavigation: hashchange, а для routerMode history — popstate)
+ * позицию не возвращает: прокруткой там управляет навигация (якорь, auto2top, история), и старая
+ * позиция поверх неё увела бы страницу в случайное место. Повторное закрытие (popstate и
+ * hashchange на одном «Назад») гасит проверка isOpen(). Фокус возвращается до снятия блокировки:
+ * Firefox при «Назад» под открытым просмотром сбрасывал восстановленную из истории позицию в 0,
+ * если focus() приходился на только что разблокированную, ещё не пересчитанную страницу.
  */
 export const DIAGRAM_ZOOM_JS = `(function () {
     var MAX = 4;
@@ -267,7 +287,7 @@ export const DIAGRAM_ZOOM_JS = `(function () {
         'img[data-c4-zoom]{cursor:zoom-in}' +
         '.c4-zoom{position:fixed;top:0;right:0;bottom:0;left:0;z-index:1000;display:none;background:#fff;outline:none}' +
         '.c4-zoom.open{display:block}' +
-        'html.c4-zoom-open,html.c4-zoom-open body{overflow:hidden}' +
+        'html.c4-zoom-open{overflow:hidden}html.c4-zoom-open body{overflow:visible}' +
         '.c4-zoom-stage{position:absolute;top:0;right:0;bottom:0;left:0;overflow:hidden;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}' +
         '.c4-zoom-stage.grabbing{cursor:grabbing}' +
         '.c4-zoom-img{position:absolute;left:0;top:0;max-width:none!important;max-height:none!important;margin:0!important;transform-origin:0 0;pointer-events:none;-webkit-user-drag:none}' +
@@ -292,6 +312,7 @@ export const DIAGRAM_ZOOM_JS = `(function () {
     var pinch = null;
     var moved = false;
     var lastFocus = null;
+    var scrollPos = { x: 0, y: 0 };
     var frame = 0;
     var view = function () {
         return { w: window.innerWidth, h: window.innerHeight };
@@ -535,6 +556,7 @@ export const DIAGRAM_ZOOM_JS = `(function () {
         img.onload = null;
         img.alt = el.alt || '';
         img.src = el.currentSrc || el.src;
+        if (!isOpen()) scrollPos = { x: window.scrollX, y: window.scrollY };
         overlay.classList.add('open');
         document.documentElement.classList.add('c4-zoom-open');
         if (el.naturalWidth) measure(el.naturalWidth, el.naturalHeight);
@@ -547,10 +569,16 @@ export const DIAGRAM_ZOOM_JS = `(function () {
         }
         focusOverlay();
     };
-    var close = function () {
+    var restoreScroll = function () {
+        try {
+            window.scrollTo({ left: scrollPos.x, top: scrollPos.y, behavior: 'instant' });
+        } catch (e) {
+            window.scrollTo(scrollPos.x, scrollPos.y);
+        }
+    };
+    var shut = function (restore) {
         if (!isOpen()) return;
         overlay.classList.remove('open');
-        document.documentElement.classList.remove('c4-zoom-open');
         if (frame) window.cancelAnimationFrame(frame);
         frame = 0;
         img.onload = null;
@@ -560,6 +588,14 @@ export const DIAGRAM_ZOOM_JS = `(function () {
                 lastFocus.focus({ preventScroll: true });
             } catch (e) {}
         }
+        document.documentElement.classList.remove('c4-zoom-open');
+        if (restore) restoreScroll();
+    };
+    var close = function () {
+        shut(true);
+    };
+    var closeForNavigation = function () {
+        shut(false);
     };
     document.addEventListener(
         'click',
@@ -602,7 +638,8 @@ export const DIAGRAM_ZOOM_JS = `(function () {
             apply();
         }
     });
-    window.addEventListener('hashchange', close);
+    window.addEventListener('hashchange', closeForNavigation);
+    window.addEventListener('popstate', closeForNavigation);
     var $d = (window.$docsify = window.$docsify || {});
     $d.plugins = [].concat($d.plugins || [], function (hook) {
         hook.doneEach(mark);

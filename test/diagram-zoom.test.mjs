@@ -6,7 +6,13 @@ import { DIAGRAM_ZOOM_JS } from './dist.mjs';
 // Просмотр диаграмм с зумом (compose/site.scripts.ts) в jsdom: раскладки нет, поэтому
 // натуральный размер картинки задаётся свойством, а без него берётся запасной (300×150).
 // Хук doneEach docsify вызывается руками — им скрипт размечает картинки страницы.
-const page = ({ width = 1024, height = 768 } = {}) => {
+// Прокрутки в jsdom тоже нет: scrollX/scrollY — геттеры над `pos` (меняется через `scrollAt`),
+// а window.scrollTo — шпион, который запоминает координаты, `behavior` объектной формы и был ли
+// ещё на <html> класс блокировки (заодно пропадает «Not implemented: window.scrollTo» в выводе).
+// Под классом блокировки геттеры отдают 0 — как браузер с темой, где body всё же обрезает
+// содержимое: так проверяется страховочный возврат. `legacyScroll` — старый движок, который на
+// незнакомое значение `behavior` бросает исключение.
+const page = ({ width = 1024, height = 768, legacyScroll = false } = {}) => {
     const dom = new JSDOM(
         `<!DOCTYPE html><html><head></head><body>
 <input id="search">
@@ -26,6 +32,20 @@ const page = ({ width = 1024, height = 768 } = {}) => {
     const { window } = dom;
     Object.defineProperty(window, 'innerWidth', { value: width, configurable: true });
     Object.defineProperty(window, 'innerHeight', { value: height, configurable: true });
+    const pos = { x: 0, y: 0 };
+    const scrolls = [];
+    const locked = () => window.document.documentElement.classList.contains('c4-zoom-open');
+    Object.defineProperty(window, 'scrollX', { get: () => (locked() ? 0 : pos.x), configurable: true });
+    Object.defineProperty(window, 'scrollY', { get: () => (locked() ? 0 : pos.y), configurable: true });
+    window.scrollTo = (a, b) => {
+        if (typeof a !== 'object') return scrolls.push({ x: a, y: b, locked: locked() });
+        if (legacyScroll) throw new window.TypeError(`Unknown behavior: ${a.behavior}`);
+        scrolls.push({ x: a.left, y: a.top, behavior: a.behavior, locked: locked() });
+    };
+    const scrollAt = (x, y) => {
+        pos.x = x;
+        pos.y = y;
+    };
     window.eval(DIAGRAM_ZOOM_JS);
     const doneEach = () => {
         for (const plugin of window.$docsify.plugins) plugin({ doneEach: (fn) => fn() });
@@ -46,7 +66,7 @@ const page = ({ width = 1024, height = 768 } = {}) => {
     const frame = () => new Promise((r) => window.requestAnimationFrame(() => r()));
     const isOpen = () => !!$('.c4-zoom.open');
     const pct = () => $('.c4-zoom-pct').textContent;
-    return { window, document, $, click, key, natural, frame, isOpen, pct, doneEach };
+    return { window, document, $, click, key, natural, frame, isOpen, pct, doneEach, scrollAt, scrolls };
 };
 
 describe('просмотр диаграмм с зумом', () => {
@@ -217,6 +237,101 @@ describe('просмотр диаграмм с зумом', () => {
         click($('#diagram'));
         window.dispatchEvent(new window.HashChangeEvent('hashchange'));
         expect(isOpen()).toBe(false);
+    });
+
+    it('закрытие читателем (Esc, кнопка, клик мимо) возвращает позицию прокрутки по обеим осям', () => {
+        const { $, click, key, isOpen, scrollAt, scrolls } = page();
+        const closers = {
+            Escape: () => key('Escape'),
+            button: () => click($('.c4-zoom-bar button[title^="Close"]')),
+            outside: () => click($('.c4-zoom-stage'), { clientX: 5, clientY: 5 })
+        };
+        let n = 0;
+        for (const [name, closeIt] of Object.entries(closers)) {
+            n++;
+            scrollAt(10 * n, 1000 * n);
+            click($('#diagram'));
+            closeIt();
+            expect(isOpen(), name).toBe(false);
+            expect(scrolls.length, name).toBe(n);
+            expect(scrolls.at(-1), name).toEqual({
+                x: 10 * n,
+                y: 1000 * n,
+                behavior: 'instant',
+                locked: false
+            });
+        }
+    });
+
+    it('повторное открытие с другого места — возвращается позиция второго открытия', () => {
+        const { $, click, key, scrollAt, scrolls } = page();
+        scrollAt(0, 500);
+        click($('#diagram'));
+        key('Escape');
+        scrollAt(40, 2500);
+        click($('#diagram'));
+        key('Escape');
+        expect(scrolls).toEqual([
+            { x: 0, y: 500, behavior: 'instant', locked: false },
+            { x: 40, y: 2500, behavior: 'instant', locked: false }
+        ]);
+    });
+
+    it('закрытие по hashchange позицию не восстанавливает', () => {
+        const { window, $, click, isOpen, scrollAt, scrolls } = page();
+        scrollAt(0, 1200);
+        click($('#diagram'));
+        window.dispatchEvent(new window.HashChangeEvent('hashchange'));
+        expect(isOpen()).toBe(false);
+        expect(scrolls).toEqual([]);
+    });
+
+    it('закрытие по popstate (routerMode history) позицию не восстанавливает, повтор по hashchange безопасен', () => {
+        const { window, $, click, key, isOpen, scrollAt, scrolls } = page();
+        scrollAt(0, 1200);
+        click($('#diagram'));
+        window.dispatchEvent(new window.PopStateEvent('popstate'));
+        expect(isOpen()).toBe(false);
+        window.dispatchEvent(new window.HashChangeEvent('hashchange'));
+        expect(scrolls).toEqual([]);
+        click($('#diagram'));
+        key('Escape');
+        expect(scrolls).toEqual([{ x: 0, y: 1200, behavior: 'instant', locked: false }]);
+    });
+
+    it('фокус возвращается до снятия блокировки, возврат позиции — после', () => {
+        const { window, $, click, key, scrollAt, scrolls } = page();
+        const order = [];
+        const locked = () => window.document.documentElement.classList.contains('c4-zoom-open');
+        const focus = window.HTMLElement.prototype.focus;
+        window.HTMLElement.prototype.focus = function (opts) {
+            if (this === window.document.body) order.push(`focus locked=${locked()}`);
+            return focus.call(this, opts);
+        };
+        scrollAt(0, 900);
+        click($('#diagram'));
+        key('Escape');
+        order.push(`scrollTo locked=${scrolls.at(-1).locked}`);
+        expect(order).toEqual(['focus locked=true', 'scrollTo locked=false']);
+    });
+
+    it('старый движок бросает на behavior: instant — возврат запасной формой scrollTo(x, y)', () => {
+        const { $, click, key, isOpen, scrollAt, scrolls } = page({ legacyScroll: true });
+        scrollAt(30, 800);
+        click($('#diagram'));
+        key('Escape');
+        expect(isOpen()).toBe(false);
+        expect(scrolls).toEqual([{ x: 30, y: 800, locked: false }]);
+    });
+
+    it('блокировка прокрутки — overflow:hidden на html, а body под ней не обрезает содержимое', () => {
+        // Причина сброса позиции: overflow:hidden на body при height:100% темы обрезает страницу
+        // по высоте окна. Раскладки в jsdom нет — проверяется сам набор правил.
+        const { document } = page();
+        const css = [...document.querySelectorAll('style')].map((s) => s.textContent).join('');
+        expect(css).toContain('html.c4-zoom-open{overflow:hidden}');
+        expect(css).toContain('html.c4-zoom-open body{overflow:visible}');
+        expect(css).not.toMatch(/html\.c4-zoom-open body\{[^}]*overflow:hidden/);
     });
 
     it('в выходной строке нет комментариев, кириллицы и внешних адресов', () => {
