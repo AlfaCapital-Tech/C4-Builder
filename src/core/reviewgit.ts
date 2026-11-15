@@ -98,6 +98,8 @@ export interface Upstream {
     log: string;
     /** Незапушенные коммиты уже есть (только журнала — иначе preflight отказывает). */
     pending: boolean;
+    /** Сколько их. */
+    ahead: number;
 }
 
 // Незавершённая операция git: пока она идёт, HEAD и индекс принадлежат ей, а не журналу.
@@ -173,7 +175,7 @@ export const preflight = async (cwd: string, file: string): Promise<Upstream> =>
     const ahead = Number(
         await must(cwd, ['rev-list', '--count', '@{upstream}..HEAD'], 'git rev-list failed')
     );
-    return { top, branch, remote, log, pending: ahead > 0 };
+    return { top, branch, remote, log, pending: ahead > 0, ahead };
 };
 
 /**
@@ -349,6 +351,23 @@ export const publishFile = async ({ cwd, file, message, edit }: PublishInput): P
  */
 export const unpushedLog = async (cwd: string, file: string): Promise<boolean> =>
     (await preflight(cwd, file).catch(() => undefined))?.pending ?? false;
+
+/** Что пушить в журнале: изменён ли файл относительно HEAD и сколько незапушенных коммитов журнала. */
+export interface ReviewPending {
+    changed: boolean;
+    unpushed: number;
+}
+
+/**
+ * Состояние для плашки Push. null — пушить нельзя (не git, нет upstream, чужие незапушенные коммиты,
+ * merge в процессе): кнопка дала бы только ошибку, страница плашку не показывает.
+ */
+export const reviewPending = async (cwd: string, file: string): Promise<ReviewPending | null> => {
+    const up = await preflight(cwd, file).catch(() => undefined);
+    if (!up) return null;
+    const status = await git(cwd, ['status', '--porcelain', '--', path.relative(cwd, file)]);
+    return status.code === 0 ? { changed: !!status.stdout.trim(), unpushed: up.ahead } : null;
+};
 
 /** Дотолкать уже закоммиченный журнал без нового коммита (несохранённые правки файла не трогаются). */
 export const pushPending = async (cwd: string, file: string): Promise<boolean> =>

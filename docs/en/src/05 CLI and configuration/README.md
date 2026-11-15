@@ -383,7 +383,7 @@ On the log's own page they are joined by **Approve row** — approval of a row o
 
 With neither the log nor the agent mode there are no buttons; without `-w` and on static hosting
 neither. The `buttons` key relabels them: its text is shown as is in any interface language.
-`approve` labels **Approve row**, `push` — the **Push** button of the comment toast.
+`approve` labels **Approve row**, `push` — the **Push** button of the review log bar.
 
 ```json
 { "buttons": { "agent": "Fix it", "comment": "Note", "approve": "Approve" } }
@@ -469,9 +469,13 @@ page. The keys live inside `comments`:
   does not matter; a `who` or `set` column missing from the table is an error, the file is not
   changed. The row is found by all its cells: if it changed after the page was loaded, the error asks
   to reload the page.
-- `push` — the **Push** button in the toast after **Add comment**. That toast does not go away by
-  itself: it stays until closed with «×» or pushed, and survives a page reload, so several comments go
-  in one commit. `enabled: false` turns the button off. `message` — the commit message template shared
+- `push` — the review log bar at the bottom of a change page: «Review log: <path> has unpushed
+  changes» with a **Push** button. It is shown while the page's log has something to push: the file is
+  changed (comments from the page or an edit in an editor) or a log commit is unpushed (say, an
+  approval whose push was rejected). The server reports the state with every page render, so the bar
+  survives a reload and shows in a new tab; several comments go in one commit. The bar cannot be
+  closed — it goes away after the push. With the agent bar shown, it sits above it. With nothing to
+  push, no git or no upstream there is no bar. `enabled: false` turns the bar off. `message` — the commit message template shared
   by Push and approve, `review {change}: {action} — {author}` by default: `{change}` — the log's
   directory name (the change name for OpenSpec), `{action}` — `approved` or `comments`, `{author}` —
   the name from `who` for an approval, the comment author for Push (`author`, otherwise

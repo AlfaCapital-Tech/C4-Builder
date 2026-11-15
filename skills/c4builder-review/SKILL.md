@@ -13,7 +13,7 @@ The human looks at the pages in the browser (`c4builder site -w`), selects text 
 - **Comment** (only with the `comments` key of `.c4builder`, formerly `reviewLog`) — a comment for people in the review
   log: c4builder appends it as a row of the nearest `comments.file` (`review.md` by default). It is
   not a task for you — leave it alone unless asked.
-- **Approve row** (on the log page, with `comments.approve`) and **Push** (in the comment toast, with
+- **Approve row** (on the log page, with `comments.approve`) and **Push** (on the review log bar, with
   `comments.push`) — the human records an approval in the status table or pushes the comments:
   c4builder commits only the log file and pushes it. Not for you either; do not edit the log while
   the human reviews — your edits of it would go into their commit.

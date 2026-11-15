@@ -469,6 +469,13 @@ describe('апрув и push журнала в site -w', () => {
         await serveSite(box.work, ['site', '-w', '-p', String(port)], {
             env,
             onReady: async () => {
+                const state = async (pg) => {
+                    const r = await fetch(`http://127.0.0.1:${port}/__c4builder/review-log?page=${pg}`);
+                    return r.ok ? (await r.json()).pending : r.status;
+                };
+                expect(await state(page)).toEqual({ changed: false, unpushed: 0 });
+                // страница вне change — журнала нет, плашки нет
+                expect(await state('Overview.md')).toBe(404);
                 for (const comment of ['One', 'Two', 'Three']) {
                     const r = await call(port, '', { page, quote: 'foo bar', section: 'Flow', comment });
                     expect(r.status).toBe(200);
@@ -492,6 +499,7 @@ describe('апрув и push журнала в site -w', () => {
                 expect(box.git(box.work, 'diff', '--name-only').split('\n')).toContain('notes.md');
                 const again = await call(port, '/push', { page });
                 expect(await again.json()).toMatchObject({ commit: null, pushed: false });
+                expect(await state(page)).toEqual({ changed: false, unpushed: 0 });
             }
         });
     }, 60_000);
@@ -509,6 +517,8 @@ describe('апрув и push журнала в site -w', () => {
                     expect(html).toContain('"approve":null,"push":false');
                     expect((await call(port, '/approve', { page, cells: ['x'] })).status).toBe(404);
                     expect((await call(port, '/push', { page })).status).toBe(404);
+                    const get = await fetch(`http://127.0.0.1:${port}/__c4builder/review-log?page=${page}`);
+                    expect(await get.json()).not.toHaveProperty('pending');
                 }
             });
         } finally {
@@ -564,6 +574,43 @@ describe('апрув и push журнала в site -w', () => {
         } finally {
             fs.rmSync(hook, { force: true });
             fs.writeFileSync(cfg, saved);
+        }
+    }, 60_000);
+
+    it('GET pending: правка журнала руками, незапушенный коммит после отклонённого пуша, снова чисто', async () => {
+        const port = 28353;
+        const hook = path.join(box.remote, 'hooks', 'pre-receive');
+        const state = async () =>
+            (await (await fetch(`http://127.0.0.1:${port}/__c4builder/review-log?page=${page}`)).json())
+                .pending;
+        try {
+            await serveSite(box.work, ['site', '-w', '-p', String(port)], {
+                env,
+                onReady: async () => {
+                    expect(await state()).toEqual({ changed: false, unpushed: 0 });
+                    fs.appendFileSync(log, '\nhand edit\n');
+                    expect(await state()).toEqual({ changed: true, unpushed: 0 });
+                    fs.writeFileSync(hook, '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+                    expect((await call(port, '/push', { page })).status).toBe(502);
+                    expect(await state()).toEqual({ changed: false, unpushed: 1 });
+                    fs.rmSync(hook);
+                    expect(await (await call(port, '/push', { page })).json()).toMatchObject({
+                        commit: null,
+                        pushed: true
+                    });
+                    expect(await state()).toEqual({ changed: false, unpushed: 0 });
+                    // GET во время пуша (так страница перезагружается по livereload посреди запроса)
+                    // ждёт его конца и не видит устаревшее «не запушено».
+                    fs.appendFileSync(log, '\nanother edit\n');
+                    fs.writeFileSync(hook, '#!/bin/sh\nsleep 1\nexit 0\n', { mode: 0o755 });
+                    const pushing = call(port, '/push', { page });
+                    await new Promise((r) => setTimeout(r, 200));
+                    expect(await state()).toEqual({ changed: false, unpushed: 0 });
+                    expect((await pushing).status).toBe(200);
+                }
+            });
+        } finally {
+            fs.rmSync(hook, { force: true });
         }
     }, 60_000);
 });

@@ -45,9 +45,13 @@ const CSS = [
     '.c4b-review .c4b-del{opacity:1}',
     '.c4b-ctoast{position:fixed;left:16px;bottom:16px;z-index:1003;max-width:420px;padding:8px 14px;border-radius:6px;background:#2c3e50;color:#fff;font:13px/1.4 sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.3)}',
     '.c4b-ctoast.c4b-err{background:#c0392b}',
-    '.c4b-ctoast button{margin-left:10px;padding:2px 10px;border:1px solid #fff;border-radius:4px;background:none;color:#fff;font:13px sans-serif;cursor:pointer}',
-    '.c4b-ctoast button.c4b-x{margin-left:6px;padding:2px 6px;border-color:transparent}',
-    '.c4b-ctoast button:disabled{opacity:.6;cursor:default}',
+    // Плашка Push журнала — внизу по центру, как панель агента, но цветом журнала (кнопка Comment):
+    // их не путают; при видимой панели агента плашка встаёт над ней (bottom считает скрипт).
+    '.c4b-logbar{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:1000;width:520px;max-width:calc(100vw - 32px);box-sizing:border-box;display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid #b58900;border-radius:6px;background:#fffbea;color:#2c3e50;font:13px/1.4 sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.2)}',
+    '.c4b-logbar[hidden]{display:none}',
+    '.c4b-logbar span{flex:1;min-width:0;overflow-wrap:anywhere}',
+    '.c4b-logbar button{flex:none;padding:4px 12px;border:1px solid #b58900;border-radius:4px;background:#b58900;color:#fff;cursor:pointer;font:13px sans-serif}',
+    '.c4b-logbar button:disabled{opacity:.6;cursor:default}',
     '.c4b-cbtns button.c4b-ap{border-color:#2c7a4b}',
     'mark.c4b-hl{background:#fff3a0;color:inherit;padding:0;border-radius:2px}',
     'mark.c4b-dhl{background:#cfe3ff;color:inherit;padding:0;border-radius:2px}',
@@ -71,7 +75,7 @@ const jsValue = (v: unknown): string =>
 export type MailboxState = { name: string; state: 'listening' | 'reconnecting'; queued: number };
 // Журнал ревью для страницы (change site-review-log): файл и раздел — в подсказке поля ввода;
 // null — кнопки нет.
-// `approve` — таблица статусов для кнопки апрува строки, `push` — кнопка Push в тосте комментария
+// `approve` — таблица статусов для кнопки апрува строки, `push` — плашка Push журнала
 // (change site-review-approve-push).
 export type ReviewLogState = {
     file: string;
@@ -121,7 +125,6 @@ export const commentsSnippet = ({
     var TOAST_KEY = '__c4builderCommentToast';
     var DRAFT_KEY = '__c4builderReview:' + ${jsValue(project)};
     var TARGET_KEY = '__c4builderTarget:' + ${jsValue(project)};
-    var PUSH_KEY = '__c4builderPush:' + ${jsValue(project)};
     var AGENT = { on: ${agent}, mailboxes: ${jsValue(mailboxes)} };
     var BLOCKS = 'p,li,td,th,h1,h2,h3,h4,h5,h6,pre,blockquote,dd,dt,div,section,details,summary';
     var style = document.createElement('style');
@@ -150,14 +153,12 @@ export const commentsSnippet = ({
     var collapse = function (s) { return String(s).replace(/\\s+/g, ' ').trim(); };
     var same = function (a, b) { return collapse(a).toLowerCase() === collapse(b).toLowerCase(); };
 
-    var toastEl = null, toastTimer = 0, stickyEl = null;
+    var toastEl = null, toastTimer = 0;
     var toast = function (msg, err) {
         if (toastEl) toastEl.remove();
         toastEl = document.createElement('div');
         toastEl.className = 'c4b-ctoast' + (err ? ' c4b-err' : '');
         toastEl.textContent = msg;
-        // The sticky Push toast keeps its place at the bottom; a regular one goes above it.
-        if (stickyEl) toastEl.style.bottom = (24 + stickyEl.offsetHeight) + 'px';
         document.body.appendChild(toastEl);
         clearTimeout(toastTimer);
         toastTimer = setTimeout(function () { if (toastEl) { toastEl.remove(); toastEl = null; } }, err ? 8000 : 5000);
@@ -298,6 +299,7 @@ export const commentsSnippet = ({
                 var msg = t('removed', { file: r.file });
                 try { sessionStorage.setItem(TOAST_KEY, msg); } catch (e) {}
                 toast(msg);
+                refreshLog();
             }, function (err) {
                 del.disabled = false;
                 failure('removeFailed')(err);
@@ -354,12 +356,26 @@ export const commentsSnippet = ({
         first.setAttribute('data-c4b-log', '1');
         var page = pageFile();
         fetch(REVIEW_LOG_URL + '?page=' + encodeURIComponent(page), { method: 'GET' }).then(function (res) {
-            if (!res.ok) return;
+            if (!res.ok) { if (pageFile() === page) updateBar(null); return; }
             return res.json().then(function (data) {
                 if (pageFile() !== page || content() !== root || root.firstElementChild !== first) return;
+                updateBar(data);
                 if (data.log) { logFirst = first; logUnpushed = !!data.unpushed; decorateLog(root); }
                 else highlightRemarks(root, data);
             });
+        }, function () {});
+    };
+    // The same GET after an action on the page (comment, removal, approve, push): only the git
+    // state — the Push bar and whether an approved row may be pushed again.
+    var refreshLog = function () {
+        if (!REVIEW_LOG) return;
+        var page = pageFile();
+        fetch(REVIEW_LOG_URL + '?page=' + encodeURIComponent(page), { method: 'GET' }).then(function (res) {
+            return res.ok ? res.json() : null;
+        }).then(function (data) {
+            if (pageFile() !== page) return;
+            if (data && data.log) logUnpushed = !!data.unpushed;
+            updateBar(data);
         }, function () {});
     };
     var schedule = function () {
@@ -456,6 +472,7 @@ export const commentsSnippet = ({
         for (var i = 0; i < ours.length; i++) ours[i].remove();
         return collapse(copy.textContent);
     };
+    var approvedRows = {};
     var approveTarget = function (range) {
         var A = REVIEW_LOG && REVIEW_LOG.approve, root = content();
         if (!A || !root || !logFirst || root.firstElementChild !== logFirst) return null;
@@ -488,6 +505,7 @@ export const commentsSnippet = ({
         });
         // An approved row whose commit was not pushed (the push was rejected) keeps the button:
         // pressing it again pushes that commit.
+        if (approvedRows[JSON.stringify(texts)] && !logUnpushed) return null;
         return literals && done === literals && !logUnpushed ? null : { cells: texts };
     };
     var update = function () {
@@ -529,60 +547,6 @@ export const commentsSnippet = ({
         return function (err) { toast(t(key, { error: err && err.message ? err.message : err }), true); };
     };
 
-    // The Push toast (key comments.push) has no timer: it stays until pushed or closed and survives
-    // the livereload that follows every write to the log. Later comments update the same toast, so
-    // several comments go in one commit; logs of several changes are pushed one by one.
-    var pushState = function () {
-        try { return JSON.parse(sessionStorage.getItem(PUSH_KEY) || 'null'); } catch (e) { return null; }
-    };
-    var savePush = function (st) {
-        try {
-            if (st) sessionStorage.setItem(PUSH_KEY, JSON.stringify(st));
-            else sessionStorage.removeItem(PUSH_KEY);
-        } catch (e) {}
-    };
-    var closeSticky = function () { if (stickyEl) { stickyEl.remove(); stickyEl = null; } };
-    var showPush = function (st, error) {
-        closeSticky();
-        stickyEl = document.createElement('div');
-        stickyEl.className = 'c4b-ctoast c4b-sticky' + (error ? ' c4b-err' : '');
-        var text = document.createElement('span');
-        text.textContent = error || st.msg;
-        var push = button(LABELS.push || t('push'), null, 'c4b-push');
-        push.title = t('pushTitle');
-        var x = button('\\u00d7', function () { savePush(null); closeSticky(); }, 'c4b-x');
-        x.title = t('closeToast');
-        push.addEventListener('click', function () {
-            push.disabled = true;
-            var files = Object.keys(st.logs), done = [], changed = false;
-            var next = function () {
-                if (!files.length) return Promise.resolve();
-                var file = files.shift();
-                return send({ page: st.logs[file] }, 'POST', PUSH_URL).then(function (r) {
-                    delete st.logs[file];
-                    done.push(r.file || file);
-                    changed = changed || !!(r.commit || r.pushed);
-                    return next();
-                });
-            };
-            next().then(function () {
-                savePush(null);
-                closeSticky();
-                toast(changed ? t('pushed', { file: done.join(', ') }) : t('nothingToPush'));
-            }, function (err) {
-                savePush(st);
-                showPush(st, t('pushFailed', { error: err && err.message ? err.message : err }));
-            });
-        });
-        stickyEl.appendChild(text);
-        stickyEl.appendChild(push);
-        stickyEl.appendChild(x);
-        document.body.appendChild(stickyEl);
-    };
-    if (REVIEW_LOG && REVIEW_LOG.push) {
-        var restored = pushState();
-        if (restored && restored.logs && Object.keys(restored.logs).length) showPush(restored);
-    }
 
     // The tab's recipient lives in sessionStorage: it survives livereload, is per tab and is
     // copied with a duplicated tab. Recipients are the server's mailboxes plus the tab's own.
@@ -714,6 +678,48 @@ export const commentsSnippet = ({
     panel.appendChild(list);
     panel.appendChild(general);
     document.body.appendChild(panel);
+
+    // The Push bar of the review log (key comments.push): shown while the page's log has something to
+    // push. The state comes from the server with every GET of the log — it sees hand edits of the log,
+    // a commit left by a failed push and the other tabs; nothing is kept in the browser.
+    var bar = document.createElement('div');
+    bar.className = 'c4b-logbar';
+    bar.hidden = true;
+    var barText = document.createElement('span');
+    var pushing = false;
+    var barPush = button(LABELS.push || t('push'), function () {
+        if (pushing) return;
+        pushing = true;
+        barPush.disabled = true;
+        send({ page: pageFile() }, 'POST', PUSH_URL).then(function (r) {
+            pushing = false;
+            // Pushed or nothing to push: the bar goes at once, the GET below confirms it.
+            bar.hidden = true;
+            toast(r.commit || r.pushed ? t('pushed', { file: r.file }) : t('nothingToPush'));
+            refreshLog();
+        }, function (err) {
+            // The log still has something to push: the bar stays, the button is active again.
+            pushing = false;
+            barPush.disabled = false;
+            failure('pushFailed')(err);
+        });
+    });
+    barPush.title = t('pushTitle');
+    bar.appendChild(barText);
+    bar.appendChild(barPush);
+    document.body.appendChild(bar);
+    // Above the agent bar when it is shown, so neither covers the other.
+    var placeBar = function () {
+        bar.style.bottom = (panel.hidden ? 16 : 16 + panel.offsetHeight + 8) + 'px';
+    };
+    var updateBar = function (data) {
+        var p = REVIEW_LOG && REVIEW_LOG.push && data && data.pending;
+        bar.hidden = !(p && (p.changed || p.unpushed));
+        if (bar.hidden) return;
+        barText.textContent = t('logPending', { file: data.file });
+        barPush.disabled = pushing;
+        placeBar();
+    };
     var renderPanel = function () {
         panel.hidden = !AGENT.on;
         var items = draft(), pages = {}, empty = !items.length;
@@ -743,6 +749,7 @@ export const commentsSnippet = ({
         discard.disabled = busy;
         approve.disabled = busy || !canSend();
         submit.disabled = busy || empty || !canSend();
+        placeBar();
     };
     var label = function (m) {
         return t(m.state === 'listening' ? 'stateListening' : 'stateReconnecting', { name: m.name }) +
@@ -843,19 +850,11 @@ export const commentsSnippet = ({
             primary = draft().length ? add : now;
         } else {
             primary = button(t('addRemark'), run(function (c) {
-                var it = item(c);
-                return send(it, 'POST', REVIEW_LOG_URL).then(function (r) {
+                return send(item(c), 'POST', REVIEW_LOG_URL).then(function (r) {
                     var msg = t(r.number ? 'addedNumber' : 'added', { file: r.file, number: r.number });
-                    if (REVIEW_LOG.push) {
-                        var st = pushState() || {};
-                        st.logs = st.logs || {};
-                        st.logs[r.file] = it.page;
-                        st.msg = msg;
-                        savePush(st);
-                        return showPush(st);
-                    }
                     try { sessionStorage.setItem(TOAST_KEY, msg); } catch (e) {}
                     toast(msg);
+                    refreshLog();
                 });
             }));
             buttons.push(primary);
@@ -892,14 +891,19 @@ export const commentsSnippet = ({
     if (rvBtn) rvBtn.addEventListener('click', openFor('review'));
     if (apBtn) apBtn.addEventListener('click', function () {
         var s = selection(), row = s && approveTarget(s.range);
-        if (!row) return;
+        if (!row || apBtn.disabled) return;
         apBtn.disabled = true;
         btns.hidden = true;
         send({ page: pageFile(), cells: row.cells }, 'POST', APPROVE_URL).then(function (r) {
+            // Approved and pushed: the row keeps its old text until livereload re-renders the page,
+            // so it is remembered — no button at it meanwhile.
+            approvedRows[JSON.stringify(row.cells)] = true;
+            logUnpushed = false;
+            apBtn.hidden = true;
             var msg = t(r.pushed ? 'approvedPushed' : 'approvedRow', { file: r.file });
             try { sessionStorage.setItem(TOAST_KEY, msg); } catch (e) {}
             toast(msg);
-        }, failure('approveFailed')).then(function () { apBtn.disabled = false; });
+        }, failure('approveFailed')).then(function () { apBtn.disabled = false; refreshLog(); });
     });
     document.addEventListener('mousedown', function (e) {
         if (pop && !pop.contains(e.target) && !btns.contains(e.target)) close();

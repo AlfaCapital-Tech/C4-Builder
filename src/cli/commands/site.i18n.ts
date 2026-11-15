@@ -60,7 +60,7 @@ export const UI_STRINGS = {
         pushed: 'Pushed {file}',
         nothingToPush: 'Nothing to push',
         pushFailed: 'Push failed: {error}',
-        closeToast: 'Close'
+        logPending: 'Review log: {file} has unpushed changes'
     },
     ru: {
         feedback: 'Сказать агенту',
@@ -120,6 +120,6 @@ export const UI_STRINGS = {
         pushed: '{file} запушен',
         nothingToPush: 'Пушить нечего',
         pushFailed: 'Не удалось запушить: {error}',
-        closeToast: 'Закрыть'
+        logPending: 'Журнал ревью: {file} — изменения не запушены'
     }
 };

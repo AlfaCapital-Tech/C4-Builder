@@ -116,7 +116,7 @@ and exit codes; it writes nothing and works outside a project.
    lands as a row of the nearest `comments.file` (`review.md`) — read it there, not in `docs/`.
    The `buttons` key relabels the buttons (`agent`, `comment`, `approve`, `push`). With
    `comments.approve` / `comments.push` the human approves a status table row (**Approve row**) or
-   pushes written comments (**Push** in the comment toast) from the page: c4builder commits only the
+   pushes the log (**Push** on the review log bar) from the page: c4builder commits only the
    log file and pushes it — your uncommitted edits elsewhere stay as they are, but your edits of the
    same log file go into that commit; your unpushed commits in the branch make it refuse.
    `C4BUILDER_RENDER_CONCURRENCY=<n>` sets the number of parallel PlantUML processes (default

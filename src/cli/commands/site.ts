@@ -12,7 +12,14 @@ import type { BuildResult } from '../../core/build.ts';
 import type { PageSources } from '../../core/compose/markdown.ts';
 import { batchSchema, type FeedbackBatch, formatBatch, LISTENER_NAME } from '../../core/feedback.ts';
 import { redirectKey } from '../../core/plugins/tree.ts';
-import { publishFile, pushPending, ReviewGitError, serialQueue, unpushedLog } from '../../core/reviewgit.ts';
+import {
+    publishFile,
+    pushPending,
+    ReviewGitError,
+    reviewPending,
+    serialQueue,
+    unpushedLog
+} from '../../core/reviewgit.ts';
 import {
     approveRow,
     deleteRemark,
@@ -566,6 +573,23 @@ export default (
             // Origin: это чтение, ответ (путь файла) чужой странице всё равно не отдаётся без CORS.
             // Страница журнала → `{ file, log: true }`; другая страница → её замечания из журнала
             // `{ file, log: false, logPage, remarks }` для подсветки цитат; журнала нет — 404.
+            // Git-операции сервера — строго по одной: две вкладки, нажавшие кнопку одновременно,
+            // столкнулись бы на index.lock. Через ту же очередь идёт и чтение состояния для плашки
+            // Push и кнопки апрува: GET, пришедший во время пуша (livereload после записи журнала
+            // перезагружает страницу посреди запроса), ждёт его конца и не видит устаревшее «не
+            // запушено» — иначе кнопка оставалась бы видимой после успешного пуша.
+            const queue = serialQueue();
+            const pushOn = !!reviewLog.push && reviewLog.push.enabled !== false;
+            // Поля состояния git для ответа GET: `unpushed` — для кнопки апрува, `pending` — для
+            // плашки Push (только с включённым push; null — пушить нельзя).
+            const gitState = async (file: string, log: boolean): Promise<Record<string, unknown>> => {
+                if (!pushOn && !(log && reviewLog.approve)) return {};
+                const pending = await queue(() => reviewPending(cwd, file));
+                return {
+                    ...(log && reviewLog.approve ? { unpushed: (pending?.unpushed ?? 0) > 0 } : {}),
+                    ...(pushOn ? { pending } : {})
+                };
+            };
             app.get(REVIEW_LOG_PATH, async (req, res) => {
                 if (!localHost(req) || (req.get('origin') && !fromSite(req))) {
                     res.status(403).json({ error: 'comments are accepted only from the site itself' });
@@ -576,11 +600,7 @@ export default (
                 if (own) {
                     // С апрувом — есть ли незапушенный коммит журнала: тогда кнопка видна и у уже
                     // одобренной строки, повторный апрув его дотолкает.
-                    res.json(
-                        reviewLog.approve
-                            ? { file: relOf(own), log: true, unpushed: await unpushedLog(cwd, own) }
-                            : { file: relOf(own), log: true }
-                    );
+                    res.json({ file: relOf(own), log: true, ...(await gitState(own, true)) });
                     return;
                 }
                 const source = found && firstSource(found.sources);
@@ -596,7 +616,8 @@ export default (
                         file: relOf(file),
                         log: false,
                         logPage: pageOf(file) ?? null,
-                        remarks: parseRemarks(file, reviewLog, source)
+                        remarks: parseRemarks(file, reviewLog, source),
+                        ...(await gitState(file, false))
                     });
                 } catch (e) {
                     res.status(500).json({ error: `could not read the review log: ${(e as Error).message}` });
@@ -645,10 +666,8 @@ export default (
             });
 
             // Апрув строки и Push журнала (change site-review-approve-push): маршрут есть, только если
-            // задан его ключ, иначе 404. Git-операции — строго по одной: две вкладки, нажавшие кнопку
-            // одновременно, столкнулись бы на index.lock. Шаблон сообщения — общий для обоих действий
-            // и действует, даже если сама кнопка Push выключена.
-            const queue = serialQueue();
+            // задан его ключ, иначе 404; git-операции — через общую очередь `queue`. Шаблон сообщения —
+            // общий для обоих действий и действует, даже если сама кнопка Push выключена.
             const template = reviewLog.push?.message ?? 'review {change}: {action} — {author}';
             const messageFor = (file: string, action: string, who: string): string =>
                 fillCells([template], {
@@ -720,7 +739,7 @@ export default (
                     }
                 });
             }
-            if (reviewLog.push && reviewLog.push.enabled !== false) {
+            if (pushOn) {
                 app.post(REVIEW_PUSH_PATH, express.json({ limit: '64kb' }), async (req, res) => {
                     if (!fromSite(req)) return deny(res);
                     const body = (req.body ?? {}) as Record<string, unknown>;

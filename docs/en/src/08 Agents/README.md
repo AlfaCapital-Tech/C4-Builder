@@ -116,7 +116,7 @@ source — for example the change's `review.md`; it is a record for people and t
 addressed to the agent, and the agent should not move feedback there or answer it by editing the log.
 
 With the `comments.approve` and `comments.push` keys the log is committed and pushed from the page:
-**Approve row** records the approval of a status table row, **Push** in the comment toast sends the
+**Approve row** records the approval of a status table row, **Push** on the review log bar sends the
 written comments (see «Approve and Push of the log» on the
 [CLI and configuration](05%20CLI%20and%20configuration/05%20CLI%20and%20configuration.md) page).
 Only the log file goes into the commit, other changes of the working copy — the agent's included — are

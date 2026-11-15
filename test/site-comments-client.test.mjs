@@ -588,14 +588,15 @@ describe('кнопка журнала ревью', () => {
         ]);
         p.window.__reply = { file: 'src/review.md', number: 4 };
         await p.write('t', 'Comment', 'Wrong', 'Add comment');
-        // первый вызов — GET синхронизации страницы с журналом
+        // первый вызов — GET синхронизации страницы с журналом, последний — его повтор после записи
         expect(p.window.__calls).toEqual([
             { url: '/__c4builder/review-log?page=A.md', method: 'GET', body: undefined },
             {
                 url: '/__c4builder/review-log',
                 method: 'POST',
                 body: { page: 'A.md', quote: 'foo bar', section: 'Flow', comment: 'Wrong' }
-            }
+            },
+            { url: '/__c4builder/review-log?page=A.md', method: 'GET', body: undefined }
         ]);
         expect(p.toast()).toBe('Added to src/review.md as #4');
     });
@@ -729,7 +730,7 @@ describe('кнопка Approve row', () => {
         p.window.__reply = { file: 'src/review.md', commit: 'abc1234', pushed: true };
         p.byText(p.doc.querySelector('.c4b-cbtns'), 'Approve row').click();
         await sleep(20);
-        expect(p.window.__calls.at(-1)).toEqual({
+        expect(p.window.__calls.filter((c) => c.method === 'POST').at(-1)).toEqual({
             url: '/__c4builder/review-log/approve',
             method: 'POST',
             body: { page: 'A.md', cells: ['Аналитик', '', 'Иванов Иван', ''] }
@@ -795,7 +796,7 @@ describe('кнопка Approve row: повтор и служебные элем�
         p.window.__reply = { file: 'src/review.md', commit: null, pushed: true };
         p.byText(p.doc.querySelector('.c4b-cbtns'), 'Approve row').click();
         await sleep(20);
-        return p.window.__calls.at(-1).body.cells;
+        return p.window.__calls.filter((c) => c.method === 'POST').at(-1).body.cells;
     };
 
     it('одобренная строка, коммит журнала не запушен (GET unpushed) — кнопка есть, повтор шлёт строку', async () => {
@@ -821,83 +822,184 @@ describe('кнопка Approve row: повтор и служебные элем�
     });
 });
 
-// Push из тоста комментария (change site-review-approve-push): липкий тост без таймера, состояние в
-// sessionStorage — переживает livereload, следующие комментарии обновляют тот же тост.
-describe('кнопка Push в тосте комментария', () => {
+// Плашка Push журнала (change site-review-approve-push): состояние — из GET журнала (`pending`),
+// а не из браузера; кнопка неактивна на время запроса, после успеха плашка уходит сразу.
+describe('плашка Push журнала', () => {
     const LOG = { file: 'review.md', heading: ['Remarks'], push: true };
-    const sticky = (p) => p.doc.querySelectorAll('.c4b-sticky');
-    const comment = async (p, text, number) => {
-        p.window.__reply = { file: 'src/review.md', number };
-        await p.write('t', 'Comment', text, 'Add comment');
+    const PENDING = {
+        file: 'src/review.md',
+        log: false,
+        remarks: [],
+        pending: { changed: true, unpushed: 0 }
     };
+    const bar = (p) => p.doc.querySelector('.c4b-logbar');
+    const barButton = (p) => bar(p).querySelector('button');
 
-    it('тост с Push и «×» не исчезает по таймеру и переживает перезагрузку', async () => {
-        const p = await agentPage({ agent: false, languages: ['en'], reviewLog: LOG });
-        await comment(p, 'Why?', 4);
-        expect(sticky(p).length).toBe(1);
-        const el = sticky(p)[0];
-        expect(el.querySelector('span').textContent).toBe('Added to src/review.md as #4');
-        expect([...el.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Push', '×']);
-        await sleep(5300);
-        expect(sticky(p).length).toBe(1);
-        // перезагрузка: состояние вкладки в sessionStorage
+    it('pending в ответе GET — плашка с текстом и Push; без кнопки закрытия', async () => {
+        const p = await agentPage({ agent: false, languages: ['en'], reviewLog: LOG, reply: PENDING });
+        expect(bar(p).hidden).toBe(false);
+        expect(bar(p).querySelector('span').textContent).toBe(
+            'Review log: src/review.md has unpushed changes'
+        );
+        expect([...bar(p).querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Push']);
+        // незапушенный коммит без правок файла — тоже плашка
         const q = await agentPage({
             agent: false,
             languages: ['en'],
             reviewLog: LOG,
-            session: p.dump('sessionStorage')
+            reply: { ...PENDING, pending: { changed: false, unpushed: 1 } }
         });
-        expect(sticky(q).length).toBe(1);
-        // следующий комментарий обновляет тот же тост
-        await comment(q, 'And this', 5);
-        expect(sticky(q).length).toBe(1);
-        expect(sticky(q)[0].querySelector('span').textContent).toBe('Added to src/review.md as #5');
-        q.window.__reply = { file: 'src/review.md', commit: 'abc1234', pushed: true };
-        q.byText(sticky(q)[0], 'Push').click();
-        await sleep(20);
-        expect(q.window.__calls.at(-1)).toEqual({
-            url: '/__c4builder/review-log/push',
-            method: 'POST',
-            body: { page: 'A.md' }
-        });
-        expect(sticky(q).length).toBe(0);
-        expect(q.toast()).toBe('Pushed src/review.md');
-        expect(q.window.sessionStorage.getItem('__c4builderPush:p1')).toBeNull();
-    }, 15_000);
-
-    it('нечего пушить; ошибка — тост остаётся с текстом ошибки, «×» закрывает', async () => {
-        const p = await agentPage({ agent: false, languages: ['en'], reviewLog: LOG });
-        await comment(p, 'Why?', 4);
-        p.window.__error = 'push to origin/main was rejected';
-        p.byText(sticky(p)[0], 'Push').click();
-        await sleep(20);
-        expect(sticky(p).length).toBe(1);
-        expect(sticky(p)[0].textContent).toContain('Push failed: push to origin/main was rejected');
-        expect(p.byText(sticky(p)[0], 'Push').disabled).toBe(false);
-        p.window.__error = '';
-        p.window.__reply = { file: 'src/review.md', commit: null, pushed: false };
-        p.byText(sticky(p)[0], 'Push').click();
-        await sleep(20);
-        expect(p.toast()).toBe('Nothing to push');
-        await comment(p, 'More', 5);
-        p.byText(sticky(p)[0], '×').click();
-        expect(sticky(p).length).toBe(0);
-        expect(p.window.sessionStorage.getItem('__c4builderPush:p1')).toBeNull();
+        expect(bar(q).hidden).toBe(false);
     });
 
-    it('без ключа push — прежний тост без кнопки; подпись из buttons.push', async () => {
-        const p = await agentPage({ agent: false, languages: ['en'], reviewLog: { ...LOG, push: false } });
-        await comment(p, 'Why?', 4);
-        expect(sticky(p).length).toBe(0);
-        expect(p.toast()).toBe('Added to src/review.md as #4');
-        const q = await agentPage({
+    it('Push: на время запроса кнопка неактивна; успех — плашка скрыта сразу, тост, перезапрос GET', async () => {
+        const p = await agentPage({ agent: false, languages: ['en'], reviewLog: LOG, reply: PENDING });
+        p.window.__reply = { file: 'src/review.md', commit: 'abc1234', pushed: true };
+        barButton(p).click();
+        expect(barButton(p).disabled).toBe(true);
+        barButton(p).click();
+        await sleep(20);
+        expect(p.window.__calls.filter((c) => c.method === 'POST')).toEqual([
+            { url: '/__c4builder/review-log/push', method: 'POST', body: { page: 'A.md' } }
+        ]);
+        expect(bar(p).hidden).toBe(true);
+        expect(p.toast()).toBe('Pushed src/review.md');
+        expect(p.window.__calls.at(-1)).toEqual({
+            url: '/__c4builder/review-log?page=A.md',
+            method: 'GET',
+            body: undefined
+        });
+        expect(bar(p).hidden).toBe(true);
+    });
+
+    it('«нечего пушить» тоже скрывает плашку; ошибка — плашка остаётся, кнопка снова активна', async () => {
+        const p = await agentPage({ agent: false, languages: ['en'], reviewLog: LOG, reply: PENDING });
+        p.window.__error = 'push to origin/main was rejected';
+        barButton(p).click();
+        await sleep(20);
+        expect(bar(p).hidden).toBe(false);
+        expect(barButton(p).disabled).toBe(false);
+        expect(p.toast()).toBe('Push failed: push to origin/main was rejected');
+        p.window.__error = '';
+        p.window.__reply = { file: 'src/review.md', commit: null, pushed: false };
+        barButton(p).click();
+        await sleep(20);
+        expect(bar(p).hidden).toBe(true);
+        expect(p.toast()).toBe('Nothing to push');
+    });
+
+    it('нет плашки: чисто, pending null (не git), страница без журнала (404), push выключен', async () => {
+        const clean = await agentPage({
             agent: false,
+            reviewLog: LOG,
+            reply: { ...PENDING, pending: { changed: false, unpushed: 0 } }
+        });
+        expect(bar(clean).hidden).toBe(true);
+        const nogit = await agentPage({ agent: false, reviewLog: LOG, reply: { ...PENDING, pending: null } });
+        expect(bar(nogit).hidden).toBe(true);
+        const nolog = await agentPage({ agent: false, reviewLog: LOG, error: 'review.md not found' });
+        expect(bar(nolog).hidden).toBe(true);
+        const off = await agentPage({ agent: false, reviewLog: { ...LOG, push: false }, reply: PENDING });
+        expect(bar(off).hidden).toBe(true);
+    });
+
+    it('после Add comment — обычный тост с таймером и перезапрос GET, плашка появляется', async () => {
+        const p = await agentPage({
+            agent: false,
+            languages: ['en'],
+            reviewLog: LOG,
+            reply: { ...PENDING, pending: { changed: false, unpushed: 0 } }
+        });
+        expect(bar(p).hidden).toBe(true);
+        p.window.__reply = { file: 'src/review.md', number: 4, pending: { changed: true, unpushed: 0 } };
+        await p.write('t', 'Comment', 'Why?', 'Add comment');
+        expect(p.toast()).toBe('Added to src/review.md as #4');
+        expect(p.doc.querySelectorAll('.c4b-ctoast button').length).toBe(0);
+        expect(p.window.__calls.at(-1).method).toBe('GET');
+        expect(bar(p).hidden).toBe(false);
+    });
+
+    it('над панелью агента; подпись из buttons.push, русский текст', async () => {
+        const solo = await agentPage({ agent: false, reviewLog: LOG, reply: PENDING });
+        expect(bar(solo).style.bottom).toBe('16px');
+        const p = await agentPage({
+            agent: true,
             languages: ['ru'],
             reviewLog: LOG,
+            reply: PENDING,
             labels: { push: 'Send' }
         });
-        q.window.__reply = { file: 'src/review.md', number: 4 };
-        await q.write('t', 'Комментарий', 'Почему?', 'Добавить комментарий');
-        expect([...sticky(q)[0].querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Send', '×']);
+        Object.defineProperty(p.panel, 'offsetHeight', { value: 60 });
+        p.agentEvent({ on: true, mailboxes: [] });
+        expect(p.panel.hidden).toBe(false);
+        expect(bar(p).style.bottom).toBe('84px');
+        expect(barButton(p).textContent).toBe('Send');
+        expect(bar(p).querySelector('span').textContent).toBe(
+            'Журнал ревью: src/review.md — изменения не запушены'
+        );
+    });
+});
+
+// Approve row: кнопка неактивна на время запроса, после успеха скрыта и не возвращается у этой
+// строки до перерисовки страницы; состояние журнала — перезапросом.
+describe('Approve row после успеха', () => {
+    const APPROVE = { heading: ['Статусы'], who: 'Кто', set: { Статус: 'Approved', Дата: '{date}' } };
+    const BODY = `<h1>Ревью</h1><h2>Статусы</h2>
+<table><thead><tr><th>Роль</th><th>Статус</th><th>Кто</th><th>Дата</th></tr></thead><tbody>
+<tr><td>Аналитик</td><td></td><td id="who1">Иванов Иван</td><td></td></tr>
+</tbody></table>`;
+    const select = async (p) => {
+        const range = p.doc.createRange();
+        range.selectNodeContents(p.doc.getElementById('who1'));
+        p.window.getSelection().removeAllRanges();
+        p.window.getSelection().addRange(range);
+        p.doc.dispatchEvent(new p.window.Event('selectionchange'));
+        await sleep(20);
+        return p.buttons();
+    };
+
+    it('кнопка неактивна во время запроса, после успеха скрыта, у этой строки больше не появляется', async () => {
+        const p = await agentPage({
+            agent: false,
+            languages: ['en'],
+            reviewLog: { file: 'review.md', heading: ['Замечания'], approve: APPROVE, push: true },
+            body: BODY,
+            reply: {
+                file: 'src/review.md',
+                log: true,
+                unpushed: false,
+                pending: { changed: false, unpushed: 0 }
+            }
+        });
+        expect(await select(p)).toEqual(['Comment', 'Approve row']);
+        const ap = p.byText(p.doc.querySelector('.c4b-cbtns'), 'Approve row');
+        p.window.__reply = { file: 'src/review.md', commit: 'abc1234', pushed: true };
+        ap.click();
+        expect(ap.disabled).toBe(true);
+        ap.click();
+        await sleep(20);
+        expect(p.window.__calls.filter((c) => c.method === 'POST').length).toBe(1);
+        expect(ap.hidden).toBe(true);
+        expect(p.window.__calls.at(-1).method).toBe('GET');
+        expect(await select(p)).toEqual(['Comment']);
+        expect(p.doc.querySelector('.c4b-logbar').hidden).toBe(true);
+    });
+
+    it('ошибка — кнопка снова активна и видна у строки', async () => {
+        const p = await agentPage({
+            agent: false,
+            languages: ['en'],
+            reviewLog: { file: 'review.md', heading: ['Замечания'], approve: APPROVE },
+            body: BODY,
+            reply: { file: 'src/review.md', log: true, unpushed: false }
+        });
+        await select(p);
+        const ap = p.byText(p.doc.querySelector('.c4b-cbtns'), 'Approve row');
+        p.window.__error = 'push was rejected';
+        ap.click();
+        await sleep(20);
+        expect(ap.disabled).toBe(false);
+        p.window.__error = '';
+        expect(await select(p)).toEqual(['Comment', 'Approve row']);
     });
 });
