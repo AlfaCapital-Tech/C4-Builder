@@ -17,6 +17,12 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
 - **BREAKING (output):** `vendor/docsify-plantuml.min.js` is no longer shipped or copied to the
   site. A custom `docsifyTemplate` that loads it gets a build warning; the build passes — remove
   the `<script>` tag from the template (#33)
+- Site: closing the full-screen image viewer (`Esc`, `×` or a click beside the image) no longer
+  jumps the page back to the top — the reader stays where they opened it. The page also keeps its
+  position while the viewer is open, so a live reload of `site -w`, the browser's **Back**/**Forward**
+  between anchors and the sidebar highlight no longer reset to the top; closing because of a
+  navigation (another page, an anchor, **Back**/**Forward**, also with `routerMode: 'history'`)
+  leaves scrolling to the navigation
 
 ## v0.15.0
 
