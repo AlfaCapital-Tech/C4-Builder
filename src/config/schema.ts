@@ -112,8 +112,6 @@ export const configSchema = z.object({
     diagramsOnTop: bool(defaultConfig.diagramsOnTop),
     embedDiagram: bool(defaultConfig.embedDiagram),
     excludeOtherFiles: bool(defaultConfig.excludeOtherFiles),
-    generateLocalImages: bool(defaultConfig.generateLocalImages),
-    plantumlServerUrl: str(defaultConfig.plantumlServerUrl),
     diagramFormat: str(defaultConfig.diagramFormat),
     d2Layout: str(defaultConfig.d2Layout),
     charset: str(defaultConfig.charset),
@@ -215,7 +213,10 @@ export const commentsLog = (c: Pick<C4ConfigFile, 'comments' | 'reviewLog'>): Co
 /**
  * Предупреждения о ключах, которые схема молча отбрасывает, хотя пользователь явно ждал от них
  * эффекта. `comments.label` — типичный след переименования `reviewLog` → `comments`: без
- * предупреждения кнопка тихо возвращалась к подписи по умолчанию.
+ * предупреждения кнопка тихо возвращалась к подписи по умолчанию. `generateLocalImages: false` —
+ * след удалённого онлайн-рендера PlantUML: пользователь ждал рендера на сервере, а сборка теперь
+ * локальная и требует Java. `true` и `plantumlServerUrl` записаны в каждый старый конфиг и
+ * поведения не меняли — предупреждение на них было бы шумом у всех.
  */
 export const configWarnings = (raw: Record<string, unknown>): string[] => {
     const warnings: string[] = [];
@@ -234,6 +235,11 @@ export const configWarnings = (raw: Record<string, unknown>): string[] => {
     )
         warnings.push(
             'comments.approve.set has no non-empty value without placeholders — an approved row cannot be recognized, so Approve row stays on every named row and each press makes a new commit'
+        );
+    if (raw.generateLocalImages === false)
+        warnings.push(
+            'generateLocalImages and plantumlServerUrl are ignored — online PlantUML rendering was removed, ' +
+                'diagrams are always rendered locally; remove both keys'
         );
     return warnings;
 };

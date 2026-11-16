@@ -35,12 +35,10 @@ export const WIZARD_KEYS = {
     generateMD: 'GENERATE_MD',
     generateCompleteMD: 'GENERATE_COMPLETE_MD_FILE',
     generateWEB: 'GENERATE_WEBSITE',
-    generateLocalImages: 'GENERATE_LOCAL_IMAGES',
     embedDiagram: 'EMBED_DIAGRAM',
     includeBreadcrumbs: 'INCLUDE_BREADCRUMBS',
     includeLinkToDiagram: 'INCLUDE_LINK_TO_DIAGRAM',
     excludeOtherFiles: 'EXCLUDE_OTHER_FILES',
-    plantumlServerUrl: 'PLANTUML_SERVER_URL',
     diagramFormat: 'DIAGRAM_FORMAT',
     charset: 'CHARSET'
 } as const satisfies Partial<Record<keyof C4ConfigFile, keyof BuildOptions>>;
@@ -248,25 +246,12 @@ export default async (
         }
     }
 
-    if (
-        ask(
-            'generateLocalImages',
-            'embedDiagram',
-            'includeBreadcrumbs',
-            'includeLinkToDiagram',
-            'excludeOtherFiles'
-        )
-    ) {
+    if (ask('embedDiagram', 'includeBreadcrumbs', 'includeLinkToDiagram', 'excludeOtherFiles')) {
         const defaults = [
             checkedKey(
                 currentConfiguration.INCLUDE_BREADCRUMBS,
                 defaultConfig.includeBreadcrumbs,
                 'includeBreadcrumbs'
-            ),
-            checkedKey(
-                currentConfiguration.GENERATE_LOCAL_IMAGES,
-                defaultConfig.generateLocalImages,
-                'generateLocalImages'
             ),
             checkedKey(
                 currentConfiguration.INCLUDE_LINK_TO_DIAGRAM,
@@ -303,10 +288,6 @@ export default async (
                 value: 'excludeOtherFiles'
             }
         ];
-        choices.push({
-            name: 'Generate diagram images locally',
-            value: 'generateLocalImages'
-        });
 
         responses = await inquirer.prompt({
             type: 'checkbox',
@@ -320,18 +301,6 @@ export default async (
         conf.set('diagramsOnTop', responses.generate.includes('diagramsOnTop'));
         conf.set('embedDiagram', responses.generate.includes('embedDiagram'));
         conf.set('excludeOtherFiles', responses.generate.includes('excludeOtherFiles'));
-        conf.set('generateLocalImages', responses.generate.includes('generateLocalImages'));
-    }
-
-    if (ask('plantumlServerUrl')) {
-        responses = await inquirer.prompt({
-            type: 'input',
-            name: 'plantumlServerUrl',
-            message: 'PlantUML Server URL',
-            default: currentConfiguration.PLANTUML_SERVER_URL || defaultConfig.plantumlServerUrl,
-            validate: validate(nonEmptyString, 'enter the PlantUML server URL')
-        });
-        conf.set('plantumlServerUrl', responses.plantumlServerUrl);
     }
 
     if (ask('diagramFormat')) {

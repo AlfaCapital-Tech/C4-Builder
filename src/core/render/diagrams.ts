@@ -8,7 +8,6 @@ import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 
 import { writeFile, VENDORED_JAR } from '../../util/utils.ts';
-import { httpGetBuffer } from '../../util/http.ts';
 // D2-бэкенд: только статические хелперы (парсинг импортов) грузятся сразу; сам
 // движок @terrastruct/d2 тянется лениво внутри renderD2/teardownD2.
 import { renderD2, foldD2Imports } from './d2renderer.ts';
@@ -255,11 +254,6 @@ export const getMime = (format: string): string => {
     return `image/${format}`;
 };
 
-// Загрузка удалённо отрендеренной картинки (embed-ветка онлайн-рендера PlantUML) в
-// base64. Редиректы и таймауты берём из общего util/http: прежде здесь был голый GET
-// без обоих — 302 от PlantUML-сервера ронял embed-сборку, а зависший сокет вешал её.
-export const httpGet = async (url: string): Promise<string> => (await httpGetBuffer(url)).toString('base64');
-
 // Прямой вызов PlantUML: layout считает встроенный Java-движок Smetana
 // (`-Playout=smetana`), внешний graphviz/dot не нужен. Диаграмма подаётся в stdin
 // (`-pipe`), результат читается из stdout — имя выходного файла задаёт c4builder,
@@ -410,7 +404,7 @@ const placeholderSvg = (w: number, h: number, color: string, frame: string, line
     '</svg>';
 
 // Картинка-заглушка вместо упавшей «мягкой» диаграммы: ошибка видна на странице,
-// сайт остаётся собранным (так же вёл себя онлайн-рендер docsify-plantuml).
+// сайт остаётся собранным — битый блок в тексте страницы не должен ронять всю документацию.
 const errorPlaceholderSvg = (name: string, reason: string): string => {
     const lines = [`${name}: diagram not rendered`, ...reason.split('\n')]
         .flatMap((l) => l.match(/.{1,88}/g) ?? [''])
@@ -671,7 +665,7 @@ export const generateImages = async (
             const lane: DiagramLane = registeredEngine(diagram.engine) ?? 'plantuml';
 
             // Заглушка с ошибкой вместо картинки: у «мягких» диаграмм — всегда (блоки в markdown
-            // плагинов писались под онлайн-рендер, где битый блок давал картинку с ошибкой, а
+            // плагинов писались под клиентский рендер, где битый блок давал картинку с ошибкой, а
             // не падение сборки), при softErrors — у любых: фоновый рендер не должен ронять
             // dev-сервер. Чексумма в кэш не сохраняется: следующая пересборка перерисует (в
             // сессии dev-сервера — только при изменении входа, см. failedRenders).

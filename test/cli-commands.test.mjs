@@ -46,6 +46,10 @@ describe('позиционные подкоманды CLI', () => {
         const flag = run('--new', '--name', 'demo-flag', '-y');
         expect(flag.status, flag.stderr).toBe(0);
         expect(listTree(path.join(dir, 'demo'))).toEqual(listTree(path.join(dir, 'demo-flag')));
+        // Онлайн-рендер удалён: новый конфиг не несёт его ключей (change remove-remote-plantuml).
+        const config = JSON.parse(fs.readFileSync(path.join(dir, 'demo', '.c4builder'), 'utf8'));
+        expect(config).not.toHaveProperty('generateLocalImages');
+        expect(config).not.toHaveProperty('plantumlServerUrl');
     });
 
     it('неизвестная команда → код 1 и список команд, без сборки и промптов', () => {

@@ -38,17 +38,17 @@ export interface TreeItem {
 
 // Единый реестр движков диаграмм: расширение (с точкой) → рендерер + способности.
 // ЕДИНСТВЕННЫЙ источник истины о том, какие файлы считаются диаграммами. Из него
-// строятся фильтр scan (ниже), regex ссылок в compose/markdown.ts и ветвление
-// «есть ли у движка онлайн-рендер» (build/compose). Добавление движка = одна строка
-// здесь; фазы подхватят его без синхронной правки.
+// строятся фильтр scan (ниже) и regex ссылок в compose/markdown.ts. Добавление движка =
+// одна строка здесь; фазы подхватят его без синхронной правки. Все движки рендерятся
+// локально: исходник диаграммы — описание архитектуры, на внешние серверы он не уходит.
 export const DIAGRAM_ENGINES = [
-    { ext: '.puml', engine: 'plantuml', remoteRender: true },
-    { ext: '.d2', engine: 'd2', remoteRender: false },
-    { ext: '.bpmn', engine: 'bpmn', remoteRender: false },
-    { ext: '.mmd', engine: 'mermaid', remoteRender: false },
+    { ext: '.puml', engine: 'plantuml' },
+    { ext: '.d2', engine: 'd2' },
+    { ext: '.bpmn', engine: 'bpmn' },
+    { ext: '.mmd', engine: 'mermaid' },
     // Экспорт редактора Wireflow: суффикс из двух расширений, прочие .json — не диаграммы.
-    { ext: '.wireflow.json', engine: 'wireflow', remoteRender: false }
-] as const satisfies ReadonlyArray<{ ext: string; engine: string; remoteRender: boolean }>;
+    { ext: '.wireflow.json', engine: 'wireflow' }
+] as const satisfies ReadonlyArray<{ ext: string; engine: string }>;
 
 export type DiagramEngine = (typeof DIAGRAM_ENGINES)[number]['engine'];
 type EngineEntry = (typeof DIAGRAM_ENGINES)[number];
@@ -87,11 +87,6 @@ export const diagramBaseName = (name: string): string => {
 // Движок реестра по имени (Diagram.engine — строка); не из реестра — undefined.
 export const registeredEngine = (engine: string): DiagramEngine | undefined =>
     DIAGRAM_ENGINES.find((e) => e.engine === engine)?.engine;
-
-// Есть ли у движка онлайн-рендер (сервер, как у PlantUML). Для движков без него (D2)
-// сборка при выключенном generateLocalImages невозможна — вывод не из чего собрать.
-export const engineSupportsRemote = (engine: string): boolean =>
-    DIAGRAM_ENGINES.some((e) => e.engine === engine && e.remoteRender);
 
 export const getFolderName = (dir: string, root: string, homepage: string): string => {
     return dir === root ? homepage : path.parse(dir).base;
@@ -162,20 +157,19 @@ export const generateTree = async (dir: string, options: BuildOptions): Promise<
                 // Ранний return рекурсии срабатывал уже ПОСЛЕ push — отсекаем до него.
                 if (childDir === options.DIST_FOLDER) continue;
                 item.descendants.push(file);
-                //create corresponding dist folder
-                if (options.GENERATE_WEBSITE || options.GENERATE_MD || options.GENERATE_LOCAL_IMAGES)
-                    await makeDirectory(
-                        path.join(options.DIST_FOLDER, dir.replace(options.ROOT_FOLDER, ''), file)
-                    );
+                // Каталог выхода нужен всегда: картинки диаграмм рендерятся в него при любом наборе выходов.
+                await makeDirectory(
+                    path.join(options.DIST_FOLDER, dir.replace(options.ROOT_FOLDER, ''), file)
+                );
 
                 await build(childDir, dir);
             }
         }
 
         // Блоки ```plantuml и ```mermaid в страницах рендерим при сборке: иначе текст
-        // диаграммы доезжал до браузера и клиентский рендер (docsify-plantuml, в т.ч. в
-        // пользовательских шаблонах) отправлял его наружу. puml/d2 остаются кодом — так
-        // показывают исходник.
+        // диаграммы доезжал бы до браузера, и клиентский рендер из пользовательского шаблона
+        // (пакет его больше не поставляет) отправлял бы его наружу. puml/d2 остаются кодом —
+        // так показывают исходник.
         const fences = createFenceExtractor(['plantuml', 'mermaid']);
         const mdFiles = files.filter((x) => path.extname(x).toLowerCase() === '.md');
         for (const mdFile of mdFiles) {

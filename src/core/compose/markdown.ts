@@ -4,7 +4,7 @@ import fsextra from 'fs-extra';
 import { createRequire } from 'node:module';
 
 import defaultDocsifyTemplate from './docsify.template.ts';
-import { encodeURIPath, readFile, writeFile, plantUmlServerUrl } from '../../util/utils.ts';
+import { encodeURIPath, readFile, writeFile } from '../../util/utils.ts';
 import { VENDOR_DIR } from '../../util/paths.ts';
 import { escapeRegExp } from '../../util/text.ts';
 // Фаза scan: тип дерева и его элементов + производные (имя папки, формат выхода диаграммы)
@@ -15,13 +15,12 @@ import {
     diagramEntryPath,
     diagramOutputFormat,
     DIAGRAM_ENGINES,
-    engineSupportsRemote,
     collectIncludes,
     type TreeItem,
     type Diagram
 } from '../scan/tree.ts';
-// Фаза render: mime-тип формата и загрузка удалённо отрендеренной картинки (embed-ветка).
-import { getMime, httpGet } from '../render/diagrams.ts';
+// Фаза render: mime-тип формата картинки (embed-ветка).
+import { getMime } from '../render/diagrams.ts';
 // Граф D2-импортов — тот же, что у рендера (приложение llms-full.txt).
 import { d2LocalImports } from '../render/d2renderer.ts';
 import type { BuildOptions } from '../../config/options.ts';
@@ -102,17 +101,6 @@ const readDiagramBase64 = async (absPath: string): Promise<string> => {
     return b64;
 };
 
-// Тот же кеш для embed-ветки онлайн-рендера (ключ — URL, с абсолютными путями не
-// пересекается): три генератора иначе тянули бы одну и ту же картинку с PlantUML-сервера
-// трижды за сборку.
-const readRemoteDiagramBase64 = async (url: string): Promise<string> => {
-    const cached = diagramBase64Cache.get(url);
-    if (cached !== undefined) return cached;
-    const b64 = await httpGet(url);
-    diagramBase64Cache.set(url, b64);
-    return b64;
-};
-
 // Единый рендер markdown одной диаграммы для всех трёх генераторов. В complete-документе
 // ссылки «скачать/перейти» префиксуются папкой элемента, а Download отбивается переводом
 // строки (историческая вёрстка). Признак — variant, а не пустота префикса: у диаграмм в
@@ -129,37 +117,21 @@ const buildDiagramMarkdown = async (
     const format = diagramOutputFormat(diagram, options);
     // rawPath — сырой путь (для чтения файла и как основа ссылок), кодируем ровно один раз.
     const rawPath = path.join(path.dirname(diagram.dir), `${name}.${format}`);
-    // Онлайн-рендер (движки с remoteRender в DIAGRAM_ENGINES) отдаёт абсолютный URL
-    // сервера: его нельзя ни префиксовать папкой, ни повторно кодировать (encodeURI
-    // сломал бы схему https:// и '+' в base64).
-    const isRemoteUrl = !options.GENERATE_LOCAL_IMAGES && engineSupportsRemote(diagram.engine);
-    const diagramUrl = isRemoteUrl
-        ? plantUmlServerUrl(
-              options.PLANTUML_SERVER_URL,
-              format,
-              diagram.content as string // рендер-контент диаграммы (Buffer читается как текст)
-          )
-        : encodeURIPath(rawPath);
-
     // В complete-документе И картинка, И ссылка «скачать/перейти» префиксуются папкой
     // элемента: complete.md лежит в корне dist, а картинки — во вложенных папках, поэтому
     // относительный путь считается от корня. Склеиваем СЫРЫЕ сегменты и кодируем один раз
-    // (иначе % из первого encodeURI превратился бы в %25). Абсолютный URL онлайн-рендера
-    // отдаём как есть — без папки и без повторного encodeURI. В page-варианте md лежит
-    // рядом с картинкой, поэтому путь остаётся относительным к странице (diagramUrl).
-    const localHref =
-        isComplete && !isRemoteUrl
-            ? encodeURIPath(path.join(item.dir.replace(options.ROOT_FOLDER, ''), rawPath))
-            : diagramUrl;
+    // (иначе % из первого encodeURI превратился бы в %25). В page-варианте md лежит рядом
+    // с картинкой, поэтому путь остаётся относительным к странице.
+    const localHref = encodeURIPath(
+        isComplete ? path.join(item.dir.replace(options.ROOT_FOLDER, ''), rawPath) : rawPath
+    );
 
     // Title ссылки-исходника (`"T"`, docsify `':size=600'`) переносится на картинку.
     const titleSuffix = title ? ` ${title}` : '';
     if (options.EMBED_DIAGRAM) {
-        const imgContent = options.GENERATE_LOCAL_IMAGES
-            ? await readDiagramBase64(
-                  path.join(options.DIST_FOLDER, item.dir.replace(options.ROOT_FOLDER, ''), rawPath)
-              )
-            : await readRemoteDiagramBase64(diagramUrl);
+        const imgContent = await readDiagramBase64(
+            path.join(options.DIST_FOLDER, item.dir.replace(options.ROOT_FOLDER, ''), rawPath)
+        );
         const diagramImage = `\n![${name}](data:${getMime(format)};base64,${imgContent}${titleSuffix})\n`;
         const diagramLink = `${isComplete ? '\n' : ''}[Download ${name} diagram](${localHref} ':ignore')`;
         return diagramImage + diagramLink;
@@ -456,13 +428,16 @@ export const generateMD = async (
 
 /** Страница сайта (posix-путь `.md` от корня dist, как его грузит docsify) → исходные файлы. */
 export type PageSources = Map<string, string[]>;
+// Итог сборки сайта: источники страниц и признак пользовательского шаблона, подключающего
+// клиентский рендер PlantUML (предупреждение печатает build — compose в консоль не пишет).
+export type WebSite = { pages: PageSources; loadsClientPlantuml: boolean };
 
 export const generateWebMD = async (
     tree: TreeItem[],
     options: BuildOptions,
     // Переадресации плагинов (change site-agent-review) — в опции docsify, см. DocsifyOptions.
     redirects: Redirects = new Map()
-): Promise<PageSources> => {
+): Promise<WebSite> => {
     const filePromises: Promise<void>[] = [];
     let docsifySideBar = '';
     const pages: PageSources = new Map();
@@ -510,29 +485,33 @@ export const generateWebMD = async (
     };
 
     //docsify homepage
-    filePromises.push(
-        writeFile(
-            path.join(options.DIST_FOLDER, `index.html`),
-            docsifyTemplate({
-                name: options.PROJECT_NAME,
-                repo: options.REPO_NAME,
-                loadSidebar: true,
-                auto2top: true,
-                homepage: `${options.WEB_FILE_NAME || rootName()}.md`,
-                plantuml: {
-                    skin: 'classic'
-                },
-                stylesheet: options.WEB_THEME,
-                alias: { '/.*/_sidebar.md': '/_sidebar.md' },
-                nativeEmoji: true,
-                supportSearch: options.SUPPORT_SEARCH,
-                executeScript: options.EXECUTE_SCRIPT,
-                // Ключ только при включённом сворачивании: при false index.html остаётся прежним.
-                ...(options.SIDEBAR_COLLAPSE ? { sidebarDisplayLevel: 1 } : {}),
-                ...(redirects.size ? { c4builder: { redirects: Object.fromEntries(redirects) } } : {})
-            })
-        )
-    );
+    // Опция `plantuml` — для пользовательских шаблонов, которые к ней обращаются: её удаление
+    // дало бы TypeError в чужом коде, а встроенному шаблону она не нужна.
+    const indexHtml = docsifyTemplate({
+        name: options.PROJECT_NAME,
+        repo: options.REPO_NAME,
+        loadSidebar: true,
+        auto2top: true,
+        homepage: `${options.WEB_FILE_NAME || rootName()}.md`,
+        plantuml: {
+            skin: 'classic'
+        },
+        stylesheet: options.WEB_THEME,
+        alias: { '/.*/_sidebar.md': '/_sidebar.md' },
+        nativeEmoji: true,
+        supportSearch: options.SUPPORT_SEARCH,
+        executeScript: options.EXECUTE_SCRIPT,
+        // Ключ только при включённом сворачивании: при false index.html остаётся прежним.
+        ...(options.SIDEBAR_COLLAPSE ? { sidebarDisplayLevel: 1 } : {}),
+        ...(redirects.size ? { c4builder: { redirects: Object.fromEntries(redirects) } } : {})
+    });
+    // Проверяем готовый index.html, а не исходник шаблона: так ловится любая форма шаблона
+    // (CJS/ESM/TS, теги, собранные в рантайме). Сам скрипт больше не поставляется — тег даст 404,
+    // а при наличии файла он слал бы исходники диаграмм на внешний сервер рендера. Только у
+    // пользовательского шаблона и только тег <script>: подстрока в имени проекта, repoUrl или
+    // ключах переадресаций встроенного шаблона — не клиентский рендер.
+    const loadsClientPlantuml = !!options.DOCSIFY_TEMPLATE && /<script[^>]*docsify-plantuml/i.test(indexHtml);
+    filePromises.push(writeFile(path.join(options.DIST_FOLDER, `index.html`), indexHtml));
 
     //copy local docsify vendor files to dist
     const docsifyVendorSrc = path.join(VENDOR_DIR, 'docsify');
@@ -557,5 +536,5 @@ export const generateWebMD = async (
     filePromises.push(writeFile(path.join(options.DIST_FOLDER, '_sidebar.md'), docsifySideBar));
 
     await Promise.all(filePromises);
-    return pages;
+    return { pages, loadsClientPlantuml };
 };

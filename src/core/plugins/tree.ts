@@ -75,10 +75,10 @@ export const addPage = (tree: TreeItem[], options: BuildOptions, page: PageSpec)
             VIRTUAL.add(item);
             parent.descendants.push(seg);
             tree.splice(subtreeEnd(tree, parent), 0, item);
-            if (options.GENERATE_WEBSITE || options.GENERATE_MD || options.GENERATE_LOCAL_IMAGES)
-                fs.mkdirSync(path.join(options.DIST_FOLDER, dir.replace(options.ROOT_FOLDER, '')), {
-                    recursive: true
-                });
+            // Как у реальных папок (scan/tree): картинки диаграмм рендерятся сюда при любом наборе выходов.
+            fs.mkdirSync(path.join(options.DIST_FOLDER, dir.replace(options.ROOT_FOLDER, '')), {
+                recursive: true
+            });
         }
         parent = item;
     }

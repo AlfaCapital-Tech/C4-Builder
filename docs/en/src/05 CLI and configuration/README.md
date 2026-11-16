@@ -610,8 +610,6 @@ in older versions produce a warning listing them, and the build continues.
 | `includeLinkToDiagram` | `false` | a link instead of the diagram image |
 | `embedDiagram` | `false` | image embedded in markdown as base64 |
 | `excludeOtherFiles` | `false` | do not copy other files from the sources |
-| `generateLocalImages` | `true` | local rendering; `false` — links to an online server |
-| `plantumlServerUrl` | `https://www.plantuml.com/plantuml` | server for `generateLocalImages: false` |
 | `diagramFormat` | `svg` | `svg` or `png` |
 | `d2Layout` | `dagre` | D2 layout: `dagre` or `elk` |
 | `useSystemFonts` | `false` | system fonts instead of the bundled one |

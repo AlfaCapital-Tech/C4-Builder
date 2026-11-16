@@ -18,6 +18,24 @@ User-facing changes of C4-Builder. Every pull request that changes behaviour add
   the timeout. New keys `comments.approve`
   (`heading`, `who`, `set`), `comments.push` (`enabled`, `message`), `buttons.approve`,
   `buttons.push`; without them nothing changes
+- **BREAKING (config):** online PlantUML rendering is removed — every diagram is rendered locally
+  and diagram sources never go to an external render server. `generateLocalImages` and
+  `plantumlServerUrl` are gone from the defaults, the setup wizard, `--list` and new projects;
+  `c4builder doctor` no longer reports them as missing. An old `.c4builder` with
+  `generateLocalImages: false` builds locally with a warning naming both keys before the build
+  (exit code 0 on success, the file is not modified); `true` and `plantumlServerUrl` are ignored silently. Such projects
+  now need Java (resolved automatically, or a private JRE is downloaded) or the Docker image, and
+  a syntactically broken `.puml` now fails the build instead of showing the server's error image —
+  run `c4builder check` on the diagrams before upgrading; remove both keys from `.c4builder` (#33)
+- **BREAKING (output):** `vendor/docsify-plantuml.min.js` is no longer shipped or copied to the
+  site. A custom `docsifyTemplate` that loads it gets a build warning; the build passes — remove
+  the `<script>` tag from the template (#33)
+- Site: closing the full-screen image viewer (`Esc`, `×` or a click beside the image) no longer
+  jumps the page back to the top — the reader stays where they opened it. The page also keeps its
+  position while the viewer is open, so a live reload of `site -w`, the browser's **Back**/**Forward**
+  between anchors and the sidebar highlight no longer reset to the top; closing because of a
+  navigation (another page, an anchor, **Back**/**Forward**, also with `routerMode: 'history'`)
+  leaves scrolling to the navigation
 
 ## v0.15.0
 

@@ -564,6 +564,18 @@ describe('проект и запуск', () => {
             expect(byId(report, id)?.status, id).toBe('ok');
     });
 
+    it('конфиг без ключей удалённого онлайн-рендера — полнота ok', () => {
+        // Мастер их больше не спрашивает, значит и сборка без терминала на них не встанет.
+        const { cwd, json } = sandbox();
+        const config = JSON.parse(CONFIG);
+        delete config.generateLocalImages;
+        delete config.plantumlServerUrl;
+        project(cwd, JSON.stringify(config));
+        expect(byId(json(['project', '--offline']).report, 'project.complete')).toMatchObject({
+            status: 'ok'
+        });
+    });
+
     it('плагин печатает в stdout при импорте — `--json` остаётся одним JSON, вывод плагина — в details', () => {
         const { cwd, json } = sandbox();
         project(cwd, JSON.stringify({ ...JSON.parse(CONFIG), plugins: ['./plug.mjs'] }));

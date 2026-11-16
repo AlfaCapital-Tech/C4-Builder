@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { cachedJava, resolveJava } from './dist.mjs';
+import { cachedJava, generateMD, generateTree, resolveJava } from './dist.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -23,6 +23,39 @@ const goldenManifest = (variant) => path.join(goldenDir(variant), 'manifest.json
 const goldenTree = (variant) => path.join(goldenDir(variant), 'tree');
 
 export const TMP_ROOT = path.join(__dirname, '.tmp');
+
+// Страница markdown проекта `<dir>/src` прямым вызовом scan → compose, без CLI и рендера: для
+// тестов compose-логики (alt, порядок, ссылки), где картинка диаграммы — не предмет проверки.
+// Java им не нужна; картинки, которые положил бы рендер, тест при надобности кладёт в `docs/` сам.
+const COMPOSE_OPTIONS = {
+    PROJECT_NAME: 'compose',
+    HOMEPAGE_NAME: 'Overview',
+    REPO_NAME: '',
+    MD_FILE_NAME: 'README',
+    CHARSET: 'UTF-8',
+    DIAGRAM_FORMAT: 'svg',
+    GENERATE_MD: true,
+    GENERATE_WEBSITE: false,
+    GENERATE_COMPLETE_MD_FILE: false,
+    INCLUDE_NAVIGATION: false,
+    INCLUDE_TABLE_OF_CONTENTS: false,
+    INCLUDE_BREADCRUMBS: false,
+    INCLUDE_LINK_TO_DIAGRAM: false,
+    DIAGRAMS_ON_TOP: false,
+    EMBED_DIAGRAM: false,
+    EXCLUDE_OTHER_FILES: false
+};
+export const composeReadme = async (dir, overrides = {}) => {
+    const options = {
+        ...COMPOSE_OPTIONS,
+        ROOT_FOLDER: path.join(dir, 'src'),
+        DIST_FOLDER: path.join(dir, 'docs'),
+        ...overrides
+    };
+    fs.mkdirSync(options.DIST_FOLDER, { recursive: true });
+    await generateMD(await generateTree(options.ROOT_FOLDER, options), options);
+    return fs.readFileSync(path.join(options.DIST_FOLDER, 'README.md'), 'utf8');
+};
 
 // env спавна CLI с включённой проверкой обновлений: vitest.config ставит NO_UPDATE_NOTIFIER,
 // GitHub Actions — CI; кэш — во временном XDG_CONFIG_HOME, а не в настоящем ~/.config.

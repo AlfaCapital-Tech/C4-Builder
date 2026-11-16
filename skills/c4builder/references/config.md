@@ -43,10 +43,15 @@ Validation rules:
 
 ## Diagrams
 
+Diagrams are always rendered locally (Java + bundled PlantUML, bundled D2, BPMN, mermaid and
+wireflow engines); there is no online render mode, and diagram sources never leave the machine.
+An old `.c4builder` with the removed online-render keys still builds locally: only
+`generateLocalImages: false` prints a warning naming `generateLocalImages` and
+`plantumlServerUrl`; `generateLocalImages: true` and any `plantumlServerUrl` are silently
+ignored. Delete both keys from the file.
+
 | Key | Default | Meaning |
 |---|---|---|
-| `generateLocalImages` | `true` | render locally (Java + bundled PlantUML, bundled D2). `false` = PlantUML images are links to `plantumlServerUrl`; a project with `.d2` files then fails |
-| `plantumlServerUrl` | `https://www.plantuml.com/plantuml` | server for `generateLocalImages: false` |
 | `diagramFormat` | `svg` | `svg` or `png` (PNG is rasterized from SVG; ditaa is always PNG) |
 | `d2Layout` | `dagre` | D2 layout engine: `dagre` or `elk` |
 | `useSystemFonts` | `false` | machine fonts instead of the bundled one — output differs per machine (`--system-fonts` for one run) |
@@ -74,8 +79,9 @@ Validation rules:
 |---|---|---|
 | `plugins` | `[]` | `"name"` or `["name", { options }]` — see [plugins.md](plugins.md). Unlike other keys, a malformed entry always fails the build |
 
-Legacy keys (`plantumlVersion`, `generatePDF`, `generateCompletePDF`) only produce a
-warning — remove them when you see one.
+Legacy keys (`plantumlVersion`, `generatePDF`, `generateCompletePDF`, `generateLocalImages: false`)
+only produce a warning — remove them when you see one. `plantumlServerUrl` and
+`generateLocalImages: true` are dropped without a warning; remove them too.
 
 Complete config written by `c4builder new --name demo -y` — start from it when adding
 c4builder to an existing repository:
@@ -104,8 +110,6 @@ c4builder to an existing repository:
   "diagramsOnTop": true,
   "embedDiagram": false,
   "excludeOtherFiles": false,
-  "generateLocalImages": true,
-  "plantumlServerUrl": "https://www.plantuml.com/plantuml",
   "diagramFormat": "svg",
   "d2Layout": "dagre",
   "charset": "UTF-8",

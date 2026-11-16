@@ -219,6 +219,21 @@ describe('comments и прежний reviewLog', () => {
         expect(configWarnings({ comments: {}, reviewLog: { label: 'X' } })).toEqual([]);
         expect(configWarnings({})).toEqual([]);
     });
+    it('configWarnings: ключи удалённого онлайн-рендера — предупреждение только на generateLocalImages: false', () => {
+        const server = 'https://www.plantuml.com/plantuml';
+        const [warning, ...rest] = configWarnings({ generateLocalImages: false, plantumlServerUrl: server });
+        expect(rest).toEqual([]);
+        expect(warning).toMatch(/generateLocalImages and plantumlServerUrl are ignored/);
+        // true и адрес сервера записаны в каждый старый конфиг — молча игнорируются, как и отсутствие
+        expect(configWarnings({ generateLocalImages: true, plantumlServerUrl: server })).toEqual([]);
+        expect(configWarnings({ plantumlServerUrl: server })).toEqual([]);
+    });
+    it('ключи удалённого онлайн-рендера схема отбрасывает', () => {
+        const parsed = parseConfig({ generateLocalImages: false, plantumlServerUrl: 'x' });
+        expect(parsed.ok).toBe(true);
+        expect(parsed.value).not.toHaveProperty('generateLocalImages');
+        expect(parsed.value).not.toHaveProperty('plantumlServerUrl');
+    });
 });
 
 // Апрув строки и Push журнала (change site-review-approve-push).

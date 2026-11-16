@@ -613,8 +613,6 @@ describe('сборка проекта с .wireflow.json', () => {
         diagramsOnTop: false,
         embedDiagram: false,
         excludeOtherFiles: false,
-        generateLocalImages: true,
-        plantumlServerUrl: 'https://www.plantuml.com/plantuml',
         diagramFormat: 'svg',
         d2Layout: 'dagre',
         charset: 'UTF-8',
