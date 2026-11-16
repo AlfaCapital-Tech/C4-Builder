@@ -115,6 +115,15 @@ A feedback comment is an instruction to the agent: it is never written to the fi
 source — for example the change's `review.md`; it is a record for people and the review process, not
 addressed to the agent, and the agent should not move feedback there or answer it by editing the log.
 
+With the `comments.approve` and `comments.push` keys the log is committed and pushed from the page:
+**Approve row** records the approval of a status table row, **Push** on the review log bar sends the
+written comments (see «Approve and Push of the log» on the
+[CLI and configuration](05%20CLI%20and%20configuration/05%20CLI%20and%20configuration.md) page).
+Only the log file goes into the commit, other changes of the working copy — the agent's included — are
+left alone; unpushed agent commits in the branch are a refusal: the log never carries other work
+along. But the log file is committed whole: if the agent edited the same `review.md`, its edits go
+into that commit.
+
 ### Several agents
 
 Several agents, each with its own change, can work with one `site -w`: each listens under its own
@@ -138,7 +147,8 @@ has (`en` or `ru`), otherwise English. To pin the language for a project, set th
 the English buttons; the Russian interface shows **Сказать агенту** (Tell agent), **Комментарий**
 (Comment), **Добавить комментарий** (Add comment), **Отправить** (Send now), **Добавить** (Add),
 **Отправить агенту** (Send to agent), **Одобрить** (Approve), **Очистить** (Discard),
-**Готово, правок нет** (Done — no changes), **Кому** (Send to). Labels set with the `buttons` key are
+**Готово, правок нет** (Done — no changes), **Кому** (Send to), **Одобрить строку** (Approve row),
+**Запушить** (Push). Labels set with the `buttons` key are
 shown as is. The interface language does not change the CLI output, the `c4builder feedback` batch,
 server error texts or the review log section heading (`comments.heading`).
 

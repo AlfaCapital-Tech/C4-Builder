@@ -322,6 +322,41 @@ export const writeActualTree = (tree, variant) => {
     }
 };
 
+// Песочница git для тестов журнала ревью (change site-review-approve-push): bare-remote, рабочая
+// копия с upstream и клон «коллеги» во временном каталоге. Глобальный конфиг пользователя (подпись
+// коммитов, хуки, push.default) подменён своим файлом — тесты не зависят от машины и не трогают
+// настоящие remote. `env` — передать в спавн CLI и в process.env теста.
+export const gitSandbox = (name = 'git-') => {
+    fs.mkdirSync(TMP_ROOT, { recursive: true });
+    const base = fs.mkdtempSync(path.join(TMP_ROOT, name));
+    const config = path.join(base, 'gitconfig');
+    fs.writeFileSync(
+        config,
+        '[user]\n\tname = Ivan Ivanov\n\temail = ivan@example.com\n[init]\n\tdefaultBranch = main\n[commit]\n\tgpgsign = false\n'
+    );
+    const env = { GIT_CONFIG_GLOBAL: config, GIT_CONFIG_NOSYSTEM: '1' };
+    const git = (cwd, ...args) => {
+        const r = spawnSync('git', args, { cwd, encoding: 'utf8', env: { ...process.env, ...env } });
+        if (r.status !== 0) throw new Error(`git ${args.join(' ')}: ${r.stderr}`);
+        return r.stdout.trim();
+    };
+    const remote = path.join(base, 'remote.git');
+    const work = path.join(base, 'work');
+    const other = path.join(base, 'other');
+    git(base, 'init', '--bare', '-q', remote);
+    git(base, 'clone', '-q', remote, work);
+    // Наполнение рабочей копии — до первого коммита: `seed(work)` пишет файлы проекта.
+    const init = (seed) => {
+        seed(work);
+        git(work, 'add', '-A');
+        git(work, 'commit', '-q', '-m', 'init');
+        git(work, 'push', '-q', '-u', 'origin', 'main');
+        git(base, 'clone', '-q', remote, other);
+    };
+    const remoteLog = () => git(remote, 'log', '--format=%s', 'main').split('\n');
+    return { base, remote, work, other, env, git, init, remoteLog };
+};
+
 // Кириллица в SVG уезжает числовыми XML-сущностями (&#1050; = «К») — декодируем перед проверками
 export const decodeXmlEntities = (text) =>
     text.replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(Number(code)));

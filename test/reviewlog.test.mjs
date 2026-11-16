@@ -3,12 +3,16 @@ import path from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 
 import {
+    approvedRows,
+    approveRow,
     deleteRemark,
     fillCells,
     findReviewFile,
+    isNoName,
     isReviewFile,
     parseRemarks,
     remarkVars,
+    removeRow,
     writeRemark
 } from './dist.mjs';
 import { TMP_ROOT } from './helpers.mjs';
@@ -249,5 +253,117 @@ describe('writeRemark', () => {
             writeRemark(review, { file: 'review.md', heading: ['Other', 'Nope'], cells: ['{text}'] }, input)
         ).toBeNull();
         expect(fs.readFileSync(review, 'utf8')).toContain('## Other\n\n- Why? — «foo» (§ Flow)\n');
+    });
+});
+
+// Апрув строки таблицы статусов (change site-review-approve-push): строка — по всем ячейкам,
+// колонки — по названиям; функция чистая, файл пишет сервер после проверки репозитория.
+describe('approveRow', () => {
+    const LOG = [
+        '# Ревью',
+        '',
+        '## Статусы',
+        '',
+        '| Роль | Статус | Кто | Дата |',
+        '|------|--------|-----|------|',
+        '| Аналитик | | Иванов Иван | |',
+        '| Тестировщик | | — | |',
+        '| Разработчик | Approved | Петров Пётр | 2026-11-01 |',
+        '',
+        '## Замечания',
+        '',
+        '| # | Где | Что |',
+        '|---|---|---|',
+        '| 1 | design | Иванов Иван |',
+        ''
+    ].join('\n');
+    const OPTS = {
+        heading: ['Статусы'],
+        who: 'Кто',
+        set: { Статус: 'Approved', Дата: '{date}' }
+    };
+    const ROW = ['Аналитик', '', 'Иванов Иван', ''];
+
+    it('ячейки set по названиям колонок; остальной текст байт в байт прежний', () => {
+        const r = approveRow(LOG, OPTS, ROW, '2026-11-15');
+        expect(r.author).toBe('Иванов Иван');
+        expect(r.markdown).toBe(
+            LOG.replace(
+                '| Аналитик | | Иванов Иван | |',
+                '| Аналитик | Approved | Иванов Иван | 2026-11-15 |'
+            )
+        );
+    });
+    it('CRLF сохраняется; {author} — имя из колонки who, HTML и | экранированы', () => {
+        const crlf = LOG.replace(/\n/g, '\r\n');
+        const r = approveRow(crlf, { ...OPTS, set: { Статус: '<b>{author}</b> | ok' } }, ROW, '2026-11-15');
+        expect(r.markdown).toContain('| Аналитик | <b>Иванов Иван</b> \\| ok | Иванов Иван |  |\r\n');
+        expect(r.markdown.split('\r\n').length).toBe(crlf.split('\r\n').length);
+    });
+    it('варианты заголовка и регистр названий колонок', () => {
+        const r = approveRow(LOG, { ...OPTS, heading: ['Statuses', 'Статусы'], who: 'кто' }, ROW, 'd');
+        expect(r.markdown).toContain('| Аналитик | Approved | Иванов Иван | d |');
+    });
+    it('строки нет или их несколько — not-found / ambiguous', () => {
+        expect(approveRow(LOG, OPTS, ['Аналитик', '', 'Сидоров', ''])).toEqual({ error: 'not-found' });
+        const twice = LOG.replace('| Тестировщик | | — | |', '| Аналитик | | Иванов Иван | |');
+        expect(approveRow(twice, OPTS, ROW)).toEqual({ error: 'ambiguous' });
+        expect(approveRow(LOG, { ...OPTS, heading: ['Нет такого'] }, ROW)).toEqual({ error: 'not-found' });
+    });
+    it('нет колонки who или set — no-column с названием', () => {
+        expect(approveRow(LOG, { ...OPTS, set: { Комментарий: 'x' } }, ROW)).toEqual({
+            error: 'no-column',
+            column: 'Комментарий'
+        });
+        expect(approveRow(LOG, { ...OPTS, who: 'Ревьюер' }, ROW)).toEqual({
+            error: 'no-column',
+            column: 'Ревьюер'
+        });
+    });
+    it('без имени в колонке who и уже одобренная строка — отказ', () => {
+        expect(approveRow(LOG, OPTS, ['Тестировщик', '', '—', ''])).toEqual({ error: 'no-name' });
+        expect(approveRow(LOG, OPTS, ['Разработчик', 'Approved', 'Петров Пётр', '2026-11-01'])).toEqual({
+            error: 'approved'
+        });
+        expect(isNoName('')).toBe(true);
+        expect(isNoName(' - ')).toBe(true);
+        expect(isNoName('Иванов Иван')).toBe(false);
+    });
+    it('файл журнала не пишется', () => {
+        const file = path.join(root, 'statuses.md');
+        fs.writeFileSync(file, LOG);
+        approveRow(fs.readFileSync(file, 'utf8'), OPTS, ROW);
+        expect(fs.readFileSync(file, 'utf8')).toBe(LOG);
+    });
+    it('строка короче заголовка (docsify дорисовывает пустые ячейки) — находится и для апрува, и для удаления', () => {
+        const short = LOG.replace('| Аналитик | | Иванов Иван | |', '| Аналитик | | Иванов Иван |');
+        const r = approveRow(short, OPTS, ROW, '2026-11-15');
+        expect(r.markdown).toContain('| Аналитик | Approved | Иванов Иван | 2026-11-15 |');
+        const removed = removeRow(short, 'Статусы', { text: 'Аналитик' }, { cells: ROW });
+        expect(removed.markdown).not.toContain('| Аналитик |');
+        // лишние непустые ячейки страницы сверх ширины заголовка — не та строка
+        expect(approveRow(LOG, OPTS, [...ROW, 'x'])).toEqual({ error: 'not-found' });
+    });
+    it('пустое значение в set — не литерал: строка с пустой ячейкой не «одобрена»', () => {
+        const opts = { ...OPTS, set: { Статус: '', Дата: '{date}' } };
+        expect(approvedRows(LOG, opts)).toEqual({ rows: [] });
+        expect(approveRow(LOG, opts, ROW, 'd')).toHaveProperty('markdown');
+    });
+    it('нет колонки who или set — approvedRows называет колонку (как и апрув)', () => {
+        expect(approvedRows(LOG, { ...OPTS, who: 'Ревьюер' })).toEqual({ column: 'Ревьюер' });
+        expect(approvedRows(LOG, { ...OPTS, set: { Комментарий: 'ok' } })).toEqual({ column: 'Комментарий' });
+    });
+    it('approvedRows — одобренные строки по тому же правилу, что и отказ апрува', () => {
+        expect(approvedRows(LOG, OPTS)).toEqual({
+            rows: [['Разработчик', 'Approved', 'Петров Пётр', '2026-11-01']]
+        });
+        // регистр значения важен — как и при апруве: «approved» — не одобрена
+        const lower = LOG.replace('| Разработчик | Approved |', '| Разработчик | approved |');
+        expect(approvedRows(lower, OPTS)).toEqual({ rows: [] });
+        expect(
+            approveRow(lower, OPTS, ['Разработчик', 'approved', 'Петров Пётр', '2026-11-01'], 'd')
+        ).toHaveProperty('markdown');
+        // set без литералов — одобренных строк не бывает
+        expect(approvedRows(LOG, { ...OPTS, set: { Дата: '{date}' } })).toEqual({ rows: [] });
     });
 });

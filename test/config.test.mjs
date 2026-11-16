@@ -172,8 +172,30 @@ describe('comments и прежний reviewLog', () => {
         expect(log({ comments: { file: 'a.md' }, reviewLog: { file: 'b.md', heading: 'B' } })).toEqual({
             enabled: true,
             file: 'a.md',
-            heading: ['Review']
+            heading: ['Review'],
+            push: { enabled: false, message: 'review {change}: {action} — {author}' }
         });
+    });
+    it('commentsLog: push нормализован — включён ли и шаблон сообщения всегда задан', () => {
+        const log = (raw) => commentsLog(configSchema.parse(raw));
+        expect(log({ comments: {} }).push).toEqual({
+            enabled: false,
+            message: 'review {change}: {action} — {author}'
+        });
+        expect(log({ comments: { push: {} } }).push.enabled).toBe(true);
+        expect(log({ comments: { push: { enabled: false, message: '{file}' } } }).push).toEqual({
+            enabled: false,
+            message: '{file}'
+        });
+    });
+    it('configWarnings: approve.set без литералов — предупреждение', () => {
+        const approve = (set) => ({ comments: { approve: { heading: 'S', who: 'W', set } } });
+        expect(configWarnings(approve({ Date: '{date}', By: '{author}' }))).toEqual([
+            'comments.approve.set has no non-empty value without placeholders — an approved row cannot be recognized, so Approve row stays on every named row and each press makes a new commit'
+        ]);
+        expect(configWarnings(approve({ Status: 'Approved', Date: '{date}' }))).toEqual([]);
+        // пустое значение (очистить колонку) — не литерал
+        expect(configWarnings(approve({ Note: '', Date: '{date}' }))).toHaveLength(1);
     });
     it('commentsLog: enabled: false — журнала нет; label — из reviewLog', () => {
         const log = (raw) => commentsLog(configSchema.parse(raw));
@@ -211,6 +233,62 @@ describe('comments и прежний reviewLog', () => {
         expect(parsed.ok).toBe(true);
         expect(parsed.value).not.toHaveProperty('generateLocalImages');
         expect(parsed.value).not.toHaveProperty('plantumlServerUrl');
+    });
+});
+
+// Апрув строки и Push журнала (change site-review-approve-push).
+describe('comments.approve и comments.push', () => {
+    const APPROVE = { heading: 'Статусы', who: 'Кто', set: { Статус: 'Approved', Дата: '{date}' } };
+    it('без ключей — полей нет, кнопок нет', () => {
+        const c = configSchema.parse({ comments: {} }).comments;
+        expect(c).not.toHaveProperty('approve');
+        expect(c).not.toHaveProperty('push');
+        expect(configSchema.parse({ comments: { approve: null, push: null } }).comments.push).toBeUndefined();
+    });
+    it('push: {} включён с шаблоном по умолчанию, enabled: false — выключен', () => {
+        expect(configSchema.parse({ comments: { push: {} } }).comments.push).toEqual({
+            enabled: true,
+            message: 'review {change}: {action} — {author}'
+        });
+        expect(configSchema.parse({ comments: { push: { enabled: false } } }).comments.push.enabled).toBe(
+            false
+        );
+        expect(configSchema.parse({ comments: { push: { message: '{file}' } } }).comments.push.message).toBe(
+            '{file}'
+        );
+    });
+    it('approve: heading строкой и списком, неизвестные поля отбрасываются', () => {
+        expect(
+            configSchema.parse({ comments: { approve: { ...APPROVE, extra: 1 } } }).comments.approve
+        ).toEqual({
+            heading: ['Статусы'],
+            who: 'Кто',
+            set: { Статус: 'Approved', Дата: '{date}' }
+        });
+        expect(
+            configSchema.parse({ comments: { approve: { ...APPROVE, heading: ['Statuses', 'Статусы'] } } })
+                .comments.approve.heading
+        ).toEqual(['Statuses', 'Статусы']);
+        expect(
+            configSchema.parse({ comments: { push: { enabled: true, foo: 'x' } } }).comments.push
+        ).not.toHaveProperty('foo');
+    });
+    it('approve без who, set или heading, set пустой или не строки — ошибка', () => {
+        const bad = (approve) => configSchema.safeParse({ comments: { approve } }).success;
+        expect(bad({ heading: 'S', set: { A: 'x' } })).toBe(false);
+        expect(bad({ heading: 'S', who: 'W' })).toBe(false);
+        expect(bad({ who: 'W', set: { A: 'x' } })).toBe(false);
+        expect(bad({ heading: 'S', who: 'W', set: {} })).toBe(false);
+        expect(bad({ heading: 'S', who: 'W', set: { A: true } })).toBe(false);
+    });
+    it('commentsLog пробрасывает approve и push; buttons.approve и buttons.push', () => {
+        const log = commentsLog(configSchema.parse({ comments: { approve: APPROVE, push: {} } }));
+        expect(log.approve.who).toBe('Кто');
+        expect(log.push.enabled).toBe(true);
+        expect(configSchema.parse({ buttons: { approve: 'Approve', push: 'Send' } }).buttons).toEqual({
+            approve: 'Approve',
+            push: 'Send'
+        });
     });
 });
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { buttonLabels, commentsSnippet } from '../dist/cli/commands/site.comments.js';
+import { UI_STRINGS } from './dist.mjs';
 
 // Клиентский сниппет страницы `site -w` в jsdom: кнопки у выделения — журнал ревью (Comment) и
 // агент (Tell agent), поповер, черновик для агента и панель (changes site-comments,
@@ -587,7 +588,7 @@ describe('кнопка журнала ревью', () => {
         ]);
         p.window.__reply = { file: 'src/review.md', number: 4 };
         await p.write('t', 'Comment', 'Wrong', 'Add comment');
-        // первый вызов — GET синхронизации страницы с журналом
+        // первый вызов — GET синхронизации страницы с журналом; git-состояние без push/approve не спрашивается
         expect(p.window.__calls).toEqual([
             { url: '/__c4builder/review-log?page=A.md', method: 'GET', body: undefined },
             {
@@ -681,5 +682,502 @@ describe('кнопка журнала ревью', () => {
             'Сказать агенту',
             'Комментарий'
         ]);
+    });
+});
+
+// Апрув строки таблицы статусов (change site-review-approve-push): кнопка у выделения только на
+// странице журнала, в одной строке таблицы раздела approve.heading с именем и без апрува.
+describe('кнопка Approve row', () => {
+    const APPROVE = { heading: ['Статусы'], who: 'Кто', set: { Статус: 'Approved', Дата: '{date}' } };
+    const LOG = { file: 'review.md', heading: ['Замечания'], approve: APPROVE };
+    // Одобренные строки отдаёт сервер (правило одно — серверное).
+    const APPROVED = ['Разработчик', 'Approved', 'Петров Пётр', '2026-11-01'];
+    const BODY = `<h1>Ревью</h1><h2>Статусы</h2>
+<table><thead><tr><th>Роль</th><th>Статус</th><th>Кто</th><th>Дата</th></tr></thead><tbody>
+<tr><td>Аналитик</td><td></td><td id="who1">Иванов Иван</td><td></td></tr>
+<tr><td id="role2">Тестировщик</td><td></td><td id="who2">—</td><td></td></tr>
+<tr><td>Разработчик</td><td>Approved</td><td id="who3">Петров Пётр</td><td>2026-11-01</td></tr>
+</tbody></table>
+<h2>Замечания</h2>
+<table><thead><tr><th>#</th><th>Где</th><th>Что</th></tr></thead><tbody>
+<tr><td>1</td><td>design</td><td id="rm">Иванов Иван</td></tr>
+</tbody></table>`;
+    const page = (opts = {}) =>
+        agentPage({
+            agent: false,
+            languages: ['en'],
+            reviewLog: LOG,
+            body: BODY,
+            reply: { file: 'src/review.md', log: true, approved: [APPROVED] },
+            ...opts
+        });
+    // Выделение от начала текста одного элемента до конца другого и кнопки у него.
+    const select = async (p, from, to = from) => {
+        const range = p.doc.createRange();
+        range.setStart(p.doc.getElementById(from).firstChild, 0);
+        const end = p.doc.getElementById(to).firstChild;
+        range.setEnd(end, end.length);
+        const sel = p.window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        p.doc.dispatchEvent(new p.window.Event('selectionchange'));
+        await sleep(20);
+        return p.buttons();
+    };
+
+    it('строка с именем — Comment и Approve row; запрос с ячейками строки, тост с результатом', async () => {
+        const p = await page();
+        expect(await select(p, 'who1')).toEqual(['Comment', 'Approve row']);
+        p.window.__reply = { file: 'src/review.md', commit: 'abc1234', pushed: true };
+        p.byText(p.doc.querySelector('.c4b-cbtns'), 'Approve row').click();
+        await sleep(20);
+        expect(p.window.__calls.filter((c) => c.method === 'POST').at(-1)).toEqual({
+            url: '/__c4builder/review-log/approve',
+            method: 'POST',
+            body: { page: 'A.md', cells: ['Аналитик', '', 'Иванов Иван', ''] }
+        });
+        expect(p.toast()).toBe('Row approved in src/review.md and pushed');
+    });
+
+    it('нет кнопки: две строки, строка без имени, уже одобренная, раздел «Замечания»', async () => {
+        const p = await page();
+        expect(await select(p, 'who1', 'role2')).toEqual(['Comment']);
+        expect(await select(p, 'who2')).toEqual(['Comment']);
+        expect(await select(p, 'who3')).toEqual(['Comment']);
+        expect(await select(p, 'rm')).toEqual(['Comment']);
+        expect(await select(p, 'who1')).toEqual(['Comment', 'Approve row']);
+    });
+
+    it('не страница журнала и без ключа approve — кнопки нет', async () => {
+        const other = await page({ reply: { file: 'src/review.md', log: false, remarks: [] } });
+        expect(await select(other, 'who1')).toEqual(['Comment']);
+        const off = await page({ reviewLog: { file: 'review.md', heading: ['Замечания'] } });
+        expect(await select(off, 'who1')).toEqual(['Comment']);
+        expect(off.doc.querySelectorAll('.c4b-cbtns button').length).toBe(2);
+    });
+
+    it('подпись из buttons.approve на любом языке; ошибка сервера — тост с префиксом', async () => {
+        const p = await page({ languages: ['ru'], labels: { approve: 'Approve' } });
+        expect(await select(p, 'who1')).toEqual(['Комментарий', 'Approve']);
+        p.window.__error = 'row not found';
+        p.byText(p.doc.querySelector('.c4b-cbtns'), 'Approve').click();
+        await sleep(20);
+        expect(p.toast()).toBe('Не удалось одобрить: row not found');
+    });
+
+    it('подписи по умолчанию не совпадают с Approve панели агенту', async () => {
+        const ru = await page({ languages: ['ru'] });
+        expect(await select(ru, 'who1')).toEqual(['Комментарий', 'Одобрить строку']);
+        expect(UI_STRINGS.en.approveRow).not.toBe(UI_STRINGS.en.approve);
+        expect(UI_STRINGS.ru.approveRow).not.toBe(UI_STRINGS.ru.approve);
+        expect(UI_STRINGS.en.push).not.toBe(UI_STRINGS.en.approve);
+    });
+});
+
+// Approve row: дотолкивание незапушенного апрува и ячейки без «×» журнала (code review).
+describe('кнопка Approve row: повтор и служебные элементы', () => {
+    const APPROVE = { heading: ['Статусы'], who: 'Кто', set: { Статус: 'Approved', Дата: '{date}' } };
+    const BODY = `<h1>Ревью</h1><h2>Статусы</h2>
+<table><thead><tr><th>Роль</th><th>Статус</th><th>Кто</th><th>Дата</th></tr></thead><tbody>
+<tr><td>Аналитик</td><td></td><td id="who1">Иванов Иван</td><td></td></tr>
+<tr><td>Разработчик</td><td>Approved</td><td id="who3">Петров Пётр</td><td>2026-11-01</td></tr>
+</tbody></table>`;
+    const page = (reviewLog, reply) =>
+        agentPage({ agent: false, languages: ['en'], reviewLog, body: BODY, reply });
+    const select = async (p, id) => {
+        const range = p.doc.createRange();
+        range.selectNodeContents(p.doc.getElementById(id));
+        p.window.getSelection().removeAllRanges();
+        p.window.getSelection().addRange(range);
+        p.doc.dispatchEvent(new p.window.Event('selectionchange'));
+        await sleep(20);
+        return p.buttons();
+    };
+    const approve = async (p) => {
+        p.window.__reply = { file: 'src/review.md', commit: null, pushed: true };
+        p.byText(p.doc.querySelector('.c4b-cbtns'), 'Approve row').click();
+        await sleep(20);
+        return p.window.__calls.filter((c) => c.method === 'POST').at(-1).body.cells;
+    };
+
+    it('одобренная строка, коммит журнала не запушен (сервер отметил строку в unpushedRows) — кнопка есть, повтор шлёт строку', async () => {
+        const LOG = { file: 'review.md', heading: ['Замечания'], approve: APPROVE };
+        const approved = [['Разработчик', 'Approved', 'Петров Пётр', '2026-11-01']];
+        const done = await page(LOG, { file: 'src/review.md', log: true, approved });
+        expect(await select(done, 'who3')).toEqual(['Comment']);
+        const p = await page(LOG, { file: 'src/review.md', log: true, approved, unpushedRows: approved });
+        expect(await select(p, 'who3')).toEqual(['Comment', 'Approve row']);
+        expect(await approve(p)).toEqual(['Разработчик', 'Approved', 'Петров Пётр', '2026-11-01']);
+        expect(p.toast()).toBe('Row approved in src/review.md and pushed');
+    });
+
+    it('«×» журнала в ячейках таблицы статусов не попадает в ячейки запроса', async () => {
+        // Раздел журнала — h1 «Ревью»: таблица статусов внутри него, её строки получают «×».
+        const p = await page(
+            { file: 'review.md', heading: ['Ревью'], approve: APPROVE },
+            { file: 'f', log: true }
+        );
+        await sleep(50);
+        expect(p.doc.querySelectorAll('.c4b-del').length).toBe(2);
+        expect(await select(p, 'who1')).toEqual(['Comment', 'Approve row']);
+        expect(await approve(p)).toEqual(['Аналитик', '', 'Иванов Иван', '']);
+    });
+});
+
+// Плашка Push журнала (change site-review-approve-push): состояние — из GET журнала (`pending`),
+// а не из браузера; кнопка неактивна на время запроса, после успеха плашка уходит сразу.
+describe('плашка Push журнала', () => {
+    const LOG = { file: 'review.md', heading: ['Remarks'], push: true };
+    const PENDING = {
+        file: 'src/review.md',
+        log: false,
+        remarks: [],
+        pending: { changed: true, unpushed: 0 }
+    };
+    const bar = (p) => p.doc.querySelector('.c4b-logbar');
+    const barButton = (p) => bar(p).querySelector('button');
+
+    it('pending в ответе GET — плашка с текстом и Push; без кнопки закрытия', async () => {
+        const p = await agentPage({ agent: false, languages: ['en'], reviewLog: LOG, reply: PENDING });
+        expect(bar(p).hidden).toBe(false);
+        // короткий текст — рядом панель агента; полный путь — в подсказке
+        expect(bar(p).querySelector('span').textContent).toBe('Review log has unpushed changes');
+        expect(bar(p).querySelector('span').title).toBe('src/review.md');
+        expect([...bar(p).querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Push']);
+        // незапушенный коммит без правок файла — тоже плашка
+        const q = await agentPage({
+            agent: false,
+            languages: ['en'],
+            reviewLog: LOG,
+            reply: { ...PENDING, pending: { changed: false, unpushed: 1 } }
+        });
+        expect(bar(q).hidden).toBe(false);
+    });
+
+    it('Push: на время запроса кнопка неактивна; успех — плашка скрыта сразу, тост, перезапрос GET', async () => {
+        const p = await agentPage({ agent: false, languages: ['en'], reviewLog: LOG, reply: PENDING });
+        p.window.__reply = { file: 'src/review.md', commit: 'abc1234', pushed: true };
+        barButton(p).click();
+        expect(barButton(p).disabled).toBe(true);
+        barButton(p).click();
+        await sleep(20);
+        expect(p.window.__calls.filter((c) => c.method === 'POST')).toEqual([
+            { url: '/__c4builder/review-log/push', method: 'POST', body: { page: 'A.md' } }
+        ]);
+        expect(bar(p).hidden).toBe(true);
+        expect(p.toast()).toBe('Pushed src/review.md');
+        expect(p.window.__calls.at(-1)).toEqual({
+            url: '/__c4builder/review-log/state?page=A.md',
+            method: 'GET',
+            body: undefined
+        });
+        expect(bar(p).hidden).toBe(true);
+    });
+
+    it('«нечего пушить» тоже скрывает плашку; ошибка — плашка остаётся, кнопка снова активна', async () => {
+        const p = await agentPage({ agent: false, languages: ['en'], reviewLog: LOG, reply: PENDING });
+        p.window.__error = 'push to origin/main was rejected';
+        barButton(p).click();
+        await sleep(20);
+        expect(bar(p).hidden).toBe(false);
+        expect(barButton(p).disabled).toBe(false);
+        expect(p.toast()).toBe('Push failed: push to origin/main was rejected');
+        p.window.__error = '';
+        p.window.__reply = { file: 'src/review.md', commit: null, pushed: false };
+        barButton(p).click();
+        await sleep(20);
+        expect(bar(p).hidden).toBe(true);
+        expect(p.toast()).toBe('Nothing to push');
+    });
+
+    it('нет плашки: чисто, pending null (не git), страница без журнала (404), push выключен', async () => {
+        const clean = await agentPage({
+            agent: false,
+            reviewLog: LOG,
+            reply: { ...PENDING, pending: { changed: false, unpushed: 0 } }
+        });
+        expect(bar(clean).hidden).toBe(true);
+        const nogit = await agentPage({ agent: false, reviewLog: LOG, reply: { ...PENDING, pending: null } });
+        expect(bar(nogit).hidden).toBe(true);
+        const nolog = await agentPage({ agent: false, reviewLog: LOG, error: 'review.md not found' });
+        expect(bar(nolog).hidden).toBe(true);
+        const off = await agentPage({ agent: false, reviewLog: { ...LOG, push: false }, reply: PENDING });
+        expect(bar(off).hidden).toBe(true);
+    });
+
+    it('после Add comment — обычный тост с таймером и перезапрос GET, плашка появляется', async () => {
+        const p = await agentPage({
+            agent: false,
+            languages: ['en'],
+            reviewLog: LOG,
+            reply: { ...PENDING, pending: { changed: false, unpushed: 0 } }
+        });
+        expect(bar(p).hidden).toBe(true);
+        p.window.__reply = { file: 'src/review.md', number: 4, pending: { changed: true, unpushed: 0 } };
+        await p.write('t', 'Comment', 'Why?', 'Add comment');
+        expect(p.toast()).toBe('Added to src/review.md as #4');
+        expect(p.doc.querySelectorAll('.c4b-ctoast button').length).toBe(0);
+        expect(p.window.__calls.at(-1).method).toBe('GET');
+        expect(bar(p).hidden).toBe(false);
+    });
+
+    it('справа от панели агента в общем нижнем ряду; на узком экране — перенос над панелью', async () => {
+        const p = await agentPage({
+            agent: true,
+            languages: ['ru'],
+            reviewLog: LOG,
+            reply: PENDING,
+            labels: { push: 'Send' }
+        });
+        const dock = p.doc.querySelector('.c4b-dock');
+        expect([...dock.children]).toEqual([p.panel, bar(p)]);
+        expect(p.panel.hidden).toBe(false);
+        expect(bar(p).hidden).toBe(false);
+        expect(dock.hidden).toBe(false);
+        // ряд по низу, перенос строки — вверх (wrap-reverse): плашка встаёт над панелью
+        const css = p.doc.head.querySelector('style').textContent;
+        expect(css).toContain(
+            '.c4b-dock{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:1000;display:flex;flex-wrap:wrap-reverse;align-items:flex-end;justify-content:center;gap:8px;'
+        );
+        expect(css).not.toMatch(/\.c4b-(review|logbar)\{position:fixed/);
+        expect(barButton(p).textContent).toBe('Send');
+        expect(bar(p).querySelector('span').textContent).toBe('Журнал ревью не запушен');
+        // одна плашка без панели — одна в ряду (по центру)
+        const solo = await agentPage({ agent: false, reviewLog: LOG, reply: PENDING });
+        expect(solo.panel.hidden).toBe(true);
+        expect(bar(solo).hidden).toBe(false);
+    });
+});
+
+// Нижний ряд панелей не перекрывает конец страницы: у контента — нижний отступ высотой ряда.
+describe('нижний отступ контента под панелями', () => {
+    const LOG = { file: 'review.md', heading: ['Remarks'], push: true };
+    const PENDING = {
+        file: 'src/review.md',
+        log: false,
+        remarks: [],
+        pending: { changed: true, unpushed: 0 }
+    };
+    const CLEAN = { ...PENDING, pending: { changed: false, unpushed: 0 } };
+    const padding = (p) => p.doc.querySelector('.markdown-section').style.paddingBottom;
+    // В jsdom раскладки нет: высоту ряда задаём руками.
+    const height = (p, h) =>
+        Object.defineProperty(p.doc.querySelector('.c4b-dock'), 'offsetHeight', {
+            configurable: true,
+            value: h
+        });
+
+    it('панель агента без плашки — отступ высотой ряда; агент ушёл — отступ снят', async () => {
+        const p = await agentPage({ agent: false, reviewLog: LOG, reply: CLEAN });
+        expect(padding(p)).toBe('');
+        expect(p.doc.querySelector('.c4b-dock').hidden).toBe(true);
+        height(p, 50);
+        p.agentEvent({ on: true, mailboxes: [] });
+        expect(padding(p)).toBe('82px');
+        p.agentEvent({ on: false, mailboxes: [] });
+        expect(padding(p)).toBe('');
+    });
+
+    it('плашка появилась и ушла после Push — отступ появляется и снимается', async () => {
+        const p = await agentPage({ agent: false, reviewLog: LOG, reply: CLEAN });
+        height(p, 40);
+        p.window.__reply = { file: 'src/review.md', number: 4, pending: { changed: true, unpushed: 0 } };
+        await p.write('t', 'Comment', 'Why?', 'Add comment');
+        expect(padding(p)).toBe('72px');
+        p.window.__reply = { file: 'src/review.md', commit: 'abc1234', pushed: true };
+        p.doc.querySelector('.c4b-logbar button').click();
+        await sleep(20);
+        expect(padding(p)).toBe('');
+    });
+});
+
+// Approve row: кнопка неактивна на время запроса, после успеха скрыта и не возвращается у этой
+// строки до перерисовки страницы; состояние журнала — перезапросом.
+describe('Approve row после успеха', () => {
+    const APPROVE = { heading: ['Статусы'], who: 'Кто', set: { Статус: 'Approved', Дата: '{date}' } };
+    const BODY = `<h1>Ревью</h1><h2>Статусы</h2>
+<table><thead><tr><th>Роль</th><th>Статус</th><th>Кто</th><th>Дата</th></tr></thead><tbody>
+<tr><td>Аналитик</td><td></td><td id="who1">Иванов Иван</td><td></td></tr>
+</tbody></table>`;
+    const select = async (p) => {
+        const range = p.doc.createRange();
+        range.selectNodeContents(p.doc.getElementById('who1'));
+        p.window.getSelection().removeAllRanges();
+        p.window.getSelection().addRange(range);
+        p.doc.dispatchEvent(new p.window.Event('selectionchange'));
+        await sleep(20);
+        return p.buttons();
+    };
+
+    it('кнопка неактивна во время запроса, после успеха скрыта, у этой строки больше не появляется', async () => {
+        const p = await agentPage({
+            agent: false,
+            languages: ['en'],
+            reviewLog: { file: 'review.md', heading: ['Замечания'], approve: APPROVE, push: true },
+            body: BODY,
+            reply: {
+                file: 'src/review.md',
+                log: true,
+                unpushed: false,
+                pending: { changed: false, unpushed: 0 }
+            }
+        });
+        expect(await select(p)).toEqual(['Comment', 'Approve row']);
+        const ap = p.byText(p.doc.querySelector('.c4b-cbtns'), 'Approve row');
+        p.window.__reply = { file: 'src/review.md', commit: 'abc1234', pushed: true };
+        ap.click();
+        expect(ap.disabled).toBe(true);
+        ap.click();
+        await sleep(20);
+        expect(p.window.__calls.filter((c) => c.method === 'POST').length).toBe(1);
+        expect(ap.hidden).toBe(true);
+        expect(p.window.__calls.at(-1).method).toBe('GET');
+        expect(await select(p)).toEqual(['Comment']);
+        expect(p.doc.querySelector('.c4b-logbar').hidden).toBe(true);
+    });
+
+    it('ошибка — кнопка снова активна и видна у строки', async () => {
+        const p = await agentPage({
+            agent: false,
+            languages: ['en'],
+            reviewLog: { file: 'review.md', heading: ['Замечания'], approve: APPROVE },
+            body: BODY,
+            reply: { file: 'src/review.md', log: true, unpushed: false }
+        });
+        await select(p);
+        const ap = p.byText(p.doc.querySelector('.c4b-cbtns'), 'Approve row');
+        p.window.__error = 'push was rejected';
+        ap.click();
+        await sleep(20);
+        expect(ap.disabled).toBe(false);
+        p.window.__error = '';
+        expect(await select(p)).toEqual(['Comment', 'Approve row']);
+    });
+});
+
+// Перезагрузка по livereload во время запроса страницы (code review): сниппет livereload ждёт ответа
+// (window.__c4builderBusy), перед перезагрузкой тост на экране сохраняется и показывается снова.
+describe('livereload во время запроса', () => {
+    const LOG = { file: 'review.md', heading: ['Remarks'], push: true };
+    const PENDING = {
+        file: 'src/review.md',
+        log: false,
+        remarks: [],
+        pending: { changed: true, unpushed: 0 }
+    };
+
+    it('перезагрузка ждёт ответа Push; тост результата переживает перезагрузку', async () => {
+        const p = await agentPage({ agent: false, languages: ['en'], reviewLog: LOG, reply: PENDING });
+        p.window.__reply = { file: 'src/review.md', commit: 'abc1234', pushed: true };
+        p.doc.querySelector('.c4b-logbar button').click();
+        expect(p.window.__c4builderBusy).toBe(1);
+        // так сниппет livereload откладывает перезагрузку, пришедшую посреди запроса
+        let saved = null;
+        let reloads = 0;
+        p.window.__c4builderReloadLater = () => {
+            reloads++;
+            p.window.__c4builderBeforeReload();
+            saved = p.window.sessionStorage.getItem('__c4builderCommentToast');
+        };
+        await sleep(20);
+        expect(reloads).toBe(1);
+        expect(p.window.__c4builderBusy).toBe(0);
+        expect(JSON.parse(saved)).toEqual({ msg: 'Pushed src/review.md', err: false });
+        const q = await agentPage({
+            agent: false,
+            languages: ['en'],
+            reviewLog: LOG,
+            session: { __c4builderCommentToast: saved }
+        });
+        expect(q.toast()).toBe('Pushed src/review.md');
+    });
+
+    it('без перезагрузки тост не сохраняется и не всплывает потом снова', async () => {
+        const p = await agentPage({ agent: false, languages: ['en'], reviewLog: LOG, reply: PENDING });
+        p.window.__reply = { file: 'src/review.md', commit: null, pushed: false };
+        p.doc.querySelector('.c4b-logbar button').click();
+        await sleep(20);
+        expect(p.toast()).toBe('Nothing to push');
+        expect(p.window.sessionStorage.getItem('__c4builderCommentToast')).toBeNull();
+    });
+});
+
+// Третий раунд code review: ошибка конфигурации апрува — тостом один раз; git-состояние не
+// спрашивается на странице без журнала.
+describe('страница журнала: конфиг и git-состояние', () => {
+    const APPROVE = { heading: ['Статусы'], who: 'Кто', set: { Статус: 'Approved' } };
+
+    it('нет колонки из who или set — тост с ошибкой один раз, кнопки апрува нет', async () => {
+        const error = 'comments.approve: column "Кто" not found in the table of Статусы in src/review.md';
+        const p = await agentPage({
+            agent: false,
+            languages: ['en'],
+            reviewLog: { file: 'review.md', heading: ['Remarks'], approve: APPROVE },
+            reply: { file: 'src/review.md', log: true, approved: [], configError: error }
+        });
+        expect(p.toast()).toBe(error);
+        expect(p.doc.querySelector('.c4b-ctoast').classList.contains('c4b-err')).toBe(true);
+        p.doc.querySelector('.c4b-ctoast').remove();
+        // повторная отрисовка страницы — без второго тоста
+        p.window.dispatchEvent(new p.window.Event('hashchange'));
+        await sleep(400);
+        expect(p.toast()).toBeUndefined();
+    });
+
+    it('страница без журнала (404) — git-состояние не спрашивается', async () => {
+        const p = await agentPage({
+            agent: false,
+            reviewLog: { file: 'review.md', heading: ['Remarks'], push: true, approve: APPROVE },
+            error: 'review.md not found'
+        });
+        expect(p.window.__calls.map((c) => c.url)).toEqual(['/__c4builder/review-log?page=A.md']);
+    });
+});
+
+// Отсрочка livereload — только на странице (сервер её не держит: иначе перезагрузка ждала бы во
+// всех вкладках): пока идёт запрос страницы, reload откладывается, перед перезагрузкой тост сохраняется.
+describe('сниппет livereload: отсрочка на время запроса', () => {
+    const load = async () => {
+        const { JSDOM } = await import('jsdom');
+        const { LIVERELOAD_SNIPPET } = await import('../dist/cli/commands/site.js');
+        const html = `<!DOCTYPE html><html><head></head><body>
+<script>
+window.__sources = [];
+window.EventSource = function (url) {
+    var self = this;
+    self.listeners = {};
+    self.closed = 0;
+    self.addEventListener = function (name, fn) { self.listeners[name] = fn; };
+    self.close = function () { self.closed++; };
+    window.__sources.push(self);
+};
+window.__saved = 0;
+window.__c4builderBeforeReload = function () { window.__saved++; };
+</script>
+${LIVERELOAD_SNIPPET}
+</body></html>`;
+        const { window } = new JSDOM(html, { runScripts: 'dangerously', url: 'http://localhost/#/A' });
+        return window;
+    };
+
+    it('во время запроса reload откладывается; после — перезагрузка с сохранением тоста', async () => {
+        const window = await load();
+        const es = window.__sources[0];
+        window.__c4builderBusy = 1;
+        es.listeners.reload();
+        expect(es.closed).toBe(0);
+        expect(window.__saved).toBe(0);
+        expect(typeof window.__c4builderReloadLater).toBe('function');
+        window.__c4builderReloadLater();
+        expect(es.closed).toBe(1);
+        expect(window.__saved).toBe(1);
+    });
+
+    it('без запроса — перезагрузка сразу', async () => {
+        const window = await load();
+        const es = window.__sources[0];
+        es.listeners.reload();
+        expect(es.closed).toBe(1);
+        expect(window.__saved).toBe(1);
     });
 });

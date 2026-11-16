@@ -6,7 +6,7 @@ import path from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 
 import { cmdSite } from './dist.mjs';
-import { agentEnv, REPO_ROOT, serveSite, TMP_ROOT, updateCheckEnv } from './helpers.mjs';
+import { agentEnv, gitSandbox, REPO_ROOT, serveSite, TMP_ROOT, updateCheckEnv } from './helpers.mjs';
 
 // Подсказка после сборки печатает `c4builder site` — форма обязана работать наравне
 // с `--site`, иначе allowExcessArguments молча глотает её и команда просто пересобирает.
@@ -365,6 +365,347 @@ describe('журнал ревью в site -w', () => {
         } finally {
             fs.writeFileSync(cfg, saved);
             fs.writeFileSync(log, savedLog);
+        }
+    }, 60_000);
+});
+
+// Апрув строки и Push журнала (change site-review-approve-push): маршруты на репозитории с
+// bare-remote во временном каталоге, автор и подпись коммитов — из подменённого глобального конфига.
+describe('апрув и push журнала в site -w', () => {
+    const box = gitSandbox('cli-site-git-');
+    afterAll(() => fs.rmSync(box.base, { recursive: true, force: true }));
+    const env = { ...process.env, ...box.env };
+    const LOG = [
+        '# Ревью',
+        '',
+        '## Статусы',
+        '',
+        '| Роль | Статус | Кто | Дата |',
+        '|------|--------|-----|------|',
+        '| Аналитик | | Иванов Иван | |',
+        '| Тестировщик | | — | |',
+        '',
+        '## Замечания',
+        '',
+        '| # | Где | Замечание | Автор |',
+        '|---|---|---|---|',
+        ''
+    ].join('\n');
+    const COMMENTS = {
+        heading: 'Замечания',
+        cells: ['', '{artifact} → {section}', '{text}', '{author}'],
+        approve: { heading: 'Статусы', who: 'Кто', set: { Статус: 'Approved', Дата: '{date}' } },
+        push: {}
+    };
+    const page = 'add-push-platform/add-push-platform.md';
+    box.init((dir) => {
+        fs.mkdirSync(path.join(dir, 'src', 'add-push-platform'), { recursive: true });
+        fs.writeFileSync(path.join(dir, 'src', 'README.md'), '# root\n');
+        fs.writeFileSync(
+            path.join(dir, 'src', 'add-push-platform', 'README.md'),
+            '# change\n\n## Flow\n\nfoo bar\n'
+        );
+        fs.writeFileSync(path.join(dir, 'src', 'add-push-platform', 'review.md'), LOG);
+        fs.writeFileSync(path.join(dir, 'notes.md'), 'notes\n');
+        fs.writeFileSync(path.join(dir, '.gitignore'), 'docs/\n.c4builder.server.json\n');
+        fs.writeFileSync(path.join(dir, '.c4builder'), JSON.stringify({ ...CONFIG, comments: COMMENTS }));
+    });
+    const log = path.join(box.work, 'src', 'add-push-platform', 'review.md');
+    const cfg = path.join(box.work, '.c4builder');
+    const call = (port, route, body, headers = { Origin: `http://127.0.0.1:${port}` }) =>
+        fetch(`http://127.0.0.1:${port}/__c4builder/review-log${route}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...headers },
+            body: JSON.stringify(body)
+        });
+    const today = () => {
+        const d = new Date();
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    };
+
+    it('approve: 403 без Origin, 404 не журнал, 409 устаревшая строка; успех — коммит в remote', async () => {
+        const port = 28336;
+        await serveSite(box.work, ['site', '-w', '-p', String(port)], {
+            env,
+            onReady: async () => {
+                const html = await (await fetch(`http://127.0.0.1:${port}/`)).text();
+                expect(html).toContain('"approve":{"heading":[');
+                const row = { page, cells: ['Аналитик', '', 'Иванов Иван', ''] };
+                expect((await call(port, '/approve', row, {})).status).toBe(403);
+                expect((await call(port, '/approve', { ...row, page: 'Overview.md' })).status).toBe(404);
+                const stale = await call(port, '/approve', {
+                    ...row,
+                    cells: ['Аналитик', '', 'Сидоров', '']
+                });
+                expect(stale.status).toBe(409);
+                expect((await stale.json()).error).toContain('reload it');
+                expect(fs.readFileSync(log, 'utf8')).toBe(LOG);
+                expect(box.remoteLog()).toEqual(['init']);
+                const ok = await call(port, '/approve', row);
+                const body = await ok.json();
+                expect(ok.status, JSON.stringify(body)).toBe(200);
+                expect(body).toMatchObject({
+                    file: 'src/add-push-platform/review.md',
+                    pushed: true,
+                    message: 'review add-push-platform: approved — Иванов Иван'
+                });
+                expect(fs.readFileSync(log, 'utf8')).toBe(
+                    LOG.replace(
+                        '| Аналитик | | Иванов Иван | |',
+                        `| Аналитик | Approved | Иванов Иван | ${today()} |`
+                    )
+                );
+                expect(box.remoteLog()[0]).toBe('review add-push-platform: approved — Иванов Иван');
+                // строка уже одобрена — повтор с прежними ячейками не находит её
+                expect((await call(port, '/approve', row)).status).toBe(409);
+            }
+        });
+    }, 60_000);
+
+    it('push: три комментария — один коммит только журнала; повтор — нечего пушить; чужой Origin — 403', async () => {
+        const port = 28337;
+        const before = box.remoteLog().length;
+        fs.appendFileSync(path.join(box.work, 'notes.md'), 'local edit\n');
+        await serveSite(box.work, ['site', '-w', '-p', String(port)], {
+            env,
+            onReady: async () => {
+                const state = async (pg) => {
+                    const r = await fetch(`http://127.0.0.1:${port}/__c4builder/review-log/state?page=${pg}`);
+                    return r.ok ? (await r.json()).pending : r.status;
+                };
+                expect(await state(page)).toEqual({ changed: false, unpushed: 0 });
+                // страница вне change — журнала нет, плашки нет
+                expect(await state('Overview.md')).toBe(404);
+                for (const comment of ['One', 'Two', 'Three']) {
+                    const r = await call(port, '', { page, quote: 'foo bar', section: 'Flow', comment });
+                    expect(r.status).toBe(200);
+                }
+                expect((await call(port, '/push', { page }, { Origin: 'http://evil.test' })).status).toBe(
+                    403
+                );
+                const ok = await call(port, '/push', { page });
+                const body = await ok.json();
+                expect(ok.status, JSON.stringify(body)).toBe(200);
+                expect(body).toMatchObject({ file: 'src/add-push-platform/review.md', pushed: true });
+                const remote = box.remoteLog();
+                expect(remote.length).toBe(before + 1);
+                expect(remote[0]).toBe('review add-push-platform: comments — Ivan Ivanov');
+                expect(box.git(box.remote, 'show', '--name-only', '--format=', 'main')).toBe(
+                    'src/add-push-platform/review.md'
+                );
+                expect(box.git(box.remote, 'show', '--format=', 'main').match(/^\+\| \d+ \|/gm)).toHaveLength(
+                    3
+                );
+                expect(box.git(box.work, 'diff', '--name-only').split('\n')).toContain('notes.md');
+                const again = await call(port, '/push', { page });
+                expect(await again.json()).toMatchObject({ commit: null, pushed: false });
+                expect(await state(page)).toEqual({ changed: false, unpushed: 0 });
+            }
+        });
+    }, 60_000);
+
+    it('без approve и с push.enabled: false — маршруты 404', async () => {
+        const port = 28338;
+        const saved = fs.readFileSync(cfg, 'utf8');
+        const { approve, ...rest } = COMMENTS;
+        fs.writeFileSync(cfg, JSON.stringify({ ...CONFIG, comments: { ...rest, push: { enabled: false } } }));
+        try {
+            await serveSite(box.work, ['site', '-w', '-p', String(port)], {
+                env,
+                onReady: async () => {
+                    const html = await (await fetch(`http://127.0.0.1:${port}/`)).text();
+                    expect(html).toContain('"approve":null,"push":false');
+                    expect((await call(port, '/approve', { page, cells: ['x'] })).status).toBe(404);
+                    expect((await call(port, '/push', { page })).status).toBe(404);
+                    const get = await fetch(`http://127.0.0.1:${port}/__c4builder/review-log?page=${page}`);
+                    expect(await get.json()).not.toHaveProperty('pending');
+                    // ни push, ни approve — git-состояние не нужно, маршрута нет
+                    const st = await fetch(
+                        `http://127.0.0.1:${port}/__c4builder/review-log/state?page=${page}`
+                    );
+                    expect(st.status).toBe(404);
+                }
+            });
+        } finally {
+            fs.writeFileSync(cfg, saved);
+        }
+    }, 60_000);
+
+    it('approve без push: пуш отклонён — ошибка без упоминания Push; повторный Approve дотолкает коммит', async () => {
+        const port = 28339;
+        const saved = fs.readFileSync(cfg, 'utf8');
+        const { push, ...rest } = COMMENTS;
+        fs.writeFileSync(cfg, JSON.stringify({ ...CONFIG, comments: rest }));
+        fs.writeFileSync(
+            log,
+            fs
+                .readFileSync(log, 'utf8')
+                .replace('| Тестировщик | | — | |', '| Тестировщик | | Петров Пётр | |')
+        );
+        box.git(box.work, 'commit', '-q', '-m', 'tester', '--', 'src/add-push-platform/review.md');
+        box.git(box.work, 'push', '-q');
+        const hook = path.join(box.remote, 'hooks', 'pre-receive');
+        fs.writeFileSync(hook, '#!/bin/sh\necho "protected branch" >&2\nexit 1\n', { mode: 0o755 });
+        const row = { page, cells: ['Тестировщик', '', 'Петров Пётр', ''] };
+        const approved = { page, cells: ['Тестировщик', 'Approved', 'Петров Пётр', today()] };
+        const check = async () =>
+            (await fetch(`http://127.0.0.1:${port}/__c4builder/review-log/state?page=${page}`)).json();
+        try {
+            await serveSite(box.work, ['site', '-w', '-p', String(port)], {
+                env,
+                onReady: async () => {
+                    expect(await check()).toEqual({
+                        file: 'src/add-push-platform/review.md',
+                        unpushedRows: []
+                    });
+                    const rejected = await call(port, '/approve', row);
+                    expect(rejected.status).toBe(502);
+                    const { error } = await rejected.json();
+                    expect(error).toContain('protected branch');
+                    expect(error).not.toContain('Push');
+                    // апрув закоммичен, не запушен — сервер отмечает именно эту строку
+                    expect(await check()).toMatchObject({ unpushedRows: [approved.cells] });
+                    fs.rmSync(hook);
+                    const again = await call(port, '/approve', approved);
+                    const body = await again.json();
+                    expect(again.status, JSON.stringify(body)).toBe(200);
+                    expect(body).toMatchObject({ commit: null, pushed: true });
+                    expect(box.remoteLog()[0]).toBe('review add-push-platform: approved — Петров Пётр');
+                    expect(await check()).toMatchObject({ unpushedRows: [] });
+                    // запушено — повтор снова «уже одобрена»
+                    expect((await call(port, '/approve', approved)).status).toBe(409);
+                    // одобрена руками и не закоммичена — честный отказ, файл не тронут
+                    fs.writeFileSync(
+                        log,
+                        fs
+                            .readFileSync(log, 'utf8')
+                            .replace(
+                                '| Тестировщик |',
+                                '| Ревьюер | Approved | Сидоров Семён | 2026-11-01 |\n| Тестировщик |'
+                            )
+                    );
+                    const before = fs.readFileSync(log, 'utf8');
+                    const manual = await call(port, '/approve', {
+                        page,
+                        cells: ['Ревьюер', 'Approved', 'Сидоров Семён', '2026-11-01']
+                    });
+                    expect(manual.status).toBe(409);
+                    expect((await manual.json()).error).toContain('is not committed');
+                    expect(fs.readFileSync(log, 'utf8')).toBe(before);
+                    box.git(
+                        box.work,
+                        'commit',
+                        '-q',
+                        '-m',
+                        'reviewer',
+                        '--',
+                        'src/add-push-platform/review.md'
+                    );
+                    box.git(box.work, 'push', '-q');
+                }
+            });
+        } finally {
+            fs.rmSync(hook, { force: true });
+            fs.writeFileSync(cfg, saved);
+        }
+    }, 60_000);
+
+    it('GET pending: правка журнала руками, незапушенный коммит после отклонённого пуша, снова чисто', async () => {
+        const port = 28353;
+        const hook = path.join(box.remote, 'hooks', 'pre-receive');
+        const state = async () =>
+            (await (await fetch(`http://127.0.0.1:${port}/__c4builder/review-log/state?page=${page}`)).json())
+                .pending;
+        try {
+            await serveSite(box.work, ['site', '-w', '-p', String(port)], {
+                env,
+                onReady: async ({ waitFor }) => {
+                    expect(await state()).toEqual({ changed: false, unpushed: 0 });
+                    fs.appendFileSync(log, '\nhand edit\n');
+                    // правка в редакторе: пересборка сбрасывает кэш состояния
+                    await waitFor(/built in/);
+                    await new Promise((r) => setTimeout(r, 200));
+                    expect(await state()).toEqual({ changed: true, unpushed: 0 });
+                    fs.writeFileSync(hook, '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+                    expect((await call(port, '/push', { page })).status).toBe(502);
+                    expect(await state()).toEqual({ changed: false, unpushed: 1 });
+                    fs.rmSync(hook);
+                    expect(await (await call(port, '/push', { page })).json()).toMatchObject({
+                        commit: null,
+                        pushed: true
+                    });
+                    expect(await state()).toEqual({ changed: false, unpushed: 0 });
+                    // GET во время пуша (так страница перезагружается по livereload посреди запроса)
+                    // ждёт его конца и не видит устаревшее «не запушено».
+                    fs.appendFileSync(log, '\nanother edit\n');
+                    fs.writeFileSync(hook, '#!/bin/sh\nsleep 1\nexit 0\n', { mode: 0o755 });
+                    const pushing = call(port, '/push', { page });
+                    await new Promise((r) => setTimeout(r, 200));
+                    expect(await state()).toEqual({ changed: false, unpushed: 0 });
+                    expect((await pushing).status).toBe(200);
+                }
+            });
+        } finally {
+            fs.rmSync(hook, { force: true });
+        }
+    }, 60_000);
+
+    it('комментарий во время пуша ждёт очередь; GET журнала — без git; повторный state — из кэша', async () => {
+        const port = 28354;
+        fs.writeFileSync(
+            log,
+            fs
+                .readFileSync(log, 'utf8')
+                .replace('| Тестировщик |', '| Разработчик | | Сидоров Семён | |\n| Тестировщик |')
+        );
+        box.git(box.work, 'commit', '-q', '-m', 'developer', '--', 'src/add-push-platform/review.md');
+        box.git(box.work, 'push', '-q');
+        const hook = path.join(box.remote, 'hooks', 'pre-receive');
+        try {
+            await serveSite(box.work, ['site', '-w', '-p', String(port)], {
+                env,
+                onReady: async () => {
+                    // GET журнала отвечает без git: одобренные строки есть, git-состояния нет
+                    const fast = await (
+                        await fetch(`http://127.0.0.1:${port}/__c4builder/review-log?page=${page}`)
+                    ).json();
+                    expect(fast).not.toHaveProperty('pending');
+                    expect(Array.isArray(fast.approved)).toBe(true);
+                    // медленный пуш: запись журнала пересобирает сайт посреди запроса
+                    fs.writeFileSync(hook, '#!/bin/sh\nsleep 2\nexit 0\n', { mode: 0o755 });
+                    const approved = await call(port, '/approve', {
+                        page,
+                        cells: ['Разработчик', '', 'Сидоров Семён', '']
+                    });
+                    expect(approved.status).toBe(200);
+                    // state дважды подряд: второй ответ — из кэша, без git (быстро)
+                    const stateUrl = `http://127.0.0.1:${port}/__c4builder/review-log/state?page=${page}`;
+                    const first = await (await fetch(stateUrl)).json();
+                    const t0 = Date.now();
+                    expect(await (await fetch(stateUrl)).json()).toEqual(first);
+                    expect(Date.now() - t0).toBeLessThan(100);
+                    // комментарий во время пуша ждёт очередь: его ответ — после ответа пуша
+                    fs.appendFileSync(log, '\nhand edit\n');
+                    let pushedAt = 0;
+                    const pushing = call(port, '/push', { page }).then((r) => {
+                        pushedAt = Date.now();
+                        return r;
+                    });
+                    await new Promise((r) => setTimeout(r, 300));
+                    const comment = await call(port, '', {
+                        page,
+                        quote: 'foo bar',
+                        section: 'Flow',
+                        comment: 'Late'
+                    });
+                    const commentedAt = Date.now();
+                    expect(comment.status).toBe(200);
+                    expect((await pushing).status).toBe(200);
+                    expect(commentedAt).toBeGreaterThanOrEqual(pushedAt);
+                }
+            });
+        } finally {
+            fs.rmSync(hook, { force: true });
         }
     }, 60_000);
 });

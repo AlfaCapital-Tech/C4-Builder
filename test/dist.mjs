@@ -87,9 +87,12 @@ export {
 export { UI_STRINGS } from '../dist/cli/commands/site.i18n.js';
 export { batchSchema, formatBatch } from '../dist/core/feedback.js';
 export {
+    approvedRows,
+    approveRow,
     deleteRemark,
     fillCells,
     findReviewFile,
+    isNoName,
     isReviewFile,
     parseRemarks,
     remarkVars,
@@ -104,7 +107,26 @@ export {
     renderBpmn,
     teardownBpmn
 } from '../dist/core/render/bpmnrenderer.js';
-export { appendRow, formatEntry, removeRow, writeRow } from '../dist/core/sections.js';
+export {
+    appendRow,
+    formatEntry,
+    removeRow,
+    tableHeader,
+    updateRow,
+    writeRow
+} from '../dist/core/sections.js';
+export {
+    commitFile,
+    GIT_TIMEOUTS,
+    preflight,
+    publishFile,
+    pushPending,
+    ReviewGitError,
+    serialQueue,
+    syncAndPush,
+    reviewPending,
+    sshEnv
+} from '../dist/core/reviewgit.js';
 export {
     MermaidError,
     MERMAID_PACKAGE,

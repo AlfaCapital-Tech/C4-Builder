@@ -48,7 +48,7 @@ export interface BuildOptions {
     D2_LAYOUT: string;
     MD_FILE_NAME: string;
     // Свои подписи кнопок у выделения страницы `site -w` (change site-button-names).
-    BUTTONS: { agent?: string; comment?: string };
+    BUTTONS: { agent?: string; comment?: string; approve?: string; push?: string };
     // Журнал ревью страницы `site -w` (change site-review-log); undefined — кнопки нет.
     REVIEW_LOG?: ReviewLogOptions;
     UI_LANGUAGE: 'auto' | 'en' | 'ru';

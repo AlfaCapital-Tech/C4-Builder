@@ -11,12 +11,15 @@ import {
     collapse,
     deleteRow,
     escapeHtml,
+    fitRow,
     formatEntry,
     markdownHasHeading,
     plain,
     type RowRef,
     type RemoveResult,
+    tableHeader,
     tableRows,
+    updateRow,
     writeRow
 } from './sections.ts';
 
@@ -28,6 +31,16 @@ export interface ReviewLogOptions {
     cells?: string[];
     author?: string;
     label?: string;
+    approve?: ApproveOptions;
+    /** Нормализован в `commentsLog`: включён ли Push и шаблон сообщения коммита. */
+    push: { enabled: boolean; message: string };
+}
+
+/** Ключ `comments.approve`: раздел таблицы статусов, колонка ревьюера и значения ячеек по колонкам. */
+export interface ApproveOptions {
+    heading: string[];
+    who: string;
+    set: Record<string, string>;
 }
 
 export interface RemarkInput {
@@ -224,6 +237,103 @@ export const deleteRemark = (
 ): RemoveResult => {
     const heading = findHeading(readLog(reviewFile), headings);
     return heading ? deleteRow(reviewFile, heading, ref, { anyCell: true, cells }) : { error: 'not-found' };
+};
+
+/** Прочерк в колонке ревьюера — «ревьюер не назначен», как и пустая ячейка. */
+export const isNoName = (cell: string): boolean => /^(|-|—|–)$/.test(plain(cell));
+
+const sameColumn = (a: string, b: string): boolean => plain(a).toLowerCase() === plain(b).toLowerCase();
+
+/** Итог апрува строки: новый текст журнала и имя ревьюера либо причина отказа. */
+export type ApproveResult =
+    | { markdown: string; author: string }
+    | { error: 'not-found' | 'ambiguous' | 'no-name' | 'approved' }
+    | { error: 'no-column'; column: string };
+
+/**
+ * Апрув строки таблицы статусов (change site-review-approve-push): строка раздела `heading` ищется по
+ * всем ячейкам `cells` (как их видит страница), в ячейки колонок `set` пишутся значения с
+ * подстановками `{date}` и `{author}` (имя из колонки `who`). Файл не пишется — вызывающий сначала
+ * проверяет git: апрув без upstream не должен оставить изменённый журнал.
+ */
+export const approveRow = (
+    markdown: string,
+    opts: ApproveOptions,
+    cells: string[],
+    date: string = today()
+): ApproveResult => {
+    const table = statusTable(markdown, opts);
+    if (!table) return { error: 'not-found' };
+    if ('column' in table) return { error: 'no-column', column: table.column };
+    const { heading, index } = table;
+    const who = index(opts.who);
+    let author = '';
+    let approved = false;
+    const result = updateRow(markdown, heading, cells, (row) => {
+        author = plain(row[who] ?? '');
+        approved = isApproved(row, opts, index);
+        const vars = { date, author: escapeHtml(author) };
+        const out: Record<number, string> = {};
+        for (const [column, template] of Object.entries(opts.set))
+            out[index(column)] = fillCells([template], vars)[0];
+        return out;
+    });
+    if ('error' in result) return result;
+    if (isNoName(author)) return { error: 'no-name' };
+    if (approved) return { error: 'approved' };
+    return { markdown: result.markdown, author };
+};
+
+/**
+ * Одобрена ли строка — единственное правило, его же видит страница (`approvedRows`): все литералы
+ * `set` (значения без подстановок) уже стоят в своих колонках. Без литералов строка не бывает
+ * одобренной: кнопка остаётся у каждой строки с именем (configWarnings предупреждает).
+ */
+const isApproved = (row: string[], opts: ApproveOptions, index: (name: string) => number): boolean => {
+    const literals = Object.entries(opts.set).filter(([, v]) => isLiteral(v));
+    return (
+        literals.length > 0 && literals.every(([column, v]) => plain(row[index(column)] ?? '') === plain(v))
+    );
+};
+
+/**
+ * Одобренные строки таблицы статусов — ячейки как их показывает страница (`fitRow`): по ним
+ * страница прячет кнопку Approve row. Нет раздела, таблицы или колонки — пусто.
+ */
+export const approvedRows = (
+    markdown: string,
+    opts: ApproveOptions
+): { rows: string[][] } | { column: string } => {
+    const table = statusTable(markdown, opts);
+    if (!table) return { rows: [] };
+    if ('column' in table) return table;
+    return {
+        rows: tableRows(markdown, table.heading)
+            .filter((r) => isApproved(r.cells, opts, table.index))
+            .map((r) => fitRow(r.cells, table.width))
+    };
+};
+
+/**
+ * Литерал `set` — непустое значение без подстановок: по нему узнают одобренную строку. Пустое
+ * значение (очистить колонку) литералом не считается — иначе строка с пустой ячейкой «одобрена».
+ */
+export const isLiteral = (value: string): boolean => plain(value) !== '' && !/\{\w+\}/.test(value);
+
+/**
+ * Таблица статусов и индексы колонок по названиям — общая проверка для апрува и для страницы:
+ * нет колонки из `who` или `set` — `{ column }`; нет раздела или таблицы — undefined.
+ */
+const statusTable = (
+    markdown: string,
+    opts: ApproveOptions
+): { heading: string; width: number; index: (name: string) => number } | { column: string } | undefined => {
+    const heading = findHeading(markdown, opts.heading);
+    const header = heading && tableHeader(markdown, heading);
+    if (!heading || !header) return undefined;
+    const index = (name: string): number => header.findIndex((h) => sameColumn(h, name));
+    const missing = [opts.who, ...Object.keys(opts.set)].find((c) => index(c) < 0);
+    return missing === undefined ? { heading, width: header.length, index } : { column: missing };
 };
 
 /** Дописывает замечание в журнал и возвращает номер строки таблицы (null — список). */

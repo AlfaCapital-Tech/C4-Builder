@@ -124,6 +124,27 @@ const findTable = (lines: string[], start: number, end: number): Table | undefin
     return undefined;
 };
 
+/**
+ * Строки таблицы (индексы строк файла), совпавшие со всеми ячейками `cells` — как их видит
+ * страница: сравнение через `plain`, число ячеек тоже должно совпасть.
+ */
+const findRowByCells = (lines: string[], table: Table, cells: string[]): number[] => {
+    // Сравнение в ширину заголовка: docsify дорисовывает короткую строку пустыми ячейками и не
+    // показывает лишние. Ячейки страницы сверх ширины должны быть пустыми.
+    const want = fitRow(cells, table.cols);
+    if (cells.slice(table.cols).some((c) => plain(c))) return [];
+    const found: number[] = [];
+    for (let i = table.header + 2; i <= table.last; i++) {
+        const row = fitRow(splitRow(lines[i]), table.cols);
+        if (want.every((c, k) => row[k] === c)) found.push(i);
+    }
+    return found;
+};
+
+/** Ячейки строки как их показывает страница: через `plain`, дополнены пустыми или обрезаны до `width`. */
+export const fitRow = (cells: string[], width: number): string[] =>
+    Array.from({ length: width }, (_, k) => plain(cells[k] ?? ''));
+
 /** Готовые ячейки строки либо их фабрика по номеру строки (номер известен только здесь). */
 export type Cells = string[] | ((number: number | null) => string[]);
 
@@ -278,10 +299,10 @@ export const removeRow = (
         const { header, last, numeric, textCol } = table;
         const rows: { line: number; cells: string[] }[] = [];
         for (let i = header + 2; i <= last; i++) rows.push({ line: i, cells: splitRow(lines[i]) });
-        const wantCells = cells?.map(plain);
+        const byCells = cells && new Set(findRowByCells(lines, table, cells));
         const byText = rows.filter((r) =>
-            wantCells
-                ? wantCells.length === r.cells.length && wantCells.every((c, i) => plain(r.cells[i]) === c)
+            byCells
+                ? byCells.has(r.line)
                 : anyCell
                   ? r.cells.some((c) => plain(c) === want)
                   : plain(r.cells[textCol] ?? '') === want
@@ -321,4 +342,49 @@ export const deleteRow = (
     const result = removeRow(fs.readFileSync(file, 'utf8'), heading, ref, options);
     if ('markdown' in result) fs.writeFileSync(file, result.markdown);
     return result;
+};
+
+/** Заголовки колонок таблицы раздела `heading` как в файле; нет раздела или таблицы — undefined. */
+export const tableHeader = (markdown: string, heading: string): string[] | undefined => {
+    const lines = markdown.split(/\r?\n/);
+    const section = findSection(lines, heading);
+    const table = section && findTable(lines, section.start, section.end);
+    return table ? splitRow(lines[table.header]) : undefined;
+};
+
+/** Новые значения ячеек по индексам колонок; строятся по ячейкам найденной строки. */
+export type RowUpdate = (cells: string[]) => Record<number, string>;
+
+export type UpdateResult = { markdown: string; cells: string[] } | { error: 'not-found' | 'ambiguous' };
+
+/**
+ * Переписывает ячейки строки таблицы раздела `heading`, найденной по всем ячейкам (`match` — как их
+ * видит страница, сравнение через `plain`): ровно одна строка, иначе ошибка — строку, которую
+ * человек видел, могли изменить после загрузки страницы. Строка пересобирается в `| a | b |`,
+ * остальные строки файла и перевод строки не меняются. Значения экранируются от `|`; HTML —
+ * забота вызывающего, как у `appendRow`. `cells` в ответе — исходные ячейки строки.
+ */
+export const updateRow = (
+    markdown: string,
+    heading: string,
+    match: string[],
+    update: RowUpdate
+): UpdateResult => {
+    const eol = markdown.includes('\r\n') ? '\r\n' : '\n';
+    const lines = markdown.split(/\r?\n/);
+    const section = findSection(lines, heading);
+    const table = section && findTable(lines, section.start, section.end);
+    if (!table) return { error: 'not-found' };
+    const found = findRowByCells(lines, table, match);
+    if (!found.length) return { error: 'not-found' };
+    if (found.length > 1) return { error: 'ambiguous' };
+    const cells = splitRow(lines[found[0]]);
+    const next = [...cells];
+    for (const [k, v] of Object.entries(update(cells))) {
+        const i = Number(k);
+        while (next.length <= i) next.push('');
+        next[i] = escapeCell(v);
+    }
+    lines[found[0]] = `| ${next.join(' | ')} |`;
+    return { markdown: lines.join(eol), cells };
 };

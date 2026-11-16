@@ -4,6 +4,11 @@ export const FEEDBACK_PATH = '/__c4builder/feedback';
 export const FEEDBACK_HEADER = 'X-C4builder-Feedback';
 // Комментарий в журнал ревью (change site-review-log): POST с цитатой, разделом и текстом.
 export const REVIEW_LOG_PATH = '/__c4builder/review-log';
+// Апрув строки таблицы статусов и Push журнала (change site-review-approve-push): коммит и пуш файла.
+export const REVIEW_APPROVE_PATH = '/__c4builder/review-log/approve';
+export const REVIEW_PUSH_PATH = '/__c4builder/review-log/push';
+// Git-состояние журнала страницы для плашки Push и повторного апрува — отдельно, через очередь.
+export const REVIEW_STATE_PATH = '/__c4builder/review-log/state';
 // Адрес страницы change'а по имени слушателя (change site-agent-review): читает `c4builder feedback`.
 export const PAGE_PATH = '/__c4builder/page';
 
@@ -23,9 +28,13 @@ const CSS = [
     '.c4b-cpop button,.c4b-review button{padding:4px 12px;border:1px solid #ccc;border-radius:4px;background:#fff;color:#2c3e50;cursor:pointer;font:13px sans-serif}',
     '.c4b-cpop button.c4b-primary,.c4b-review button.c4b-primary{border-color:#42b983;background:#42b983;color:#fff}',
     '.c4b-cpop button:disabled,.c4b-review button:disabled{opacity:.6;cursor:default}',
-    // Панель review — ниже кнопок у выделения и поповера: она прибита к низу экрана и иначе
-    // перекрывает их у выделения в нижних строках.
-    '.c4b-review{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:1000;width:520px;max-width:calc(100vw - 32px);box-sizing:border-box;padding:8px 12px;border:1px solid #3b82f6;border-radius:6px;background:#fff;color:#2c3e50;font:13px/1.4 sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.2)}',
+    // Нижний ряд панелей — общий фиксированный контейнер по центру: [панель агента][плашка журнала],
+    // выровнены по низу; одна — по центру. Не помещаются в ширину окна — плашка переносится НАД
+    // панелью (wrap-reverse: перенесённая строка встаёт выше первой). Ряд — ниже кнопок у выделения
+    // и поповера: он прибит к низу экрана и иначе перекрывает их у выделения в нижних строках.
+    '.c4b-dock{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:1000;display:flex;flex-wrap:wrap-reverse;align-items:flex-end;justify-content:center;gap:8px;width:max-content;max-width:calc(100vw - 32px)}',
+    '.c4b-dock[hidden]{display:none}',
+    '.c4b-review{position:relative;z-index:1000;width:520px;max-width:100%;box-sizing:border-box;padding:8px 12px;border:1px solid #3b82f6;border-radius:6px;background:#fff;color:#2c3e50;font:13px/1.4 sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.2)}',
     '.c4b-review .c4b-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px}',
     '.c4b-review .c4b-row small{flex:1;color:#888;white-space:nowrap}',
     // Выбор адресата сжимается вместе с select: длинные имена не выталкивают кнопки из строки.
@@ -42,6 +51,14 @@ const CSS = [
     '.c4b-review .c4b-del{opacity:1}',
     '.c4b-ctoast{position:fixed;left:16px;bottom:16px;z-index:1003;max-width:420px;padding:8px 14px;border-radius:6px;background:#2c3e50;color:#fff;font:13px/1.4 sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.3)}',
     '.c4b-ctoast.c4b-err{background:#c0392b}',
+    // Плашка Push журнала — в нижнем ряду справа от панели агента, цветом журнала (кнопка Comment):
+    // их не путают. Компактная — рядом панель 520px: короткий текст, путь файла — в подсказке.
+    '.c4b-logbar{display:flex;align-items:center;gap:8px;max-width:100%;box-sizing:border-box;padding:8px 12px;border:1px solid #b58900;border-radius:6px;background:#fffbea;color:#2c3e50;font:13px/1.4 sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.2)}',
+    '.c4b-logbar[hidden]{display:none}',
+    '.c4b-logbar span{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+    '.c4b-logbar button{flex:none;padding:4px 12px;border:1px solid #b58900;border-radius:4px;background:#b58900;color:#fff;cursor:pointer;font:13px sans-serif}',
+    '.c4b-logbar button:disabled{opacity:.6;cursor:default}',
+    '.c4b-cbtns button.c4b-ap{border-color:#2c7a4b}',
     'mark.c4b-hl{background:#fff3a0;color:inherit;padding:0;border-radius:2px}',
     'mark.c4b-dhl{background:#cfe3ff;color:inherit;padding:0;border-radius:2px}',
     'sup.c4b-ref{font-size:.7em;line-height:0;margin-left:1px;user-select:none}',
@@ -64,14 +81,23 @@ const jsValue = (v: unknown): string =>
 export type MailboxState = { name: string; state: 'listening' | 'reconnecting'; queued: number };
 // Журнал ревью для страницы (change site-review-log): файл и раздел — в подсказке поля ввода;
 // null — кнопки нет.
-export type ReviewLogState = { file: string; heading: string[] };
+// `approve` — таблица статусов для кнопки апрува строки, `push` — плашка Push журнала
+// (change site-review-approve-push).
+export type ReviewLogState = {
+    file: string;
+    heading: string[];
+    approve?: { heading: string[]; who: string; set: Record<string, string> } | null;
+    push?: boolean;
+};
 // Свои подписи кнопок у выделения (ключ `buttons`, change site-button-names); пусто — словарь.
-export type ButtonLabels = { agent?: string; comment?: string };
+export type ButtonLabels = { agent?: string; comment?: string; approve?: string; push?: string };
 // `reviewLog.label` — прежний способ подписать кнопку журнала: остаётся ради старых конфигов,
 // `buttons.comment` его перекрывает. Пустые строки — «не задано», подпись берётся из словаря.
 export const buttonLabels = (buttons?: ButtonLabels, reviewLogLabel?: string): ButtonLabels => ({
     agent: buttons?.agent || undefined,
-    comment: buttons?.comment || reviewLogLabel || undefined
+    comment: buttons?.comment || reviewLogLabel || undefined,
+    approve: buttons?.approve || undefined,
+    push: buttons?.push || undefined
 });
 
 // Начальное состояние агентского режима и ключ проекта вставляет сервер, дальше его обновляют
@@ -98,6 +124,9 @@ export const commentsSnippet = ({
     window.__c4builderComments = true;
     var FEEDBACK = '${FEEDBACK_PATH}';
     var REVIEW_LOG_URL = '${REVIEW_LOG_PATH}';
+    var APPROVE_URL = '${REVIEW_APPROVE_PATH}';
+    var STATE_URL = '${REVIEW_STATE_PATH}';
+    var PUSH_URL = '${REVIEW_PUSH_PATH}';
     var REVIEW_LOG = ${jsValue(reviewLog)};
     var LABELS = ${jsValue(labels)};
     var TOAST_KEY = '__c4builderCommentToast';
@@ -143,8 +172,20 @@ export const commentsSnippet = ({
     };
     try {
         var saved = sessionStorage.getItem(TOAST_KEY);
-        if (saved) { sessionStorage.removeItem(TOAST_KEY); toast(saved); }
+        if (saved) {
+            sessionStorage.removeItem(TOAST_KEY);
+            var kept = saved.charAt(0) === '{' ? JSON.parse(saved) : { msg: saved };
+            toast(kept.msg, kept.err);
+        }
     } catch (e) {}
+    // Called by the livereload snippet right before it reloads the page: the toast on screen (the
+    // result of a comment, approve or push) is shown again after the reload.
+    window.__c4builderBeforeReload = function () {
+        if (!toastEl) return;
+        try {
+            sessionStorage.setItem(TOAST_KEY, JSON.stringify({ msg: toastEl.textContent, err: toastEl.classList.contains('c4b-err') }));
+        } catch (e) {}
+    };
 
     var content = function () { return document.querySelector('.markdown-section'); };
     var headingLevel = function (el) { return /^H[1-6]$/.test(el.tagName) ? Number(el.tagName[1]) : 0; };
@@ -275,8 +316,8 @@ export const commentsSnippet = ({
             if (item.cells) body.cells = item.cells;
             send(body, 'DELETE', url).then(function (r) {
                 var msg = t('removed', { file: r.file });
-                try { sessionStorage.setItem(TOAST_KEY, msg); } catch (e) {}
                 toast(msg);
+                refreshLog();
             }, function (err) {
                 del.disabled = false;
                 failure('removeFailed')(err);
@@ -325,6 +366,12 @@ export const commentsSnippet = ({
     // One GET per rendered page: the server says whether the page is the log (decorate rows) or
     // which remarks belong to it (highlight quotes). The marker lives on the first rendered element,
     // so a re-render by docsify clears it and the page is synced again.
+    var logFirst = null, logApproved = [], unpushedRows = {}, hasLog = false, configShown = false;
+    var keysOf = function (rows) {
+        var out = {};
+        (rows || []).forEach(function (row) { out[JSON.stringify(row)] = true; });
+        return out;
+    };
     var syncLog = function () {
         var root = content();
         if (!REVIEW_LOG || !root || !root.firstElementChild || root.firstElementChild.hasAttribute('data-c4b-log')) return;
@@ -332,18 +379,38 @@ export const commentsSnippet = ({
         first.setAttribute('data-c4b-log', '1');
         var page = pageFile();
         fetch(REVIEW_LOG_URL + '?page=' + encodeURIComponent(page), { method: 'GET' }).then(function (res) {
-            if (!res.ok) return;
+            if (!res.ok) { if (pageFile() === page) { hasLog = false; updateBar(null); } return; }
             return res.json().then(function (data) {
                 if (pageFile() !== page || content() !== root || root.firstElementChild !== first) return;
-                if (data.log) decorateLog(root);
+                hasLog = true;
+                if (data.log) { logFirst = first; logApproved = data.approved || []; decorateLog(root); }
                 else highlightRemarks(root, data);
+                // A misconfigured approve (a column of "who" or "set" is missing) is said once, not
+                // hidden behind an absent button.
+                if (data.configError && !configShown) { configShown = true; toast(data.configError, true); }
+                refreshLog();
             });
+        }, function () {});
+    };
+    // The git state of the page's log (the Push bar, whether an approved row may be pushed again): a
+    // separate request — the server answers it after a running git operation — asked only with push or
+    // approve, on every render and after an action on the page.
+    var refreshLog = function () {
+        if (!REVIEW_LOG || !(REVIEW_LOG.push || REVIEW_LOG.approve) || !hasLog) return;
+        var page = pageFile();
+        fetch(STATE_URL + '?page=' + encodeURIComponent(page), { method: 'GET' }).then(function (res) {
+            return res.ok ? res.json() : null;
+        }).then(function (data) {
+            if (pageFile() !== page) return;
+            unpushedRows = keysOf(data && data.unpushedRows);
+            updateBar(data);
         }, function () {});
     };
     var schedule = function () {
         setTimeout(function () {
             try { syncLog(); } catch (e) {}
             try { highlightDraft(); } catch (e) {}
+            try { fitDock(); } catch (e) {}
         }, 50);
     };
     var docsifyVm = null;
@@ -376,6 +443,13 @@ export const commentsSnippet = ({
         rvBtn = button(LABELS.comment || t('review'), null, 'c4b-rv');
         rvBtn.title = t('reviewTitle');
         btns.appendChild(rvBtn);
+    }
+    var apBtn = null;
+    if (REVIEW_LOG && REVIEW_LOG.approve) {
+        apBtn = button(LABELS.approve || t('approveRow'), null, 'c4b-ap');
+        apBtn.title = t('approveRowTitle');
+        apBtn.hidden = true;
+        btns.appendChild(apBtn);
     }
     document.body.appendChild(btns);
     var pop = null;
@@ -417,9 +491,51 @@ export const commentsSnippet = ({
         for (var i = 0; i < btns.children.length; i++) if (!btns.children[i].hidden) return true;
         return false;
     };
+    // The status row under the selection (key comments.approve): both ends in one row of the table
+    // of the approve section on the log page itself, with a reviewer name, not approved yet. The
+    // server checks the row again: the page may be stale.
+    // Cell text as the file has it: without our controls (the «×» of decorateLog, number links).
+    var cellText = function (cell) {
+        var copy = cell.cloneNode(true);
+        var ours = copy.querySelectorAll('.c4b-del, sup.c4b-ref, button');
+        for (var i = 0; i < ours.length; i++) ours[i].remove();
+        return collapse(copy.textContent);
+    };
+    var approvedRows = {};
+    var approveTarget = function (range) {
+        var A = REVIEW_LOG && REVIEW_LOG.approve, root = content();
+        if (!A || !root || !logFirst || root.firstElementChild !== logFirst) return null;
+        var rowOf = function (n) {
+            var el = n && (n.nodeType === 1 ? n : n.parentNode);
+            return el && el.closest ? el.closest('tr') : null;
+        };
+        var tr = rowOf(range.startContainer);
+        if (!tr || tr !== rowOf(range.endContainer) || !root.contains(tr)) return null;
+        var table = tr.closest('table'), h = null;
+        A.heading.some(function (name) { return !!(h = findHeading(root, name)); });
+        if (!h || !sectionOf(h).some(function (el) { return el === table || el.contains(table); })) return null;
+        var cells = tr.querySelectorAll('td');
+        if (!cells.length) return null;
+        var heads = table.querySelectorAll('thead th');
+        var col = function (name) {
+            for (var i = 0; i < heads.length; i++) if (same(heads[i].textContent, name)) return i;
+            return -1;
+        };
+        var texts = [];
+        for (var c = 0; c < cells.length; c++) texts.push(cellText(cells[c]));
+        var who = col(A.who);
+        if (who < 0 || /^(|-|\\u2013|\\u2014)$/.test(texts[who] || '')) return null;
+        // Approved is the server's rule (the "approved" rows of the log GET), or approved from this
+        // page a moment ago. An approved row the server marks as committed but not pushed (the push
+        // was rejected) keeps the button: pressing it again pushes that commit.
+        var key = JSON.stringify(texts);
+        var approved = approvedRows[key] || keysOf(logApproved)[key];
+        return approved && !unpushedRows[key] ? null : { cells: texts };
+    };
     var update = function () {
         if (pop) return;
         var s = selection();
+        if (apBtn) apBtn.hidden = !(s && approveTarget(s.range));
         if (!s || !anyButton()) { btns.hidden = true; return; }
         btns.hidden = false;
         place(btns, anchorRect(s.range));
@@ -439,8 +555,18 @@ export const commentsSnippet = ({
         if (!p) return (window.$docsify && window.$docsify.homepage) || 'README.md';
         return /\\.md$/i.test(p) ? p : p + '.md';
     };
+    // While a request is running, a livereload (the server wrote the log) waits for it: the reload
+    // happens after the caller has shown the result, which then survives the reload.
+    var busyDone = function () {
+        setTimeout(function () {
+            window.__c4builderBusy = Math.max(0, (window.__c4builderBusy || 1) - 1);
+            var later = window.__c4builderReloadLater;
+            if (!window.__c4builderBusy && later) { window.__c4builderReloadLater = null; later(); }
+        }, 0);
+    };
     var send = function (body, method, url) {
-        return fetch(url, {
+        window.__c4builderBusy = (window.__c4builderBusy || 0) + 1;
+        var request = fetch(url, {
             method: method || 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body)
@@ -450,10 +576,13 @@ export const commentsSnippet = ({
                 return data;
             });
         });
+        request.then(busyDone, busyDone);
+        return request;
     };
     var failure = function (key) {
         return function (err) { toast(t(key, { error: err && err.message ? err.message : err }), true); };
     };
+
 
     // The tab's recipient lives in sessionStorage: it survives livereload, is per tab and is
     // copied with a duplicated tab. Recipients are the server's mailboxes plus the tab's own.
@@ -584,7 +713,64 @@ export const commentsSnippet = ({
     panel.appendChild(head);
     panel.appendChild(list);
     panel.appendChild(general);
-    document.body.appendChild(panel);
+    // The bottom row: the agent bar and the review log bar side by side (see the CSS).
+    var dock = document.createElement('div');
+    dock.className = 'c4b-dock';
+    dock.appendChild(panel);
+    document.body.appendChild(dock);
+
+    // The Push bar of the review log (key comments.push): shown while the page's log has something to
+    // push. The state comes from the server with every GET of the log — it sees hand edits of the log,
+    // a commit left by a failed push and the other tabs; nothing is kept in the browser.
+    var bar = document.createElement('div');
+    bar.className = 'c4b-logbar';
+    bar.hidden = true;
+    var barText = document.createElement('span');
+    var pushing = false;
+    var barPush = button(LABELS.push || t('push'), function () {
+        if (pushing) return;
+        pushing = true;
+        barPush.disabled = true;
+        send({ page: pageFile() }, 'POST', PUSH_URL).then(function (r) {
+            pushing = false;
+            // Pushed or nothing to push: the bar goes at once, the GET below confirms it.
+            bar.hidden = true;
+            toast(r.commit || r.pushed ? t('pushed', { file: r.file }) : t('nothingToPush'));
+            refreshLog();
+        }, function (err) {
+            // The log still has something to push: the bar stays, the button is active again.
+            pushing = false;
+            barPush.disabled = false;
+            failure('pushFailed')(err);
+        });
+    });
+    barPush.title = t('pushTitle');
+    bar.appendChild(barText);
+    bar.appendChild(barPush);
+    dock.appendChild(bar);
+    // The end of the page must scroll above the bottom row: the content gets a bottom padding of the
+    // row's height plus its gap to the window edge and some air; no row — no padding. Recomputed when
+    // a bar shows, hides or changes size (ResizeObserver; without it — on every change we make and on
+    // window resize).
+    var fitDock = function () {
+        dock.hidden = panel.hidden && bar.hidden;
+        var root = content();
+        if (!root) return;
+        root.style.paddingBottom = dock.hidden ? '' : (dock.offsetHeight + 32) + 'px';
+    };
+    if (window.ResizeObserver) {
+        try { new ResizeObserver(fitDock).observe(dock); } catch (e) {}
+    }
+    window.addEventListener('resize', fitDock);
+    var updateBar = function (data) {
+        var p = REVIEW_LOG && REVIEW_LOG.push && data && data.pending;
+        bar.hidden = !(p && (p.changed || p.unpushed));
+        fitDock();
+        if (bar.hidden) return;
+        barText.textContent = t('logPending');
+        barText.title = data.file;
+        barPush.disabled = pushing;
+    };
     var renderPanel = function () {
         panel.hidden = !AGENT.on;
         var items = draft(), pages = {}, empty = !items.length;
@@ -614,6 +800,7 @@ export const commentsSnippet = ({
         discard.disabled = busy;
         approve.disabled = busy || !canSend();
         submit.disabled = busy || empty || !canSend();
+        fitDock();
     };
     var label = function (m) {
         return t(m.state === 'listening' ? 'stateListening' : 'stateReconnecting', { name: m.name }) +
@@ -716,8 +903,8 @@ export const commentsSnippet = ({
             primary = button(t('addRemark'), run(function (c) {
                 return send(item(c), 'POST', REVIEW_LOG_URL).then(function (r) {
                     var msg = t(r.number ? 'addedNumber' : 'added', { file: r.file, number: r.number });
-                    try { sessionStorage.setItem(TOAST_KEY, msg); } catch (e) {}
                     toast(msg);
+                    refreshLog();
                 });
             }));
             buttons.push(primary);
@@ -752,6 +939,21 @@ export const commentsSnippet = ({
     btns.addEventListener('mousedown', function (e) { e.preventDefault(); });
     fbBtn.addEventListener('click', openFor('feedback'));
     if (rvBtn) rvBtn.addEventListener('click', openFor('review'));
+    if (apBtn) apBtn.addEventListener('click', function () {
+        var s = selection(), row = s && approveTarget(s.range);
+        if (!row || apBtn.disabled) return;
+        apBtn.disabled = true;
+        btns.hidden = true;
+        send({ page: pageFile(), cells: row.cells }, 'POST', APPROVE_URL).then(function (r) {
+            // Approved and pushed: the row keeps its old text until livereload re-renders the page,
+            // so it is remembered — no button at it meanwhile.
+            approvedRows[JSON.stringify(row.cells)] = true;
+            delete unpushedRows[JSON.stringify(row.cells)];
+            apBtn.hidden = true;
+            var msg = t(r.pushed ? 'approvedPushed' : 'approvedRow', { file: r.file });
+            toast(msg);
+        }, failure('approveFailed')).then(function () { apBtn.disabled = false; refreshLog(); });
+    });
     document.addEventListener('mousedown', function (e) {
         if (pop && !pop.contains(e.target) && !btns.contains(e.target)) close();
     });
