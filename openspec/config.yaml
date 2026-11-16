@@ -7,7 +7,7 @@ context: |
   порт на TypeScript/ESM → рендер-фичи (java напрямую + Smetana,
   PNG через resvg, D2, экспериментальный TeaVM-движок).
   Главный потребитель — репо arch (108 .puml, C4-PlantUML stdlib, локальные
-  .iuml-инклюды, кириллица, diagramFormat=svg, generateLocalImages=true):
+  .iuml-инклюды, кириллица, diagramFormat=svg):
   совместимость с его конфигом .c4builder — обязательный контракт.
   Работает в корпсреде без интернета: рендер только локальный (vendor JAR),
   онлайн-сервисы PlantUML не использовать.

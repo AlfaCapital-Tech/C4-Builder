@@ -246,13 +246,6 @@ sequenceDiagram
 [resvg](https://github.com/thx/resvg-js) тем же вендорным шрифтом. PNG получается
 одинаковым для PlantUML, D2, BPMN, mermaid и wireflow и не требует браузера. ditaa остаётся нативным PNG PlantUML.
 
-## Онлайн-сервер PlantUML
-
-С `generateLocalImages: false` диаграммы не рендерятся локально: в выход попадают ссылки на
-сервер из `plantumlServerUrl` (по умолчанию `https://www.plantuml.com/plantuml`). Это значит,
-что исходники диаграмм уходят на внешний сервер, а D2, BPMN, mermaid и wireflow в этом режиме не работают —
-сборка остановится с ошибкой. Режим оставлен для совместимости; основной — локальный рендер.
-
 ## Проверка отдельных диаграмм
 
 ```bash

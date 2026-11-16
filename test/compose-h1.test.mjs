@@ -1,59 +1,23 @@
-import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = path.join(__dirname, '..');
-const CLI = path.join(REPO_ROOT, 'dist', 'index.js');
+import { composeReadme, REPO_ROOT } from './helpers.mjs';
 
 // 4.2: при пользовательском h1 + diagramsOnTop нессылочная диаграмма НЕ должна вставать
-// выше заголовка. generateLocalImages=false → диаграмма превращается в remote-URL
-// (java и рендер не нужны), поэтому тест самодостаточен и быстр.
+// выше заголовка. Проверяется compose, а не рендер: scan → compose вызываются напрямую,
+// а на месте отрендеренной картинки лежит заглушка — java не нужна, тест быстрый.
 let dir;
 let readme;
 
-beforeAll(() => {
+beforeAll(async () => {
     dir = fs.mkdtempSync(path.join(REPO_ROOT, 'test', '.tmp-h1-'));
     fs.mkdirSync(path.join(dir, 'src'), { recursive: true });
+    fs.mkdirSync(path.join(dir, 'docs'), { recursive: true });
     fs.writeFileSync(path.join(dir, 'src', 'index.md'), '# My Own Title\n\nBody text.\n');
     fs.writeFileSync(path.join(dir, 'src', 'a.puml'), '@startuml\nAlice -> Bob\n@enduml\n');
-    fs.writeFileSync(
-        path.join(dir, '.c4builder'),
-        // Полный набор ключей — иначе визард переспросил бы недостающее и завис на EOF.
-        JSON.stringify({
-            projectName: 'h1demo',
-            homepageName: 'Overview',
-            rootFolder: 'src',
-            distFolder: 'docs',
-            generateMD: true,
-            generateCompleteMD: false,
-            generateWEB: false,
-            includeNavigation: false,
-            includeTableOfContents: false,
-            webTheme: 'vendor/vue.css',
-            supportSearch: false,
-            repoUrl: '',
-            executeScript: false,
-            docsifyTemplate: '',
-            webPort: '3000',
-            includeBreadcrumbs: false,
-            includeLinkToDiagram: false,
-            diagramsOnTop: true,
-            embedDiagram: false,
-            excludeOtherFiles: false,
-            generateLocalImages: false,
-            plantumlServerUrl: 'https://www.plantuml.com/plantuml',
-            diagramFormat: 'svg',
-            d2Layout: 'dagre',
-            charset: 'UTF-8',
-            hasRun: true
-        })
-    );
-    const res = spawnSync(process.execPath, [CLI], { cwd: dir, encoding: 'utf8', input: '' });
-    if (res.status !== 0) throw new Error(`build failed: ${res.stdout}\n${res.stderr}`);
-    readme = fs.readFileSync(path.join(dir, 'docs', 'README.md'), 'utf8');
+    fs.writeFileSync(path.join(dir, 'docs', 'a.svg'), '<svg xmlns="http://www.w3.org/2000/svg"/>');
+    readme = await composeReadme(dir, { DIAGRAMS_ON_TOP: true });
 });
 
 afterAll(() => {
@@ -69,6 +33,11 @@ describe('4.2: пользовательский h1 + diagramsOnTop', () => {
         expect(diagramPos).toBeGreaterThanOrEqual(0);
         expect(h1Pos).toBeLessThan(diagramPos); // h1 выше диаграммы (регрессия была наоборот)
         expect(diagramPos).toBeLessThan(bodyPos); // diagramsOnTop: диаграмма выше тела
+    });
+
+    it('картинка — локальный файл рядом со страницей', () => {
+        expect(readme).toContain('![diagram](a.svg)');
+        expect(fs.existsSync(path.join(dir, 'docs', 'a.svg'))).toBe(true);
     });
 
     it('ровно один h1 в документе', () => {

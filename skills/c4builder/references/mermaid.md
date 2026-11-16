@@ -75,4 +75,3 @@ warnings, or copy the block into a temporary `.mmd`.
   dependency, loaded only when the project has mermaid. An install with `--omit=optional`
   stops a `.mmd` build (and turns blocks into placeholders) with a hint to reinstall c4builder
   without that flag.
-- Like D2 and BPMN, mermaid has no online renderer: `generateLocalImages` must stay `true`.

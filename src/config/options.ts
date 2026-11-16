@@ -23,7 +23,6 @@ export interface BuildOptions {
     GENERATE_WEBSITE: boolean;
     GENERATE_COMPLETE_MD_FILE: boolean;
     GENERATE_LLMS: boolean;
-    GENERATE_LOCAL_IMAGES: boolean;
     EMBED_DIAGRAM: boolean;
     INCLUDE_NAVIGATION: boolean;
     INCLUDE_BREADCRUMBS: boolean;
@@ -45,7 +44,6 @@ export interface BuildOptions {
     DOCSIFY_TEMPLATE: string;
     CHARSET: string;
     WEB_PORT: string;
-    PLANTUML_SERVER_URL: string;
     DIAGRAM_FORMAT: string;
     D2_LAYOUT: string;
     MD_FILE_NAME: string;

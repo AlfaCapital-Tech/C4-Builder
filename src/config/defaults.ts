@@ -27,8 +27,6 @@ const defaultConfig = {
     diagramsOnTop: true,
     embedDiagram: false,
     excludeOtherFiles: false,
-    generateLocalImages: true,
-    plantumlServerUrl: 'https://www.plantuml.com/plantuml',
     diagramFormat: 'svg',
     d2Layout: 'dagre',
     charset: 'UTF-8',

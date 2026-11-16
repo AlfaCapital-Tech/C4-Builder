@@ -8,7 +8,8 @@ import { REPO_ROOT, TMP_ROOT } from './helpers.mjs';
 // Блоки ```plantuml и ```mermaid в страницах проекта рендерятся при сборке (PlantUML —
 // системной java, как в check.test.mjs) во всех выходах; ```puml/```d2 — показ исходника,
 // остаются кодом.
-// Шаблон — пользовательский с клиентским docsify-plantuml (как у арх-репо).
+// Шаблон — пользовательский с тегом клиентского docsify-plantuml (как был у арх-репо): скрипт
+// больше не поставляется, сборка должна пройти с предупреждением.
 const CLI = path.join(REPO_ROOT, 'dist', 'index.js');
 const CONFIG = {
     ...JSON.parse(
@@ -108,9 +109,12 @@ describe('блоки ```plantuml в страницах', () => {
         expect(image('B/B.md')).toContain('diagram not rendered');
     });
 
-    it('пользовательский шаблон: родные emoji в опциях, docsify-plantuml.min.js в выходе', () => {
+    it('пользовательский шаблон с docsify-plantuml: предупреждение, родные emoji, файла в выходе нет', () => {
+        // Клиентский рендер больше не поставляется (change remove-remote-plantuml): сборка проходит
+        // (beforeAll проверил код 0), а предупреждение подсказывает убрать тег из шаблона.
+        expect(out).toMatch(/WARNING:[\s\S]*docsifyTemplate loads docsify-plantuml/);
         expect(read('index.html')).toContain('"nativeEmoji":true');
-        expect(fs.existsSync(path.join(dir, 'docs', 'vendor', 'docsify-plantuml.min.js'))).toBe(true);
+        expect(fs.existsSync(path.join(dir, 'docs', 'vendor', 'docsify-plantuml.min.js'))).toBe(false);
     });
 
     it('llms-full.txt: исходник блока в fence plantuml, include — в приложении', () => {

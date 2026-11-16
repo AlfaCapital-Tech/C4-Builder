@@ -11,9 +11,12 @@ and one `.md` per page. The site is static and does not go to the internet: docs
 and the plugins sit in `vendor/` next to `index.html`, diagrams are ready-made SVG or PNG files.
 Theme fonts are system fonts (no Google Fonts), emoji such as `:smile:` are shown as characters
 rather than images from GitHub, and ```` ```plantuml ```` and ```` ```mermaid ```` blocks are
-rendered at build time, not in the browser (plantuml.com, client-side mermaid). External addresses appear only by explicit choice:
-`generateLocalImages: false` (diagram images link to `plantumlServerUrl`), a custom `webTheme`
-or `docsifyTemplate` that uses them, external images in page text.
+rendered at build time, not in the browser — like every diagram file. Diagram sources are never
+sent to external render servers, and no `.c4builder` key turns that on. External addresses appear
+only by explicit choice: a custom `webTheme` or `docsifyTemplate` that uses them, external images
+in page text. The package does not ship client-side PlantUML rendering (`docsify-plantuml`): if a
+custom `docsifyTemplate` loads it, the build passes with a warning — remove that `<script>` from
+the template.
 
 - To view it locally, run `c4builder site` (or `c4builder site -w` to rebuild on changes), by default at
   `http://localhost:3000`. Double-clicking `index.html` will not work: docsify loads pages with

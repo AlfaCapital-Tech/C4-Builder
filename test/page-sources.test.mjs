@@ -18,7 +18,8 @@ const write = (rel, content) => {
 const rel = (p) => path.relative(process.cwd(), path.join(dir, p)).split(path.sep).join('/');
 
 describe('addPage: sources', () => {
-    const options = { ROOT_FOLDER: 'src', DIST_FOLDER: 'docs' };
+    // addPage создаёт каталог выхода страницы — во временном каталоге, а не в docs/ репозитория.
+    const options = { ROOT_FOLDER: 'src', DIST_FOLDER: path.join(dir, 'docs') };
     const root = {
         dir: 'src',
         name: 'Overview',

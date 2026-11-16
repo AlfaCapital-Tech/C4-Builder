@@ -9,7 +9,7 @@ import { REPO_ROOT, TMP_ROOT } from './helpers.mjs';
 const CLI = path.join(REPO_ROOT, 'dist', 'index.js');
 
 // Полный набор ключей (кроме generateLLMS) — иначе визард переспросил бы недостающее.
-// generateLocalImages=false: PlantUML уходит remote-URL'ом, java и рендер не нужны.
+// Диаграммы в проектах ниже — предмет теста, их рендерит java, которую резолвит сам CLI.
 const BASE_CONFIG = {
     projectName: 'llmsdemo',
     homepageName: 'Overview',
@@ -31,8 +31,6 @@ const BASE_CONFIG = {
     diagramsOnTop: false,
     embedDiagram: false,
     excludeOtherFiles: false,
-    generateLocalImages: false,
-    plantumlServerUrl: 'https://www.plantuml.com/plantuml',
     diagramFormat: 'svg',
     d2Layout: 'dagre',
     charset: 'UTF-8',
@@ -263,7 +261,6 @@ describe('generateLlmsFull: независимость от настроек к�
             DIST_FOLDER: path.join(dir, 'docs'),
             HOMEPAGE_NAME: 'Overview',
             EMBED_DIAGRAM: true,
-            GENERATE_LOCAL_IMAGES: true,
             DIAGRAM_FORMAT: 'png',
             INCLUDE_BREADCRUMBS: false,
             DIAGRAMS_ON_TOP: false

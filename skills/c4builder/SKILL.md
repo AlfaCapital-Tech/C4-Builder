@@ -243,6 +243,4 @@ reads, its `fix:` lines say what to run.
 - Ignoring `⚠ … undeclared element` because the exit code is 0 — the diagram has a stray empty
   element instead of the intended relation.
 - A page "missing" from the output because its file or folder starts with `_`.
-- `generateLocalImages: false` in a project with `.d2`, `.bpmn`, `.mmd` or `.wireflow.json` files — they have no online
-  renderer, the build stops with an error.
 - Writing `bpmndi` coordinates into a `.bpmn` — they are ignored; the layout is always automatic.

@@ -471,7 +471,7 @@ describe('--open / --open-change <id> в site', () => {
         );
         fs.writeFileSync(
             path.join(project, '.c4builder'),
-            JSON.stringify({ ...CONFIG, generateLocalImages: false, plugins: ['openspec'] })
+            JSON.stringify({ ...CONFIG, plugins: ['openspec'] })
         );
         const port = 28332;
         const out = await serveSite(

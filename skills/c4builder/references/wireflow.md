@@ -55,6 +55,5 @@ Same validation and rendering as the build. Each problem is one line with the el
 
 - Not pixel-identical to the editor: a different font, the same geometry and colours.
 - Estimates, rates and stages (`settings`) and the estimate badge are not drawn.
-- `generateLocalImages: false` does not work with wireflow (no online renderer) — the build stops.
 - In `llms-full.txt` the source is a `json` block with embedded images replaced by
   `"<embedded image>"`.
