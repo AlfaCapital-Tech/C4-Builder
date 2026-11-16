@@ -3,7 +3,7 @@
 User-facing changes of C4-Builder. Every pull request that changes behaviour adds a line to
 `## Unreleased`; the release commit renames it to `## vX.Y.Z`.
 
-## Unreleased
+## v0.16.0
 
 - Site: the review log can be committed and pushed from the page of `site -w`. **Approve row** /
   «Одобрить строку» at a selection within a row of the status table on the log page writes the
