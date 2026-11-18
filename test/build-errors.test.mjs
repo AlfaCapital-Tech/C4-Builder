@@ -14,6 +14,7 @@ import {
     placeholderText,
     plantUmlFailure,
     PlantUmlInputError,
+    plantUmlLineBase,
     VERBOSE_HINT,
     WireflowError
 } from './dist.mjs';
@@ -43,6 +44,21 @@ describe('ошибка PlantUML — структура у источника (re
         expect(err.details).toEqual([{ line: 4, message: 'Fatal parsing error' }]);
         expect(err.message).toBe(`PlantUML exited with code 200\n${ISSUE_STDERR}`);
         expect(describeRenderError(err)).toEqual(['line 4: Fatal parsing error']);
+    });
+
+    it('позиция ошибки считается от строки @start…: сдвиг до строки текста', () => {
+        expect(plantUmlFailure(200, ISSUE_STDERR).line).toBe(4);
+        // Директива в первой строке — позиция и есть строка текста.
+        expect(plantUmlLineBase('@startuml\nA -> B\n@enduml')).toBe(0);
+        // Строки перед директивой движок не считает.
+        expect(plantUmlLineBase("\n' note\n@startuml\nA -> B\n@enduml")).toBe(2);
+        expect(plantUmlLineBase('text\n@startmindmap\n* a\n@endmindmap')).toBe(1);
+        // Без директивы в начале строки движок оборачивает текст сам: обёртка — позиция 0,
+        // ведущие пустые строки отброшены, остальные идут в счёт.
+        expect(plantUmlLineBase('A -> B\nfoo')).toBe(-1);
+        expect(plantUmlLineBase('\n  \nA -> B\n\nfoo')).toBe(1);
+        expect(plantUmlLineBase('  @startuml\nA -> B\n  @enduml')).toBe(-1);
+        expect(plantUmlLineBase('A -> B : see @startuml docs')).toBe(-1);
     });
 
     it('без блока ERROR — обычная Error с кодом и stderr', () => {

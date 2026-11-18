@@ -32,6 +32,8 @@ const FILES = {
     'src/A/README.md': '# A\n\n```plantuml\n!include ../shared.iuml\n```\n',
     'src/B/README.md': '# B\n\n```plantuml\n[a[b] --> [c]\n```\n',
     'src/C/README.md': '# C\n\n```mermaid\nflowchart LR\n  A -->> ((B\n```\n',
+    // `@startuml` в середине строки — не директива: блок без неё получает обёртку.
+    'src/D/README.md': '# D\n\n```plantuml\nAlice -> Bob : see @startuml MentionDocs\n```\n',
     'tpl.mjs':
         "export default (o) => '<script>window.$docsify = ' + JSON.stringify(o) + ';</script>' +\n" +
         '  \'<script src="vendor/docsify-plantuml.min.js"></script>\';\n'
@@ -102,6 +104,12 @@ describe('блоки ```plantuml в страницах', () => {
         expect(image('A/A.md')).toContain('from-include');
         expect(image('A/README.md')).toContain('from-include');
         expect(image('pf.md', '/A/')).toContain('from-include');
+    });
+
+    it('упоминание @startuml в тексте блока без директивы: блок рендерится, предупреждения нет', () => {
+        expect(image('D/D.md')).toContain('MentionDocs');
+        expect(image('D/D.md')).not.toContain('diagram not rendered');
+        expect(out).not.toMatch(/src[/\\]D[/\\]README\.md/);
     });
 
     it('битый блок: сборка жива, заглушка, предупреждение с путём .md', () => {

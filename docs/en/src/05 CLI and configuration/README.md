@@ -12,7 +12,7 @@
 | `c4builder site -w` | the same, rebuilding on every save and reloading the browser |
 | `c4builder feedback --wait --as <name>` | waits for the next batch of page feedback for the agent `<name>` from `site -w` and prints it, see "Feedback to the agent" below |
 | `c4builder status [--json]` | whether the dev server of this project is running: address, pid, agent mode, `feedback` listeners; exit code 0 — running, 1 — not, see "The state file and `c4builder status`" below |
-| `c4builder check <files...>` | checks `.puml`, `.iuml`, `.d2`, `.bpmn`, `.mmd`, `.wireflow.json` diagrams without a build, exit code 0 or 1; `--strict` — 1 on warnings too; `--format json\|github\|gitlab` — a report for agents and CI, `--files-from <file>` — a list of paths from a file or stdin (see "Checking diagrams" below and [Diagrams](03%20Diagrams/03%20Diagrams.md)) |
+| `c4builder check <files...>` | checks `.puml`, `.iuml`, `.d2`, `.bpmn`, `.mmd`, `.wireflow.json` diagrams and `plantuml` blocks in `.md` files without a build, exit code 0 or 1; `--strict` — 1 on warnings too; `--format json\|github\|gitlab` — a report for agents and CI, `--files-from <file>` — a list of paths from a file or stdin (see "Checking diagrams" below and [Diagrams](03%20Diagrams/03%20Diagrams.md)) |
 | `c4builder jre info` | managed JRE parameters for external caches in CI (JSON) |
 | `c4builder jre install [--force]` | download a JRE into the cache in advance; `--force` — even if system Java exists |
 | `c4builder list` | print the current config; since 0.5.0 outside a project — an error with exit code 1, no files created |
