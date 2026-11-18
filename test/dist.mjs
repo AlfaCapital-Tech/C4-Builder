@@ -16,7 +16,8 @@ export {
     generateImages,
     pendingPlaceholderSvg,
     plantUmlFailure,
-    PlantUmlInputError
+    PlantUmlInputError,
+    plantUmlLineBase
 } from '../dist/core/render/diagrams.js';
 export { build } from '../dist/core/build.js';
 export {

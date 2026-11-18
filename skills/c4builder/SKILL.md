@@ -77,7 +77,10 @@ and exit codes; it writes nothing and works outside a project.
    `rule: "undeclared-element"` with `element` is the relation alias typo. `--json` is the
    same. A list of paths can come from a file or stdin: `--files-from <file|->`, one per line. A changed `.iuml` is checked directly too: a
    styles file calling C4 macros (`UpdateElementStyle`) is checked with the C4 stdlib
-   included. Same engines as the build (bundled PlantUML jar, bundled D2, BPMN pipeline, mermaid, wireflow), no
+   included. A `.md` file (a page, an OpenSpec artifact) is checked too: every fenced `plantuml`
+   block in it, with the error line counted from the top of the `.md` file; other blocks
+   (`puml`, `d2`, `mermaid`) and the text are ignored, a file without `plantuml` blocks passes.
+   Same engines as the build (bundled PlantUML jar, bundled D2, BPMN pipeline, mermaid, wireflow), no
    `.c4builder` needed.
 3. **Build** the whole project:
 

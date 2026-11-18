@@ -31,6 +31,13 @@ const run = (args, { env = {}, input } = {}) => {
     });
 };
 const checkEnv = (env, ...args) => run(['check', ...args], { env });
+// Номер строки (с 1) первой строки фикстуры с подстрокой needle: ожидания не зависят от правки
+// текста вокруг блока.
+const lineOf = (name, needle) =>
+    fs
+        .readFileSync(path.join(dir, name), 'utf8')
+        .split('\n')
+        .findIndex((l) => l.includes(needle)) + 1;
 
 const BPMN_NS = 'xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"';
 const bpmn = (body) =>
@@ -151,6 +158,175 @@ beforeAll(() => {
                 '<bpmn:sequenceFlow id="F3" sourceRef="G" targetRef="E2"/>'
         )
     );
+    // Блоки ```plantuml в markdown (issue #91) — в подпапке: `!include` блока ищется от папки
+    // файла, а не от cwd, и по подпапке видно, что check ничего не пишет.
+    fs.mkdirSync(path.join(dir, 'md'));
+    const md = (name, lines) => write(`md/${name}`, `${lines.join('\n')}\n`);
+    const intro = ['# Design', '', 'Text before the diagram.', ''];
+    md('ok.md', [...intro, '```plantuml', '@startuml', 'Alice -> Bob : hi', '@enduml', '```', '', 'After.']);
+    // Без @startuml/@enduml — обёртку добавляет разбор блока, как в сборке.
+    md('bare.md', [...intro, '```plantuml', 'Alice -> Bob : hi', '```']);
+    // Блок открывается в строке 10, ошибка — в строке 13 файла: с обёрткой и без неё.
+    const pad = [...intro, 'One.', '', 'Two.', '', 'Three.'];
+    md('bad-wrapped.md', [
+        ...pad,
+        '```plantuml',
+        '@startuml',
+        'Alice -> Bob : hi',
+        'foo bar baz',
+        '@enduml',
+        '```'
+    ]);
+    md('bad-bare.md', [...pad, '```plantuml', 'Alice -> Bob : a', 'Bob -> Alice : b', 'foo bar baz', '```']);
+    // Три блока, ошибки в первом и третьем (содержимое разное — одинаковые схлопываются).
+    md('multi.md', [
+        ...intro,
+        '```plantuml',
+        'Alice -> Bob : one',
+        'broken one here',
+        '```',
+        '',
+        '```plantuml',
+        'Alice -> Bob : two',
+        '```',
+        '',
+        '~~~plantuml',
+        '@startuml',
+        'Alice -> Bob : three',
+        'broken three here',
+        '@enduml',
+        '~~~'
+    ]);
+    const same = ['```plantuml', 'Alice -> Bob : same', 'same broken line', '```'];
+    md('dup.md', [...intro, ...same, '', 'Between.', '', ...same]);
+    md('plain.md', [...intro, 'No diagrams here, only `inline code` and a [link](ok.md).']);
+    // Не `plantuml` — код, а не диаграмма: заведомо битое содержимое не проверяется.
+    md('other.md', [
+        ...intro,
+        '```puml',
+        'foo bar baz',
+        '```',
+        '',
+        '```d2',
+        'a -> ',
+        '```',
+        '',
+        '```mermaid',
+        'flowchart LR',
+        '  A -->> ((B',
+        '```',
+        '',
+        '```text',
+        '@startuml',
+        'foo bar baz',
+        '```'
+    ]);
+    // Имя библиотеки не совпадает с файлами в cwd: в режиме -pipe PlantUML сперва ищет
+    // включение в текущем каталоге и только потом — в папке файла.
+    write('md/md-lib.iuml', '!procedure $hello()\nAlice -> Bob : hello\n!endprocedure\n');
+    md('include.md', [...intro, '```plantuml', '!include md-lib.iuml', '$hello()', '```']);
+    md('list.md', [
+        '# Steps',
+        '',
+        '1. First step:',
+        '',
+        '   ```plantuml',
+        '   @startuml',
+        '   Alice -> Bob : in a list',
+        '   @enduml',
+        '   ```',
+        '',
+        '2. Broken step:',
+        '',
+        '   ```plantuml',
+        '   Alice -> Bob : in a list too',
+        '   list broken line',
+        '   ```'
+    ]);
+    // Движок считает строку ошибки от `@start…`: строки блока перед директивой номер не сдвигают.
+    md('lead.md', [
+        ...intro,
+        '```plantuml',
+        '',
+        "' comment before the directive",
+        '@startuml',
+        'Alice -> Bob : hi',
+        'lead broken line',
+        '@enduml',
+        '```'
+    ]);
+    // `@startuml` в середине строки — не директива: блок получает обёртку, строка — файла.
+    md('mention.md', [
+        ...intro,
+        '```plantuml',
+        'Alice -> Bob : see @startuml docs',
+        'mention broken line',
+        '```'
+    ]);
+    // Директива с отступом внутри блока: движок её директивой не считает и оборачивает текст сам.
+    md('indent.md', [
+        ...intro,
+        '```plantuml',
+        '',
+        '  @startuml',
+        '  Alice -> Bob : hi',
+        '  indent broken line',
+        '  @enduml',
+        '```'
+    ]);
+    // Ошибка в первом блоке, предупреждение во втором — порядок замечаний в отчёте.
+    md('mix.md', [
+        ...intro,
+        '```plantuml',
+        'Alice -> Bob : one',
+        'mix broken line',
+        '```',
+        '',
+        '```plantuml',
+        '!include <C4/C4_Container>',
+        'Person(u, "User")',
+        'Rel(u, mixghost, "typo")',
+        '```'
+    ]);
+    // Для подставной java (см. тест сбоя процесса): маркер в теле блока выбирает исход рендера.
+    md('crash.md', [
+        ...intro,
+        '```plantuml',
+        'FAKE_SYNTAX one',
+        '```',
+        '',
+        '```plantuml',
+        'FAKE_CRASH',
+        '```',
+        '',
+        '```plantuml',
+        'Alice -> Bob : fine',
+        '```',
+        '',
+        '```plantuml',
+        'FAKE_SYNTAX four',
+        '```'
+    ]);
+    // Связь на необъявленный алиас: строка 8 (блок без обёртки) и строка 15 (с обёрткой).
+    md('rels.md', [
+        '# Rels',
+        '',
+        '```plantuml',
+        '!include <C4/C4_Container>',
+        'Person(u, "User")',
+        'System(s, "S")',
+        'Rel(u, s, "ok")',
+        'Rel(u, ghost1, "typo")',
+        '```',
+        '',
+        '```plantuml',
+        '@startuml',
+        '!include <C4/C4_Container>',
+        'Person(u, "User")',
+        'Rel(u, ghost2, "typo")',
+        '@enduml',
+        '```'
+    ]);
 });
 
 afterAll(() => {
@@ -194,7 +370,7 @@ describe('c4builder check', () => {
         const res = check('what.txt', 'missing.puml');
         expect(res.status).toBe(1);
         expect(res.stderr).toMatch(
-            /✗ what\.txt: unsupported extension \(expected \.puml, \.iuml, \.d2, \.bpmn, \.mmd or \.wireflow\.json\)/
+            /✗ what\.txt: unsupported extension \(expected \.puml, \.iuml, \.d2, \.bpmn, \.mmd, \.wireflow\.json or \.md\)/
         );
         expect(res.stderr).toMatch(/✗ missing\.puml: ENOENT/);
         const bare = check('d2', 'mmd', 'puml');
@@ -204,7 +380,7 @@ describe('c4builder check', () => {
         const usage = check();
         expect(usage.status).toBe(1);
         expect(usage.stdout).toMatch(
-            /usage: c4builder check \[--strict\] <file\.\.\.> .*\| \.mmd \| \.wireflow\.json\)/
+            /usage: c4builder check \[--strict\] <file\.\.\.> .*\| \.mmd \| \.wireflow\.json \| \.md\)/
         );
     });
 
@@ -308,6 +484,151 @@ describe('c4builder check', () => {
         expect(strict.stderr).toMatch(/^✗ dangling\.puml: 3 warning\(s\), failing with --strict$/m);
         expect(strict.stderr).toMatch(/^✗ warn\.bpmn: \d+ warning\(s\), failing with --strict$/m);
         expect(strict.stdout).toMatch(/✓ implicit\.puml/);
+    });
+
+    // Блоки ```plantuml в `.md` (issue #91).
+
+    it('.md: корректные блоки (с @startuml и без), !include из папки файла → ✓, код 0', () => {
+        const res = check('md/ok.md', 'md/bare.md', 'md/include.md');
+        expect(res.status, res.stderr).toBe(0);
+        for (const name of ['ok', 'bare', 'include'])
+            expect(res.stdout).toMatch(new RegExp(`^✓ md/${name}\\.md$`, 'm'));
+        expect(res.stderr).not.toMatch(/[✗⚠]/);
+    });
+
+    it('.md: ошибка блока → `✗ <file>: line N` со строкой файла, с обёрткой и без — номер один; код 1', () => {
+        const res = check('md/bad-wrapped.md', 'md/bad-bare.md', 'md/ok.md');
+        expect(res.status).toBe(1);
+        expect(lineOf('md/bad-wrapped.md', '```plantuml')).toBe(10);
+        expect(lineOf('md/bad-bare.md', '```plantuml')).toBe(10);
+        expect(res.stderr).toMatch(/^✗ md\/bad-wrapped\.md: line 13: Syntax Error/m);
+        expect(res.stderr).toMatch(/^✗ md\/bad-bare\.md: line 13: Syntax Error/m);
+        expect(res.stderr.match(/✗/g)).toHaveLength(2);
+        expect(res.stdout).toMatch(/✓ md\/ok\.md/); // остальные файлы всё равно проверены
+    });
+
+    it('.md: три блока, два с ошибкой → две строки ✗; одинаковые блоки → одна, строка первого', () => {
+        const multi = check('md/multi.md');
+        expect(multi.status).toBe(1);
+        const one = lineOf('md/multi.md', 'broken one here');
+        const three = lineOf('md/multi.md', 'broken three here');
+        expect(multi.stderr).toMatch(new RegExp(`^✗ md/multi\\.md: line ${one}: Syntax Error`, 'm'));
+        expect(multi.stderr).toMatch(new RegExp(`^✗ md/multi\\.md: line ${three}: Syntax Error`, 'm'));
+        expect(multi.stderr.match(/✗/g)).toHaveLength(2);
+        expect(multi.stdout).not.toMatch(/✓/);
+
+        const dup = check('md/dup.md');
+        expect(dup.status).toBe(1);
+        expect(dup.stderr).toMatch(
+            new RegExp(`^✗ md/dup\\.md: line ${lineOf('md/dup.md', 'same broken line')}: Syntax Error`, 'm')
+        );
+        expect(dup.stderr.match(/✗/g)).toHaveLength(1);
+    });
+
+    it('.md: строки перед @startuml, упоминание @startuml в тексте, директива с отступом → строка файла', () => {
+        const res = check('md/lead.md', 'md/mention.md', 'md/indent.md');
+        expect(res.status).toBe(1);
+        for (const name of ['lead', 'mention', 'indent']) {
+            const line = lineOf(`md/${name}.md`, `${name} broken line`);
+            expect(res.stderr).toMatch(new RegExp(`^✗ md/${name}\\.md: line ${line}: Syntax Error`, 'm'));
+        }
+        expect(res.stderr.match(/✗/g)).toHaveLength(3);
+    });
+
+    // Подставная java вместо моков процесса: `-version` проходит резолв JRE, дальше исход
+    // рендера выбирает маркер во входе. Настоящий сбой JVM (таймаут 120 с, нехватка памяти)
+    // в тесте не воспроизвести. Скрипт POSIX — на Windows пропускаем.
+    it.skipIf(process.platform === 'win32')(
+        '.md: сбой процесса на одном блоке — замечание блока, ошибки остальных не теряются',
+        () => {
+            const bin = path.join(dir, 'fake-jre', 'bin');
+            fs.mkdirSync(bin, { recursive: true });
+            fs.writeFileSync(
+                path.join(bin, 'java'),
+                [
+                    '#!/bin/sh',
+                    'if [ "$1" = "-version" ]; then echo \'openjdk version "21.0.0"\' >&2; exit 0; fi',
+                    'src=$(cat)',
+                    'case "$src" in',
+                    "  *FAKE_CRASH*) echo 'java.lang.OutOfMemoryError: fake heap' >&2; exit 1 ;;",
+                    "  *FAKE_SYNTAX*) printf 'ERROR\\n1\\nSyntax Error?\\n' >&2; exit 200 ;;",
+                    '  *) echo \'<svg xmlns="http://www.w3.org/2000/svg"></svg>\' ;;',
+                    'esac',
+                    ''
+                ].join('\n'),
+                { mode: 0o755 }
+            );
+            const env = { JAVA_HOME: path.join(dir, 'fake-jre') };
+            const one = lineOf('md/crash.md', 'FAKE_SYNTAX one');
+            const crash = lineOf('md/crash.md', 'FAKE_CRASH') - 1; // строка открывающей fence
+            const four = lineOf('md/crash.md', 'FAKE_SYNTAX four');
+
+            const res = checkEnv(env, '--verbose', 'md/crash.md');
+            expect(res.status).toBe(1);
+            const lines = res.stderr.split('\n').filter((l) => l.startsWith('✗'));
+            expect(lines).toEqual([
+                `✗ md/crash.md: line ${one}: Syntax Error?`,
+                `✗ md/crash.md: line ${crash}: PlantUML exited with code 1 (run with --verbose for details)`,
+                `✗ md/crash.md: line ${four}: Syntax Error?`
+            ]);
+            // Полный вывод процесса — только по --verbose.
+            expect(res.stderr).toContain('java.lang.OutOfMemoryError: fake heap');
+            expect(checkEnv(env, 'md/crash.md').stderr).not.toContain('OutOfMemoryError');
+
+            const report = checkEnv(env, '--format', 'json', 'md/crash.md');
+            expect(report.status).toBe(1);
+            const list = JSON.parse(report.stdout);
+            expect(list.map((d) => [d.line, d.severity, d.engine])).toEqual(
+                [one, crash, four].map((line) => [line, 'error', 'plantuml'])
+            );
+            expect(list[1].message).toMatch(/^PlantUML exited with code 1\n.*OutOfMemoryError/s);
+        }
+    );
+
+    it('.md: блок в пункте списка проверяется, строка — файла', () => {
+        const res = check('md/list.md');
+        expect(res.status).toBe(1);
+        expect(res.stderr).toMatch(
+            new RegExp(`^✗ md/list\\.md: line ${lineOf('md/list.md', 'list broken line')}: Syntax Error`, 'm')
+        );
+        expect(res.stderr.match(/✗/g)).toHaveLength(1); // первый блок списка корректен
+    });
+
+    it('.md без блоков plantuml (в т. ч. с битыми puml/d2/mermaid/text) → ✓, код 0, java не нужна', () => {
+        // Без java в окружении: резолв JRE пошёл бы в сеть и уронил тест — значит, его не было.
+        const res = run(['check', 'md/plain.md', 'md/other.md'], {
+            env: {
+                PATH: path.join(dir, 'no-path'),
+                JAVA_HOME: '',
+                XDG_CACHE_HOME: path.join(dir, 'no-cache'),
+                LOCALAPPDATA: path.join(dir, 'no-cache')
+            }
+        });
+        expect(res.status, res.stderr).toBe(0);
+        expect(res.stdout).toBe('✓ md/plain.md\n✓ md/other.md\n');
+        expect(res.stderr).toBe('');
+        expect(fs.existsSync(path.join(dir, 'no-cache'))).toBe(false);
+    });
+
+    it('.md: check ничего не пишет рядом с файлом', () => {
+        const list = () => fs.readdirSync(path.join(dir, 'md')).sort();
+        const before = list();
+        check('md/ok.md', 'md/bad-bare.md', 'md/rels.md');
+        expect(list()).toEqual(before);
+    });
+
+    it('.md: связь на необъявленный алиас → ⚠ со строкой файла; с --strict → ✗, код 1', () => {
+        const res = check('md/rels.md');
+        expect(res.status, res.stderr).toBe(0);
+        expect(res.stderr).toMatch(/^⚠ md\/rels\.md: line 8: Rel to undeclared element "ghost1"$/m);
+        expect(res.stderr).toMatch(/^⚠ md\/rels\.md: line 15: Rel to undeclared element "ghost2"$/m);
+        expect(res.stderr.match(/⚠/g)).toHaveLength(2);
+        expect(res.stdout).toMatch(/^✓ md\/rels\.md$/m);
+
+        const strict = check('--strict', 'md/rels.md');
+        expect(strict.status).toBe(1);
+        expect(strict.stderr).toMatch(/^✗ md\/rels\.md: 2 warning\(s\), failing with --strict$/m);
+        expect(strict.stdout).not.toMatch(/✓/);
     });
 });
 
@@ -434,6 +755,68 @@ describe('c4builder check --format', () => {
         const alias = checkEnv({}, '--json', 'dangling.puml');
         expect(alias.status).toBe(0);
         expect(alias.stdout).toBe(res.stdout);
+    });
+
+    it('json: блоки plantuml в .md — файл .md, строка файла, движок plantuml; без диаграмм → `[]`', () => {
+        const error = (file, line) => ({
+            file,
+            line,
+            column: null,
+            engine: 'plantuml',
+            severity: 'error',
+            rule: null,
+            element: null
+        });
+        const { res, list } = json('md/ok.md', 'md/bad-wrapped.md', 'md/multi.md');
+        expect(res.status).toBe(1);
+        expect(list.map(pick)).toEqual([
+            error('md/bad-wrapped.md', 13),
+            error('md/multi.md', lineOf('md/multi.md', 'broken one here')),
+            error('md/multi.md', lineOf('md/multi.md', 'broken three here'))
+        ]);
+        // Позиция — в line, а не в тексте.
+        for (const d of list) expect(d.message).toMatch(/^Syntax Error/);
+
+        const plain = json('md/plain.md', 'md/other.md');
+        expect(plain.res.status, plain.res.stderr).toBe(0);
+        expect(plain.list).toEqual([]);
+
+        const warned = json('md/rels.md');
+        expect(warned.res.status, warned.res.stderr).toBe(0);
+        expect(warned.list.map(pick)).toEqual(
+            [
+                [8, 'ghost1'],
+                [15, 'ghost2']
+            ].map(([line, element]) => ({
+                file: 'md/rels.md',
+                line,
+                column: null,
+                engine: 'plantuml',
+                severity: 'warning',
+                rule: 'undeclared-element',
+                element
+            }))
+        );
+    });
+
+    it('json: замечания одного .md — по возрастанию строки (ошибка блока 1 перед предупреждением блока 2)', () => {
+        const { res, list } = json('md/mix.md');
+        expect(res.status).toBe(1);
+        expect(list.map((d) => [d.severity, d.line])).toEqual([
+            ['error', lineOf('md/mix.md', 'mix broken line')],
+            ['warning', lineOf('md/mix.md', 'mixghost')]
+        ]);
+        // Текстовый режим не меняется: предупреждения печатаются перед строкой результата файла.
+        const text = check('md/mix.md');
+        expect(text.stderr.indexOf('⚠ md/mix.md')).toBeLessThan(text.stderr.indexOf('✗ md/mix.md'));
+    });
+
+    it('github: ошибка блока .md → ::error со строкой файла .md', () => {
+        const res = checkEnv({}, '--format', 'github', 'md/bad-wrapped.md');
+        expect(res.status).toBe(1);
+        expect(res.stdout).toMatch(
+            /^::error file=md\/bad-wrapped\.md,line=13,title=c4builder plantuml::Syntax Error/m
+        );
     });
 
     it('json: все файлы корректны → `[]`, код 0', () => {

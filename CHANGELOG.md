@@ -3,6 +3,15 @@
 User-facing changes of C4-Builder. Every pull request that changes behaviour adds a line to
 `## Unreleased`; the release commit renames it to `## vX.Y.Z`.
 
+## Unreleased
+
+- `c4builder check` accepts `.md` files and validates the fenced `plantuml` blocks in them with
+  the bundled PlantUML, parsed the same way as in the build (a block without `@startuml` is
+  wrapped). An error is `✗ <file>: line <N>: <message>` with the line of the `.md` file, every
+  broken block of the file is reported in one run, exit code 1; the relation-to-undeclared-element
+  warning and `--format json|github|gitlab` work for blocks too. The rest of the file and blocks
+  in other languages are not checked; a file without `plantuml` blocks passes (#91)
+
 ## v0.16.0
 
 - Site: the review log can be committed and pushed from the page of `site -w`. **Approve row** /

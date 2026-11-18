@@ -58,7 +58,7 @@ export const COMMAND_HELP: Record<string, CommandHelp> = {
     check: {
         args: '<files...>',
         summary: 'check diagrams without a build',
-        about: `Checks diagram files without a project or a build: ${EXTENSIONS.join(', ')}. A file with another extension is an error. --format json, github or gitlab prints one report for agents and CI instead of the lines below.`,
+        about: `Checks diagram files without a project or a build: ${EXTENSIONS.join(', ')}. In a .md file only fenced blocks with the plantuml language are checked, the rest of the file is ignored. A file with another extension is an error. --format json, github or gitlab prints one report for agents and CI instead of the lines below.`,
         options: ['--strict', '--format', '--json', '--files-from', '--verbose'],
         output: [
             [
@@ -67,7 +67,7 @@ export const COMMAND_HELP: Record<string, CommandHelp> = {
             ],
             [
                 '✗ <file>: line <N>: <message>',
-                'stderr: a .puml error; the line within the diagram (the file line for one @startuml block)'
+                'stderr: a .puml error; the line within the diagram (the file line for one @startuml block); for a block in a .md file, the line of the .md file'
             ],
             [
                 '✗ <file>: <message>',
