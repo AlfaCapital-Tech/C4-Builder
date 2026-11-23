@@ -306,10 +306,30 @@ const PUML_ERROR = /^ERROR\n(\d+)\n(.*)$/m;
  * блока `ERROR` (нет памяти, таймаут) — обычная Error: контекстом диаграммы он не лечится.
  */
 export class PlantUmlInputError extends DiagramError {
-    constructor(output: string, problem: DiagramProblem) {
+    /** Позиция ошибки, как её считает движок: с 1 от строки `@start…` (см. plantUmlLineBase). */
+    readonly line: number;
+    constructor(output: string, problem: DiagramProblem & { line: number }) {
         super(output, [problem], [problemText(problem)]);
+        this.line = problem.line;
     }
 }
+
+/**
+ * Сдвиг позиции ошибки PlantUML до строки текста: строка `content` = `line` ошибки + сдвиг.
+ * Движок считает от строки `@start…`, а не от начала текста: строки перед ней (пустая,
+ * комментарий) в счёт не идут. Директивой он признаёт `@start` только в самом начале строки;
+ * без такой строки сам оборачивает текст в `@startuml` — обёртка занимает позицию 0, а
+ * ведущие пустые строки отбрасываются. Проверено на вендорном jar в режиме -pipe.
+ * ponytail: при нескольких `@start` движок не сообщает, в какой из диаграмм ошибка, — считаем
+ * от первой; разбирать текст на диаграммы — когда такие блоки станут проверять всерьёз.
+ */
+export const plantUmlLineBase = (content: string): number => {
+    const lines = content.split('\n');
+    const start = lines.findIndex((l) => l.startsWith('@start'));
+    if (start !== -1) return start;
+    const firstText = lines.findIndex((l) => l.trim() !== '');
+    return Math.max(firstText, 0) - 1;
+};
 
 /** Ошибка процесса PlantUML по коду выхода и stderr (нормализованному до `\n`); экспорт — для тестов. */
 export const plantUmlFailure = (code: number | null, stderr: string): Error => {

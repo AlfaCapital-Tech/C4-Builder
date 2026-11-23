@@ -259,7 +259,7 @@ PlantUML, D2, BPMN, mermaid and wireflow and needs no browser. ditaa stays a nat
 c4builder check src/context.puml "src/4 D2 Example/landscape.d2"
 ```
 
-`check` validates `.puml`, `.iuml`, `.d2`, `.bpmn`, `.mmd` and `.wireflow.json`/`wireflow.json` files with the same engine as the
+`check` validates `.puml`, `.iuml`, `.d2`, `.bpmn`, `.mmd` and `.wireflow.json`/`wireflow.json` files and `plantuml` blocks in `.md` files with the same engine as the
 build (for `.bpmn`: parsing, rules, layout and rendering; for wireflow: file structure and rendering), but writes nothing and needs no project
 or `.c4builder`. Exit code 0 means every file compiles, 1 means there is an error. Warnings (`⚠`) do
 not affect the code, except in `--strict` mode, see below:
@@ -273,6 +273,20 @@ not affect the code, except in `--strict` mode, see below:
 including it into an empty diagram, and an `.iuml` with C4 macros (`UpdateElementStyle` and the
 like) — in the context of the C4 stdlib, as in the diagrams that include it. No line number is
 printed for an `.iuml`.
+
+In an `.md` file (a project page, an OpenSpec artifact) `check` validates the ` ```plantuml `
+blocks, parsed the same way as in the build: a block without `@startuml`/`@enduml` is wrapped
+automatically. The rest of the file, including blocks in other languages (`puml`, `d2`,
+`mermaid`), is not checked; a file without `plantuml` blocks passes. Every block of the file is
+checked, and the line number is the line of the `.md` file:
+
+```text
+✗ openspec/changes/add-auth/design.md: line 42: Syntax Error?
+```
+
+A broken block is an error and exit code 1 here, although the build only prints a warning for it
+and puts a placeholder instead of the image. Identical blocks are checked once, with the line of
+the first one.
 
 A C4 relation to an undeclared element is a warning. If the alias in `Rel(u, nope, …)` has a typo,
 PlantUML does not fail but silently draws an empty circle for it. `check` and the build print:
@@ -300,5 +314,5 @@ fine):
 
 ```bash
 #!/bin/sh
-git diff --cached --name-only -z --diff-filter=ACM -- '*.puml' '*.iuml' '*.d2' '*.bpmn' '*.mmd' '*.wireflow.json' 'wireflow.json' '*/wireflow.json' | xargs -0 -r c4builder check
+git diff --cached --name-only -z --diff-filter=ACM -- '*.puml' '*.iuml' '*.d2' '*.bpmn' '*.mmd' '*.wireflow.json' 'wireflow.json' '*/wireflow.json' '*.md' | xargs -0 -r c4builder check
 ```

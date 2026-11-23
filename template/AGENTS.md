@@ -8,7 +8,7 @@ into `docs/`.
 
 ```bash
 c4builder                    # build docs/ (non-interactive with a complete .c4builder)
-c4builder check <file...>    # validate .puml / .iuml / .d2 / .bpmn / .mmd / .wireflow.json files, exit code 0 = OK
+c4builder check <file...>    # validate .puml / .iuml / .d2 / .bpmn / .mmd / .wireflow.json files and plantuml blocks in .md, exit code 0 = OK
 c4builder check --strict <file...>  # the same, exit code 1 on warnings too - use this one
 c4builder check --strict --format json <file...>  # the same, findings as a JSON array on stdout
 git diff --name-only | c4builder check --strict --files-from -  # check the paths listed on stdin, one per line

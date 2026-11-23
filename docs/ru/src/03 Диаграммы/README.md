@@ -252,7 +252,7 @@ sequenceDiagram
 c4builder check src/context.puml "src/4 D2 Example/landscape.d2"
 ```
 
-`check` проверяет `.puml`, `.iuml`, `.d2`, `.bpmn`, `.mmd` и `.wireflow.json`/`wireflow.json` тем же движком, что и сборка (для
+`check` проверяет `.puml`, `.iuml`, `.d2`, `.bpmn`, `.mmd`, `.wireflow.json`/`wireflow.json` и блоки `plantuml` в `.md` тем же движком, что и сборка (для
 `.bpmn` — разбор, правила, раскладка и рендер; для wireflow — структура файла и рендер), но ничего не пишет и не требует проекта или
 `.c4builder`.
 Код выхода 0 — все файлы собираются, 1 — есть ошибка. Предупреждения (`⚠`) на код не влияют,
@@ -266,6 +266,18 @@ c4builder check src/context.puml "src/4 D2 Example/landscape.d2"
 `!include` разрешается от папки проверяемого файла. Библиотека `.iuml` проверяется включением
 в пустую диаграмму, а `.iuml` с макросами C4 (`UpdateElementStyle` и т. п.) — в контексте
 C4-stdlib, как в диаграммах, которые его подключают. Номер строки для `.iuml` не печатается.
+
+В файле `.md` (страница проекта, артефакт OpenSpec) `check` проверяет блоки ` ```plantuml ` —
+тем же разбором блока, что и сборка: блок без `@startuml`/`@enduml` оборачивается сам. Остальное
+содержимое файла, включая блоки других языков (`puml`, `d2`, `mermaid`), не проверяется; файл
+без блоков `plantuml` проходит. Проверяются все блоки файла, номер строки — строка файла `.md`:
+
+```text
+✗ openspec/changes/add-auth/design.md: line 42: Syntax Error?
+```
+
+Битый блок здесь — ошибка и код 1, хотя сборка для него только печатает предупреждение и
+ставит заглушку вместо картинки. Одинаковые блоки проверяются один раз, строка — первого из них.
 
 Связь C4 на необъявленный элемент — предупреждение. Если в `Rel(u, nope, …)` опечатка в
 алиасе, PlantUML не падает, а молча рисует по нему пустой кружок. `check` и сборка печатают:
@@ -293,5 +305,5 @@ Pre-commit-хук, который проверяет диаграммы в ин�
 
 ```bash
 #!/bin/sh
-git diff --cached --name-only -z --diff-filter=ACM -- '*.puml' '*.iuml' '*.d2' '*.bpmn' '*.mmd' '*.wireflow.json' 'wireflow.json' '*/wireflow.json' | xargs -0 -r c4builder check
+git diff --cached --name-only -z --diff-filter=ACM -- '*.puml' '*.iuml' '*.d2' '*.bpmn' '*.mmd' '*.wireflow.json' 'wireflow.json' '*/wireflow.json' '*.md' | xargs -0 -r c4builder check
 ```

@@ -40,6 +40,25 @@ describe('createFenceExtractor', () => {
         expect(createFenceExtractor(OPENSPEC).extract(one + one, 'x').diagrams).toHaveLength(1);
     });
 
+    it('обёртка @startuml: директива — только в начале строки, упоминание в тексте не считается', () => {
+        const content = (body) =>
+            createFenceExtractor(OPENSPEC).extract(`# T\n\n\`\`\`plantuml\n${body}\n\`\`\`\n`, 'p')
+                .diagrams[0];
+        // Упоминание в подписи — блок без директивы: обёртка нужна, строка 1 content — обёртка.
+        const mention = content('A -> B : see @startuml docs');
+        expect(mention.content).toBe('@startuml\nA -> B : see @startuml docs\n@enduml');
+        expect(mention.lineOffset).toBe(2);
+        // Директива после комментария или с отступом — обёртку не добавляем.
+        for (const body of [
+            "' note\n@startuml\nA -> B\n@enduml",
+            '  @startmindmap\n  * root\n  @endmindmap'
+        ]) {
+            const d = content(body);
+            expect(d.content).toBe(body);
+            expect(d.lineOffset).toBe(3);
+        }
+    });
+
     it('диаграмма несёт источник и метку soft (ошибка блока не валит сборку)', () => {
         const { diagrams } = createFenceExtractor(OPENSPEC).extract(
             '```plantuml\nA -> B\n```\n',

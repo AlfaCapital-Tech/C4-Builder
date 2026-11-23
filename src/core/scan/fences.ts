@@ -87,7 +87,10 @@ export const createFenceExtractor = (langs: readonly string[]) => {
                         .map((l) => (l.startsWith(indent) ? l.slice(indent.length) : l))
                         .join('\n');
                     // PlantUML требует @startuml/@enduml; в артефактах их часто опускают.
-                    const wrap = ext === '.puml' && !/@start\w+/.test(src);
+                    // Директива — только в начале строки: упоминание `@startuml` в подписи или
+                    // заметке диаграмму не открывает, и блок без обёртки ушёл бы в движок как
+                    // есть, а номера строк его ошибок считались бы от обёртки самого движка.
+                    const wrap = ext === '.puml' && !/^\s*@start\w+/m.test(src);
                     const content = wrap ? `@startuml\n${src}\n@enduml` : src;
                     for (; counted < at; counted++) if (md[counted] === '\n') fenceLine++;
                     // Тело начинается строкой после fence; обёртка — лишняя первая строка content.
