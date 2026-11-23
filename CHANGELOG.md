@@ -3,7 +3,7 @@
 User-facing changes of C4-Builder. Every pull request that changes behaviour adds a line to
 `## Unreleased`; the release commit renames it to `## vX.Y.Z`.
 
-## Unreleased
+## v0.17.0
 
 - `c4builder check` accepts `.md` files and validates the fenced `plantuml` blocks in them with
   the bundled PlantUML, parsed the same way as in the build (a block without `@startuml` is
